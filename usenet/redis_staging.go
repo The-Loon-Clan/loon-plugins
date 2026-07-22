@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -74,7 +75,9 @@ func formatFieldKey(fileNum, partNum int) string {
 }
 
 // compactArticle is the minimal per-article JSON stored in the art: hash. The
-// short json tags define the wire format (identical to prod's MarshalCompact).
+// short json tags describe the wire format; it is WRITTEN by marshalCompact (not
+// encoding/json — see there) and read back with json.Unmarshal, exactly as prod
+// does.
 type compactArticle struct {
 	MessageID  string `json:"m"`
 	Subject    string `json:"s"`
@@ -87,6 +90,82 @@ type compactArticle struct {
 	FileNum    int    `json:"fn,omitempty"`
 	TotalFiles int    `json:"tf,omitempty"`
 	FileParts  bool   `json:"fp,omitempty"`
+}
+
+// bufPool reuses byte buffers for marshalCompact to reduce GC pressure on the
+// hot ingest path.
+var bufPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 0, 512)
+		return &b
+	},
+}
+
+// marshalCompact encodes a compactArticle without reflection — and, critically,
+// WITHOUT encoding/json's HTML escaping. Message-ids are always wrapped in
+// <addr@host>, which json.Marshal expands to <…>: that inflates every
+// staged value (the one thing redis mode is trying to conserve) and stops the
+// bytes being identical to what prod writes into the same key space. Lifted from
+// prod's MarshalCompact; decode stays json.Unmarshal, as prod does.
+func marshalCompact(ca *compactArticle) []byte {
+	bp := bufPool.Get().(*[]byte)
+	b := (*bp)[:0]
+
+	b = append(b, `{"m":"`...)
+	b = appendEscaped(b, ca.MessageID)
+	b = append(b, `","s":"`...)
+	b = appendEscaped(b, ca.Subject)
+	b = append(b, `","f":"`...)
+	b = appendEscaped(b, ca.From)
+	b = append(b, `","b":`...)
+	b = strconv.AppendInt(b, ca.Bytes, 10)
+	b = append(b, `,"d":`...)
+	b = strconv.AppendInt(b, ca.Date, 10)
+	b = append(b, `,"p":`...)
+	b = strconv.AppendInt(b, int64(ca.PartNum), 10)
+	b = append(b, `,"tp":`...)
+	b = strconv.AppendInt(b, int64(ca.TotalParts), 10)
+	if ca.SegTotal != 0 {
+		b = append(b, `,"st":`...)
+		b = strconv.AppendInt(b, int64(ca.SegTotal), 10)
+	}
+	if ca.FileNum != 0 {
+		b = append(b, `,"fn":`...)
+		b = strconv.AppendInt(b, int64(ca.FileNum), 10)
+	}
+	if ca.TotalFiles != 0 {
+		b = append(b, `,"tf":`...)
+		b = strconv.AppendInt(b, int64(ca.TotalFiles), 10)
+	}
+	if ca.FileParts {
+		b = append(b, `,"fp":true`...)
+	}
+	b = append(b, '}')
+
+	out := make([]byte, len(b))
+	copy(out, b)
+	*bp = b
+	bufPool.Put(bp)
+	return out
+}
+
+// appendEscaped appends s to b with JSON string escaping for \ and " and control
+// characters — deliberately not for < and > (see marshalCompact).
+func appendEscaped(b []byte, s string) []byte {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '"' || c == '\\':
+			b = append(b, '\\', c)
+		case c < 0x20:
+			b = append(b, '\\', 'u', '0', '0',
+				"0123456789abcdef"[c>>4],
+				"0123456789abcdef"[c&0xf])
+		default:
+			b = append(b, c)
+		}
+	}
+	return b
 }
 
 // stageArticles inserts articles + metadata, detects newly-complete sets, and
@@ -127,8 +206,7 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 				TotalParts: a.TotalParts, SegTotal: a.SegTotal, FileNum: a.FileNum,
 				TotalFiles: a.TotalFiles, FileParts: a.FileParts,
 			}
-			blob, _ := json.Marshal(&ca)
-			fields = append(fields, formatFieldKey(a.FileNum, a.PartNum), blob)
+			fields = append(fields, formatFieldKey(a.FileNum, a.PartNum), marshalCompact(&ca))
 		}
 		pipe.HSet(ctx, artKey(gu.groupName, gu.hash), fields...)
 	}
