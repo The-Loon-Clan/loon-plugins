@@ -75,7 +75,7 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	// Pick up any admin edits to the junk rules before this pass filters anything.
 	p.reloadJunkRules(ctx)
 
-	pool, err := p.ensurePool(ctx, cfg)
+	runs, err := p.activeFleet(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, errNoServer) {
 			p.crawlJob.Log("no server configured — add one in the admin wizard")
@@ -83,21 +83,43 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 			return
 		}
 		p.crawlJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/crawl-pool", err)
+		p.core.Errors.Report(ctx, "usenet/crawl-fleet", err)
 		return
 	}
+
+	// Each provider crawls independently with its OWN watermarks and coverage —
+	// article numbers are per-server, so nothing numeric can be shared. What they
+	// do share is the staging area, where message-id dedup turns the overlap into
+	// better completeness: a release short a segment on one backbone can be
+	// finished by another.
+	totalStaged := 0
+	for _, run := range runs {
+		if ctx.Err() != nil {
+			return
+		}
+		totalStaged += p.crawlProvider(ctx, run, cfg)
+	}
+	p.crawlJob.Log("crawl complete across %d provider(s): %d article(s) staged", len(runs), totalStaged)
+	p.crawlJob.SetIdle(p.nextCrawl())
+	go p.runBuild(ctx)
+	if totalStaged == 0 {
+		go p.idleHealthCheck(ctx)
+	}
+}
+
+// crawlProvider runs one provider's forward pass and returns articles staged.
+func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config) int {
+	pool, sid := run.pool, run.prov.ID
 	pool.TopUp(ctx) // refill anything the last pass discarded
 
-	groups, err := p.st.activeGroups(ctx, cfg.MaxGroups)
+	groups, err := p.st.activeGroupsForProvider(ctx, sid, cfg.MaxGroups)
 	if err != nil {
-		p.crawlJob.SetError(err.Error())
 		p.core.Errors.Report(ctx, "usenet/crawl-groups", err)
-		return
+		return 0
 	}
 	if len(groups) == 0 {
 		p.crawlJob.Log("no active groups — pick some in the admin wizard")
-		p.crawlJob.SetIdle(p.nextCrawl())
-		return
+		return 0
 	}
 
 	// 1. Resolve each group's window and enqueue its batches.
@@ -105,19 +127,20 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	var jobs []batchJob
 	for _, g := range groups {
 		if ctx.Err() != nil {
-			return
+			return 0
 		}
 		plan, err := p.planGroup(ctx, pool, g, cfg)
 		if err != nil {
-			p.core.Errors.Report(ctx, "usenet/crawl-plan", fmt.Errorf("%s: %w", g.Name, err))
-			p.crawlJob.Log("%s: %v", g.Name, err)
+			p.core.Errors.Report(ctx, "usenet/crawl-plan",
+				fmt.Errorf("%s/%s: %w", run.prov.label(), g.Name, err))
+			p.crawlJob.Log("%s/%s: %v", run.prov.label(), g.Name, err)
 			continue
 		}
 		plans[g.Name] = plan
 		if !plan.hasWork {
 			// Nothing new, but still record the server range so the coverage view
 			// stays honest.
-			if err := p.st.updateGroupState(ctx, plan.group, int64(plan.low), int64(plan.high),
+			if err := p.st.updateGroupStateForProvider(ctx, sid, plan.group, int64(plan.low), int64(plan.high),
 				0, int64(plan.start), time.Time{}); err != nil {
 				p.core.Errors.Report(ctx, "usenet/crawl-range", err)
 			}
@@ -132,29 +155,23 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		}
 	}
 	if len(jobs) == 0 {
-		p.crawlJob.Log("crawl complete: %d group(s), nothing new", len(plans))
-		p.crawlJob.SetIdle(p.nextCrawl())
-		go p.idleHealthCheck(ctx) // nothing to fetch — spend the idle pool on health
-		return
+		p.crawlJob.Log("%s: %d group(s), nothing new", run.prov.label(), len(plans))
+		return 0
 	}
 
 	// 2. Fetch + stage in parallel over the pool.
 	cutoff := time.Now().AddDate(0, 0, -cfg.RetentionDays)
-	p.crawlJob.Log("crawling %d group(s), %d batch(es) over %d connection(s)…",
-		len(plans), len(jobs), cfg.Connections)
+	p.crawlJob.Log("%s: crawling %d group(s), %d batch(es) over %d connection(s)…",
+		run.prov.label(), len(plans), len(jobs), run.prov.conns(cfg.Connections))
 	results := p.runBatches(ctx, pool, jobs, cutoff, cfg)
 
 	// 3. Advance watermarks to the last contiguous success per group.
-	staged, advanced := p.advanceWatermarks(ctx, plans, results)
+	staged, advanced := p.advanceWatermarks(ctx, sid, plans, results)
 
 	st := pool.Stats()
-	p.crawlJob.Log("crawl complete: %d group(s), %d batch(es), %d article(s) staged, %d group(s) advanced (conns %d/%d, resets %d)",
-		len(plans), len(jobs), staged, advanced, st.Open, st.Target, st.Resets)
-	p.crawlJob.SetIdle(p.nextCrawl())
-	go p.runBuild(ctx) // assemble what just landed
-	if staged == 0 {
-		go p.idleHealthCheck(ctx)
-	}
+	p.crawlJob.Log("%s: %d group(s), %d batch(es), %d article(s) staged, %d advanced (conns %d/%d, resets %d)",
+		run.prov.label(), len(plans), len(jobs), staged, advanced, st.Open, st.Target, st.Resets)
+	return staged
 }
 
 // idleHealthCheck runs a health pass only when the indexer has nothing better to
@@ -298,7 +315,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, cu
 // CONTIGUOUS run of successful batches. A failure in the middle stops the
 // advance there, so the failed range is refetched next pass instead of being
 // silently skipped — with parallel batches, "highest success" would strand gaps.
-func (p *Plugin) advanceWatermarks(ctx context.Context, plans map[string]*crawlPlan, results []batchResult) (staged, advanced int) {
+func (p *Plugin) advanceWatermarks(ctx context.Context, serverID int, plans map[string]*crawlPlan, results []batchResult) (staged, advanced int) {
 	byGroup := make(map[string][]batchResult, len(plans))
 	for _, r := range results {
 		staged += r.staged
@@ -314,7 +331,7 @@ func (p *Plugin) advanceWatermarks(ctx context.Context, plans map[string]*crawlP
 			if !r.ok {
 				continue
 			}
-			if err := p.st.recordFetchedRange(ctx, name, int64(r.lo), int64(r.hi)); err != nil {
+			if err := p.st.recordFetchedRangeFor(ctx, serverID, name, int64(r.lo), int64(r.hi)); err != nil {
 				p.core.Errors.Report(ctx, "usenet/crawl-range-record", err)
 			}
 		}
@@ -327,7 +344,7 @@ func (p *Plugin) advanceWatermarks(ctx context.Context, plans map[string]*crawlP
 		} else {
 			p.crawlJob.Log("%s: no contiguous progress this pass — retrying from %d", name, plan.start)
 		}
-		if err := p.st.updateGroupState(ctx, name, int64(plan.low), int64(plan.high),
+		if err := p.st.updateGroupStateForProvider(ctx, serverID, name, int64(plan.low), int64(plan.high),
 			watermark, int64(plan.start), latest); err != nil {
 			p.core.Errors.Report(ctx, "usenet/crawl-watermark", fmt.Errorf("%s: %w", name, err))
 		}
