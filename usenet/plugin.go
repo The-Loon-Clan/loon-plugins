@@ -2,11 +2,13 @@
 // the last few days of a set of newsgroups, assembles complete article sets into
 // downloadable NZB files, and serves search / group-list / download through a
 // capability the host's pages consume. It owns the "usenet" Postgres schema and
-// groups all the indexer's jobs — Crawler, NZB Builder, Prune — in one place.
+// groups its jobs — Crawler, Backfill, NZB Builder, Tag Fill, Prune — in one place.
 //
-// It is the LEAN subset of the prod crawler: forward-only, ~N-day window, single
-// connection, Postgres staging (no Redis), no backfill/coverage machinery. See
-// USENET-PLUGIN.md.
+// Staging (the transient article-assembly buffer) is pluggable behind the
+// stagingStore seam: durable Postgres by default (never-lost, the base site's
+// mode), or prod's Redis pipeline lifted verbatim via staging: redis (fast,
+// best-effort) when the host has Redis. See USENET-PLUGIN.md and, for the seam,
+// USENET-STAGING-MODES.md.
 package usenet
 
 import (
