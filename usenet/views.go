@@ -132,7 +132,7 @@ type knob struct {
 func (p *Plugin) knobs(ctx context.Context) []knob {
 	cfg := p.effective(ctx)
 	return []knob{
-		{"retention_days", "Retention (days)", cfg.RetentionDays, "keep the last N days of releases"},
+		{"retention_days", "Retention / backfill depth (days)", cfg.RetentionDays, "keep — and backfill — the last N days; raise it to pull more history, backfill stops once caught up to this horizon"},
 		{"crawl_interval_min", "Crawl interval (min)", cfg.CrawlIntervalMin, "how often to crawl + build (applies next cycle)"},
 		{"batch", "Overview batch size", cfg.Batch, "article-number span per NNTP OVER request"},
 		{"max_groups", "Max groups per run", cfg.MaxGroups, "cap active groups crawled per pass"},
