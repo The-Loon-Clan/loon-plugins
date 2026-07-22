@@ -12,7 +12,11 @@ type healthRow struct {
 	Data []byte
 }
 
-// nzbsNeedingHealthCheck returns releases due a check, never-checked first.
+// nzbsNeedingHealthCheck returns releases due a check: never-checked first, then
+// OLDEST CONTENT first. The second key matters — old articles are the ones most
+// likely to have expired, so checking them first finds real losses soonest.
+// (Prod has no tiebreak here at all, so among its hundreds of thousands of
+// never-checked rows the order is whatever the index scan happens to yield.)
 //
 // minAgeHours is a propagation guard, not a performance tweak: a release posted
 // minutes ago may not have reached every server yet, so STATting it would report
@@ -42,7 +46,8 @@ func (s *PGStore) nzbsNeedingHealthCheck(ctx context.Context, limit, recheckDays
 			    AND COALESCE(posted_at, created_at) < now() - make_interval(hours => $2)
 			    AND (last_health_check_at IS NULL
 			         OR last_health_check_at < now() - make_interval(days => $3))
-			  ORDER BY last_health_check_at NULLS FIRST, id
+			  ORDER BY last_health_check_at NULLS FIRST,
+			           COALESCE(posted_at, created_at) ASC, id
 			  LIMIT $1`, limit, minAgeHours, recheckDays)
 	})
 	if err != nil {

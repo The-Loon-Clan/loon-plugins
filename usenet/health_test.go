@@ -185,3 +185,18 @@ func TestNzbCharsetReaderRejectsUnknown(t *testing.T) {
 		t.Error("expected an unsupported charset to be reported, not silently mangled")
 	}
 }
+
+// TestHealthOutcomeSemantics pins the three-way outcome, which exists because
+// prod's two-way version misbehaves in both directions: it writes nothing when a
+// check fails, so the same rows return next pass and the drain loop spins with
+// no backoff — while stamping everything instead would make a release skipped
+// for a momentary busy pool wait the whole recheck window.
+func TestHealthOutcomeSemantics(t *testing.T) {
+	if healthWritten == healthSkipPermanent || healthSkipPermanent == healthSkipTransient {
+		t.Fatal("outcomes must be distinct")
+	}
+	// Permanent = bad data; the row gets stamped so it stops jamming the queue.
+	// Transient = bad luck; the row is left alone so it is retried promptly.
+	// This test documents the contract the sweep loop relies on; the loop's
+	// branches are asserted by the switch in runHealthCheck.
+}

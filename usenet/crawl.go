@@ -134,6 +134,7 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	if len(jobs) == 0 {
 		p.crawlJob.Log("crawl complete: %d group(s), nothing new", len(plans))
 		p.crawlJob.SetIdle(p.nextCrawl())
+		go p.idleHealthCheck(ctx) // nothing to fetch — spend the idle pool on health
 		return
 	}
 
@@ -151,6 +152,25 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		len(plans), len(jobs), staged, advanced, st.Open, st.Target, st.Resets)
 	p.crawlJob.SetIdle(p.nextCrawl())
 	go p.runBuild(ctx) // assemble what just landed
+	if staged == 0 {
+		go p.idleHealthCheck(ctx)
+	}
+}
+
+// idleHealthCheck runs a health pass only when the indexer has nothing better to
+// do: no new articles this crawl AND no backfill left. Health checking is
+// bookkeeping — it earns connections only once the work that produces content
+// has none to spend. (Prod is looser: it drains health whenever backfill is
+// exhausted, even on a pass that just fetched tens of thousands of articles.)
+func (p *Plugin) idleHealthCheck(ctx context.Context) {
+	if ctx == nil || ctx.Err() != nil {
+		return
+	}
+	pending, err := p.st.groupsNeedingBackfill(ctx, 1)
+	if err != nil || len(pending) > 0 {
+		return // backfill still has history to pull; it goes first
+	}
+	p.runHealthCheck(ctx)
 }
 
 func (p *Plugin) nextCrawl() time.Time {

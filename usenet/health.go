@@ -209,19 +209,32 @@ func (p *Plugin) statBatch(ctx context.Context, pool *nntp.Pool, ids []string) (
 	return out, err
 }
 
-// checkOne STATs an entire release and returns its verdict, or ok=false when the
-// result is too inconclusive to record.
-func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, chunk int) (verdict string, totalSegs, missingData, par2Total int, ok bool) {
+// healthOutcome says what to do with a release after checking it. The
+// distinction matters: prod writes nothing when a check fails, so the same rows
+// come back on the next pass and the drain loop spins with no backoff. Stamping
+// everything instead would be just as wrong — a release skipped because the pool
+// was momentarily busy would then wait the full recheck window.
+type healthOutcome int
+
+const (
+	healthWritten       healthOutcome = iota // verdict recorded
+	healthSkipPermanent                      // bad data: stamp it so it stops jamming the queue
+	healthSkipTransient                      // pool busy / too much doubt: leave it, retry soon
+)
+
+// checkOne STATs an entire release and returns its verdict plus what should be
+// persisted.
+func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, chunk int) (verdict string, totalSegs, missingData, par2Total int, outcome healthOutcome) {
 	segs, err := parseNzbSegments(row.Data)
 	if err != nil {
 		// A blob we can't parse is a storage problem, not evidence about the
 		// articles — never let it downgrade a verdict.
 		p.core.Errors.Report(ctx, "usenet/health-parse", fmt.Errorf("nzb %d: %w", row.ID, err))
-		return "", 0, 0, 0, false
+		return "", 0, 0, 0, healthSkipPermanent
 	}
 	total := len(segs.Data) + len(segs.Par2)
 	if total == 0 {
-		return "", 0, 0, 0, false
+		return "", 0, 0, 0, healthSkipPermanent
 	}
 
 	var missData, missPar2, unknown int
@@ -249,17 +262,17 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 		return nil
 	}
 	if err := count(segs.Data, &missData); err != nil {
-		return "", 0, 0, 0, false
+		return "", 0, 0, 0, healthSkipTransient
 	}
 	if err := count(segs.Par2, &missPar2); err != nil {
-		return "", 0, 0, 0, false
+		return "", 0, 0, 0, healthSkipTransient
 	}
 
 	// Too much doubt: keep whatever verdict this release already had.
 	if float64(unknown)/float64(total) > maxInconclusiveRatio {
-		return "", 0, 0, 0, false
+		return "", 0, 0, 0, healthSkipTransient
 	}
-	return healthVerdict(missData, len(segs.Par2), missPar2), total, missData, len(segs.Par2), true
+	return healthVerdict(missData, len(segs.Par2), missPar2), total, missData, len(segs.Par2), healthWritten
 }
 
 // runHealthCheck sweeps releases that are due a check.
@@ -299,32 +312,46 @@ func (p *Plugin) runHealthCheck(ctx context.Context) {
 		return
 	}
 
-	var checked, skipped int
+	var checked, unreadable int
+	var yielded bool
 	tally := map[string]int{}
 	for _, row := range rows {
 		if ctx.Err() != nil {
 			break
 		}
-		verdict, total, missing, par2, ok := p.checkOne(ctx, pool, row, cfg.HealthStatChunk)
-		if !ok {
-			// Record that we looked, so a permanently-unreadable row doesn't jam
-			// the queue, but leave its verdict alone.
+		verdict, total, missing, par2, outcome := p.checkOne(ctx, pool, row, cfg.HealthStatChunk)
+		switch outcome {
+		case healthWritten:
+			if err := p.st.updateNzbHealth(ctx, row.ID, verdict, total, missing, par2); err != nil {
+				p.core.Errors.Report(ctx, "usenet/health-update", fmt.Errorf("nzb %d: %w", row.ID, err))
+				continue
+			}
+			checked++
+			tally[verdict]++
+		case healthSkipPermanent:
+			// Bad data, not bad luck. Stamp it so an unreadable row doesn't sit at
+			// the head of the queue forever, but leave its verdict untouched.
 			if err := p.st.touchHealthChecked(ctx, row.ID); err != nil {
 				p.core.Errors.Report(ctx, "usenet/health-touch", err)
 			}
-			skipped++
-			continue
+			unreadable++
+		case healthSkipTransient:
+			// The connections are wanted elsewhere, or the provider is flaky.
+			// Stop the pass instead of grinding through the rest for the same
+			// answer, and leave the row untouched so it is retried promptly.
+			yielded = true
 		}
-		if err := p.st.updateNzbHealth(ctx, row.ID, verdict, total, missing, par2); err != nil {
-			p.core.Errors.Report(ctx, "usenet/health-update", fmt.Errorf("nzb %d: %w", row.ID, err))
-			continue
+		if yielded {
+			break
 		}
-		checked++
-		tally[verdict]++
 	}
 
-	p.healthJob.Log("health check: %d checked (%d healthy, %d broken, %d dead), %d inconclusive/skipped",
-		checked, tally[healthHealthy], tally[healthBroken], tally[healthDead], skipped)
+	msg := fmt.Sprintf("health check: %d checked (%d healthy, %d broken, %d dead), %d unreadable",
+		checked, tally[healthHealthy], tally[healthBroken], tally[healthDead], unreadable)
+	if yielded {
+		msg += " — yielded early (connections busy or results inconclusive)"
+	}
+	p.healthJob.Log("%s", msg)
 	p.healthJob.SetIdle(p.nextHealth(cfg))
 }
 
