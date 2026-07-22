@@ -3,6 +3,7 @@ package usenet
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -283,8 +284,8 @@ func (s *PGStore) getServer(ctx context.Context) (pluginapi.Server, bool, error)
 	found := false
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		e := tx.QueryRowContext(ctx,
-			`SELECT host, port, tls, username, password, enabled FROM servers ORDER BY id LIMIT 1`).
-			Scan(&srv.Host, &srv.Port, &srv.TLS, &srv.Username, &srv.Password, &srv.Enabled)
+			`SELECT host, port, tls, username, password, enabled, backbone FROM servers ORDER BY id LIMIT 1`).
+			Scan(&srv.Host, &srv.Port, &srv.TLS, &srv.Username, &srv.Password, &srv.Enabled, &srv.Backbone)
 		if e == sql.ErrNoRows {
 			return nil
 		}
@@ -297,15 +298,30 @@ func (s *PGStore) getServer(ctx context.Context) (pluginapi.Server, bool, error)
 	return srv, found, err
 }
 
+// saveServer updates the FIRST configured server, or creates one if there are
+// none. It deliberately does not touch any other row: the wizard edits a single
+// server, but the fleet may hold several (providers.go), and this used to
+// DELETE FROM servers first — so saving the wizard would have silently wiped
+// every additional provider an operator had added.
 func (s *PGStore) saveServer(ctx context.Context, srv pluginapi.Server) error {
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM servers`); err != nil {
+		var id int
+		err := tx.GetContext(ctx, &id, `SELECT id FROM servers ORDER BY id LIMIT 1`)
+		if err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+			_, err = tx.ExecContext(ctx,
+				`INSERT INTO servers (host, port, tls, username, password, enabled, backbone, name)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7,$1)`,
+				srv.Host, srv.Port, srv.TLS, srv.Username, srv.Password, srv.Enabled, srv.Backbone)
 			return err
 		}
-		_, err := tx.ExecContext(ctx,
-			`INSERT INTO servers (host, port, tls, username, password, enabled)
-			 VALUES ($1, $2, $3, $4, $5, $6)`,
-			srv.Host, srv.Port, srv.TLS, srv.Username, srv.Password, srv.Enabled)
+		_, err = tx.ExecContext(ctx,
+			`UPDATE servers
+			    SET host=$2, port=$3, tls=$4, username=$5, password=$6, enabled=$7, backbone=$8
+			  WHERE id=$1`,
+			id, srv.Host, srv.Port, srv.TLS, srv.Username, srv.Password, srv.Enabled, srv.Backbone)
 		return err
 	})
 }

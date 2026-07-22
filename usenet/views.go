@@ -176,6 +176,7 @@ func formServer(gc *gin.Context) pluginapi.Server {
 		Username: gc.PostForm("username"),
 		Password: gc.PostForm("password"),
 		Enabled:  true,
+		Backbone: strings.TrimSpace(gc.PostForm("backbone")),
 	}
 }
 

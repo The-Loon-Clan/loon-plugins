@@ -21,6 +21,23 @@
             <button class="btn btn-primary" type="submit">Save</button>
             <button class="btn btn-outline-secondary" type="submit" formaction="/admin/settings/usenet/test">Test connection</button>
         </div>
+        <div style="margin-top:.6rem">
+            <label for="backbone">Backbone <span style="opacity:.6;font-weight:400">(optional)</span></label>
+            <input type="text" id="backbone" name="backbone" value="{{.Server.Backbone}}"
+                   placeholder="e.g. omicron, usenetexpress, abavia">
+            <p style="opacity:.7;font-size:.85rem;margin:.35rem 0 0">
+              The upstream network this account resells. Article <em>numbers</em> are handed out by the
+              backbone, not by your provider — two accounts on the same backbone see the same numbers for
+              the same articles, while different backbones agree on nothing numeric.
+              <br>
+              Name it only when you are sure: providers sharing a backbone then share crawl progress
+              (the second account adds <em>connections</em>, not extra content). Leave it blank and this
+              server is treated as its own backbone, which is the safe assumption — wrongly marking two
+              servers as the same backbone makes each skip articles the other fetched.
+              <br>
+              See <code>PROVIDERS.md</code>. A picker of known providers and their backbones is planned.
+            </p>
+        </div>
     </form>
 </div>
 

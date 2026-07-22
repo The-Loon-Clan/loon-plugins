@@ -105,6 +105,11 @@ type Server struct {
 	Username string
 	Password string
 	Enabled  bool
+	// Backbone names the upstream network this account resells. Providers on the
+	// same backbone hand out the SAME article numbers, so they share crawl state;
+	// different backbones share nothing numeric. Empty means "assume its own".
+	// See usenet/PROVIDERS.md.
+	Backbone string
 }
 
 // ReleaseFile is one file inside an assembled release (parsed from the NZB).
