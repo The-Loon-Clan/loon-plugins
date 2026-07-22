@@ -142,6 +142,11 @@ func (p *Plugin) knobs(ctx context.Context) []knob {
 		{"backfill_batches_per_run", "Backfill batches per run", cfg.BackfillBatchesPerRun, "how much history each backfill pass pulls"},
 		{"staging_prune_hours", "Staging prune horizon (hrs)", cfg.StagingPruneHours, "drop staged articles older than this that never completed into an NZB (default 6)"},
 		{"staging_max_rows", "Staging soft cap (rows)", cfg.StagingMaxRows, "pg back-pressure denominator: backfill yields as staged rows approach this (default 2,000,000)"},
+		{"health_interval_min", "Health check interval (min)", cfg.HealthIntervalMin, "how often to sweep stored NZBs for expired articles (default 60)"},
+		{"health_batch_size", "Health check batch (releases)", cfg.HealthBatchSize, "releases examined per sweep (default 50)"},
+		{"health_recheck_days", "Health re-check after (days)", cfg.HealthRecheckDays, "how long a verdict stands before it is re-tested (default 30)"},
+		{"health_min_age_hours", "Health min age (hrs)", cfg.HealthMinAgeHours, "skip releases newer than this — articles may still be propagating, and checking early wrongly marks new uploads dead (default 24)"},
+		{"health_stat_chunk", "Health STATs per lease", cfg.HealthStatChunk, "segments checked per borrowed connection; smaller returns connections to the crawler more often (default 200)"},
 		{"backfill_pressure_high_pct", "Backfill pause at (% pressure)", cfg.BackfillPressureHighPct, "backfill pauses when staging pressure reaches this percent (default 85); forward crawl never pauses"},
 		{"backfill_pressure_low_pct", "Backfill resume below (% pressure)", cfg.BackfillPressureLowPct, "paused backfill resumes once pressure drops below this percent (default 70)"},
 	}

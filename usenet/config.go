@@ -30,6 +30,14 @@ type Config struct {
 	StagingMaxRows    int    `json:"staging_max_rows"`    // pg back-pressure denominator: staged rows / this (default 2_000_000)
 	StagingPruneHours int    `json:"staging_prune_hours"` // pg stale-staging horizon in hours (default 6)
 
+	// NZB health checking (health.go). Segments are STATted on idle connections
+	// only, so these bound how much bookkeeping runs, not how fast it must.
+	HealthIntervalMin int `json:"health_interval_min"`  // sweep cadence (default 60)
+	HealthBatchSize   int `json:"health_batch_size"`    // releases per sweep (default 50)
+	HealthRecheckDays int `json:"health_recheck_days"`  // re-check a release this often (default 30)
+	HealthMinAgeHours int `json:"health_min_age_hours"` // propagation guard: skip releases newer than this (default 24)
+	HealthStatChunk   int `json:"health_stat_chunk"`    // segments STATted per connection lease (default 200)
+
 	// Backfill back-pressure thresholds (percent of staging pressure). Backfill
 	// pauses at high, resumes below low; the forward crawl is never paused.
 	BackfillPressureHighPct int `json:"backfill_pressure_high_pct"` // default 85
@@ -78,6 +86,21 @@ func (c *Config) applyDefaults() {
 	if c.StagingPruneHours <= 0 {
 		c.StagingPruneHours = 6
 	}
+	if c.HealthIntervalMin <= 0 {
+		c.HealthIntervalMin = 60
+	}
+	if c.HealthBatchSize <= 0 {
+		c.HealthBatchSize = 50
+	}
+	if c.HealthRecheckDays <= 0 {
+		c.HealthRecheckDays = 30
+	}
+	if c.HealthMinAgeHours <= 0 {
+		c.HealthMinAgeHours = 24
+	}
+	if c.HealthStatChunk <= 0 {
+		c.HealthStatChunk = 200
+	}
 	if c.BackfillPressureHighPct <= 0 {
 		c.BackfillPressureHighPct = 85
 	}
@@ -104,6 +127,11 @@ func (c *Config) knobFields() map[string]*int {
 		"backfill_batches_per_run":   &c.BackfillBatchesPerRun,
 		"staging_max_rows":           &c.StagingMaxRows,
 		"staging_prune_hours":        &c.StagingPruneHours,
+		"health_interval_min":        &c.HealthIntervalMin,
+		"health_batch_size":          &c.HealthBatchSize,
+		"health_recheck_days":        &c.HealthRecheckDays,
+		"health_min_age_hours":       &c.HealthMinAgeHours,
+		"health_stat_chunk":          &c.HealthStatChunk,
 		"backfill_pressure_high_pct": &c.BackfillPressureHighPct,
 		"backfill_pressure_low_pct":  &c.BackfillPressureLowPct,
 	}

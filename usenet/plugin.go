@@ -48,6 +48,7 @@ type Plugin struct {
 	buildJob    core.Job
 	tagJob      core.Job
 	pruneJob    core.Job
+	healthJob   core.Job
 
 	// per-job locks: a manual trigger (admin button / /admin/jobs) must not
 	// overlap a scheduled run of the same job — they share one NNTP connection
@@ -55,6 +56,7 @@ type Plugin struct {
 	crawlMu    sync.Mutex
 	backfillMu sync.Mutex
 	buildMu    sync.Mutex
+	healthMu   sync.Mutex
 
 	// backfillPaused is the hysteresis latch for staging back-pressure; only
 	// touched inside runBackfill (serialized by backfillMu).
@@ -144,11 +146,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 			"Re-parses resolution/source/codec/audio/language tags for untagged NZBs")
 		p.pruneJob = c.Scheduler.RegisterJob("NZB Prune",
 			"Deletes NZBs older than the retention window")
+		p.healthJob = c.Scheduler.RegisterJob("NZB Health Check",
+			"STATs stored NZBs to find releases whose articles have expired").MarkOffPeak()
 		p.crawlJob.SetTrigger(func() { go p.runCrawl(p.ctx) })
 		p.backfillJob.SetTrigger(func() { go p.runBackfill(p.ctx) })
 		p.buildJob.SetTrigger(func() { go p.runBuild(p.ctx) })
 		p.tagJob.SetTrigger(func() { go p.runTagFill(p.ctx) })
 		p.pruneJob.SetTrigger(func() { go p.runPrune(p.ctx) })
+		p.healthJob.SetTrigger(func() { go p.runHealthCheck(p.ctx) })
 		p.svc.triggerCrawl = func() { go p.runCrawl(p.ctx) }
 		p.svc.triggerBackfill = func() { go p.runBackfill(p.ctx) }
 	}
@@ -177,6 +182,8 @@ func (p *Plugin) Start(ctx context.Context) error {
 			return time.Duration(p.effective(ctx).CrawlIntervalMin) * time.Minute
 		case "Usenet Backfill":
 			return time.Duration(p.effective(ctx).BackfillIntervalMin) * time.Minute
+		case "NZB Health Check":
+			return time.Duration(p.effective(ctx).HealthIntervalMin) * time.Minute
 		}
 		if prevInterval != nil {
 			return prevInterval(ctx, jobName, def)
@@ -200,6 +207,10 @@ func (p *Plugin) Start(ctx context.Context) error {
 	p.core.Scheduler.RunLoop(ctx, p.buildJob, 90*time.Second, interval, p.runBuild)
 	p.core.Scheduler.RunLoop(ctx, p.tagJob, 5*time.Minute, 6*time.Hour, p.runTagFill)
 	p.core.Scheduler.RunLoop(ctx, p.pruneJob, 10*time.Minute, 24*time.Hour, p.runPrune)
+	// Health checking runs on idle connections (TryDo), so a long boot delay just
+	// keeps it out of the way while the crawler seeds watermarks.
+	p.core.Scheduler.RunLoop(ctx, p.healthJob, 15*time.Minute,
+		time.Duration(p.cfg.HealthIntervalMin)*time.Minute, p.runHealthCheck)
 	return nil
 }
 

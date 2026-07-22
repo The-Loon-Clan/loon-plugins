@@ -24,6 +24,7 @@ type Store interface {
 	AssemblerStore
 	MaintenanceStore
 	JunkStore
+	HealthStore
 }
 
 // ReleaseReader is the read side: search, browse, feed, detail, raw NZB, stats.
@@ -87,6 +88,14 @@ type AssemblerStore interface {
 type JunkStore interface {
 	seedJunkRules(ctx context.Context, specs []junkRuleSpec) (int, error)
 	junkRules(ctx context.Context) ([]junkRuleSpec, error)
+}
+
+// HealthStore is the NZB health surface (health.go).
+type HealthStore interface {
+	nzbsNeedingHealthCheck(ctx context.Context, limit, recheckDays, minAgeHours int) ([]healthRow, error)
+	updateNzbHealth(ctx context.Context, id int64, status string, total, missing, par2 int) error
+	touchHealthChecked(ctx context.Context, id int64) error
+	healthBreakdown(ctx context.Context) (map[string]int, error)
 }
 
 // MaintenanceStore is the nzbs cleanup / retagging surface (off-peak jobs). The
