@@ -132,6 +132,7 @@ type knob struct {
 func (p *Plugin) knobs(ctx context.Context) []knob {
 	cfg := p.effective(ctx)
 	return []knob{
+		{"connections", "NNTP connections", cfg.Connections, "size of the shared connection pool — how many overview batches are fetched in parallel; keep at or below your provider's per-account limit"},
 		{"retention_days", "Retention / backfill depth (days)", cfg.RetentionDays, "keep — and backfill — the last N days; raise it to pull more history, backfill stops once caught up to this horizon"},
 		{"crawl_interval_min", "Crawl interval (min)", cfg.CrawlIntervalMin, "how often to crawl + build (applies next cycle)"},
 		{"batch", "Overview batch size", cfg.Batch, "article-number span per NNTP OVER request"},

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/the-loon-clan/loon/core"
+	"github.com/the-loon-clan/loon/nntp"
 	"github.com/the-loon-clan/loon/schedule"
 
 	"github.com/the-loon-clan/loon-plugins/pluginapi"
@@ -58,6 +59,12 @@ type Plugin struct {
 	// backfillPaused is the hysteresis latch for staging back-pressure; only
 	// touched inside runBackfill (serialized by backfillMu).
 	backfillPaused bool
+
+	// Shared NNTP connection pool (crawl + backfill). Opened lazily on first
+	// use — see pool.go.
+	poolMu  sync.Mutex
+	pool    *nntp.Pool
+	poolKey string
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -213,7 +220,10 @@ func (p *Plugin) runTagFill(ctx context.Context) {
 	p.tagJob.SetIdle(time.Now().Add(6 * time.Hour))
 }
 
-func (p *Plugin) Stop(ctx context.Context) error { return nil }
+func (p *Plugin) Stop(ctx context.Context) error {
+	p.closePool()
+	return nil
+}
 
 // categoryFor returns the Newznab category id for a release via the catalog
 // plugin, or 8010 (Other/Misc) when the catalog isn't installed.

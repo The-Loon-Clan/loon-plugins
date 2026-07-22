@@ -9,8 +9,10 @@ import (
 	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
-// dialServer opens (and, if credentials are set, authenticates) a single NNTP
-// connection. The demo uses one connection at a time — none of prod's pool.
+// dialServer opens (and, if credentials are set, authenticates) a single
+// one-shot NNTP connection for the admin helpers below (connection test, group
+// listing). Crawling and backfilling do NOT use this — they share the pooled
+// connections from pool.go.
 func dialServer(srv pluginapi.Server) (*nntp.Conn, error) {
 	if srv.Host == "" {
 		return nil, fmt.Errorf("usenet: no server host configured")

@@ -2,6 +2,7 @@ package usenet
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -54,17 +55,20 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		}
 	}
 
-	srv, ok, err := p.st.getServer(ctx)
+	// Same pool as the forward crawl: the provider caps connections per account,
+	// so a separate pool would just push us over the limit.
+	pool, err := p.ensurePool(ctx, cfg)
 	if err != nil {
+		if errors.Is(err, errNoServer) {
+			p.backfillJob.Log("no server configured")
+			p.backfillJob.SetIdle(p.nextBackfill())
+			return
+		}
 		p.backfillJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/backfill-server", err)
+		p.core.Errors.Report(ctx, "usenet/backfill-pool", err)
 		return
 	}
-	if !ok || srv.Host == "" {
-		p.backfillJob.Log("no server configured")
-		p.backfillJob.SetIdle(p.nextBackfill())
-		return
-	}
+	pool.TopUp(ctx)
 	groups, err := p.st.groupsNeedingBackfill(ctx, cfg.MaxGroups)
 	if err != nil {
 		p.backfillJob.SetError(err.Error())
@@ -77,14 +81,6 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		return
 	}
 
-	conn, err := dialServer(srv)
-	if err != nil {
-		p.backfillJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/backfill-dial", err)
-		return
-	}
-	defer conn.Quit()
-
 	cutoff := time.Now().AddDate(0, 0, -cfg.RetentionDays)
 	budget := cfg.BackfillBatchesPerRun
 	totalStaged := 0
@@ -92,7 +88,7 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		if ctx.Err() != nil || budget <= 0 {
 			break
 		}
-		used, staged, err := p.backfillGroup(ctx, conn, g, cutoff, budget, cfg)
+		used, staged, err := p.backfillGroup(ctx, pool, g, cutoff, budget, cfg)
 		budget -= used
 		totalStaged += staged
 		if err != nil {
@@ -115,10 +111,19 @@ func (p *Plugin) nextBackfill() time.Time {
 // backfillGroup fetches batches below the group's back_watermark, advancing it
 // downward. Returns batches consumed and articles staged. Marks the group done
 // when it reaches the server's oldest article or crosses the retention horizon.
-func (p *Plugin) backfillGroup(ctx context.Context, conn *nntp.Conn, g backfillRow, cutoff time.Time, budget int, cfg Config) (used, staged int, err error) {
-	if _, low, _, err := conn.Group(g.Name); err != nil {
+func (p *Plugin) backfillGroup(ctx context.Context, pool *nntp.Pool, g backfillRow, cutoff time.Time, budget int, cfg Config) (used, staged int, err error) {
+	var low int
+	if err := pool.Do(ctx, func(c *nntp.Conn) error {
+		_, l, _, err := c.Group(g.Name)
+		if err != nil {
+			return err
+		}
+		low = l
+		return nil
+	}); err != nil {
 		return 0, 0, err
-	} else if int64(low) > g.ServerLow {
+	}
+	if int64(low) > g.ServerLow {
 		// Server has expired articles since we last crawled; never dip below the
 		// current low.
 		g.ServerLow = int64(low)
@@ -142,11 +147,19 @@ func (p *Plugin) backfillGroup(ctx context.Context, conn *nntp.Conn, g backfillR
 		if start < g.ServerLow {
 			start = g.ServerLow
 		}
-		if _, _, _, err := conn.Group(g.Name); err != nil {
-			return used, staged, err
-		}
-		ovs, _, err := conn.Overview(int(start), int(end))
-		if err != nil {
+		var ovs []nntp.MessageOverview
+		if err := pool.Do(ctx, func(c *nntp.Conn) error {
+			// Whichever connection we get may be selected on another group.
+			if _, _, _, err := c.Group(g.Name); err != nil {
+				return err
+			}
+			got, _, err := c.Overview(int(start), int(end))
+			if err != nil {
+				return err
+			}
+			ovs = got
+			return nil
+		}); err != nil {
 			return used, staged, err
 		}
 		used++

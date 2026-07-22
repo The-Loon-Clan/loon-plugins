@@ -44,7 +44,7 @@ type GroupStore interface {
 	groupCount(ctx context.Context) (int, error)
 	setGroupActive(ctx context.Context, name string, active bool) error
 	upsertGroups(ctx context.Context, names []string) (int, error)
-	updateGroupState(ctx context.Context, name string, low, high, start int64, hwDate time.Time) error
+	updateGroupState(ctx context.Context, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error
 }
 
 // ServerStore holds the single NNTP server row.

@@ -15,6 +15,11 @@ type Config struct {
 	MaxGroups           int          `json:"max_groups"`             // cap active groups crawled per run (default 20)
 	MaxArticlesPerGroup int          `json:"max_articles_per_group"` // cap the first-pass volume so a busy group can't pull millions (default 20000)
 
+	// Connections is the NNTP pool size — how many articles can be fetched in
+	// parallel. Providers cap concurrent connections per account; the pool keeps
+	// whatever it can open, so overshooting is safe but pointless.
+	Connections int `json:"connections"` // default 10
+
 	SkipBackfill          bool `json:"skip_backfill"`            // "new articles only" — disable the backfill job
 	BackfillBatchesPerRun int  `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 10)
 	BackfillIntervalMin   int  `json:"backfill_interval_min"`    // backfill cadence (default 30)
@@ -61,6 +66,9 @@ func (c *Config) applyDefaults() {
 	if c.BackfillIntervalMin <= 0 {
 		c.BackfillIntervalMin = 5 // keep backfilling frequently, not once every 30 min
 	}
+	if c.Connections <= 0 {
+		c.Connections = 10
+	}
 	if c.Staging == "" {
 		c.Staging = "pg"
 	}
@@ -86,6 +94,7 @@ func (c *Config) applyDefaults() {
 // override resolution in sync — no hardcoded operational values.
 func (c *Config) knobFields() map[string]*int {
 	return map[string]*int{
+		"connections":                &c.Connections,
 		"retention_days":             &c.RetentionDays,
 		"crawl_interval_min":         &c.CrawlIntervalMin,
 		"batch":                      &c.Batch,

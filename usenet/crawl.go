@@ -3,7 +3,10 @@ package usenet
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -28,9 +31,36 @@ type stagedArticle struct {
 	FileParts   bool
 }
 
-// runCrawl fetches recent overviews from each active group into staging, then
-// chains the builder. Forward-only from each group's high watermark; the first
-// pass is capped at MaxArticlesPerGroup and filtered to the retention window.
+// batchJob is one OVER range to fetch. Jobs from EVERY group go into a single
+// flat queue rather than per-group waves: in steady state most groups have only
+// a batch or two of new articles, so per-group waves would leave most of the
+// connection pool idle. One queue keeps every connection busy no matter how the
+// work is distributed.
+type batchJob struct {
+	group  string
+	lo, hi int
+}
+
+type batchResult struct {
+	group   string
+	lo, hi  int
+	maxDate time.Time
+	staged  int
+	ok      bool // fetched AND staged; only then may the watermark pass this range
+}
+
+// crawlPlan is one group's resolved forward window for this pass.
+type crawlPlan struct {
+	group     string
+	low, high int // server's current article-number bounds
+	start     int // first article we intend to fetch
+	hasWork   bool
+}
+
+// runCrawl fetches new overviews for every active group into staging, then
+// chains the builder. Batches are fetched in parallel across the shared NNTP
+// connection pool; a group's watermark only advances past batches that were both
+// fetched and staged successfully.
 func (p *Plugin) runCrawl(ctx context.Context) {
 	if ctx == nil {
 		return
@@ -43,17 +73,19 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	p.crawlJob.SetRunning()
 	cfg := p.effective(ctx)
 
-	srv, ok, err := p.st.getServer(ctx)
+	pool, err := p.ensurePool(ctx, cfg)
 	if err != nil {
+		if errors.Is(err, errNoServer) {
+			p.crawlJob.Log("no server configured — add one in the admin wizard")
+			p.crawlJob.SetIdle(p.nextCrawl())
+			return
+		}
 		p.crawlJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/crawl-server", err)
+		p.core.Errors.Report(ctx, "usenet/crawl-pool", err)
 		return
 	}
-	if !ok || srv.Host == "" {
-		p.crawlJob.Log("no server configured — add one in the admin wizard")
-		p.crawlJob.SetIdle(p.nextCrawl())
-		return
-	}
+	pool.TopUp(ctx) // refill anything the last pass discarded
+
 	groups, err := p.st.activeGroups(ctx, cfg.MaxGroups)
 	if err != nil {
 		p.crawlJob.SetError(err.Error())
@@ -66,31 +98,55 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		return
 	}
 
-	conn, err := dialServer(srv)
-	if err != nil {
-		p.crawlJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/crawl-dial", err)
-		return
-	}
-	defer conn.Quit()
-
-	cutoff := time.Now().AddDate(0, 0, -cfg.RetentionDays)
-	staged := 0
+	// 1. Resolve each group's window and enqueue its batches.
+	plans := make(map[string]*crawlPlan, len(groups))
+	var jobs []batchJob
 	for _, g := range groups {
 		if ctx.Err() != nil {
 			return
 		}
-		p.crawlJob.Log("crawling %s…", g.Name)
-		n, err := p.crawlGroup(ctx, conn, g, cutoff, cfg)
+		plan, err := p.planGroup(ctx, pool, g, cfg)
 		if err != nil {
-			p.core.Errors.Report(ctx, "usenet/crawl", fmt.Errorf("%s: %w", g.Name, err))
-			p.crawlJob.Log("%s: error — %v", g.Name, err)
+			p.core.Errors.Report(ctx, "usenet/crawl-plan", fmt.Errorf("%s: %w", g.Name, err))
+			p.crawlJob.Log("%s: %v", g.Name, err)
 			continue
 		}
-		staged += n
-		p.crawlJob.Log("%s: staged %d new article(s)", g.Name, n)
+		plans[g.Name] = plan
+		if !plan.hasWork {
+			// Nothing new, but still record the server range so the coverage view
+			// stays honest.
+			if err := p.st.updateGroupState(ctx, plan.group, int64(plan.low), int64(plan.high),
+				0, int64(plan.start), time.Time{}); err != nil {
+				p.core.Errors.Report(ctx, "usenet/crawl-range", err)
+			}
+			continue
+		}
+		for i := plan.start; i <= plan.high; i += cfg.Batch {
+			end := i + cfg.Batch - 1
+			if end > plan.high {
+				end = plan.high
+			}
+			jobs = append(jobs, batchJob{group: plan.group, lo: i, hi: end})
+		}
 	}
-	p.crawlJob.Log("crawl complete: %d group(s), %d new articles staged", len(groups), staged)
+	if len(jobs) == 0 {
+		p.crawlJob.Log("crawl complete: %d group(s), nothing new", len(plans))
+		p.crawlJob.SetIdle(p.nextCrawl())
+		return
+	}
+
+	// 2. Fetch + stage in parallel over the pool.
+	cutoff := time.Now().AddDate(0, 0, -cfg.RetentionDays)
+	p.crawlJob.Log("crawling %d group(s), %d batch(es) over %d connection(s)…",
+		len(plans), len(jobs), cfg.Connections)
+	results := p.runBatches(ctx, pool, jobs, cutoff, cfg)
+
+	// 3. Advance watermarks to the last contiguous success per group.
+	staged, advanced := p.advanceWatermarks(ctx, plans, results)
+
+	st := pool.Stats()
+	p.crawlJob.Log("crawl complete: %d group(s), %d batch(es), %d article(s) staged, %d group(s) advanced (conns %d/%d, resets %d)",
+		len(plans), len(jobs), staged, advanced, st.Open, st.Target, st.Resets)
 	p.crawlJob.SetIdle(p.nextCrawl())
 	go p.runBuild(ctx) // assemble what just landed
 }
@@ -99,13 +155,20 @@ func (p *Plugin) nextCrawl() time.Time {
 	return time.Now().Add(time.Duration(p.cfg.CrawlIntervalMin) * time.Minute)
 }
 
-// crawlGroup pulls new overviews for one group into staging and advances its
-// watermark. Re-selects the group before each Overview (the connection is
-// stateful and shared across groups within the run).
-func (p *Plugin) crawlGroup(ctx context.Context, conn *nntp.Conn, g groupRow, cutoff time.Time, cfg Config) (int, error) {
-	_, low, high, err := conn.Group(g.Name)
+// planGroup selects the group once to learn the server's bounds and works out
+// which article numbers this pass should fetch.
+func (p *Plugin) planGroup(ctx context.Context, pool *nntp.Pool, g groupRow, cfg Config) (*crawlPlan, error) {
+	var low, high int
+	err := pool.Do(ctx, func(c *nntp.Conn) error {
+		_, l, h, err := c.Group(g.Name)
+		if err != nil {
+			return err
+		}
+		low, high = l, h
+		return nil
+	})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	start := int(g.HighWatermark) + 1
 	if g.HighWatermark == 0 {
@@ -114,47 +177,151 @@ func (p *Plugin) crawlGroup(ctx context.Context, conn *nntp.Conn, g groupRow, cu
 	if start < low {
 		start = low
 	}
+	return &crawlPlan{
+		group: g.Name, low: low, high: high,
+		start: start, hasWork: start <= high,
+	}, nil
+}
 
-	batch := cfg.Batch
-	staged, scanned, batchNum := 0, 0, 0
-	var maxDate time.Time
-	for i := start; i <= high; i += batch {
+// runBatches fetches every job across the pool. Worker count matches the pool
+// size — more would just queue on the pool's blocking fallback, which is the
+// backpressure that keeps us from outrunning the server.
+func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, jobs []batchJob, cutoff time.Time, cfg Config) []batchResult {
+	workers := cfg.Connections
+	if workers > len(jobs) {
+		workers = len(jobs)
+	}
+	if workers < 1 {
+		workers = 1
+	}
+
+	jobCh := make(chan batchJob)
+	resCh := make(chan batchResult, len(jobs)) // buffered: workers never block on send
+
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobCh {
+				resCh <- p.fetchBatch(ctx, pool, j, cutoff)
+			}
+		}()
+	}
+	for _, j := range jobs {
 		if ctx.Err() != nil {
 			break
 		}
-		end := i + batch - 1
-		if end > high {
-			end = high
+		jobCh <- j
+	}
+	close(jobCh)
+	wg.Wait()
+	close(resCh)
+
+	out := make([]batchResult, 0, len(jobs))
+	for r := range resCh {
+		out = append(out, r)
+	}
+	return out
+}
+
+// fetchBatch pulls one overview range and stages it. The connection is returned
+// to the pool before any parsing or database work.
+func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, cutoff time.Time) batchResult {
+	res := batchResult{group: j.group, lo: j.lo, hi: j.hi}
+	if ctx.Err() != nil {
+		return res
+	}
+
+	var ovs []nntp.MessageOverview
+	err := pool.Do(ctx, func(c *nntp.Conn) error {
+		// The pool hands out whichever connection is free and another caller may
+		// have selected a different group on it, so always re-select.
+		if _, _, _, err := c.Group(j.group); err != nil {
+			return err
 		}
-		if _, _, _, err := conn.Group(g.Name); err != nil {
-			return staged, err
-		}
-		ovs, _, err := conn.Overview(i, end)
+		got, _, err := c.Overview(j.lo, j.hi)
 		if err != nil {
-			return staged, err
+			return err
 		}
-		scanned += len(ovs)
-		if d := newestDate(ovs); d.After(maxDate) {
-			maxDate = d
+		ovs = got
+		return nil
+	})
+	if err != nil {
+		p.core.Errors.Report(ctx, "usenet/crawl-fetch",
+			fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
+		return res // ok stays false — the watermark will not pass this range
+	}
+	res.maxDate = newestDate(ovs)
+
+	arts := parseOverviews(ovs, j.group, cutoff)
+	if len(arts) > 0 {
+		n, err := p.staging.stageArticles(ctx, arts)
+		if err != nil {
+			// Leave ok=false so the watermark does NOT move past articles we never
+			// stored. (Prod drops the batch on a staging error but keeps the
+			// already-advanced watermark, losing those articles permanently.)
+			p.core.Errors.Report(ctx, "usenet/crawl-stage",
+				fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
+			return res
 		}
-		arts := parseOverviews(ovs, g.Name, cutoff)
-		if len(arts) > 0 {
-			n, err := p.staging.stageArticles(ctx, arts)
-			if err != nil {
-				return staged, err
-			}
-			staged += n
+		res.staged = n
+	}
+	res.ok = true
+	return res
+}
+
+// advanceWatermarks moves each group's high watermark to the end of its last
+// CONTIGUOUS run of successful batches. A failure in the middle stops the
+// advance there, so the failed range is refetched next pass instead of being
+// silently skipped — with parallel batches, "highest success" would strand gaps.
+func (p *Plugin) advanceWatermarks(ctx context.Context, plans map[string]*crawlPlan, results []batchResult) (staged, advanced int) {
+	byGroup := make(map[string][]batchResult, len(plans))
+	for _, r := range results {
+		staged += r.staged
+		byGroup[r.group] = append(byGroup[r.group], r)
+	}
+
+	for name, rs := range byGroup {
+		plan := plans[name]
+		if plan == nil {
+			continue
 		}
-		if batchNum++; batchNum%5 == 0 {
-			p.crawlJob.Log("%s: scanned %d, staged %d (article %d of %d)", g.Name, scanned, staged, end, high)
+		highest, latest := contiguousEnd(plan.start, rs)
+
+		var watermark int64
+		if highest >= plan.start {
+			watermark = int64(highest)
+			advanced++
+		} else {
+			p.crawlJob.Log("%s: no contiguous progress this pass — retrying from %d", name, plan.start)
+		}
+		if err := p.st.updateGroupState(ctx, name, int64(plan.low), int64(plan.high),
+			watermark, int64(plan.start), latest); err != nil {
+			p.core.Errors.Report(ctx, "usenet/crawl-watermark", fmt.Errorf("%s: %w", name, err))
 		}
 	}
-	// start is the bottom of this run's forward window; it seeds back_watermark on
-	// the first crawl so backfill knows where history begins below it.
-	if err := p.st.updateGroupState(ctx, g.Name, int64(low), int64(high), int64(start), maxDate); err != nil {
-		return staged, err
+	return staged, advanced
+}
+
+// contiguousEnd returns the end of the unbroken run of successful batches
+// beginning at start, together with the newest article date seen across that run
+// (dates from batches beyond a break are ignored — they are not yet covered).
+// Returns start-1 when nothing contiguous succeeded. Sorts rs in place.
+func contiguousEnd(start int, rs []batchResult) (int, time.Time) {
+	sort.Slice(rs, func(i, j int) bool { return rs[i].lo < rs[j].lo })
+	highest := start - 1
+	var latest time.Time
+	for _, r := range rs {
+		if !r.ok || r.lo > highest+1 {
+			break
+		}
+		highest = r.hi
+		if r.maxDate.After(latest) {
+			latest = r.maxDate
+		}
 	}
-	return staged, nil
+	return highest, latest
 }
 
 // parseOverviews turns overview lines into staged articles, dropping ones with
@@ -239,7 +406,12 @@ func (s *PGStore) stageArticles(ctx context.Context, arts []stagedArticle) (int,
 	return n, err
 }
 
-func (s *PGStore) updateGroupState(ctx context.Context, name string, low, high, start int64, hwDate time.Time) error {
+// updateGroupState records the server's bounds and, when watermark > 0, advances
+// high_watermark. The watermark is passed separately from serverHigh because a
+// pass may only complete part of its window (see advanceWatermarks); GREATEST
+// keeps it monotonic, and backSeed initialises back_watermark on the first crawl
+// so the backfill knows where history begins.
+func (s *PGStore) updateGroupState(ctx context.Context, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error {
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		var hw sql.NullTime
 		if !hwDate.IsZero() {
@@ -251,7 +423,7 @@ func (s *PGStore) updateGroupState(ctx context.Context, name string, low, high, 
 			       server_low = $3, server_high = $4, last_crawl = now(),
 			       back_watermark = COALESCE(back_watermark, $5),
 			       high_watermark_date = COALESCE($6, high_watermark_date)
-			 WHERE name = $1`, name, high, low, high, start, hw)
+			 WHERE name = $1`, name, watermark, serverLow, serverHigh, backSeed, hw)
 		return err
 	})
 }
