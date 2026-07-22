@@ -42,11 +42,11 @@ type batchJob struct {
 }
 
 type batchResult struct {
-	group   string
-	lo, hi  int
-	maxDate time.Time
-	staged  int
-	ok      bool // fetched AND staged; only then may the watermark pass this range
+	group            string
+	lo, hi           int
+	minDate, maxDate time.Time
+	staged           int
+	ok               bool // fetched AND staged; only then may the watermark pass this range
 }
 
 // crawlPlan is one group's resolved forward window for this pass.
@@ -255,6 +255,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, cu
 		return res // ok stays false — the watermark will not pass this range
 	}
 	res.maxDate = newestDate(ovs)
+	res.minDate = oldestDate(ovs)
 
 	arts := parseOverviews(ovs, j.group, cutoff)
 	if len(arts) > 0 {
@@ -288,6 +289,14 @@ func (p *Plugin) advanceWatermarks(ctx context.Context, plans map[string]*crawlP
 		plan := plans[name]
 		if plan == nil {
 			continue
+		}
+		for _, r := range rs {
+			if !r.ok {
+				continue
+			}
+			if err := p.st.recordFetchedRange(ctx, name, int64(r.lo), int64(r.hi)); err != nil {
+				p.core.Errors.Report(ctx, "usenet/crawl-range-record", err)
+			}
 		}
 		highest, latest := contiguousEnd(plan.start, rs)
 

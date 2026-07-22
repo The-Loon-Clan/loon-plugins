@@ -5,15 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/the-loon-clan/loon/nntp"
 )
 
-// runBackfill walks each active group's back_watermark downward toward server_low,
-// staging historical overviews within the retention window. The crawl is serial
-// and monotonic, so a single pointer per group is exact — no gap tracking. Work is
-// capped at BackfillBatchesPerRun batches across all groups so a pass is bounded
-// and the forward crawler isn't starved of the shared connection.
+// runBackfill closes the GAPS below each group's back_watermark.
+//
+// Coverage is tracked in newsgroup_ranges, so "what is still missing" is the
+// complement of the fetched runs rather than a single downward pointer. That
+// matters for throughput: gaps from every group go into one flat batch queue and
+// are fetched in PARALLEL across the shared connection pool, where a pointer
+// walk can only ever fetch one batch at a time per group.
+//
+// A pass is bounded by BackfillBatchesPerRun across all groups, so a large
+// history doesn't monopolise the pool.
 func (p *Plugin) runBackfill(ctx context.Context) {
 	if ctx == nil {
 		return
@@ -69,6 +72,7 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		return
 	}
 	pool.TopUp(ctx)
+
 	groups, err := p.st.groupsNeedingBackfill(ctx, cfg.MaxGroups)
 	if err != nil {
 		p.backfillJob.SetError(err.Error())
@@ -81,25 +85,56 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		return
 	}
 
-	cutoff := time.Now().AddDate(0, 0, -cfg.RetentionDays)
+	// Build one flat job list from every group's gaps, oldest-work-last, bounded
+	// by the shared budget so no single group can consume the whole pass.
 	budget := cfg.BackfillBatchesPerRun
-	totalStaged := 0
+	var jobs []batchJob
+	targets := make(map[string]backfillRow, len(groups))
 	for _, g := range groups {
-		if ctx.Err() != nil || budget <= 0 {
+		if ctx.Err() != nil {
+			return
+		}
+		if budget <= 0 {
 			break
 		}
-		used, staged, err := p.backfillGroup(ctx, pool, g, cutoff, budget, cfg)
-		budget -= used
-		totalStaged += staged
+		gaps, err := p.st.backfillGaps(ctx, g.Name, g.ServerLow, g.BackWatermark)
 		if err != nil {
-			p.core.Errors.Report(ctx, "usenet/backfill", fmt.Errorf("%s: %w", g.Name, err))
-			p.backfillJob.Log("%s: error — %v", g.Name, err)
+			p.core.Errors.Report(ctx, "usenet/backfill-gaps", fmt.Errorf("%s: %w", g.Name, err))
 			continue
 		}
+		if len(gaps) == 0 {
+			if err := p.st.markBackfillDone(ctx, g.Name); err != nil {
+				p.core.Errors.Report(ctx, "usenet/backfill-done", err)
+			}
+			p.backfillJob.Log("%s: backfill complete — no gaps remain above the server's oldest article", g.Name)
+			continue
+		}
+		gj := gapJobs(g.Name, gaps, cfg.Batch, budget)
+		if len(gj) == 0 {
+			continue
+		}
+		budget -= len(gj)
+		jobs = append(jobs, gj...)
+		targets[g.Name] = g
 	}
-	p.backfillJob.Log("backfill pass complete: %d historical article(s) staged", totalStaged)
+	if len(jobs) == 0 {
+		p.backfillJob.Log("backfill: nothing to do this pass")
+		p.backfillJob.SetIdle(p.nextBackfill())
+		return
+	}
+
+	cutoff := time.Now().AddDate(0, 0, -cfg.RetentionDays)
+	p.backfillJob.Log("backfilling %d group(s), %d batch(es) over %d connection(s)…",
+		len(targets), len(jobs), cfg.Connections)
+	results := p.runBatches(ctx, pool, jobs, cutoff, cfg)
+
+	staged := p.recordBackfill(ctx, targets, results, cutoff)
+
+	st := pool.Stats()
+	p.backfillJob.Log("backfill pass complete: %d historical article(s) staged from %d batch(es) (conns %d/%d, resets %d)",
+		staged, len(jobs), st.Open, st.Target, st.Resets)
 	p.backfillJob.SetIdle(p.nextBackfill())
-	if totalStaged > 0 {
+	if staged > 0 {
 		go p.runBuild(ctx) // assemble any newly-complete historical sets
 	}
 }
@@ -108,84 +143,63 @@ func (p *Plugin) nextBackfill() time.Time {
 	return time.Now().Add(time.Duration(p.cfg.BackfillIntervalMin) * time.Minute)
 }
 
-// backfillGroup fetches batches below the group's back_watermark, advancing it
-// downward. Returns batches consumed and articles staged. Marks the group done
-// when it reaches the server's oldest article or crosses the retention horizon.
-func (p *Plugin) backfillGroup(ctx context.Context, pool *nntp.Pool, g backfillRow, cutoff time.Time, budget int, cfg Config) (used, staged int, err error) {
-	var low int
-	if err := pool.Do(ctx, func(c *nntp.Conn) error {
-		_, l, _, err := c.Group(g.Name)
+// recordBackfill persists coverage for successful batches, then re-derives each
+// group's remaining work. Unlike the forward crawl there is no contiguity rule:
+// a failed batch simply leaves its gap unrecorded, so the next pass recomputes
+// it and tries again — coverage IS the state, so nothing can be silently
+// skipped.
+func (p *Plugin) recordBackfill(ctx context.Context, targets map[string]backfillRow, results []batchResult, cutoff time.Time) (staged int) {
+	byGroup := make(map[string][]batchResult, len(targets))
+	for _, r := range results {
+		staged += r.staged
+		byGroup[r.group] = append(byGroup[r.group], r)
+	}
+
+	for name, rs := range byGroup {
+		g, ok := targets[name]
+		if !ok {
+			continue
+		}
+		var oldest time.Time
+		for _, r := range rs {
+			if !r.ok {
+				continue
+			}
+			if err := p.st.recordFetchedRange(ctx, name, int64(r.lo), int64(r.hi)); err != nil {
+				p.core.Errors.Report(ctx, "usenet/backfill-range-record", fmt.Errorf("%s: %w", name, err))
+				continue
+			}
+			if !r.minDate.IsZero() && (oldest.IsZero() || r.minDate.Before(oldest)) {
+				oldest = r.minDate
+			}
+		}
+
+		// Reached the retention horizon: everything below is older still.
+		if !oldest.IsZero() && oldest.Before(cutoff) {
+			if err := p.st.markBackfillDone(ctx, name); err != nil {
+				p.core.Errors.Report(ctx, "usenet/backfill-done", err)
+			}
+			p.backfillJob.Log("%s: reached the retention horizon (oldest %s)", name, oldest.Format("2006-01-02"))
+			continue
+		}
+
+		// Re-derive what is left; the newest remaining gap is where the next pass
+		// picks up, which is what back_watermark means to the coverage view.
+		gaps, err := p.st.backfillGaps(ctx, name, g.ServerLow, g.BackWatermark)
 		if err != nil {
-			return err
+			p.core.Errors.Report(ctx, "usenet/backfill-gaps", fmt.Errorf("%s: %w", name, err))
+			continue
 		}
-		low = l
-		return nil
-	}); err != nil {
-		return 0, 0, err
-	}
-	if int64(low) > g.ServerLow {
-		// Server has expired articles since we last crawled; never dip below the
-		// current low.
-		g.ServerLow = int64(low)
-	}
-
-	back := g.BackWatermark
-	if back <= g.ServerLow {
-		return 0, 0, p.st.markBackfillDone(ctx, g.Name)
-	}
-
-	batch := int64(cfg.Batch)
-	for used < budget {
-		if ctx.Err() != nil {
-			break
-		}
-		end := back - 1
-		if end < g.ServerLow {
-			break
-		}
-		start := end - batch + 1
-		if start < g.ServerLow {
-			start = g.ServerLow
-		}
-		var ovs []nntp.MessageOverview
-		if err := pool.Do(ctx, func(c *nntp.Conn) error {
-			// Whichever connection we get may be selected on another group.
-			if _, _, _, err := c.Group(g.Name); err != nil {
-				return err
+		if len(gaps) == 0 {
+			if err := p.st.markBackfillDone(ctx, name); err != nil {
+				p.core.Errors.Report(ctx, "usenet/backfill-done", err)
 			}
-			got, _, err := c.Overview(int(start), int(end))
-			if err != nil {
-				return err
-			}
-			ovs = got
-			return nil
-		}); err != nil {
-			return used, staged, err
+			p.backfillJob.Log("%s: backfill complete", name)
+			continue
 		}
-		used++
-
-		arts := parseOverviews(ovs, g.Name, cutoff)
-		if len(arts) > 0 {
-			n, err := p.staging.stageArticles(ctx, arts)
-			if err != nil {
-				return used, staged, err
-			}
-			staged += n
-		}
-		back = start
-		if err := p.st.updateBackWatermark(ctx, g.Name, back, oldestDate(ovs)); err != nil {
-			return used, staged, err
-		}
-		p.backfillJob.Log("%s: backfilled down to article %d (%d staged this pass)", g.Name, back, staged)
-
-		if back <= g.ServerLow {
-			return used, staged, p.st.markBackfillDone(ctx, g.Name) // reached the bottom
-		}
-		// If even the newest article in this (older) batch is past retention,
-		// everything below it is too — stop.
-		if newest := newestDate(ovs); !newest.IsZero() && newest.Before(cutoff) {
-			return used, staged, p.st.markBackfillDone(ctx, g.Name)
+		if err := p.st.updateBackWatermark(ctx, name, gaps[0].End, oldest); err != nil {
+			p.core.Errors.Report(ctx, "usenet/backfill-watermark", fmt.Errorf("%s: %w", name, err))
 		}
 	}
-	return used, staged, nil
+	return staged
 }

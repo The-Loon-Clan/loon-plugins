@@ -67,6 +67,9 @@ type BackfillStore interface {
 	markBackfillDone(ctx context.Context, name string) error
 	resetBackfill(ctx context.Context, name string) error
 	builderInfo(ctx context.Context, limit int) (BuilderInfo, error)
+	recordFetchedRange(ctx context.Context, group string, start, end int64) error
+	coveredRanges(ctx context.Context, group string) ([]articleRange, error)
+	backfillGaps(ctx context.Context, group string, low, high int64) ([]articleRange, error)
 }
 
 // AssemblerStore is the staging area the NZB assembler reads + drains.
