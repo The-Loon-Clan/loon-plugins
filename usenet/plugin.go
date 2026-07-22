@@ -68,6 +68,11 @@ type Plugin struct {
 	pool    *nntp.Pool
 	poolKey string
 
+	// One connection pool per configured provider (providers.go). Article
+	// numbers are per-server, so providers share nothing numeric — only the
+	// staging area, where message-id dedup turns overlap into better coverage.
+	fleet *providerFleet
+
 	// Fingerprint of the junk rules currently compiled into memory, so a reload
 	// only recompiles when they actually changed (junk_store.go).
 	junkMu sync.Mutex
@@ -92,6 +97,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return fmt.Errorf("usenet: config: %w", err)
 	}
 	p.cfg.applyDefaults()
+	p.fleet = newProviderFleet()
 	// Staging backend behind the seam. Limits are read per-call (via effective)
 	// so the admin knobs apply live. nzbs writes always go through pg regardless.
 	staging, err := newStaging(p.cfg.Staging, pg, c.Redis, func(ctx context.Context) (int, int) {
@@ -242,6 +248,9 @@ func (p *Plugin) runTagFill(ctx context.Context) {
 
 func (p *Plugin) Stop(ctx context.Context) error {
 	p.closePool()
+	if p.fleet != nil {
+		p.fleet.closeAll()
+	}
 	return nil
 }
 

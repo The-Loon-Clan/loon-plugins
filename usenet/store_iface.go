@@ -53,6 +53,7 @@ type GroupStore interface {
 // ServerStore holds the single NNTP server row.
 type ServerStore interface {
 	getServer(ctx context.Context) (pluginapi.Server, bool, error)
+	providers(ctx context.Context) ([]provider, error)
 	saveServer(ctx context.Context, srv pluginapi.Server) error
 }
 
