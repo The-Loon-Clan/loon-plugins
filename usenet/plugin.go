@@ -52,6 +52,10 @@ type Plugin struct {
 	crawlMu    sync.Mutex
 	backfillMu sync.Mutex
 	buildMu    sync.Mutex
+
+	// backfillPaused is the hysteresis latch for staging back-pressure; only
+	// touched inside runBackfill (serialized by backfillMu).
+	backfillPaused bool
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -74,7 +78,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.cfg.applyDefaults()
 	// Staging backend behind the seam. Limits are read per-call (via effective)
 	// so the admin knobs apply live. nzbs writes always go through pg regardless.
-	staging, err := newStaging(p.cfg.Staging, pg, func(ctx context.Context) (int, int) {
+	staging, err := newStaging(p.cfg.Staging, pg, c.Redis, func(ctx context.Context) (int, int) {
 		e := p.effective(ctx)
 		return e.StagingMaxRows, e.StagingPruneHours
 	})

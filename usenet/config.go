@@ -21,9 +21,14 @@ type Config struct {
 
 	// Staging backend (USENET-STAGING-MODES.md). Boot config, not a live knob:
 	// switching backends at runtime would strand staged data.
-	Staging           string `json:"staging"`             // pg (durable, default) | redis (fast, best-effort — Phase B)
+	Staging           string `json:"staging"`             // pg (durable, default) | redis (fast, best-effort)
 	StagingMaxRows    int    `json:"staging_max_rows"`    // pg back-pressure denominator: staged rows / this (default 2_000_000)
 	StagingPruneHours int    `json:"staging_prune_hours"` // pg stale-staging horizon in hours (default 6)
+
+	// Backfill back-pressure thresholds (percent of staging pressure). Backfill
+	// pauses at high, resumes below low; the forward crawl is never paused.
+	BackfillPressureHighPct int `json:"backfill_pressure_high_pct"` // default 85
+	BackfillPressureLowPct  int `json:"backfill_pressure_low_pct"`  // default 70
 }
 
 type ServerConfig struct {
@@ -65,6 +70,12 @@ func (c *Config) applyDefaults() {
 	if c.StagingPruneHours <= 0 {
 		c.StagingPruneHours = 6
 	}
+	if c.BackfillPressureHighPct <= 0 {
+		c.BackfillPressureHighPct = 85
+	}
+	if c.BackfillPressureLowPct <= 0 {
+		c.BackfillPressureLowPct = 70
+	}
 	if c.Server.Port == 0 {
 		c.Server.Port = 119
 	}
@@ -75,15 +86,17 @@ func (c *Config) applyDefaults() {
 // override resolution in sync — no hardcoded operational values.
 func (c *Config) knobFields() map[string]*int {
 	return map[string]*int{
-		"retention_days":           &c.RetentionDays,
-		"crawl_interval_min":       &c.CrawlIntervalMin,
-		"batch":                    &c.Batch,
-		"max_groups":               &c.MaxGroups,
-		"max_articles_per_group":   &c.MaxArticlesPerGroup,
-		"backfill_interval_min":    &c.BackfillIntervalMin,
-		"backfill_batches_per_run": &c.BackfillBatchesPerRun,
-		"staging_max_rows":         &c.StagingMaxRows,
-		"staging_prune_hours":      &c.StagingPruneHours,
+		"retention_days":             &c.RetentionDays,
+		"crawl_interval_min":         &c.CrawlIntervalMin,
+		"batch":                      &c.Batch,
+		"max_groups":                 &c.MaxGroups,
+		"max_articles_per_group":     &c.MaxArticlesPerGroup,
+		"backfill_interval_min":      &c.BackfillIntervalMin,
+		"backfill_batches_per_run":   &c.BackfillBatchesPerRun,
+		"staging_max_rows":           &c.StagingMaxRows,
+		"staging_prune_hours":        &c.StagingPruneHours,
+		"backfill_pressure_high_pct": &c.BackfillPressureHighPct,
+		"backfill_pressure_low_pct":  &c.BackfillPressureLowPct,
 	}
 }
 

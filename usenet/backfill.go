@@ -31,6 +31,29 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		return
 	}
 
+	// Back-pressure: the forward crawl never pauses, but backfill yields when the
+	// staging buffer fills faster than the NZB builder drains it. Hysteresis
+	// (pause at high-water, resume only below low-water) avoids flapping. What
+	// pressure measures is the backend's business — pg: staged rows / cap; redis:
+	// used_memory / maxmemory.
+	if pr, perr := p.staging.pressure(ctx); perr == nil {
+		high := float64(cfg.BackfillPressureHighPct) / 100.0
+		low := float64(cfg.BackfillPressureLowPct) / 100.0
+		switch {
+		case p.backfillPaused && pr >= low:
+			p.backfillJob.Log("backfill paused: staging pressure %.0f%% (resumes below %d%%)", pr*100, cfg.BackfillPressureLowPct)
+			p.backfillJob.SetIdle(p.nextBackfill())
+			return
+		case pr >= high:
+			p.backfillPaused = true
+			p.backfillJob.Log("backfill paused: staging pressure %.0f%% >= %d%% — letting the NZB builder drain", pr*100, cfg.BackfillPressureHighPct)
+			p.backfillJob.SetIdle(p.nextBackfill())
+			return
+		default:
+			p.backfillPaused = false
+		}
+	}
+
 	srv, ok, err := p.st.getServer(ctx)
 	if err != nil {
 		p.backfillJob.SetError(err.Error())

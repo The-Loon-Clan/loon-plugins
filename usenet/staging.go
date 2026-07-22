@@ -3,6 +3,8 @@ package usenet
 import (
 	"context"
 	"fmt"
+
+	"github.com/the-loon-clan/loon/core"
 )
 
 // stagingStore is the transient article-assembly buffer — the seam that lets a
@@ -67,15 +69,18 @@ func (s *pgStaging) pressure(ctx context.Context) (float64, error) {
 
 var _ stagingStore = (*pgStaging)(nil)
 
-// newStaging selects the staging backend by config mode. redis is Phase B; until
-// then, asking for it fails fast rather than silently running pg — a
+// newStaging selects the staging backend by config mode. `redis` fails fast when
+// the host has no Redis (core.Redis nil) rather than silently running pg — a
 // mode/behavior mismatch is worse than a boot error (USENET-STAGING-MODES.md).
-func newStaging(mode string, pg *PGStore, limits func(context.Context) (int, int)) (stagingStore, error) {
+func newStaging(mode string, pg *PGStore, redisSvc core.RedisService, limits func(context.Context) (int, int)) (stagingStore, error) {
 	switch mode {
 	case "", "pg":
 		return newPGStaging(pg, limits), nil
 	case "redis":
-		return nil, fmt.Errorf("staging mode %q not yet implemented (see USENET-STAGING-MODES.md, Phase B)", mode)
+		if redisSvc == nil || redisSvc.Client() == nil {
+			return nil, fmt.Errorf("staging mode redis requires Redis, but the host has none configured (core.Redis is nil) — configure the host's Redis or use staging: pg")
+		}
+		return newRedisStaging(redisSvc.Client()), nil
 	default:
 		return nil, fmt.Errorf("unknown staging mode %q (want pg|redis)", mode)
 	}
