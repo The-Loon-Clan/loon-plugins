@@ -65,6 +65,11 @@ type Plugin struct {
 	poolMu  sync.Mutex
 	pool    *nntp.Pool
 	poolKey string
+
+	// Fingerprint of the junk rules currently compiled into memory, so a reload
+	// only recompiles when they actually changed (junk_store.go).
+	junkMu sync.Mutex
+	junkFP string
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -183,6 +188,8 @@ func (p *Plugin) Start(ctx context.Context) error {
 		return nil // web-only process: capability is registered, no jobs run here
 	}
 	p.seedServer(ctx)
+	// Ship the junk rules into the DB, then compile the live set into memory.
+	p.seedAndLoadJunkRules(ctx)
 	interval := time.Duration(p.cfg.CrawlIntervalMin) * time.Minute
 	backfillInterval := time.Duration(p.cfg.BackfillIntervalMin) * time.Minute
 	p.core.Scheduler.RunLoop(ctx, p.crawlJob, time.Minute, interval, p.runCrawl)

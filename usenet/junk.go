@@ -1,6 +1,14 @@
 package usenet
 
-import "regexp"
+import (
+	"bufio"
+	"embed"
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strings"
+	"sync/atomic"
+)
 
 // Junk-title detection, ported from the prod site's isJunkTitle
 // (indexer-site/pkg/services/nzb_assembler.go). Obfuscated Usenet posts use
@@ -9,26 +17,169 @@ import "regexp"
 // staging) and again at build (defensive), and sweep already-staged/built junk
 // in the prune job.
 //
-// This is the size-independent subset of prod's checks — the ones that need no
-// assembled-size context. Software/warez and ROT13 patterns (anime-catalog
-// specific) are intentionally omitted here.
+// The rules are DATA, not code: seed/junk_rules.tsv is embedded (so the filter
+// works before any database exists), seeds the junk_rules table, and the live
+// set is then loaded from that table and compiled ONCE into an immutable
+// junkMatcher held in an atomic pointer. The check runs per article on the
+// ingest hot path, so it must never touch the database — reload swaps the whole
+// matcher in one atomic store.
 
-var (
-	// 24+ consecutive alphanumerics anywhere = a hash/token. The workhorse.
-	reLongAlnumRun = regexp.MustCompile(`[A-Za-z0-9]{24,}`)
-	// canonical UUID.
-	reUUID = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
-	// leftover poster-template tokens: {total}, {{count}}.
-	reTemplateToken = regexp.MustCompile(`\{[A-Za-z0-9_]+\}|\{\{[^}]+\}\}`)
-	// dot-separated obfuscated pair: "f329yZ98AaYf2qHd.QPv2" (checked with the
-	// upper+lower+digit gate below).
-	reDotSepObfuscated = regexp.MustCompile(`^[A-Za-z0-9]{6,}\.[A-Za-z0-9]{1,12}$`)
-	// structural gate for the multi-segment random-token check: only
-	// alphanumerics, underscores, spaces (real titles carry other punctuation).
-	reMultiSegSegmented = regexp.MustCompile(`^[A-Za-z0-9_ ]+$`)
-	// trailing release extensions to peel before checks (compound first).
-	reReleaseExtDynamic = regexp.MustCompile(`(?i)\.(vol\d+\+\d+\.par2|part\d+\.rar|r\d{2,3}|\d{3})$`)
-)
+//go:embed seed/junk_rules.tsv
+var seedFS embed.FS
+
+const junkSeedPath = "seed/junk_rules.tsv"
+
+// junkRuleSpec is one rule as stored/shipped, before compilation.
+type junkRuleSpec struct {
+	Name    string
+	Kind    string // "regex" | "heuristic"
+	Rule    string // regex source, or the built-in heuristic id
+	Params  junkParams
+	Notes   string
+	Enabled bool
+}
+
+// junkParams are the gates (regex rules) and tuning knobs (heuristics).
+type junkParams struct {
+	RequireUpper bool `json:"require_upper,omitempty"`
+	RequireLower bool `json:"require_lower,omitempty"`
+	RequireDigit bool `json:"require_digit,omitempty"`
+	MinLen       int  `json:"min_len,omitempty"`
+	MinSegLen    int  `json:"min_seg_len,omitempty"`
+	MinChaotic   int  `json:"min_chaotic,omitempty"`
+}
+
+// compiledRule is the runtime form: regexes already compiled, no allocation or
+// parsing on the hot path.
+type compiledRule struct {
+	name      string
+	re        *regexp.Regexp // nil for heuristics
+	heuristic string         // "" for regex rules
+	params    junkParams
+}
+
+// junkMatcher is an immutable compiled rule set. Replace it wholesale; never
+// mutate one that is in use.
+type junkMatcher struct{ rules []compiledRule }
+
+// activeJunk holds the live matcher. Reads are lock-free; a reload stores a new
+// matcher in one atomic operation.
+var activeJunk atomic.Pointer[junkMatcher]
+
+func init() {
+	m, err := loadEmbeddedJunkMatcher()
+	if err != nil {
+		// The embedded file ships with the binary, so this is a build-time bug.
+		panic("usenet: embedded junk rules are invalid: " + err.Error())
+	}
+	activeJunk.Store(m)
+}
+
+// loadEmbeddedJunkMatcher compiles the shipped defaults.
+func loadEmbeddedJunkMatcher() (*junkMatcher, error) {
+	specs, err := parseJunkRulesTSV(seedFS, junkSeedPath)
+	if err != nil {
+		return nil, err
+	}
+	return newJunkMatcher(specs)
+}
+
+// embeddedJunkRules returns the shipped rules — used by the seeder.
+func embeddedJunkRules() ([]junkRuleSpec, error) {
+	return parseJunkRulesTSV(seedFS, junkSeedPath)
+}
+
+// setJunkMatcher swaps the live rule set. Safe to call while crawling.
+func setJunkMatcher(m *junkMatcher) {
+	if m != nil && len(m.rules) > 0 {
+		activeJunk.Store(m)
+	}
+}
+
+// parseJunkRulesTSV reads the tab-separated rule file.
+func parseJunkRulesTSV(fsys embed.FS, path string) ([]junkRuleSpec, error) {
+	f, err := fsys.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var out []junkRuleSpec
+	sc := bufio.NewScanner(f)
+	line := 0
+	for sc.Scan() {
+		line++
+		text := strings.TrimRight(sc.Text(), "\r")
+		if text == "" || strings.HasPrefix(text, "#") {
+			continue
+		}
+		cols := strings.Split(text, "\t")
+		if len(cols) < 4 {
+			return nil, fmt.Errorf("%s:%d: want at least 4 tab-separated columns, got %d", path, line, len(cols))
+		}
+		spec := junkRuleSpec{
+			Name:    strings.TrimSpace(cols[0]),
+			Kind:    strings.TrimSpace(cols[1]),
+			Rule:    cols[2],
+			Enabled: true,
+		}
+		if len(cols) > 4 {
+			spec.Notes = strings.TrimSpace(cols[4])
+		}
+		if raw := strings.TrimSpace(cols[3]); raw != "" && raw != "{}" {
+			if err := json.Unmarshal([]byte(raw), &spec.Params); err != nil {
+				return nil, fmt.Errorf("%s:%d: params: %w", path, line, err)
+			}
+		}
+		out = append(out, spec)
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%s: no rules", path)
+	}
+	return out, nil
+}
+
+// newJunkMatcher compiles specs. Disabled rules are dropped here so the hot path
+// never has to check a flag.
+func newJunkMatcher(specs []junkRuleSpec) (*junkMatcher, error) {
+	m := &junkMatcher{}
+	for _, s := range specs {
+		if !s.Enabled {
+			continue
+		}
+		switch s.Kind {
+		case "regex":
+			re, err := regexp.Compile(s.Rule)
+			if err != nil {
+				return nil, fmt.Errorf("junk rule %q: %w", s.Name, err)
+			}
+			m.rules = append(m.rules, compiledRule{name: s.Name, re: re, params: s.Params})
+		case "heuristic":
+			switch s.Rule {
+			case "bare_token", "multi_segment_chaos":
+			default:
+				return nil, fmt.Errorf("junk rule %q: unknown heuristic %q", s.Name, s.Rule)
+			}
+			m.rules = append(m.rules, compiledRule{name: s.Name, heuristic: s.Rule, params: s.Params})
+		default:
+			return nil, fmt.Errorf("junk rule %q: unknown kind %q", s.Name, s.Kind)
+		}
+	}
+	if len(m.rules) == 0 {
+		return nil, fmt.Errorf("junk rules: nothing enabled")
+	}
+	return m, nil
+}
+
+// structural gate for the multi-segment random-token check: only alphanumerics,
+// underscores, spaces (real titles carry other punctuation).
+var reMultiSegSegmented = regexp.MustCompile(`^[A-Za-z0-9_ ]+$`)
+
+// trailing release extensions to peel before checks (compound first).
+var reReleaseExtDynamic = regexp.MustCompile(`(?i)\.(vol\d+\+\d+\.par2|part\d+\.rar|r\d{2,3}|\d{3})$`)
 
 var staticReleaseExts = []string{
 	".par2", ".rar", ".7z", ".zip", ".tar", ".gz", ".nzb", ".enc",
@@ -65,79 +216,122 @@ func stripReleaseExts(s string) string {
 }
 
 // isJunkTitle reports whether a parsed release name is machine-generated junk.
-func isJunkTitle(title string) bool {
+func isJunkTitle(title string) bool { return whichJunkRule(title) != "" }
+
+// whichJunkRule returns the name of the first rule that fires, or "" if the
+// title looks real. Naming the rule is what makes the filter tunable — you can
+// see which rule is doing the work before changing it.
+func whichJunkRule(title string) string {
 	t := trimSpace(stripReleaseExts(title))
 	// strip wrapping decoration posters put around hashes: 'x', {x}, [x], - x
 	t = trimCut(t, "'\"{}[]- ")
 	if len(t) == 0 {
-		return true // empty after stripping
+		return "empty" // nothing left after stripping
 	}
+	return activeJunk.Load().match(t)
+}
 
-	if reLongAlnumRun.MatchString(t) {
-		return true
-	}
-
-	// Bare single token (no separators at all) that mixes upper+lower case at
-	// 16+ chars — a hash / obfuscated name. Real releases ALWAYS carry a
-	// separator (space/dot/dash/bracket), so a naked mixed-case run is machine
-	// junk. Catches the 16-23 char tokens that slip under the 24+ rule above.
-	if len(t) >= 16 && !hasSeparator(t) &&
-		containsAny(t, 'A', 'Z') && containsAny(t, 'a', 'z') {
-		return true
-	}
-
-	// multi-segment random chaos: 2+ segments (split on _ or space) of 5+ chars
-	// that each mix upper, lower, AND digit. Real tokens rarely do all three,
-	// almost never in two segments.
-	if len(t) >= 24 && reMultiSegSegmented.MatchString(t) {
-		chaotic := 0
-		seg := []rune{}
-		flush := func() bool {
-			defer func() { seg = seg[:0] }()
-			if len(seg) < 5 {
-				return false
+// match runs the compiled rules in order against an already-normalised title.
+func (m *junkMatcher) match(t string) string {
+	for _, r := range m.rules {
+		if r.re != nil {
+			if r.re.MatchString(t) && gatesPass(t, r.params) {
+				return r.name
 			}
-			var u, l, d bool
-			for _, c := range seg {
-				switch {
-				case c >= 'A' && c <= 'Z':
-					u = true
-				case c >= 'a' && c <= 'z':
-					l = true
-				case c >= '0' && c <= '9':
-					d = true
-				}
+			continue
+		}
+		switch r.heuristic {
+		case "bare_token":
+			if bareMixedCaseToken(t, r.params) {
+				return r.name
 			}
-			return u && l && d
-		}
-		for _, c := range t {
-			if c == '_' || c == ' ' {
-				if flush() {
-					chaotic++
-				}
-				continue
+		case "multi_segment_chaos":
+			if multiSegmentChaos(t, r.params) {
+				return r.name
 			}
-			seg = append(seg, c)
-		}
-		if flush() {
-			chaotic++
-		}
-		if chaotic >= 2 {
-			return true
 		}
 	}
+	return ""
+}
 
-	if reUUID.MatchString(t) {
-		return true
+// gatesPass applies the optional character-class requirements. A rule with no
+// gates passes trivially.
+func gatesPass(t string, p junkParams) bool {
+	if p.RequireUpper && !containsAny(t, 'A', 'Z') {
+		return false
 	}
-	if reTemplateToken.MatchString(t) {
-		return true
+	if p.RequireLower && !containsAny(t, 'a', 'z') {
+		return false
 	}
-	if reDotSepObfuscated.MatchString(t) &&
-		containsAny(t, 'A', 'Z') && containsAny(t, 'a', 'z') && containsAny(t, '0', '9') {
-		return true
+	if p.RequireDigit && !containsAny(t, '0', '9') {
+		return false
 	}
-	return false
+	return true
+}
+
+// bareMixedCaseToken: a naked run with no separator that mixes upper and lower
+// at min_len+ chars. Real releases ALWAYS carry a separator (space/dot/dash/
+// bracket), so a bare mixed-case run is machine junk. Catches the tokens that
+// slip under the long-alphanumeric-run rule.
+func bareMixedCaseToken(t string, p junkParams) bool {
+	minLen := p.MinLen
+	if minLen <= 0 {
+		minLen = 16
+	}
+	return len(t) >= minLen && !hasSeparator(t) &&
+		containsAny(t, 'A', 'Z') && containsAny(t, 'a', 'z')
+}
+
+// multiSegmentChaos: min_chaotic+ segments (split on _ or space) of min_seg_len+
+// chars that EACH mix upper, lower and digit. Real tokens rarely do all three,
+// almost never in two segments.
+func multiSegmentChaos(t string, p junkParams) bool {
+	minLen, minSegLen, minChaotic := p.MinLen, p.MinSegLen, p.MinChaotic
+	if minLen <= 0 {
+		minLen = 24
+	}
+	if minSegLen <= 0 {
+		minSegLen = 5
+	}
+	if minChaotic <= 0 {
+		minChaotic = 2
+	}
+	if len(t) < minLen || !reMultiSegSegmented.MatchString(t) {
+		return false
+	}
+	chaotic := 0
+	seg := make([]rune, 0, 16)
+	flush := func() bool {
+		defer func() { seg = seg[:0] }()
+		if len(seg) < minSegLen {
+			return false
+		}
+		var u, l, d bool
+		for _, c := range seg {
+			switch {
+			case c >= 'A' && c <= 'Z':
+				u = true
+			case c >= 'a' && c <= 'z':
+				l = true
+			case c >= '0' && c <= '9':
+				d = true
+			}
+		}
+		return u && l && d
+	}
+	for _, c := range t {
+		if c == '_' || c == ' ' {
+			if flush() {
+				chaotic++
+			}
+			continue
+		}
+		seg = append(seg, c)
+	}
+	if flush() {
+		chaotic++
+	}
+	return chaotic >= minChaotic
 }
 
 // ── small string helpers (avoid importing strings twice across files) ──

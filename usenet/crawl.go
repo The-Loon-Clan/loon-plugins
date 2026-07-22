@@ -72,6 +72,8 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	defer p.crawlMu.Unlock()
 	p.crawlJob.SetRunning()
 	cfg := p.effective(ctx)
+	// Pick up any admin edits to the junk rules before this pass filters anything.
+	p.reloadJunkRules(ctx)
 
 	pool, err := p.ensurePool(ctx, cfg)
 	if err != nil {

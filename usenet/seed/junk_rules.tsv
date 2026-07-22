@@ -1,0 +1,34 @@
+# Junk-title rules — the shipped defaults.
+#
+# This file is the SINGLE SOURCE OF TRUTH: it is embedded in the binary (so the
+# filter works with no database), and it seeds the junk_rules table on boot. The
+# live filter is then loaded from that table into memory, so operators can add,
+# tune, or disable rules without a code release.
+#
+# One rule per line so diffs are per-rule and a community PR adding a pattern
+# reads as one line. Tab-separated. Lines starting with # are comments.
+#
+# Columns:
+#   name    stable identifier, also what gets reported when a rule fires
+#   kind    regex | heuristic
+#   rule    kind=regex: the pattern. kind=heuristic: the built-in algorithm id.
+#   params  JSON object; {} when unused. Gates for regex rules, tuning for
+#           heuristics. Recognised keys:
+#             require_upper / require_lower / require_digit  (bool)
+#             min_len, min_seg_len, min_chaotic              (int)
+#   notes   why the rule exists
+#
+# Order matters only for which name is reported first; the verdict is the same.
+#
+# Obfuscated posts use random-token subjects that would otherwise assemble into
+# garbage "releases". Note that PATTERNS are what generalise here — a denylist of
+# seen subjects is useless, because every obfuscated post is a fresh random
+# string.
+#
+# name	kind	rule	params	notes
+long_alnum_run	regex	[A-Za-z0-9]{24,}	{}	24+ consecutive alphanumerics anywhere = a hash or token. The workhorse rule.
+bare_mixed_case_token	heuristic	bare_token	{"min_len":16}	A naked 16+ char run mixing upper and lower with NO separator. Real releases always carry a separator, so this catches the 16-23 char tokens that slip under long_alnum_run.
+multi_segment_chaos	heuristic	multi_segment_chaos	{"min_len":24,"min_seg_len":5,"min_chaotic":2}	2+ segments (split on _ or space) of 5+ chars that each mix upper, lower AND digit. Real titles rarely do all three, almost never twice.
+uuid	regex	(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b	{}	A canonical UUID as the release name.
+template_token	regex	\{[A-Za-z0-9_]+\}|\{\{[^}]+\}\}	{}	Leftover poster-template tokens the poster never substituted: {total}, {{count}}.
+dot_sep_obfuscated	regex	^[A-Za-z0-9]{6,}\.[A-Za-z0-9]{1,12}$	{"require_upper":true,"require_lower":true,"require_digit":true}	Dot-separated obfuscated pair like f329yZ98AaYf2qHd.QPv2 — only when it mixes case AND digits, so real short names survive.

@@ -23,6 +23,7 @@ type Store interface {
 	BackfillStore
 	AssemblerStore
 	MaintenanceStore
+	JunkStore
 }
 
 // ReleaseReader is the read side: search, browse, feed, detail, raw NZB, stats.
@@ -75,6 +76,13 @@ type AssemblerStore interface {
 	deleteStaged(ctx context.Context, group, base string) error
 	insertNzb(ctx context.Context, n nzbRow) (bool, error)
 	stageArticles(ctx context.Context, arts []stagedArticle) (int, error)
+}
+
+// JunkStore is the tunable junk-rule set (seeded from the embedded TSV, loaded
+// into memory — see junk.go).
+type JunkStore interface {
+	seedJunkRules(ctx context.Context, specs []junkRuleSpec) (int, error)
+	junkRules(ctx context.Context) ([]junkRuleSpec, error)
 }
 
 // MaintenanceStore is the nzbs cleanup / retagging surface (off-peak jobs). The
