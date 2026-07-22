@@ -90,10 +90,10 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 // provider's coverage says nothing about this one's, because the article numbers
 // are not the same articles.
 func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Config) int {
-	pool, sid := run.pool, run.prov.ID
+	pool, bb := run.pool, run.prov.backboneKey()
 	pool.TopUp(ctx)
 
-	groups, err := p.st.groupsNeedingBackfillForProvider(ctx, sid, cfg.MaxGroups)
+	groups, err := p.st.groupsNeedingBackfillForBackbone(ctx, bb, cfg.MaxGroups)
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/backfill-groups", err)
 		return 0
@@ -115,13 +115,13 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 		if budget <= 0 {
 			break
 		}
-		gaps, err := p.st.backfillGapsFor(ctx, sid, g.Name, g.ServerLow, g.BackWatermark)
+		gaps, err := p.st.backfillGapsFor(ctx, bb, g.Name, g.ServerLow, g.BackWatermark)
 		if err != nil {
 			p.core.Errors.Report(ctx, "usenet/backfill-gaps", fmt.Errorf("%s/%s: %w", run.prov.label(), g.Name, err))
 			continue
 		}
 		if len(gaps) == 0 {
-			if err := p.st.markBackfillDoneForProvider(ctx, sid, g.Name); err != nil {
+			if err := p.st.markBackfillDoneForBackbone(ctx, bb, g.Name); err != nil {
 				p.core.Errors.Report(ctx, "usenet/backfill-done", err)
 			}
 			p.backfillJob.Log("%s/%s: backfill complete — no gaps remain", run.prov.label(), g.Name)
@@ -145,7 +145,7 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 		run.prov.label(), len(targets), len(jobs), run.prov.conns(cfg.Connections))
 	results := p.runBatches(ctx, pool, jobs, cutoff, cfg)
 
-	staged := p.recordBackfill(ctx, sid, targets, results, cutoff)
+	staged := p.recordBackfill(ctx, bb, targets, results, cutoff)
 
 	st := pool.Stats()
 	p.backfillJob.Log("%s: %d historical article(s) staged from %d batch(es) (conns %d/%d, resets %d)",
@@ -162,7 +162,7 @@ func (p *Plugin) nextBackfill() time.Time {
 // a failed batch simply leaves its gap unrecorded, so the next pass recomputes
 // it and tries again — coverage IS the state, so nothing can be silently
 // skipped.
-func (p *Plugin) recordBackfill(ctx context.Context, serverID int, targets map[string]backfillRow, results []batchResult, cutoff time.Time) (staged int) {
+func (p *Plugin) recordBackfill(ctx context.Context, backbone string, targets map[string]backfillRow, results []batchResult, cutoff time.Time) (staged int) {
 	byGroup := make(map[string][]batchResult, len(targets))
 	for _, r := range results {
 		staged += r.staged
@@ -179,7 +179,7 @@ func (p *Plugin) recordBackfill(ctx context.Context, serverID int, targets map[s
 			if !r.ok {
 				continue
 			}
-			if err := p.st.recordFetchedRangeFor(ctx, serverID, name, int64(r.lo), int64(r.hi)); err != nil {
+			if err := p.st.recordFetchedRangeFor(ctx, backbone, name, int64(r.lo), int64(r.hi)); err != nil {
 				p.core.Errors.Report(ctx, "usenet/backfill-range-record", fmt.Errorf("%s: %w", name, err))
 				continue
 			}
@@ -190,7 +190,7 @@ func (p *Plugin) recordBackfill(ctx context.Context, serverID int, targets map[s
 
 		// Reached the retention horizon: everything below is older still.
 		if !oldest.IsZero() && oldest.Before(cutoff) {
-			if err := p.st.markBackfillDoneForProvider(ctx, serverID, name); err != nil {
+			if err := p.st.markBackfillDoneForBackbone(ctx, backbone, name); err != nil {
 				p.core.Errors.Report(ctx, "usenet/backfill-done", err)
 			}
 			p.backfillJob.Log("%s: reached the retention horizon (oldest %s)", name, oldest.Format("2006-01-02"))
@@ -199,19 +199,19 @@ func (p *Plugin) recordBackfill(ctx context.Context, serverID int, targets map[s
 
 		// Re-derive what is left; the newest remaining gap is where the next pass
 		// picks up, which is what back_watermark means to the coverage view.
-		gaps, err := p.st.backfillGapsFor(ctx, serverID, name, g.ServerLow, g.BackWatermark)
+		gaps, err := p.st.backfillGapsFor(ctx, backbone, name, g.ServerLow, g.BackWatermark)
 		if err != nil {
 			p.core.Errors.Report(ctx, "usenet/backfill-gaps", fmt.Errorf("%s: %w", name, err))
 			continue
 		}
 		if len(gaps) == 0 {
-			if err := p.st.markBackfillDoneForProvider(ctx, serverID, name); err != nil {
+			if err := p.st.markBackfillDoneForBackbone(ctx, backbone, name); err != nil {
 				p.core.Errors.Report(ctx, "usenet/backfill-done", err)
 			}
 			p.backfillJob.Log("%s: backfill complete", name)
 			continue
 		}
-		if err := p.st.updateBackWatermarkForProvider(ctx, serverID, name, gaps[0].End, oldest); err != nil {
+		if err := p.st.updateBackWatermarkForBackbone(ctx, backbone, name, gaps[0].End, oldest); err != nil {
 			p.core.Errors.Report(ctx, "usenet/backfill-watermark", fmt.Errorf("%s: %w", name, err))
 		}
 	}

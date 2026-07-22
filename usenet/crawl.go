@@ -109,10 +109,10 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 
 // crawlProvider runs one provider's forward pass and returns articles staged.
 func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config) int {
-	pool, sid := run.pool, run.prov.ID
+	pool, bb := run.pool, run.prov.backboneKey()
 	pool.TopUp(ctx) // refill anything the last pass discarded
 
-	groups, err := p.st.activeGroupsForProvider(ctx, sid, cfg.MaxGroups)
+	groups, err := p.st.activeGroupsForBackbone(ctx, bb, cfg.MaxGroups)
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/crawl-groups", err)
 		return 0
@@ -140,7 +140,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 		if !plan.hasWork {
 			// Nothing new, but still record the server range so the coverage view
 			// stays honest.
-			if err := p.st.updateGroupStateForProvider(ctx, sid, plan.group, int64(plan.low), int64(plan.high),
+			if err := p.st.updateGroupStateForBackbone(ctx, bb, plan.group, int64(plan.low), int64(plan.high),
 				0, int64(plan.start), time.Time{}); err != nil {
 				p.core.Errors.Report(ctx, "usenet/crawl-range", err)
 			}
@@ -166,7 +166,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	results := p.runBatches(ctx, pool, jobs, cutoff, cfg)
 
 	// 3. Advance watermarks to the last contiguous success per group.
-	staged, advanced := p.advanceWatermarks(ctx, sid, plans, results)
+	staged, advanced := p.advanceWatermarks(ctx, bb, plans, results)
 
 	st := pool.Stats()
 	p.crawlJob.Log("%s: %d group(s), %d batch(es), %d article(s) staged, %d advanced (conns %d/%d, resets %d)",
@@ -315,7 +315,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, cu
 // CONTIGUOUS run of successful batches. A failure in the middle stops the
 // advance there, so the failed range is refetched next pass instead of being
 // silently skipped — with parallel batches, "highest success" would strand gaps.
-func (p *Plugin) advanceWatermarks(ctx context.Context, serverID int, plans map[string]*crawlPlan, results []batchResult) (staged, advanced int) {
+func (p *Plugin) advanceWatermarks(ctx context.Context, backbone string, plans map[string]*crawlPlan, results []batchResult) (staged, advanced int) {
 	byGroup := make(map[string][]batchResult, len(plans))
 	for _, r := range results {
 		staged += r.staged
@@ -331,7 +331,7 @@ func (p *Plugin) advanceWatermarks(ctx context.Context, serverID int, plans map[
 			if !r.ok {
 				continue
 			}
-			if err := p.st.recordFetchedRangeFor(ctx, serverID, name, int64(r.lo), int64(r.hi)); err != nil {
+			if err := p.st.recordFetchedRangeFor(ctx, backbone, name, int64(r.lo), int64(r.hi)); err != nil {
 				p.core.Errors.Report(ctx, "usenet/crawl-range-record", err)
 			}
 		}
@@ -344,7 +344,7 @@ func (p *Plugin) advanceWatermarks(ctx context.Context, serverID int, plans map[
 		} else {
 			p.crawlJob.Log("%s: no contiguous progress this pass — retrying from %d", name, plan.start)
 		}
-		if err := p.st.updateGroupStateForProvider(ctx, serverID, name, int64(plan.low), int64(plan.high),
+		if err := p.st.updateGroupStateForBackbone(ctx, backbone, name, int64(plan.low), int64(plan.high),
 			watermark, int64(plan.start), latest); err != nil {
 			p.core.Errors.Report(ctx, "usenet/crawl-watermark", fmt.Errorf("%s: %w", name, err))
 		}

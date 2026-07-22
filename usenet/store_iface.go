@@ -43,8 +43,8 @@ type GroupStore interface {
 	groups(ctx context.Context) ([]pluginapi.GroupInfo, error)
 	allGroups(ctx context.Context, query string, limit int) ([]pluginapi.GroupInfo, error)
 	activeGroups(ctx context.Context, limit int) ([]groupRow, error)
-	activeGroupsForProvider(ctx context.Context, serverID, limit int) ([]groupRow, error)
-	updateGroupStateForProvider(ctx context.Context, serverID int, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error
+	activeGroupsForBackbone(ctx context.Context, backbone string, limit int) ([]groupRow, error)
+	updateGroupStateForBackbone(ctx context.Context, backbone, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error
 	groupCount(ctx context.Context) (int, error)
 	setGroupActive(ctx context.Context, name string, active bool) error
 	upsertGroups(ctx context.Context, names []string) (int, error)
@@ -68,16 +68,16 @@ type SettingStore interface {
 // BackfillStore drives the backward crawl + its builder view.
 type BackfillStore interface {
 	groupsNeedingBackfill(ctx context.Context, limit int) ([]backfillRow, error)
-	groupsNeedingBackfillForProvider(ctx context.Context, serverID, limit int) ([]backfillRow, error)
-	updateBackWatermarkForProvider(ctx context.Context, serverID int, name string, back int64, oldest time.Time) error
-	markBackfillDoneForProvider(ctx context.Context, serverID int, name string) error
+	groupsNeedingBackfillForBackbone(ctx context.Context, backbone string, limit int) ([]backfillRow, error)
+	updateBackWatermarkForBackbone(ctx context.Context, backbone, name string, back int64, oldest time.Time) error
+	markBackfillDoneForBackbone(ctx context.Context, backbone, name string) error
 	updateBackWatermark(ctx context.Context, name string, back int64, oldest time.Time) error
 	markBackfillDone(ctx context.Context, name string) error
 	resetBackfill(ctx context.Context, name string) error
 	builderInfo(ctx context.Context, limit int) (BuilderInfo, error)
 	recordFetchedRange(ctx context.Context, group string, start, end int64) error
-	recordFetchedRangeFor(ctx context.Context, serverID int, group string, start, end int64) error
-	backfillGapsFor(ctx context.Context, serverID int, group string, low, high int64) ([]articleRange, error)
+	recordFetchedRangeFor(ctx context.Context, backbone, group string, start, end int64) error
+	backfillGapsFor(ctx context.Context, backbone, group string, low, high int64) ([]articleRange, error)
 	coveredRanges(ctx context.Context, group string) ([]articleRange, error)
 	backfillGaps(ctx context.Context, group string, low, high int64) ([]articleRange, error)
 }

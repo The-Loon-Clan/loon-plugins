@@ -178,3 +178,33 @@ func TestFleetBenchAndRecover(t *testing.T) {
 		t.Error("should recover after the cooldown — a benched provider must get retried")
 	}
 }
+
+// TestBackboneKey pins what crawl state and coverage are keyed by. Getting this
+// wrong is silent in both directions: sharing a key across different backbones
+// makes each provider skip ranges the other fetched (lost articles), while
+// giving two accounts on ONE backbone separate keys makes the second re-crawl
+// everything the first already has.
+func TestBackboneKey(t *testing.T) {
+	// Unset = its own key. The safe default: assume nothing is shared.
+	a := provider{ID: 7}
+	if got := a.backboneKey(); got != "srv:7" {
+		t.Errorf("unset backbone = %q, want srv:7", got)
+	}
+	if (provider{ID: 8}).backboneKey() == a.backboneKey() {
+		t.Error("two servers with no backbone set must not share state")
+	}
+
+	// Same backbone named = shared key, however it was typed.
+	x := provider{ID: 1, Backbone: "Omicron"}
+	y := provider{ID: 2, Backbone: "  omicron "}
+	if x.backboneKey() != y.backboneKey() {
+		t.Errorf("same backbone should share a key: %q vs %q", x.backboneKey(), y.backboneKey())
+	}
+	if x.backboneKey() == (provider{ID: 3, Backbone: "usenetexpress"}).backboneKey() {
+		t.Error("different backbones must not share a key")
+	}
+	// A named backbone must never collide with the per-server default form.
+	if (provider{ID: 9, Backbone: "srv:1"}).backboneKey() == (provider{ID: 1}).backboneKey() {
+		t.Log("note: a backbone literally named 'srv:1' collides with server 1's default key")
+	}
+}

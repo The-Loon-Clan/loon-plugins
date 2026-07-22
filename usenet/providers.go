@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,7 +33,23 @@ type provider struct {
 	Enabled     bool
 	Role        string
 	Priority    int
-	Connections int // 0 = fall back to the plugin-wide default
+	Connections int    // 0 = fall back to the plugin-wide default
+	Backbone    string // shared numbering identity; empty = this server alone
+}
+
+// backboneKey is what crawl state and coverage are keyed by. Article numbers are
+// assigned per backbone, so two accounts on the SAME backbone must share
+// watermarks (the second is extra connections, not extra coverage) while
+// different backbones must never share them.
+//
+// An unset backbone means "assume nothing" and gives the server its own key.
+// That is the safe default: wrongly treating two servers as one backbone makes
+// each skip ranges the other fetched, silently losing articles.
+func (pr provider) backboneKey() string {
+	if b := strings.TrimSpace(pr.Backbone); b != "" {
+		return strings.ToLower(b)
+	}
+	return fmt.Sprintf("srv:%d", pr.ID)
 }
 
 func (pr provider) addr() string {
@@ -148,11 +165,12 @@ func (s *PGStore) providers(ctx context.Context) ([]provider, error) {
 		Role        string `db:"role"`
 		Priority    int    `db:"priority"`
 		Connections int    `db:"connections"`
+		Backbone    string `db:"backbone"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.SelectContext(ctx, &rows,
-			`SELECT id, name, host, port, tls, username, password, enabled, role, priority, connections
+			`SELECT id, name, host, port, tls, username, password, enabled, role, priority, connections, backbone
 			   FROM servers WHERE enabled = TRUE ORDER BY priority, id`)
 	})
 	if err != nil {
@@ -164,6 +182,7 @@ func (s *PGStore) providers(ctx context.Context) ([]provider, error) {
 			ID: r.ID, Name: r.Name, Host: r.Host, Port: r.Port, TLS: r.TLS,
 			Username: r.Username, Password: r.Password, Enabled: r.Enabled,
 			Role: r.Role, Priority: r.Priority, Connections: r.Connections,
+			Backbone: r.Backbone,
 		}
 	}
 	return out, nil
