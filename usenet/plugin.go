@@ -188,8 +188,10 @@ func (p *Plugin) Start(ctx context.Context) error {
 		return nil // web-only process: capability is registered, no jobs run here
 	}
 	p.seedServer(ctx)
-	// Ship the junk rules into the DB, then compile the live set into memory.
+	// Ship the reference data: junk rules (then compiled into memory) and the
+	// curated newsgroup pack.
 	p.seedAndLoadJunkRules(ctx)
+	p.seedCuratedNewsgroups(ctx)
 	interval := time.Duration(p.cfg.CrawlIntervalMin) * time.Minute
 	backfillInterval := time.Duration(p.cfg.BackfillIntervalMin) * time.Minute
 	p.core.Scheduler.RunLoop(ctx, p.crawlJob, time.Minute, interval, p.runCrawl)

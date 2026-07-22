@@ -1,12 +1,9 @@
 package usenet
 
 import (
-	"bufio"
-	"embed"
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"strings"
 	"sync/atomic"
 )
 
@@ -23,9 +20,6 @@ import (
 // junkMatcher held in an atomic pointer. The check runs per article on the
 // ingest hot path, so it must never touch the database — reload swaps the whole
 // matcher in one atomic store.
-
-//go:embed seed/junk_rules.tsv
-var seedFS embed.FS
 
 const junkSeedPath = "seed/junk_rules.tsv"
 
@@ -77,7 +71,7 @@ func init() {
 
 // loadEmbeddedJunkMatcher compiles the shipped defaults.
 func loadEmbeddedJunkMatcher() (*junkMatcher, error) {
-	specs, err := parseJunkRulesTSV(seedFS, junkSeedPath)
+	specs, err := parseJunkRulesTSV(junkSeedPath)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +80,7 @@ func loadEmbeddedJunkMatcher() (*junkMatcher, error) {
 
 // embeddedJunkRules returns the shipped rules — used by the seeder.
 func embeddedJunkRules() ([]junkRuleSpec, error) {
-	return parseJunkRulesTSV(seedFS, junkSeedPath)
+	return parseJunkRulesTSV(junkSeedPath)
 }
 
 // setJunkMatcher swaps the live rule set. Safe to call while crawling.
@@ -96,45 +90,27 @@ func setJunkMatcher(m *junkMatcher) {
 	}
 }
 
-// parseJunkRulesTSV reads the tab-separated rule file.
-func parseJunkRulesTSV(fsys embed.FS, path string) ([]junkRuleSpec, error) {
-	f, err := fsys.Open(path)
+// parseJunkRulesTSV reads the shipped rule file.
+func parseJunkRulesTSV(path string) ([]junkRuleSpec, error) {
+	recs, err := seedRecords(seedData, path, 4)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-
-	var out []junkRuleSpec
-	sc := bufio.NewScanner(f)
-	line := 0
-	for sc.Scan() {
-		line++
-		text := strings.TrimRight(sc.Text(), "\r")
-		if text == "" || strings.HasPrefix(text, "#") {
-			continue
-		}
-		cols := strings.Split(text, "\t")
-		if len(cols) < 4 {
-			return nil, fmt.Errorf("%s:%d: want at least 4 tab-separated columns, got %d", path, line, len(cols))
-		}
+	out := make([]junkRuleSpec, 0, len(recs))
+	for _, rec := range recs {
 		spec := junkRuleSpec{
-			Name:    strings.TrimSpace(cols[0]),
-			Kind:    strings.TrimSpace(cols[1]),
-			Rule:    cols[2],
+			Name:    col(rec, 0),
+			Kind:    col(rec, 1),
+			Rule:    rec[2], // not trimmed: a pattern may end in meaningful space
+			Notes:   col(rec, 4),
 			Enabled: true,
 		}
-		if len(cols) > 4 {
-			spec.Notes = strings.TrimSpace(cols[4])
-		}
-		if raw := strings.TrimSpace(cols[3]); raw != "" && raw != "{}" {
+		if raw := col(rec, 3); raw != "" && raw != "{}" {
 			if err := json.Unmarshal([]byte(raw), &spec.Params); err != nil {
-				return nil, fmt.Errorf("%s:%d: params: %w", path, line, err)
+				return nil, fmt.Errorf("%s: rule %q: params: %w", path, spec.Name, err)
 			}
 		}
 		out = append(out, spec)
-	}
-	if err := sc.Err(); err != nil {
-		return nil, err
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("%s: no rules", path)

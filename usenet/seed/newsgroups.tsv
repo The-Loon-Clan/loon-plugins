@@ -1,0 +1,31 @@
+# Curated newsgroups — the groups worth indexing, so a fresh install doesn't
+# face ~100,000 groups with no idea which carry real content.
+#
+# Rows are INSERT-ONLY: seeding adds groups that aren't present and never
+# touches ones that are. A group you enabled, disabled, or deleted stays exactly
+# as you left it across upgrades.
+#
+# Seeded groups arrive INACTIVE on purpose — this is a curated picker list, not
+# an instruction to start crawling fifty groups on first boot. Enable the ones
+# you want in the admin wizard.
+#
+# Tab-separated. Lines starting with # are comments.
+#
+# Columns:
+#   name   the newsgroup, exactly as the server lists it
+#   pack   which pack it belongs to: anime | movies | tv | music | books | misc
+#          (a row can only be in one pack; ship the same group twice if it
+#          genuinely serves two, or use "misc")
+#   notes  optional, why it's here
+#
+# GENERATED CONTENT: populate this from a real, running indexer rather than by
+# hand — an install that has actually been crawling knows which groups carry
+# content. See scripts/export-newsgroups.sh, which dumps exactly this format:
+#
+#   scripts/export-newsgroups.sh --dsn "$DSN" --pack anime >> usenet/seed/newsgroups.tsv
+#
+# Unlike the coverage ranges, group names ARE portable — every provider carries
+# the same group names, so a pack exported from one install is meaningful on any
+# other. (Article NUMBERS are the per-backbone part; names are not.)
+#
+# name	pack	notes

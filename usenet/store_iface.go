@@ -45,6 +45,7 @@ type GroupStore interface {
 	groupCount(ctx context.Context) (int, error)
 	setGroupActive(ctx context.Context, name string, active bool) error
 	upsertGroups(ctx context.Context, names []string) (int, error)
+	seedNewsgroups(ctx context.Context, groups []seedGroup) (int, error)
 	updateGroupState(ctx context.Context, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error
 }
 
