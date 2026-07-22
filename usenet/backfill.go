@@ -8,11 +8,16 @@ import (
 	"github.com/the-loon-clan/loon/nntp"
 )
 
-// runBackfill walks each active group's back_watermark downward toward server_low,
-// staging historical overviews within the retention window. The crawl is serial
-// and monotonic, so a single pointer per group is exact — no gap tracking. Work is
-// capped at BackfillBatchesPerRun batches across all groups so a pass is bounded
-// and the forward crawler isn't starved of the shared connection.
+// runBackfill drains each active group's history: it walks back_watermark down
+// toward server_low within the retention window and keeps going — chunk after
+// chunk — until every active group is caught up, rather than one bounded pass
+// then a long idle. Between chunks (BackfillBatchesPerRun batches each) it
+// releases the shared connection and runs the NZB Builder *synchronously*, so
+// backfill applies its own back-pressure: it never stages history faster than
+// the Builder assembles it (the staging table stays bounded), and the forward
+// crawler gets the connection in the gap. Only when the whole backlog is drained
+// does it idle until the next interval (a cheap re-check for freshly-aged
+// history). ctx cancellation (worker shutdown) breaks the loop cleanly.
 func (p *Plugin) runBackfill(ctx context.Context) {
 	if ctx == nil {
 		return
@@ -42,47 +47,65 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		p.backfillJob.SetIdle(p.nextBackfill())
 		return
 	}
-	groups, err := p.st.groupsNeedingBackfill(ctx, cfg.MaxGroups)
-	if err != nil {
-		p.backfillJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/backfill-groups", err)
-		return
-	}
-	if len(groups) == 0 {
-		p.backfillJob.Log("nothing to backfill — all active groups caught up to the retention horizon")
-		p.backfillJob.SetIdle(p.nextBackfill())
-		return
-	}
-
-	conn, err := dialServer(srv)
-	if err != nil {
-		p.backfillJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/backfill-dial", err)
-		return
-	}
-	defer conn.Quit()
 
 	cutoff := time.Now().AddDate(0, 0, -cfg.RetentionDays)
-	budget := cfg.BackfillBatchesPerRun
-	totalStaged := 0
-	for _, g := range groups {
-		if ctx.Err() != nil || budget <= 0 {
+	grandTotal := 0
+	for {
+		if ctx.Err() != nil {
 			break
 		}
-		used, staged, err := p.backfillGroup(ctx, conn, g, cutoff, budget, cfg)
-		budget -= used
-		totalStaged += staged
+		groups, err := p.st.groupsNeedingBackfill(ctx, cfg.MaxGroups)
 		if err != nil {
-			p.core.Errors.Report(ctx, "usenet/backfill", fmt.Errorf("%s: %w", g.Name, err))
-			p.backfillJob.Log("%s: error — %v", g.Name, err)
-			continue
+			p.backfillJob.SetError(err.Error())
+			p.core.Errors.Report(ctx, "usenet/backfill-groups", err)
+			break
+		}
+		if len(groups) == 0 {
+			p.backfillJob.Log("backfill complete — all active groups caught up to the retention horizon (%d article(s) staged this run)", grandTotal)
+			break
+		}
+
+		conn, err := dialServer(srv)
+		if err != nil {
+			p.backfillJob.SetError(err.Error())
+			p.core.Errors.Report(ctx, "usenet/backfill-dial", err)
+			break
+		}
+		budget := cfg.BackfillBatchesPerRun
+		usedTotal, staged := 0, 0
+		for _, g := range groups {
+			if ctx.Err() != nil || budget <= 0 {
+				break
+			}
+			used, s, err := p.backfillGroup(ctx, conn, g, cutoff, budget, cfg)
+			budget -= used
+			usedTotal += used
+			staged += s
+			if err != nil {
+				p.core.Errors.Report(ctx, "usenet/backfill", fmt.Errorf("%s: %w", g.Name, err))
+				p.backfillJob.Log("%s: error — %v", g.Name, err)
+				continue
+			}
+		}
+		// Release the shared connection so the forward crawler can use it while
+		// we assemble (the Builder is DB-only).
+		conn.Quit()
+		grandTotal += staged
+
+		if usedTotal == 0 {
+			// Groups were listed but no batch ran (all past retention / at the
+			// floor) — nothing left to do; don't spin.
+			break
+		}
+		// Back-pressure: assemble what we just staged before pulling the next
+		// chunk, so backfill paces itself to the NZB Builder instead of flooding
+		// the staging table.
+		if staged > 0 {
+			p.backfillJob.Log("staged %d so far — assembling before the next chunk", grandTotal)
+			p.runBuild(ctx)
 		}
 	}
-	p.backfillJob.Log("backfill pass complete: %d historical article(s) staged", totalStaged)
 	p.backfillJob.SetIdle(p.nextBackfill())
-	if totalStaged > 0 {
-		go p.runBuild(ctx) // assemble any newly-complete historical sets
-	}
 }
 
 func (p *Plugin) nextBackfill() time.Time {

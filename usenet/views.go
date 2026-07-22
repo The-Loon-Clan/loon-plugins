@@ -137,8 +137,8 @@ func (p *Plugin) knobs(ctx context.Context) []knob {
 		{"batch", "Overview batch size", cfg.Batch, "article-number span per NNTP OVER request"},
 		{"max_groups", "Max groups per run", cfg.MaxGroups, "cap active groups crawled per pass"},
 		{"max_articles_per_group", "First-pass article cap", cfg.MaxArticlesPerGroup, "cap a new group's initial volume"},
-		{"backfill_interval_min", "Backfill interval (min)", cfg.BackfillIntervalMin, "how often to pull history (applies next cycle)"},
-		{"backfill_batches_per_run", "Backfill batches per run", cfg.BackfillBatchesPerRun, "how much history each backfill pass pulls"},
+		{"backfill_interval_min", "Backfill re-check (min)", cfg.BackfillIntervalMin, "once fully caught up, how often to re-check for newly-aged history"},
+		{"backfill_batches_per_run", "Backfill chunk size (batches)", cfg.BackfillBatchesPerRun, "history pulled per chunk before pausing to let the NZB Builder assemble it (back-pressure) — backfill otherwise runs until caught up"},
 	}
 }
 
