@@ -1,0 +1,41 @@
+# Provider hostname -> backbone, used to pre-fill the Backbone field in the
+# wizard from the server hostname the operator already typed.
+#
+# WHY THIS EXISTS: article numbers are handed out by the BACKBONE, so two
+# accounts on one backbone must share crawl state and two different backbones
+# must not. Getting that wrong silently loses articles (see PROVIDERS.md), and
+# free-typed text is a poor way to get it right. Matching the hostname turns a
+# guess into a lookup.
+#
+# PROVISIONAL. This is a small hand-kept list of well-known mappings, not a
+# complete provider database. Backbone deals change — providers switch upstream,
+# get acquired, or multi-home — so treat every row as a hint, never as truth:
+# nothing here is applied silently, it only pre-fills a field the operator can
+# see and correct.
+#
+# TODO: replace with a properly-licensed, maintained dataset. A good public
+# source exists (usenet.rexum.space) but is "all rights reserved" with no repo,
+# so its data is not vendored here; the intent is to ask for a licence or find
+# an openly-licensed equivalent, then generate this file from it.
+#
+# Tab-separated; # comments. Columns:
+#   domain      registrable domain to match; a host matches if it equals this
+#               or ends in "." + this (so news.eweka.nl matches eweka.nl)
+#   backbone    the backbone key to pre-fill
+#   confidence  confirmed = seen in provider/backbone data directly
+#               likely    = widely published, not independently verified here
+#   notes       optional
+#
+# domain	backbone	confidence	notes
+sunnyusenet.com	omicron	confirmed
+bulknews.eu	abavia	confirmed	resells XS News
+newshosting.com	omicron	likely	UNS Holdings
+usenetserver.com	omicron	likely	UNS Holdings
+easynews.com	omicron	likely	UNS Holdings
+eweka.nl	omicron	likely
+tweaknews.eu	omicron	likely
+xsnews.nl	abavia	likely
+usenet.farm	usenet.farm	likely
+usenetexpress.com	usenetexpress	likely
+newsdemon.com	usenetexpress	likely
+giganews.com	giganews	likely

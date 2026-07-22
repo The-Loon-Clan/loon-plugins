@@ -169,7 +169,7 @@ func formServer(gc *gin.Context) pluginapi.Server {
 		port = 119
 	}
 	tls := gc.PostForm("tls")
-	return pluginapi.Server{
+	srv := pluginapi.Server{
 		Host:     strings.TrimSpace(gc.PostForm("host")),
 		Port:     port,
 		TLS:      tls == "on" || tls == "true",
@@ -178,6 +178,13 @@ func formServer(gc *gin.Context) pluginapi.Server {
 		Enabled:  true,
 		Backbone: strings.TrimSpace(gc.PostForm("backbone")),
 	}
+	// Only ever FILL A BLANK. An operator's explicit value always wins: the
+	// lookup table is a convenience that can go stale, and quietly rewriting a
+	// deliberate answer is how two providers end up wrongly sharing crawl state.
+	if srv.Backbone == "" {
+		srv.Backbone = backboneForHost(srv.Host)
+	}
+	return srv
 }
 
 func (p *Plugin) actionSaveServer(gc *gin.Context) (template.HTML, error) {
