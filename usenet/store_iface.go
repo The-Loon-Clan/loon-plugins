@@ -77,12 +77,12 @@ type AssemblerStore interface {
 	stageArticles(ctx context.Context, arts []stagedArticle) (int, error)
 }
 
-// MaintenanceStore is the cleanup / retagging surface (off-peak jobs).
+// MaintenanceStore is the nzbs cleanup / retagging surface (off-peak jobs). The
+// staging-side cleanup (deleteJunkStaged / prune) moved to stagingStore (staging.go)
+// so it swaps with the backend.
 type MaintenanceStore interface {
 	retagUntagged(ctx context.Context, limit int) (int, error)
 	recategorizeDefaults(ctx context.Context, fn func(group, title string) int, limit int) (int, error)
 	pruneNzbs(ctx context.Context, days int) (int64, error)
 	deleteJunkNzbs(ctx context.Context) (int, error)
-	deleteJunkStaged(ctx context.Context) (int64, error)
-	pruneStaging(ctx context.Context) (int64, error)
 }

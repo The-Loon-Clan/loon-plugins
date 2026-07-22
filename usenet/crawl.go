@@ -139,7 +139,7 @@ func (p *Plugin) crawlGroup(ctx context.Context, conn *nntp.Conn, g groupRow, cu
 		}
 		arts := parseOverviews(ovs, g.Name, cutoff)
 		if len(arts) > 0 {
-			n, err := p.st.stageArticles(ctx, arts)
+			n, err := p.staging.stageArticles(ctx, arts)
 			if err != nil {
 				return staged, err
 			}

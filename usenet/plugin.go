@@ -35,6 +35,7 @@ type Plugin struct {
 	cfg     Config
 	ctx     context.Context
 	st      Store
+	staging stagingStore // transient assembly buffer (pg|redis) — see staging.go
 	svc     *service
 	tmpl    *template.Template // admin-view fragments (views.go)
 	catalog pluginapi.Catalog  // optional — the content-taxonomy plugin (looked up in Start)
@@ -65,11 +66,22 @@ func (p *Plugin) Metadata() core.Metadata {
 
 func (p *Plugin) Provision(c *core.Core) error {
 	p.core = c
-	p.st = NewPGStore(c.Storage.SchemaDB("usenet"))
+	pg := NewPGStore(c.Storage.SchemaDB("usenet"))
+	p.st = pg
 	if err := c.Config.PluginInto("usenet", &p.cfg); err != nil {
 		return fmt.Errorf("usenet: config: %w", err)
 	}
 	p.cfg.applyDefaults()
+	// Staging backend behind the seam. Limits are read per-call (via effective)
+	// so the admin knobs apply live. nzbs writes always go through pg regardless.
+	staging, err := newStaging(p.cfg.Staging, pg, func(ctx context.Context) (int, int) {
+		e := p.effective(ctx)
+		return e.StagingMaxRows, e.StagingPruneHours
+	})
+	if err != nil {
+		return fmt.Errorf("usenet: staging: %w", err)
+	}
+	p.staging = staging
 	p.svc = &service{store: p.st, retentionDays: p.cfg.RetentionDays}
 
 	// Contribute indexer totals to the stats snapshot (collected in the worker
@@ -249,14 +261,14 @@ func (p *Plugin) runPrune(ctx context.Context) {
 		p.core.Errors.Report(ctx, "usenet/prune", err)
 		return
 	}
-	staged, _ := p.st.pruneStaging(ctx)
+	staged, _ := p.staging.prune(ctx)
 	// Sweep junk left over from before ingest filtering (obfuscated random-token
 	// titles that assembled into garbage releases / clog staging).
 	junkNzbs, err := p.st.deleteJunkNzbs(ctx)
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/prune-junk-nzbs", err)
 	}
-	junkStaged, err := p.st.deleteJunkStaged(ctx)
+	junkStaged, err := p.staging.deleteJunkStaged(ctx)
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/prune-junk-staged", err)
 	}

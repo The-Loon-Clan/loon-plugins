@@ -721,15 +721,33 @@ func (s *PGStore) deleteJunkStaged(ctx context.Context) (int64, error) {
 	return deleted, err
 }
 
-func (s *PGStore) pruneStaging(ctx context.Context) (int64, error) {
+// pruneStagedOlderThan drops staged articles past the horizon. The horizon is
+// config-driven (staging_prune_hours, default 6) — pgStaging passes the live
+// value. A non-positive hours falls back to 6 so a bad setting can't disable the
+// sweep and let staging grow unbounded.
+func (s *PGStore) pruneStagedOlderThan(ctx context.Context, hours int) (int64, error) {
+	if hours <= 0 {
+		hours = 6
+	}
 	var n int64
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		res, err := tx.ExecContext(ctx, `DELETE FROM articles WHERE added_at < now() - INTERVAL '6 hours'`)
+		res, err := tx.ExecContext(ctx,
+			`DELETE FROM articles WHERE added_at < now() - make_interval(hours => $1)`, hours)
 		if err != nil {
 			return err
 		}
 		n, _ = res.RowsAffected()
 		return nil
+	})
+	return n, err
+}
+
+// stagedCount is the total staged-article row count — pgStaging's pressure
+// numerator (staged rows / staging_max_rows).
+func (s *PGStore) stagedCount(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.GetContext(ctx, &n, `SELECT COUNT(*) FROM articles`)
 	})
 	return n, err
 }

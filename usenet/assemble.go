@@ -31,7 +31,7 @@ func (p *Plugin) runBuild(ctx context.Context) {
 	defer p.buildMu.Unlock()
 	p.buildJob.SetRunning()
 
-	keys, err := p.st.candidateGroups(ctx, 500)
+	keys, err := p.staging.candidateGroups(ctx, 500)
 	if err != nil {
 		p.buildJob.SetError(err.Error())
 		p.core.Errors.Report(ctx, "usenet/build-scan", err)
@@ -42,7 +42,7 @@ func (p *Plugin) runBuild(ctx context.Context) {
 		if ctx.Err() != nil {
 			break
 		}
-		arts, err := p.st.groupArticles(ctx, k.Group, k.Base)
+		arts, err := p.staging.groupArticles(ctx, k.Group, k.Base)
 		if err != nil {
 			p.core.Errors.Report(ctx, "usenet/build-load", err)
 			continue
@@ -51,7 +51,7 @@ func (p *Plugin) runBuild(ctx context.Context) {
 			continue // not actually complete yet — leave staged for next round
 		}
 		if isJunkTitle(k.Base) {
-			_ = p.st.deleteStaged(ctx, k.Group, k.Base) // drop, don't build
+			_ = p.staging.deleteStaged(ctx, k.Group, k.Base) // drop, don't build
 			continue
 		}
 		gz, err := gzipBytes(buildNZB(arts))
@@ -74,7 +74,7 @@ func (p *Plugin) runBuild(ctx context.Context) {
 			p.core.Errors.Report(ctx, "usenet/build-insert", err)
 			continue
 		}
-		_ = p.st.deleteStaged(ctx, k.Group, k.Base)
+		_ = p.staging.deleteStaged(ctx, k.Group, k.Base)
 		if ins {
 			built++
 		}

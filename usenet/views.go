@@ -139,6 +139,8 @@ func (p *Plugin) knobs(ctx context.Context) []knob {
 		{"max_articles_per_group", "First-pass article cap", cfg.MaxArticlesPerGroup, "cap a new group's initial volume"},
 		{"backfill_interval_min", "Backfill interval (min)", cfg.BackfillIntervalMin, "how often to pull history (applies next cycle)"},
 		{"backfill_batches_per_run", "Backfill batches per run", cfg.BackfillBatchesPerRun, "how much history each backfill pass pulls"},
+		{"staging_prune_hours", "Staging prune horizon (hrs)", cfg.StagingPruneHours, "drop staged articles older than this that never completed into an NZB (default 6)"},
+		{"staging_max_rows", "Staging soft cap (rows)", cfg.StagingMaxRows, "back-pressure denominator: backfill yields as staged rows approach this (default 2,000,000)"},
 	}
 }
 

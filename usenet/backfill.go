@@ -130,7 +130,7 @@ func (p *Plugin) backfillGroup(ctx context.Context, conn *nntp.Conn, g backfillR
 
 		arts := parseOverviews(ovs, g.Name, cutoff)
 		if len(arts) > 0 {
-			n, err := p.st.stageArticles(ctx, arts)
+			n, err := p.staging.stageArticles(ctx, arts)
 			if err != nil {
 				return used, staged, err
 			}

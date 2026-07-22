@@ -18,6 +18,12 @@ type Config struct {
 	SkipBackfill          bool `json:"skip_backfill"`            // "new articles only" — disable the backfill job
 	BackfillBatchesPerRun int  `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 10)
 	BackfillIntervalMin   int  `json:"backfill_interval_min"`    // backfill cadence (default 30)
+
+	// Staging backend (USENET-STAGING-MODES.md). Boot config, not a live knob:
+	// switching backends at runtime would strand staged data.
+	Staging           string `json:"staging"`             // pg (durable, default) | redis (fast, best-effort — Phase B)
+	StagingMaxRows    int    `json:"staging_max_rows"`    // pg back-pressure denominator: staged rows / this (default 2_000_000)
+	StagingPruneHours int    `json:"staging_prune_hours"` // pg stale-staging horizon in hours (default 6)
 }
 
 type ServerConfig struct {
@@ -50,6 +56,15 @@ func (c *Config) applyDefaults() {
 	if c.BackfillIntervalMin <= 0 {
 		c.BackfillIntervalMin = 5 // keep backfilling frequently, not once every 30 min
 	}
+	if c.Staging == "" {
+		c.Staging = "pg"
+	}
+	if c.StagingMaxRows <= 0 {
+		c.StagingMaxRows = 2_000_000
+	}
+	if c.StagingPruneHours <= 0 {
+		c.StagingPruneHours = 6
+	}
 	if c.Server.Port == 0 {
 		c.Server.Port = 119
 	}
@@ -67,6 +82,8 @@ func (c *Config) knobFields() map[string]*int {
 		"max_articles_per_group":   &c.MaxArticlesPerGroup,
 		"backfill_interval_min":    &c.BackfillIntervalMin,
 		"backfill_batches_per_run": &c.BackfillBatchesPerRun,
+		"staging_max_rows":         &c.StagingMaxRows,
+		"staging_prune_hours":      &c.StagingPruneHours,
 	}
 }
 
