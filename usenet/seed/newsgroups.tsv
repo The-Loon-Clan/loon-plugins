@@ -29,3 +29,39 @@
 # other. (Article NUMBERS are the per-backbone part; names are not.)
 #
 # name	pack	notes
+
+# --- anime ---
+alt.binaries.anime	anime	primary anime group
+alt.binaries.anime.german	anime	German-language anime
+alt.binaries.anime.repost	anime	reposts of alt.binaries.anime
+alt.binaries.cartoons.french.animes-fansub	anime	French fansubbed anime
+alt.binaries.dvd.anime	anime	anime DVD rips
+alt.binaries.dvd.anime.repost	anime	reposts of alt.binaries.dvd.anime
+alt.binaries.multimedia.anime	anime	
+alt.binaries.multimedia.anime.highspeed	anime	high-speed anime posts
+alt.binaries.multimedia.anime.repost	anime	reposts
+alt.binaries.multimedia.cartoons	anime	(judgment) mixed western cartoons + anime; move to misc if you only want anime
+alt.binaries.multimedia.cartoons.repost	anime	(judgment) reposts; same caveat as the parent group
+alt.binaries.multimedia.japanese	anime	Japanese media, largely anime
+alt.binaries.multimedia.japanese.repost	anime	reposts
+alt.binaries.sounds.anime	anime	(judgment) anime audio/OST — arguably pack=music
+
+# --- tv ---
+alt.binaries.hdtv	tv	HDTV captures
+alt.binaries.hdtv.repost	tv	reposts of alt.binaries.hdtv
+alt.binaries.hdtv.tv-episodes	tv	HDTV episodes
+alt.binaries.hdtv.x264	tv	x264 HDTV
+alt.binaries.tvshows	tv	
+
+# --- movies ---
+alt.binaries.blu-ray	movies	Blu-ray rips, general
+alt.binaries.dvd.english	movies	English DVD rips
+alt.binaries.movie	movies	
+alt.binaries.movies	movies	
+alt.binaries.movies.dvd	movies	movie DVD rips
+alt.binaries.movies.repost	movies	reposts of alt.binaries.movies
+
+# --- misc ---
+alt.binaries.dvd.misc	misc	mixed DVD rips
+alt.binaries.multimedia	misc	general multimedia, mixed content
+alt.binaries.nzb	misc	NZB posts rather than content
