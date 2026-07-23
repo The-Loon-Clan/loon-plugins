@@ -285,8 +285,19 @@ func (p *Plugin) runHealthCheck(ctx context.Context) {
 		return
 	}
 	defer p.healthMu.Unlock()
-	p.healthJob.SetRunning()
 	cfg := p.effective(ctx)
+	// Health competes for the same idle connections the crawler wants; running
+	// it on two workers at once doubles that pressure for no extra coverage.
+	if !p.withLease(ctx, leaseScopeJob, "NZB Health Check", p.leaseTTL(cfg), func() {
+		p.healthLocked(ctx, cfg)
+	}) {
+		p.healthJob.Log("health check skipped — another worker holds this job")
+		p.healthJob.SetIdle(p.nextHealth(cfg))
+	}
+}
+
+func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
+	p.healthJob.SetRunning()
 
 	pool, err := p.ensurePool(ctx, cfg)
 	if err != nil {

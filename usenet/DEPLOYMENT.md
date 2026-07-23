@@ -28,7 +28,39 @@ Two consequences worth noting:
   never talks to a news server, which is a useful blast-radius reduction if the
   front end is the internet-facing box.
 
-## What does NOT work: two workers
+## Running two workers (supported)
+
+Workers coordinate through leases in the `leases` table. Two scopes:
+
+- **`group`** — one backbone's view of one newsgroup. Crawl state is keyed
+  `(backbone, group_name)`, so two workers crawling *different groups* touch
+  entirely separate rows and never contend. This is the unit of parallelism:
+  worker A takes `alt.binaries.anime` on Omicron while worker B takes
+  `alt.binaries.hdtv` on the same backbone.
+- **`job`** — the jobs that are not group-scoped (NZB build, prune, tag fill,
+  health). Those drain shared staging or compete for idle connections, so they
+  run once cluster-wide; the worker that doesn't get the lease logs and skips.
+
+A worker claims what is free at the start of a pass, renews while working, and
+releases at the end. Partial acquisition is normal — whatever another worker
+holds simply isn't yours this pass. Leases carry an expiry, so a killed worker's
+groups are picked up by the next pass rather than going dark; `lease_ttl_min`
+(default 15) sets how long that takes.
+
+Because the lease is per *group*, a second account on the SAME backbone is still
+useful — it works other groups rather than sitting idle.
+
+Two caveats:
+
+- **The connection budget is still per account.** If both workers use the same
+  provider credentials, each opens up to `connections` connections, so set that
+  to roughly half your account's limit per worker, or give each worker its own
+  account.
+- Leases are advisory-by-convention: they stop the plugin's own jobs colliding.
+  Nothing prevents an operator pointing two workers at the same account and
+  over-subscribing it.
+
+## What used to not work: two workers
 
 There is no cross-host job lock. The plugin's `crawlMu` / `backfillMu` /
 `buildMu` are ordinary in-process mutexes — they stop a manual trigger racing a

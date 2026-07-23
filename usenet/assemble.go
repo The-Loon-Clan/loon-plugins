@@ -29,6 +29,16 @@ func (p *Plugin) runBuild(ctx context.Context) {
 		return
 	}
 	defer p.buildMu.Unlock()
+	// The builder drains shared staging, so it must run once cluster-wide.
+	if !p.withLease(ctx, leaseScopeJob, "NZB Builder", p.leaseTTL(p.effective(ctx)), func() {
+		p.buildLocked(ctx)
+	}) {
+		p.buildJob.Log("build skipped — another worker holds this job")
+		p.buildJob.SetIdle(p.nextCrawl())
+	}
+}
+
+func (p *Plugin) buildLocked(ctx context.Context) {
 	p.buildJob.SetRunning()
 
 	keys, err := p.staging.candidateGroups(ctx, 500)

@@ -121,6 +121,13 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 		p.crawlJob.Log("no active groups — pick some in the admin wizard")
 		return 0
 	}
+	// Take only the groups no other worker is already crawling on this backbone.
+	groups, release := p.claimGroupLeases(ctx, bb, groups, p.leaseTTL(cfg))
+	defer release()
+	if len(groups) == 0 {
+		p.crawlJob.Log("%s: every group already claimed by another worker", run.prov.label())
+		return 0
+	}
 
 	// 1. Resolve each group's window and enqueue its batches.
 	plans := make(map[string]*crawlPlan, len(groups))

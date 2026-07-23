@@ -30,6 +30,11 @@ type Config struct {
 	StagingMaxRows    int    `json:"staging_max_rows"`    // pg back-pressure denominator: staged rows / this (default 2_000_000)
 	StagingPruneHours int    `json:"staging_prune_hours"` // pg stale-staging horizon in hours (default 6)
 
+	// Cross-host coordination (lease.go). How long a claimed lease survives
+	// without renewal — long enough that a slow pass never loses its own claim,
+	// short enough that a killed worker's work is picked up promptly.
+	LeaseTTLMin int `json:"lease_ttl_min"` // default 15
+
 	// NZB health checking (health.go). Segments are STATted on idle connections
 	// only, so these bound how much bookkeeping runs, not how fast it must.
 	HealthIntervalMin int `json:"health_interval_min"`  // sweep cadence (default 60)
@@ -86,6 +91,9 @@ func (c *Config) applyDefaults() {
 	if c.StagingPruneHours <= 0 {
 		c.StagingPruneHours = 6
 	}
+	if c.LeaseTTLMin <= 0 {
+		c.LeaseTTLMin = 15
+	}
 	if c.HealthIntervalMin <= 0 {
 		c.HealthIntervalMin = 60
 	}
@@ -127,6 +135,7 @@ func (c *Config) knobFields() map[string]*int {
 		"backfill_batches_per_run":   &c.BackfillBatchesPerRun,
 		"staging_max_rows":           &c.StagingMaxRows,
 		"staging_prune_hours":        &c.StagingPruneHours,
+		"lease_ttl_min":              &c.LeaseTTLMin,
 		"health_interval_min":        &c.HealthIntervalMin,
 		"health_batch_size":          &c.HealthBatchSize,
 		"health_recheck_days":        &c.HealthRecheckDays,

@@ -102,6 +102,28 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 		p.backfillJob.Log("%s: nothing to backfill — caught up to the retention horizon", run.prov.label())
 		return 0
 	}
+	// Backfill leases the same (backbone, group) keys as the forward crawl: both
+	// advance the same row, so they must not run on it from two workers at once.
+	rows := make([]groupRow, len(groups))
+	for i, g := range groups {
+		rows[i] = groupRow{Name: g.Name}
+	}
+	heldRows, release := p.claimGroupLeases(ctx, bb, rows, p.leaseTTL(cfg))
+	defer release()
+	if len(heldRows) == 0 {
+		return 0
+	}
+	mine := make(map[string]bool, len(heldRows))
+	for _, r := range heldRows {
+		mine[r.Name] = true
+	}
+	kept := groups[:0]
+	for _, g := range groups {
+		if mine[g.Name] {
+			kept = append(kept, g)
+		}
+	}
+	groups = kept
 
 	// Build one flat job list from every group's gaps, oldest-work-last, bounded
 	// by the shared budget so no single group can consume the whole pass.

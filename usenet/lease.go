@@ -1,0 +1,261 @@
+package usenet
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/jmoiron/sqlx"
+)
+
+// Leases let the crawler run on several hosts at once.
+//
+// Two scopes, one primitive:
+//
+//   - scope "group" — who crawls one BACKBONE'S view of one GROUP. Crawl state
+//     is keyed (backbone, group_name), so two workers on the same backbone but
+//     different groups touch separate rows and never contend. That makes the
+//     group, not the backbone, the right unit: a second account on the same
+//     backbone is useful for OTHER groups rather than idle.
+//   - scope "job" — jobs that are not backbone-scoped (build, prune, tag fill,
+//     health) and must still run once cluster-wide.
+//
+// A lease is a row with an expiry rather than a Postgres advisory lock, because
+// an advisory lock is session-scoped: holding one for the length of a crawl
+// would pin a connection idle for minutes. A row survives a worker being killed
+// (it simply expires) and needs no pinned connection.
+
+const (
+	leaseScopeGroup = "group"
+	leaseScopeJob   = "job"
+)
+
+// workerID identifies this process across the cluster. Host and pid make it
+// readable in the leases table when diagnosing "who is holding this"; the random
+// suffix keeps it unique across restarts, so a crashed worker's own lease is
+// never mistaken for a live one by its replacement.
+var (
+	workerIDOnce sync.Once
+	workerIDVal  string
+)
+
+func workerID() string {
+	workerIDOnce.Do(func() {
+		host, err := os.Hostname()
+		if err != nil || host == "" {
+			host = "unknown"
+		}
+		var b [4]byte
+		_, _ = rand.Read(b[:])
+		workerIDVal = fmt.Sprintf("%s/%d/%s", host, os.Getpid(), hex.EncodeToString(b[:]))
+	})
+	return workerIDVal
+}
+
+// claimLease takes or renews a lease. It succeeds when the key is unheld, has
+// expired, or is already ours — all in one atomic upsert, so two workers racing
+// for the same key cannot both win.
+func (s *PGStore) claimLease(ctx context.Context, scope, key, worker string, ttl time.Duration) (bool, error) {
+	if ttl <= 0 {
+		ttl = time.Minute
+	}
+	got := false
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx,
+			`INSERT INTO leases (scope, key, worker_id, expires_at)
+			 VALUES ($1, $2, $3, now() + make_interval(secs => $4))
+			 ON CONFLICT (scope, key) DO UPDATE
+			    SET worker_id  = EXCLUDED.worker_id,
+			        claimed_at = CASE WHEN leases.worker_id = EXCLUDED.worker_id
+			                          THEN leases.claimed_at ELSE now() END,
+			        expires_at = EXCLUDED.expires_at
+			  WHERE leases.worker_id = EXCLUDED.worker_id
+			     OR leases.expires_at < now()`,
+			scope, key, worker, ttl.Seconds())
+		if err != nil {
+			return err
+		}
+		n, _ := res.RowsAffected()
+		got = n > 0
+		return nil
+	})
+	return got, err
+}
+
+// releaseLease drops a lease we hold, so another worker can take it immediately
+// instead of waiting for the expiry.
+func (s *PGStore) releaseLease(ctx context.Context, scope, key, worker string) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`DELETE FROM leases WHERE scope = $1 AND key = $2 AND worker_id = $3`,
+			scope, key, worker)
+		return err
+	})
+}
+
+// leaseHolders reports the current holder per key, for diagnostics.
+func (s *PGStore) leaseHolders(ctx context.Context, scope string) (map[string]string, error) {
+	type row struct {
+		Key    string `db:"key"`
+		Worker string `db:"worker_id"`
+	}
+	var rows []row
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &rows,
+			`SELECT key, worker_id FROM leases WHERE scope = $1 AND expires_at > now()`, scope)
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(rows))
+	for _, r := range rows {
+		out[r.Key] = r.Worker
+	}
+	return out, nil
+}
+
+// leaseRenewInterval is how often a held lease is refreshed while work is in
+// flight. It must be comfortably shorter than the TTL, or a slow pass would let
+// its own lease lapse and a second worker would start the same work.
+func leaseRenewInterval(ttl time.Duration) time.Duration {
+	d := ttl / 3
+	if d < 5*time.Second {
+		d = 5 * time.Second
+	}
+	return d
+}
+
+// withLease runs fn while holding a lease, renewing it in the background so a
+// long pass cannot outlive its own claim. Returns false without running fn when
+// the lease is held elsewhere.
+func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Duration, fn func()) bool {
+	me := workerID()
+	got, err := p.st.claimLease(ctx, scope, key, me, ttl)
+	if err != nil {
+		p.core.Errors.Report(ctx, "usenet/lease-claim", fmt.Errorf("%s/%s: %w", scope, key, err))
+		return false
+	}
+	if !got {
+		return false
+	}
+
+	renewCtx, stop := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		t := time.NewTicker(leaseRenewInterval(ttl))
+		defer t.Stop()
+		for {
+			select {
+			case <-renewCtx.Done():
+				return
+			case <-t.C:
+				// A failed renewal is not fatal on its own — the lease may still
+				// be valid — but if it keeps failing the TTL will lapse and
+				// another worker takes over, which is the correct outcome.
+				if ok, err := p.st.claimLease(renewCtx, scope, key, me, ttl); err != nil || !ok {
+					return
+				}
+			}
+		}
+	}()
+
+	defer func() {
+		stop()
+		wg.Wait()
+		// Release on a fresh context: ctx may already be cancelled by shutdown,
+		// and a lease left behind would idle that work until it expires.
+		relCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := p.st.releaseLease(relCtx, scope, key, me); err != nil {
+			p.core.Errors.Report(ctx, "usenet/lease-release", err)
+		}
+	}()
+
+	fn()
+	return true
+}
+
+// groupLeaseKey is the unit of crawl parallelism: one BACKBONE'S view of one
+// GROUP. Crawl state is keyed (backbone, group_name), so two workers on the same
+// backbone but different groups touch entirely separate rows and never contend —
+// which makes the group, not the backbone, the right thing to lease.
+func groupLeaseKey(backbone, group string) string { return backbone + "|" + group }
+
+// claimGroupLeases takes leases for as many of the given groups as are free and
+// returns those we own plus a release func. Partial acquisition is the normal
+// case, not an error — whatever another worker holds simply isn't ours this
+// pass, and it will crawl those groups instead.
+//
+// A single renewer refreshes the whole set while work is in flight, so a slow
+// pass cannot let part of its own claim lapse and invite a second worker in.
+func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups []groupRow, ttl time.Duration) ([]groupRow, func()) {
+	me := workerID()
+	var held []groupRow
+	var keys []string
+	for _, g := range groups {
+		k := groupLeaseKey(backbone, g.Name)
+		got, err := p.st.claimLease(ctx, leaseScopeGroup, k, me, ttl)
+		if err != nil {
+			p.core.Errors.Report(ctx, "usenet/lease-claim", fmt.Errorf("%s: %w", k, err))
+			continue
+		}
+		if got {
+			held = append(held, g)
+			keys = append(keys, k)
+		}
+	}
+	if len(held) == 0 {
+		return nil, func() {}
+	}
+
+	renewCtx, stop := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		t := time.NewTicker(leaseRenewInterval(ttl))
+		defer t.Stop()
+		for {
+			select {
+			case <-renewCtx.Done():
+				return
+			case <-t.C:
+				for _, k := range keys {
+					if ok, err := p.st.claimLease(renewCtx, leaseScopeGroup, k, me, ttl); err != nil || !ok {
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	release := func() {
+		stop()
+		wg.Wait()
+		// Fresh context: ctx may already be cancelled by shutdown, and a lease
+		// left behind idles that group until it expires.
+		relCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		for _, k := range keys {
+			if err := p.st.releaseLease(relCtx, leaseScopeGroup, k, me); err != nil {
+				p.core.Errors.Report(ctx, "usenet/lease-release", err)
+			}
+		}
+	}
+	return held, release
+}
+
+// leaseTTL resolves the configured lease lifetime.
+func (p *Plugin) leaseTTL(cfg Config) time.Duration {
+	m := cfg.LeaseTTLMin
+	if m <= 0 {
+		m = 15
+	}
+	return time.Duration(m) * time.Minute
+}

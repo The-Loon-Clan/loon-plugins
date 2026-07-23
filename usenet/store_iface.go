@@ -25,6 +25,7 @@ type Store interface {
 	MaintenanceStore
 	JunkStore
 	HealthStore
+	LeaseStore
 }
 
 // ReleaseReader is the read side: search, browse, feed, detail, raw NZB, stats.
@@ -104,6 +105,14 @@ type HealthStore interface {
 	updateNzbHealth(ctx context.Context, id int64, status string, total, missing, par2 int) error
 	touchHealthChecked(ctx context.Context, id int64) error
 	healthBreakdown(ctx context.Context) (map[string]int, error)
+}
+
+// LeaseStore is cross-host coordination (lease.go): who crawls which backbone,
+// and which worker owns the cluster-wide jobs.
+type LeaseStore interface {
+	claimLease(ctx context.Context, scope, key, worker string, ttl time.Duration) (bool, error)
+	releaseLease(ctx context.Context, scope, key, worker string) error
+	leaseHolders(ctx context.Context, scope string) (map[string]string, error)
 }
 
 // MaintenanceStore is the nzbs cleanup / retagging surface (off-peak jobs). The

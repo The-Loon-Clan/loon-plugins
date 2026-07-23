@@ -226,6 +226,15 @@ func (p *Plugin) runTagFill(ctx context.Context) {
 	if ctx == nil {
 		return
 	}
+	if !p.withLease(ctx, leaseScopeJob, "NZB Tag Fill", p.leaseTTL(p.effective(ctx)), func() {
+		p.runTagFillLocked(ctx)
+	}) {
+		p.tagJob.Log("tag fill skipped — another worker holds this job")
+		p.tagJob.SetIdle(time.Now().Add(6 * time.Hour))
+	}
+}
+
+func (p *Plugin) runTagFillLocked(ctx context.Context) {
 	p.tagJob.SetRunning()
 	n, err := p.st.retagUntagged(ctx, 500)
 	if err != nil {
@@ -298,6 +307,17 @@ func (p *Plugin) runPrune(ctx context.Context) {
 	if ctx == nil {
 		return
 	}
+	// Not group-scoped, so it must run once across the cluster or two workers
+	// duplicate the sweep.
+	if !p.withLease(ctx, leaseScopeJob, "NZB Prune", p.leaseTTL(p.effective(ctx)), func() {
+		p.runPruneLocked(ctx)
+	}) {
+		p.pruneJob.Log("prune skipped — another worker holds this job")
+		p.pruneJob.SetIdle(time.Now().Add(24 * time.Hour))
+	}
+}
+
+func (p *Plugin) runPruneLocked(ctx context.Context) {
 	p.pruneJob.SetRunning()
 	cfg := p.effective(ctx)
 	n, err := p.st.pruneNzbs(ctx, cfg.RetentionDays)
