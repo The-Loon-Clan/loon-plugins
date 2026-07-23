@@ -105,6 +105,10 @@ func TestCrawlersRendersFleetAndWorkers(t *testing.T) {
 			{ID: "hostA/1/abcd", Me: true, Groups: 14},
 			{ID: "hostB/1/efgh", Groups: 13},
 		},
+		"Pass": passVM{Any: true, Running: true, Groups: 5, Batches: 40, Failed: 2,
+			Articles: 120000, Staged: 9000, Wire: "42.0 MB", Duration: "1m30s",
+			Rate: "1333 art/s", Through: "0.47 MB/s", Providers: 2},
+		"Errors":      []errorVM{{When: "10:04:11", Op: "usenet/crawl-fetch", Msg: "430 no such article"}},
 		"Health":      healthVM{Healthy: 80, Broken: 15, Dead: 5, Unknown: 100, Total: 200, HealthyPct: 40, BrokenPct: 7, DeadPct: 2},
 		"AutoRefresh": false,
 		"Msg":         "",
@@ -117,6 +121,8 @@ func TestCrawlersRendersFleetAndWorkers(t *testing.T) {
 	for _, want := range []string{
 		"news.eweka.nl:563", "omicron", "18 / 20", "benched",
 		"hostA/1/abcd", "(this host)", "healthy", "Crawler hosts",
+		"Crawl in progress", "1333 art/s", "0.47 MB/s", "2 failed",
+		"Recent errors", "430 no such article",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("crawlers page missing %q", want)
@@ -135,7 +141,8 @@ func TestCrawlersRendersEmpty(t *testing.T) {
 	err = tmpl.ExecuteTemplate(&buf, "crawlers.html", map[string]any{
 		"Stats": pluginapi.IndexStats{}, "Groups": []crawlerGroupVM{}, "Jobs": nil,
 		"Builder": BuilderInfo{}, "Fleet": []providerVM{}, "Workers": []workerVM{},
-		"Health": healthVM{}, "AutoRefresh": false, "Msg": "", "Err": "",
+		"Health": healthVM{}, "Pass": passVM{}, "Errors": []errorVM{},
+		"AutoRefresh": false, "Msg": "", "Err": "",
 	})
 	if err != nil {
 		t.Fatalf("render empty: %v", err)

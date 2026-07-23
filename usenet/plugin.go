@@ -73,6 +73,10 @@ type Plugin struct {
 	// staging area, where message-id dedup turns overlap into better coverage.
 	fleet *providerFleet
 
+	// Live crawl counters + a short tail of recent errors, for /admin/crawlers
+	// (telemetry.go).
+	tel *telemetry
+
 	// Fingerprint of the junk rules currently compiled into memory, so a reload
 	// only recompiles when they actually changed (junk_store.go).
 	junkMu sync.Mutex
@@ -98,6 +102,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.cfg.applyDefaults()
 	p.fleet = newProviderFleet()
+	p.tel = newTelemetry()
 	// Staging backend behind the seam. Limits are read per-call (via effective)
 	// so the admin knobs apply live. nzbs writes always go through pg regardless.
 	staging, err := newStaging(p.cfg.Staging, pg, c.Redis, func(ctx context.Context) (int, int) {

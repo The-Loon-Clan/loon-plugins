@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -117,6 +118,58 @@ func redirect(gc *gin.Context, to string) (template.HTML, error) {
 // settingsRedirect lands back on the usenet section of the settings page.
 func settingsRedirect(gc *gin.Context, key, msg string) (template.HTML, error) {
 	return redirect(gc, settingsURL+"?"+key+"="+url.QueryEscape(msg)+"#s-usenet")
+}
+
+// passVM is the last (or in-flight) crawl pass, pre-formatted. This answers the
+// three questions an operator actually has when a crawl looks wrong: is it
+// moving, how fast, and is anything failing.
+type passVM struct {
+	Running                       bool
+	Any                           bool
+	Groups, Batches, Failed       int
+	Articles, Staged              int
+	Wire, Duration, Rate, Through string
+	Providers                     int
+}
+
+func (p *Plugin) passVM() passVM {
+	if p.tel == nil {
+		return passVM{}
+	}
+	cur, last, _ := p.tel.snapshot()
+	st, running := last, false
+	if cur.InProgress {
+		st, running = cur, true
+	}
+	if st.Started.IsZero() {
+		return passVM{}
+	}
+	return passVM{
+		Running: running, Any: true,
+		Groups: st.Groups, Batches: st.Batches, Failed: st.Failed,
+		Articles: st.Articles, Staged: st.Staged, Providers: st.Providers,
+		Wire:     fmtBytes(st.WireBytes),
+		Duration: st.Duration().Truncate(time.Second).String(),
+		Rate:     fmt.Sprintf("%.0f art/s", st.Rate()),
+		Through:  fmt.Sprintf("%.2f MB/s", st.Throughput()),
+	}
+}
+
+// errorVM is one recent failure, newest first.
+type errorVM struct {
+	When, Op, Msg string
+}
+
+func (p *Plugin) errorVMs() []errorVM {
+	if p.tel == nil {
+		return nil
+	}
+	_, _, errs := p.tel.snapshot()
+	out := make([]errorVM, len(errs))
+	for i, e := range errs {
+		out[i] = errorVM{When: e.At.Format("15:04:05"), Op: e.Op, Msg: e.Msg}
+	}
+	return out
 }
 
 // providerVM is one provider row on the crawlers page: what it is, and whether

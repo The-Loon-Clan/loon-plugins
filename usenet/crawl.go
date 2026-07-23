@@ -46,7 +46,9 @@ type batchResult struct {
 	lo, hi           int
 	minDate, maxDate time.Time
 	staged           int
-	ok               bool // fetched AND staged; only then may the watermark pass this range
+	articles         int   // overview lines returned
+	wire             int64 // bytes pulled off the wire, for throughput
+	ok               bool  // fetched AND staged; only then may the watermark pass this range
 }
 
 // crawlPlan is one group's resolved forward window for this pass.
@@ -83,7 +85,7 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 			return
 		}
 		p.crawlJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/crawl-fleet", err)
+		p.reportErr(ctx, "usenet/crawl-fleet", err)
 		return
 	}
 
@@ -92,6 +94,8 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	// do share is the staging area, where message-id dedup turns the overlap into
 	// better completeness: a release short a segment on one backbone can be
 	// finished by another.
+	p.tel.passStart(len(runs))
+	defer p.tel.passEnd()
 	totalStaged := 0
 	for _, run := range runs {
 		if ctx.Err() != nil {
@@ -114,7 +118,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 
 	groups, err := p.st.activeGroupsForBackbone(ctx, bb, cfg.MaxGroups)
 	if err != nil {
-		p.core.Errors.Report(ctx, "usenet/crawl-groups", err)
+		p.reportErr(ctx, "usenet/crawl-groups", err)
 		return 0
 	}
 	if len(groups) == 0 {
@@ -130,6 +134,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	}
 	groups, release := p.claimGroupLeases(ctx, bb, groups, p.leaseTTL(cfg))
 	defer release()
+	p.tel.noteGroups(len(groups))
 	if len(groups) == 0 {
 		p.crawlJob.Log("%s: every group already claimed by another worker", run.prov.label())
 		return 0
@@ -144,7 +149,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 		}
 		plan, err := p.planGroup(ctx, pool, g, cfg)
 		if err != nil {
-			p.core.Errors.Report(ctx, "usenet/crawl-plan",
+			p.reportErr(ctx, "usenet/crawl-plan",
 				fmt.Errorf("%s/%s: %w", run.prov.label(), g.Name, err))
 			p.crawlJob.Log("%s/%s: %v", run.prov.label(), g.Name, err)
 			continue
@@ -155,7 +160,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 			// stays honest.
 			if err := p.st.updateGroupStateForBackbone(ctx, bb, plan.group, int64(plan.low), int64(plan.high),
 				0, int64(plan.start), time.Time{}); err != nil {
-				p.core.Errors.Report(ctx, "usenet/crawl-range", err)
+				p.reportErr(ctx, "usenet/crawl-range", err)
 			}
 			continue
 		}
@@ -286,24 +291,27 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, cu
 	}
 
 	var ovs []nntp.MessageOverview
+	var wire int64
 	err := pool.Do(ctx, func(c *nntp.Conn) error {
 		// The pool hands out whichever connection is free and another caller may
 		// have selected a different group on it, so always re-select.
 		if _, _, _, err := c.Group(j.group); err != nil {
 			return err
 		}
-		got, _, err := c.Overview(j.lo, j.hi)
+		got, wb, err := c.Overview(j.lo, j.hi)
 		if err != nil {
 			return err
 		}
-		ovs = got
+		ovs, wire = got, wb
 		return nil
 	})
 	if err != nil {
-		p.core.Errors.Report(ctx, "usenet/crawl-fetch",
+		p.reportErr(ctx, "usenet/crawl-fetch",
 			fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
+		p.tel.noteBatch(0, 0, 0, false)
 		return res // ok stays false — the watermark will not pass this range
 	}
+	res.articles, res.wire = len(ovs), wire
 	res.maxDate = newestDate(ovs)
 	res.minDate = oldestDate(ovs)
 
@@ -314,13 +322,15 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, cu
 			// Leave ok=false so the watermark does NOT move past articles we never
 			// stored. (Prod drops the batch on a staging error but keeps the
 			// already-advanced watermark, losing those articles permanently.)
-			p.core.Errors.Report(ctx, "usenet/crawl-stage",
+			p.reportErr(ctx, "usenet/crawl-stage",
 				fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
+			p.tel.noteBatch(res.articles, 0, wire, false)
 			return res
 		}
 		res.staged = n
 	}
 	res.ok = true
+	p.tel.noteBatch(res.articles, res.staged, wire, true)
 	return res
 }
 
@@ -345,7 +355,7 @@ func (p *Plugin) advanceWatermarks(ctx context.Context, backbone string, plans m
 				continue
 			}
 			if err := p.st.recordFetchedRangeFor(ctx, backbone, name, int64(r.lo), int64(r.hi)); err != nil {
-				p.core.Errors.Report(ctx, "usenet/crawl-range-record", err)
+				p.reportErr(ctx, "usenet/crawl-range-record", err)
 			}
 		}
 		highest, latest := contiguousEnd(plan.start, rs)
@@ -359,7 +369,7 @@ func (p *Plugin) advanceWatermarks(ctx context.Context, backbone string, plans m
 		}
 		if err := p.st.updateGroupStateForBackbone(ctx, backbone, name, int64(plan.low), int64(plan.high),
 			watermark, int64(plan.start), latest); err != nil {
-			p.core.Errors.Report(ctx, "usenet/crawl-watermark", fmt.Errorf("%s: %w", name, err))
+			p.reportErr(ctx, "usenet/crawl-watermark", fmt.Errorf("%s: %w", name, err))
 		}
 	}
 	return staged, advanced

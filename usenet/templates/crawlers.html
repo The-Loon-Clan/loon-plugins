@@ -121,6 +121,55 @@
     <div class="empty">No active groups. Enable some in <a href="/admin/p/usenet">Usenet setup</a>, then crawl.</div>
     {{end}}
 
+
+{{if .Pass.Any}}
+<div class="card" style="margin-bottom:1rem">
+  <div class="card-body">
+    <h5 style="margin:0 0 .5rem">
+      {{if .Pass.Running}}Crawl in progress{{else}}Last crawl pass{{end}}
+    </h5>
+    <div style="display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.9rem">
+      <span><strong>{{.Pass.Articles}}</strong> <span style="opacity:.6">fetched</span></span>
+      <span><strong>{{.Pass.Staged}}</strong> <span style="opacity:.6">staged</span></span>
+      <span><strong>{{.Pass.Groups}}</strong> <span style="opacity:.6">groups</span></span>
+      <span><strong>{{.Pass.Batches}}</strong> <span style="opacity:.6">batches</span>
+        {{if gt .Pass.Failed 0}}<span style="color:#e0a030">· {{.Pass.Failed}} failed</span>{{end}}</span>
+      <span><strong>{{.Pass.Duration}}</strong></span>
+      <span><strong>{{.Pass.Rate}}</strong></span>
+      <span><strong>{{.Pass.Through}}</strong> <span style="opacity:.6">({{.Pass.Wire}})</span></span>
+      <span style="opacity:.6">{{.Pass.Providers}} provider(s)</span>
+    </div>
+    <p style="opacity:.6;font-size:.8rem;margin:.5rem 0 0">
+      Fetched counts overview lines pulled; staged counts what survived junk
+      filtering and dedup, so a large gap between them is the filter working.
+    </p>
+  </div>
+</div>
+{{end}}
+
+{{if .Errors}}
+<div class="card" style="margin-bottom:1rem">
+  <div class="card-body">
+    <h5 style="margin:0 0 .5rem">Recent errors <span style="opacity:.6;font-weight:400">({{len .Errors}})</span></h5>
+    <div style="max-height:14rem;overflow:auto;font-size:.85rem">
+      <table class="table" style="margin:0">
+        <tbody>
+        {{range .Errors}}
+          <tr>
+            <td style="white-space:nowrap;opacity:.6;width:5rem">{{.When}}</td>
+            <td style="white-space:nowrap"><code>{{.Op}}</code></td>
+            <td style="word-break:break-word">{{.Msg}}</td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    <p style="opacity:.6;font-size:.8rem;margin:.5rem 0 0">
+      A short tail for triage — these are also in the host error log, which keeps history.
+    </p>
+  </div>
+</div>
+{{end}}
 <div class="card" style="margin-bottom:1rem">
   <div class="card-body">
     <h5 style="margin:0 0 .5rem">Providers</h5>
