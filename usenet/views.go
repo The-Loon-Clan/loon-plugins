@@ -433,6 +433,48 @@ func (p *Plugin) actionToggleProvider(gc *gin.Context) (template.HTML, error) {
 	return settingsRedirect(gc, "msg", "provider updated")
 }
 
+func (p *Plugin) actionTuneGroup(gc *gin.Context) (template.HTML, error) {
+	name := strings.TrimSpace(gc.PostForm("name"))
+	if name == "" {
+		return settingsRedirect(gc, "err", "no group selected")
+	}
+	ret, _ := strconv.Atoi(gc.PostForm("retention_days"))
+	thr, _ := strconv.Atoi(gc.PostForm("throttle_ms"))
+	low := gc.PostForm("low_priority") != ""
+	if err := p.st.setGroupTuning(gc.Request.Context(), name, ret, thr, low); err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
+	return settingsRedirect(gc, "msg", name+" updated")
+}
+
+func (p *Plugin) actionMoveGroup(gc *gin.Context) (template.HTML, error) {
+	name := strings.TrimSpace(gc.PostForm("name"))
+	delta := -1
+	if gc.PostForm("dir") == "down" {
+		delta = 1
+	}
+	if err := p.st.moveGroup(gc.Request.Context(), name, delta); err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
+	return settingsRedirect(gc, "msg", "order updated")
+}
+
+func (p *Plugin) actionDeleteGroup(gc *gin.Context) (template.HTML, error) {
+	name := strings.TrimSpace(gc.PostForm("name"))
+	if err := p.st.deleteGroup(gc.Request.Context(), name); err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
+	return settingsRedirect(gc, "msg", name+" removed (crawl history kept)")
+}
+
+func (p *Plugin) actionPurgeInactive(gc *gin.Context) (template.HTML, error) {
+	n, err := p.st.deleteInactiveGroups(gc.Request.Context())
+	if err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
+	return settingsRedirect(gc, "msg", fmt.Sprintf("removed %d inactive group(s)", n))
+}
+
 // actionSaveKnobs persists the numeric settings; they apply on each job's next
 // run (effective() overlays them onto the config defaults).
 func (p *Plugin) actionSaveKnobs(gc *gin.Context) (template.HTML, error) {

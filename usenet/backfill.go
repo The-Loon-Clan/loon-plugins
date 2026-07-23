@@ -150,6 +150,11 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 			continue
 		}
 		gj := gapJobs(g.Name, gaps, cfg.Batch, budget)
+		gc := groupRow{Name: g.Name, RetentionDays: g.RetentionDays, ThrottleMs: g.ThrottleMs}.cutoff(cfg)
+		for i := range gj {
+			gj[i].cutoff = gc
+			gj[i].throttle = time.Duration(g.ThrottleMs) * time.Millisecond
+		}
 		if len(gj) == 0 {
 			continue
 		}
@@ -162,12 +167,11 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 		return 0
 	}
 
-	cutoff := time.Now().AddDate(0, 0, -cfg.RetentionDays)
 	p.backfillJob.Log("%s: backfilling %d group(s), %d batch(es) over %d connection(s)…",
 		run.prov.label(), len(targets), len(jobs), run.prov.conns(cfg.Connections))
-	results := p.runBatches(ctx, pool, jobs, cutoff, cfg)
+	results := p.runBatches(ctx, pool, jobs, cfg)
 
-	staged := p.recordBackfill(ctx, bb, targets, results, cutoff)
+	staged := p.recordBackfill(ctx, bb, targets, results, cfg)
 
 	st := pool.Stats()
 	p.backfillJob.Log("%s: %d historical article(s) staged from %d batch(es) (conns %d/%d, resets %d)",
@@ -184,7 +188,7 @@ func (p *Plugin) nextBackfill() time.Time {
 // a failed batch simply leaves its gap unrecorded, so the next pass recomputes
 // it and tries again — coverage IS the state, so nothing can be silently
 // skipped.
-func (p *Plugin) recordBackfill(ctx context.Context, backbone string, targets map[string]backfillRow, results []batchResult, cutoff time.Time) (staged int) {
+func (p *Plugin) recordBackfill(ctx context.Context, backbone string, targets map[string]backfillRow, results []batchResult, cfg Config) (staged int) {
 	byGroup := make(map[string][]batchResult, len(targets))
 	for _, r := range results {
 		staged += r.staged
@@ -210,7 +214,8 @@ func (p *Plugin) recordBackfill(ctx context.Context, backbone string, targets ma
 			}
 		}
 
-		// Reached the retention horizon: everything below is older still.
+		// Reached this group's retention horizon: everything below is older still.
+		cutoff := groupRow{Name: name, RetentionDays: g.RetentionDays}.cutoff(cfg)
 		if !oldest.IsZero() && oldest.Before(cutoff) {
 			if err := p.st.markBackfillDoneForBackbone(ctx, backbone, name); err != nil {
 				p.reportErr(ctx, "usenet/backfill-done", err)

@@ -39,6 +39,10 @@ type stagedArticle struct {
 type batchJob struct {
 	group  string
 	lo, hi int
+	// Resolved per group, because retention and throttling are per-group
+	// settings and a batch is the unit that actually applies them.
+	cutoff   time.Time
+	throttle time.Duration
 }
 
 type batchResult struct {
@@ -169,7 +173,11 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 			if end > plan.high {
 				end = plan.high
 			}
-			jobs = append(jobs, batchJob{group: plan.group, lo: i, hi: end})
+			jobs = append(jobs, batchJob{
+				group: plan.group, lo: i, hi: end,
+				cutoff:   g.cutoff(cfg),
+				throttle: time.Duration(g.ThrottleMs) * time.Millisecond,
+			})
 		}
 	}
 	if len(jobs) == 0 {
@@ -178,10 +186,9 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	}
 
 	// 2. Fetch + stage in parallel over the pool.
-	cutoff := time.Now().AddDate(0, 0, -cfg.RetentionDays)
 	p.crawlJob.Log("%s: crawling %d group(s), %d batch(es) over %d connection(s)…",
 		run.prov.label(), len(plans), len(jobs), run.prov.conns(cfg.Connections))
-	results := p.runBatches(ctx, pool, jobs, cutoff, cfg)
+	results := p.runBatches(ctx, pool, jobs, cfg)
 
 	// 3. Advance watermarks to the last contiguous success per group.
 	staged, advanced := p.advanceWatermarks(ctx, bb, plans, results)
@@ -243,7 +250,7 @@ func (p *Plugin) planGroup(ctx context.Context, pool *nntp.Pool, g groupRow, cfg
 // runBatches fetches every job across the pool. Worker count matches the pool
 // size — more would just queue on the pool's blocking fallback, which is the
 // backpressure that keeps us from outrunning the server.
-func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, jobs []batchJob, cutoff time.Time, cfg Config) []batchResult {
+func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, jobs []batchJob, cfg Config) []batchResult {
 	workers := cfg.Connections
 	if workers > len(jobs) {
 		workers = len(jobs)
@@ -261,7 +268,7 @@ func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, jobs []batchJo
 		go func() {
 			defer wg.Done()
 			for j := range jobCh {
-				resCh <- p.fetchBatch(ctx, pool, j, cutoff)
+				resCh <- p.fetchBatch(ctx, pool, j)
 			}
 		}()
 	}
@@ -284,7 +291,7 @@ func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, jobs []batchJo
 
 // fetchBatch pulls one overview range and stages it. The connection is returned
 // to the pool before any parsing or database work.
-func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, cutoff time.Time) batchResult {
+func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) batchResult {
 	res := batchResult{group: j.group, lo: j.lo, hi: j.hi}
 	if ctx.Err() != nil {
 		return res
@@ -315,7 +322,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, cu
 	res.maxDate = newestDate(ovs)
 	res.minDate = oldestDate(ovs)
 
-	arts := parseOverviews(ovs, j.group, cutoff)
+	arts := parseOverviews(ovs, j.group, j.cutoff)
 	if len(arts) > 0 {
 		n, err := p.staging.stageArticles(ctx, arts)
 		if err != nil {
@@ -331,6 +338,16 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, cu
 	}
 	res.ok = true
 	p.tel.noteBatch(res.articles, res.staged, wire, true)
+	// Per-group pacing: some providers rate limit per group, and some groups are
+	// not worth saturating the pool for. Applied after the connection is back in
+	// the pool, so throttling this group frees capacity for others rather than
+	// idling a connection.
+	if j.throttle > 0 {
+		select {
+		case <-ctx.Done():
+		case <-time.After(j.throttle):
+		}
+	}
 	return res
 }
 
@@ -424,6 +441,20 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time) 
 type groupRow struct {
 	Name          string
 	HighWatermark int64
+	// Per-group tuning (migration 013). RetentionDays 0 means "use the
+	// plugin-wide crawl depth".
+	RetentionDays int
+	ThrottleMs    int
+	LowPriority   bool
+}
+
+// cutoff resolves this group's crawl horizon, falling back to the global depth.
+func (g groupRow) cutoff(cfg Config) time.Time {
+	days := g.RetentionDays
+	if days <= 0 {
+		days = cfg.RetentionDays
+	}
+	return time.Now().AddDate(0, 0, -days)
 }
 
 func (s *PGStore) activeGroups(ctx context.Context, limit int) ([]groupRow, error) {

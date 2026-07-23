@@ -22,18 +22,24 @@ func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, 
 		limit = 20
 	}
 	type row struct {
-		Name string `db:"name"`
-		HW   int64  `db:"high_watermark"`
+		Name      string        `db:"name"`
+		HW        int64         `db:"high_watermark"`
+		Retention sql.NullInt64 `db:"retention_days"`
+		Throttle  int           `db:"throttle_ms"`
+		LowPri    bool          `db:"low_priority"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		// Ordered by tier first: low-priority groups are crawled only after the
+		// normal ones, so a huge low-value group cannot starve the rest.
 		return tx.SelectContext(ctx, &rows,
-			`SELECT g.name, COALESCE(st.high_watermark, 0) AS high_watermark
+			`SELECT g.name, COALESCE(st.high_watermark, 0) AS high_watermark,
+			        g.retention_days, g.throttle_ms, g.low_priority
 			   FROM newsgroups g
 			   LEFT JOIN newsgroup_state st
 			     ON st.group_name = g.name AND st.backbone = $1
 			  WHERE g.active = TRUE
-			  ORDER BY g.name
+			  ORDER BY g.low_priority, g.sort_order, g.name
 			  LIMIT $2`, backbone, limit)
 	})
 	if err != nil {
@@ -41,7 +47,10 @@ func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, 
 	}
 	out := make([]groupRow, len(rows))
 	for i, r := range rows {
-		out[i] = groupRow{Name: r.Name, HighWatermark: r.HW}
+		out[i] = groupRow{
+			Name: r.Name, HighWatermark: r.HW,
+			RetentionDays: int(r.Retention.Int64), ThrottleMs: r.Throttle, LowPriority: r.LowPri,
+		}
 	}
 	return out, nil
 }
@@ -80,14 +89,17 @@ func (s *PGStore) groupsNeedingBackfillForBackbone(ctx context.Context, backbone
 		limit = 20
 	}
 	type row struct {
-		Name string `db:"name"`
-		Back int64  `db:"back_watermark"`
-		Low  int64  `db:"server_low"`
+		Name      string        `db:"name"`
+		Back      int64         `db:"back_watermark"`
+		Low       int64         `db:"server_low"`
+		Retention sql.NullInt64 `db:"retention_days"`
+		Throttle  int           `db:"throttle_ms"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.SelectContext(ctx, &rows,
-			`SELECT g.name, st.back_watermark, st.server_low
+			`SELECT g.name, st.back_watermark, st.server_low,
+			        g.retention_days, g.throttle_ms
 			   FROM newsgroups g
 			   JOIN newsgroup_state st
 			     ON st.group_name = g.name AND st.backbone = $1
@@ -95,7 +107,7 @@ func (s *PGStore) groupsNeedingBackfillForBackbone(ctx context.Context, backbone
 			    AND st.backfill_done = FALSE
 			    AND st.back_watermark IS NOT NULL
 			    AND st.back_watermark > st.server_low
-			  ORDER BY g.name
+			  ORDER BY g.low_priority, g.sort_order, g.name
 			  LIMIT $2`, backbone, limit)
 	})
 	if err != nil {
@@ -103,7 +115,10 @@ func (s *PGStore) groupsNeedingBackfillForBackbone(ctx context.Context, backbone
 	}
 	out := make([]backfillRow, len(rows))
 	for i, r := range rows {
-		out[i] = backfillRow{Name: r.Name, BackWatermark: r.Back, ServerLow: r.Low}
+		out[i] = backfillRow{
+			Name: r.Name, BackWatermark: r.Back, ServerLow: r.Low,
+			RetentionDays: int(r.Retention.Int64), ThrottleMs: r.Throttle,
+		}
 	}
 	return out, nil
 }

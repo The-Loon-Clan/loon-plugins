@@ -49,6 +49,10 @@ type GroupStore interface {
 	updateGroupStateForBackbone(ctx context.Context, backbone, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error
 	groupCount(ctx context.Context) (int, error)
 	setGroupActive(ctx context.Context, name string, active bool) error
+	setGroupTuning(ctx context.Context, name string, retentionDays, throttleMs int, lowPriority bool) error
+	moveGroup(ctx context.Context, name string, delta int) error
+	deleteGroup(ctx context.Context, name string) error
+	deleteInactiveGroups(ctx context.Context) (int64, error)
 	upsertGroups(ctx context.Context, names []string) (int, error)
 	seedNewsgroups(ctx context.Context, groups []seedGroup) (int, error)
 	updateGroupState(ctx context.Context, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error

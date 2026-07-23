@@ -11,7 +11,7 @@ type Config struct {
 	Server ServerConfig `json:"server"`
 	// RetentionDays is CRAWL DEPTH: how far back to fetch and backfill. It does
 	// NOT delete anything.
-	RetentionDays int `json:"retention_days"` // default 3
+	RetentionDays int `json:"retention_days"` // default 6431 (~17.6y, prod parity)
 
 	// NZBRetentionDays deletes assembled releases older than N days. 0 = keep
 	// forever, which is the default and what prod does. Deleting a catalogue is
@@ -73,7 +73,11 @@ type ServerConfig struct {
 
 func (c *Config) applyDefaults() {
 	if c.RetentionDays <= 0 {
-		c.RetentionDays = 3
+		// Matches prod's per-group default: effectively "all retention". The
+		// first backfill is long, but it is bounded per pass
+		// (backfill_batches_per_run) so it fills in gradually rather than
+		// hammering a provider on day one.
+		c.RetentionDays = 6431
 	}
 	// Deliberately NOT defaulted: 0 means "keep everything".
 	if c.NZBRetentionDays < 0 {

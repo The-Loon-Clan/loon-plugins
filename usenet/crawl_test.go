@@ -106,3 +106,34 @@ func TestContiguousEndNoAdvanceSentinel(t *testing.T) {
 		t.Fatalf("end = %d, want < start (%d) so the caller skips the write", end, start)
 	}
 }
+
+// TestGroupCutoffFallback pins the per-group retention rule. A group with no
+// override must follow the plugin-wide crawl depth — storing a copied number
+// instead would pin it to whatever the default happened to be when it was added,
+// so raising the global depth later would silently skip that group.
+func TestGroupCutoffFallback(t *testing.T) {
+	cfg := Config{RetentionDays: 100}
+
+	global := groupRow{Name: "a"}.cutoff(cfg)
+	wantGlobal := time.Now().AddDate(0, 0, -100)
+	if global.Sub(wantGlobal) > time.Minute || wantGlobal.Sub(global) > time.Minute {
+		t.Errorf("no override should use the global depth: got %v, want ~%v", global, wantGlobal)
+	}
+
+	// An override wins and is independent of the global.
+	over := groupRow{Name: "b", RetentionDays: 7}.cutoff(cfg)
+	wantOver := time.Now().AddDate(0, 0, -7)
+	if over.Sub(wantOver) > time.Minute || wantOver.Sub(over) > time.Minute {
+		t.Errorf("override should win: got %v, want ~%v", over, wantOver)
+	}
+	if !over.After(global) {
+		t.Error("a shallower per-group depth should produce a LATER cutoff than the global one")
+	}
+
+	// Zero means "no override" (composite literals need parens in a condition).
+	zero := groupRow{Name: "c", RetentionDays: 0}.cutoff(cfg)
+	none := groupRow{Name: "c"}.cutoff(cfg)
+	if !zero.Equal(none) {
+		t.Error("zero retention should mean 'follow the global depth'")
+	}
+}

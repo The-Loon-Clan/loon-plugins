@@ -108,3 +108,60 @@ func (s *PGStore) toggleServer(ctx context.Context, id int) error {
 		return err
 	})
 }
+
+// ── per-group tuning (migration 013) ────────────────────────────────
+
+// setGroupTuning updates one group's overrides. retentionDays <= 0 stores NULL,
+// meaning "follow the plugin-wide crawl depth" — storing a copied number instead
+// would silently pin the group to whatever the default was when it was set.
+func (s *PGStore) setGroupTuning(ctx context.Context, name string, retentionDays, throttleMs int, lowPriority bool) error {
+	if throttleMs < 0 {
+		throttleMs = 0
+	}
+	if throttleMs > 60000 {
+		throttleMs = 60000 // a minute between batches is already pathological
+	}
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		var ret any
+		if retentionDays > 0 {
+			ret = retentionDays
+		}
+		_, err := tx.ExecContext(ctx,
+			`UPDATE newsgroups SET retention_days = $2, throttle_ms = $3, low_priority = $4
+			  WHERE name = $1`, name, ret, throttleMs, lowPriority)
+		return err
+	})
+}
+
+// moveGroup nudges a group's manual ordering within its tier.
+func (s *PGStore) moveGroup(ctx context.Context, name string, delta int) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`UPDATE newsgroups SET sort_order = sort_order + $2 WHERE name = $1`, name, delta)
+		return err
+	})
+}
+
+// deleteGroup removes a group from the catalogue. Crawl state is keyed
+// (backbone, group) and is left behind deliberately: re-adding the group should
+// resume where it left off rather than re-crawl years of history.
+func (s *PGStore) deleteGroup(ctx context.Context, name string) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM newsgroups WHERE name = $1`, name)
+		return err
+	})
+}
+
+// deleteInactiveGroups clears out the long tail left by a LIST import.
+func (s *PGStore) deleteInactiveGroups(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx, `DELETE FROM newsgroups WHERE active = FALSE`)
+		if err != nil {
+			return err
+		}
+		n, _ = res.RowsAffected()
+		return nil
+	})
+	return n, err
+}

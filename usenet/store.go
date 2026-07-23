@@ -517,6 +517,10 @@ type backfillRow struct {
 	Name          string
 	BackWatermark int64
 	ServerLow     int64
+	// Per-group tuning, so backfill honours the same retention horizon and
+	// pacing as the forward crawl (migration 013).
+	RetentionDays int
+	ThrottleMs    int
 }
 
 // groupsNeedingBackfill lists active groups not yet marked done whose backfill
