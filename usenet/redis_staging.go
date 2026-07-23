@@ -296,7 +296,14 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 	}
 
 	if len(readyGroups) > 0 {
-		r.rdb.LPush(ctx, readyKey, readyGroups...)
+		// Checked: a dropped LPush here loses a COMPLETED release — it never
+		// reaches the builder and completeness won't re-fire (the set has all
+		// its articles now). Returning the error leaves the batch's watermark
+		// un-advanced (crawl.go treats a staging error as ok=false), so the
+		// same articles re-crawl and re-queue.
+		if err := r.rdb.LPush(ctx, readyKey, readyGroups...).Err(); err != nil {
+			return len(arts), fmt.Errorf("queue ready sets: %w", err)
+		}
 	}
 	if len(evictKeys) > 0 {
 		evPipe := r.rdb.Pipeline()
@@ -369,12 +376,17 @@ func (r *redisStaging) candidateGroups(ctx context.Context, limit int) ([]groupK
 	if limit <= 0 {
 		limit = 500
 	}
-	entries, err := r.rdb.LPopCount(ctx, readyKey, limit).Result()
-	if err == redis.Nil {
-		return nil, nil // empty ready list
-	}
-	if err != nil {
-		return nil, err // surface a real error rather than treating it as "none ready"
+	// PEEK, don't pop. The build loop is written for the pg contract "leave
+	// staged, retry next pass" — it deleteStaged's a set only on success or a
+	// permanent drop (blocked ext / blacklist / junk), and leaves it on a
+	// transient sink error or on shutdown. Popping here would break that: every
+	// entry returned but not built would be gone, losing a COMPLETED release on
+	// the exact transient failure assemble.go promises to survive. Only one
+	// builder runs at a time (the "NZB Builder" job lease), so a peek cannot
+	// double-dispatch. Entries leave nzb:ready only via deleteStaged.
+	entries, err := r.rdb.LRange(ctx, readyKey, 0, int64(limit-1)).Result()
+	if err != nil && err != redis.Nil {
+		return nil, err
 	}
 	if len(entries) == 0 {
 		return nil, nil
@@ -393,15 +405,28 @@ func (r *redisStaging) candidateGroups(ctx context.Context, limit int) ([]groupK
 		return nil, err
 	}
 	out := make([]groupKey, 0, len(entries))
+	var stale []interface{}
 	for i, c := range cmds {
 		if c == nil {
+			stale = append(stale, entries[i])
 			continue
 		}
 		base, err := c.Result()
 		if err != nil || base == "" {
-			continue // meta gone (evicted/expired) — drop; articles will TTL out
+			// Meta gone (evicted / TTL'd out): the articles are already gone, so
+			// this ready entry is dead. LRange left it in place — drop it here,
+			// or it would be re-read every pass forever.
+			stale = append(stale, entries[i])
+			continue
 		}
 		out = append(out, groupKey{Group: gh[i][0], Base: base})
+	}
+	if len(stale) > 0 {
+		rem := r.rdb.Pipeline()
+		for _, e := range stale {
+			rem.LRem(ctx, readyKey, 0, e)
+		}
+		_, _ = rem.Exec(ctx) // best-effort: a leftover dead entry is retried harmlessly
 	}
 	return out, nil
 }
@@ -435,6 +460,9 @@ func (r *redisStaging) deleteStaged(ctx context.Context, group, base string) err
 	pipe.Del(ctx, artKey(group, hash))
 	pipe.Del(ctx, grpKey(group, hash))
 	pipe.SRem(ctx, activeKey(group), hash)
+	// Remove it from the work queue too — candidateGroups now PEEKS (LRange)
+	// instead of popping, so this is the one place an entry leaves nzb:ready.
+	pipe.LRem(ctx, readyKey, 0, group+":"+hash)
 	_, err := pipe.Exec(ctx)
 	return err
 }

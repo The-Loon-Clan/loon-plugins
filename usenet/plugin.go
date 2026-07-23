@@ -219,6 +219,12 @@ func (p *Plugin) Start(ctx context.Context) error {
 	if p.crawlJob == nil {
 		return nil // web-only process: capability is registered, no jobs run here
 	}
+	// One structural line an operator can correlate: the resolved modes (a
+	// sink=host flip otherwise gives no "wiring took" confirmation) and this
+	// worker's id, which is the key to its rows in leases/crawler_workers when
+	// several crawlers run.
+	p.core.Logger.Info("usenet worker starting",
+		"worker", workerID(), "sink", p.cfg.Sink, "staging", p.cfg.Staging)
 	p.seedServer(ctx)
 	// Carry a legacy host crawler's state (watermarks, groups, blacklist) so a
 	// sink=host flip RESUMES rather than restarts. One-time; no-op elsewhere.
@@ -358,7 +364,12 @@ func (p *Plugin) runPruneLocked(ctx context.Context) {
 			return
 		}
 	}
-	staged, _ := p.staging.prune(ctx)
+	staged, err := p.staging.prune(ctx)
+	if err != nil {
+		// A silently-failing prune lets stale pg staging grow unbounded (only
+		// masked by backfill back-pressure); surface it like its siblings below.
+		p.reportErr(ctx, "usenet/prune-staged", err)
+	}
 	// Sweep junk left over from before ingest filtering (obfuscated random-token
 	// titles that assembled into garbage releases / clog staging).
 	junkNzbs, err := p.st.deleteJunkNzbs(ctx)

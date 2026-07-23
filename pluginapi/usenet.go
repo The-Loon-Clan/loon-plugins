@@ -208,6 +208,37 @@ const (
 	UsenetNewznabName = "usenet.newznab"
 )
 
+// LookupUsenetIndex / Admin / Newznab resolve the plugin-published read
+// capabilities, mirroring LookupReleaseSink/LookupReleaseHealthStore so a host
+// resolves every usenet capability the same typed way rather than hand-asserting
+// the c.Lookup result.
+func LookupUsenetIndex(c *core.Core) (UsenetIndex, bool) {
+	v, ok := c.Lookup(UsenetIndexName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(UsenetIndex)
+	return s, ok
+}
+
+func LookupUsenetAdmin(c *core.Core) (UsenetAdmin, bool) {
+	v, ok := c.Lookup(UsenetAdminName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(UsenetAdmin)
+	return s, ok
+}
+
+func LookupUsenetNewznab(c *core.Core) (UsenetNewznab, bool) {
+	v, ok := c.Lookup(UsenetNewznabName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(UsenetNewznab)
+	return s, ok
+}
+
 // NewznabCachePrefix namespaces every cached Newznab response. A worker clears
 // this prefix (cache.PrefixDeleter) after an ingest to invalidate the search
 // cache; the topic is pluginapi.EventIngested.
@@ -257,11 +288,13 @@ type AssembledRelease struct {
 	SizeBytes   int64
 	PostedAt    time.Time // earliest article date; zero when unknown
 	NZBGz       []byte    // gzipped NZB XML
-	// CategoryHint is a FREE-TEXT category label the host maps into its own
-	// taxonomy; "" = no hint. The plugin emits either the explicit bracket tag
-	// off the title or the literal "Manga" (comic-archive sniff). It is a hint,
-	// not an id — the host decides what it means. (In internal-sink mode the
-	// plugin ignores this and categorises via its own catalog plugin instead.)
+	// CategoryHint is a category label the host maps into its own taxonomy;
+	// "" = no hint. It is an ANIME-DOMAIN hint (scraping is anime-only by
+	// design), drawn from a closed set: "Hentai" (adult terms in the title),
+	// "Anime" (an OVA/ONA/OAD/Gekijouban marker), or "Manga" (a .cbz/.cbr in the
+	// article filenames). It is a hint, not an id — the host decides what it
+	// means, and a non-anime host may ignore it. (In internal-sink mode the
+	// plugin ignores this field and categorises via its own catalog plugin.)
 	CategoryHint string
 	// BaseSubject and Segments are INFORMATIONAL — the plugin sets them (the raw
 	// grouping key; the segment count) but neither sink path reads them. Present

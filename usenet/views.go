@@ -62,7 +62,9 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			},
 			"reset-backfill": func(gc *gin.Context) (template.HTML, error) {
 				name := gc.PostForm("name")
-				_ = p.st.resetBackfillForGroup(gc.Request.Context(), name)
+				if err := p.st.resetBackfillForGroup(gc.Request.Context(), name); err != nil {
+					return redirect(gc, crawlersURL+"?err="+url.QueryEscape(err.Error()))
+				}
 				return redirect(gc, crawlersURL+"?msg="+url.QueryEscape("backfill re-armed for "+name))
 			},
 		},

@@ -63,7 +63,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		p.reportErr(ctx, "usenet/build-scan", err)
 		return
 	}
-	built := 0
+	built, skippedExt, skippedBL := 0, 0, 0
 	for _, k := range keys {
 		if ctx.Err() != nil {
 			break
@@ -81,7 +81,10 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		// an explicit category tag bypasses, exactly as prod's assembler does.
 		title, cat, junkRule, blockedExt := classifyRelease(k.Base, arts)
 		if blockedExt {
-			p.buildJob.Log("SKIP blocked ext: %q", title)
+			// Counted, not logged per-release: a pass drains up to 500 sets, and
+			// a per-set SKIP line would evict the pass summary from the 100-line
+			// job ring. The count folds into that summary instead.
+			skippedExt++
 			_ = p.staging.deleteStaged(ctx, k.Group, k.Base)
 			continue
 		}
@@ -93,8 +96,10 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			Subject: k.Base, Title: title,
 			Poster: firstPoster(arts), Group: k.Group,
 		}); pat != "" {
+			// Attribution is already recorded per-rule in filter_hits; the
+			// per-release log line is redundant with that and floods the ring.
 			p.hits.note("blacklist", pat, k.Base)
-			p.buildJob.Log("SKIP blacklisted (%s): %q", pat, k.Base)
+			skippedBL++
 			_ = p.staging.deleteStaged(ctx, k.Group, k.Base)
 			continue
 		}
@@ -135,7 +140,8 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			built++
 		}
 	}
-	p.buildJob.Log("built %d NZB file(s) from %d candidate group(s)", built, len(keys))
+	p.buildJob.Log("built %d NZB file(s) from %d candidate group(s) (skipped %d blocked-ext, %d blacklisted)",
+		built, len(keys), skippedExt, skippedBL)
 	if built > 0 {
 		// New releases changed the search surface — publish so a subscriber
 		// (e.g. a cache invalidator in the worker) can react. Best-effort: no
