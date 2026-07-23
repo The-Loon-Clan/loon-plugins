@@ -22,10 +22,17 @@ backup.SetDeps(backup.Deps{
     Config:     settingsService,          // GetBackupMode + GetBackupKeepCount
     StaticDirs: services.PersistentDirs,
     BackupDir:  "backups",
+    FreeDisk:   func(ctx) (int64, error) { … }, // free bytes on the BackupDir volume
+    DBSize:     func(ctx) (int64, error) { … }, // pg_database_size, for the pre-flight
 })
 ```
 
 Call once in the worker process **before `core.Boot`**.
+
+`FreeDisk`/`DBSize` are closures so the plugin needn't pull gopsutil or a DB
+driver. Skipping them is not fatal, but the run logs
+`WARN no disk pre-flight wired — proceeding blind` and loses the disk-full
+protection below.
 
 `Config` stays a host seam rather than becoming `loon/schedule` job-config vars:
 the knobs already live in the host's admin surface, and moving them would
@@ -37,7 +44,12 @@ Left inside a container's overlay filesystem it is wiped on every recreate,
 which turns the whole job into theatre — it runs, logs success, and protects
 nothing. In compose: `./backups:/app/backups`.
 
-## Two behaviours worth knowing
+## Three behaviours worth knowing
+
+**It checks free disk before it starts.** `preflightOK` compares `FreeDisk`
+against `DBSize` (plus headroom) and skip-logs rather than starting a dump that
+cannot fit — a half-written backup that fills the volume is worse than none.
+Unwired (`FreeDisk`/`DBSize` nil), the check is skipped with a WARN.
 
 **It runs an hour after boot, not a week.** The host service ran
 `for { sleep(1 week); run() }`: it never ran at boot, and each restart reset the

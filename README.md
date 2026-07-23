@@ -18,12 +18,17 @@ of narrow ports the host injects.
 
 | Plugin | What it is |
 |---|---|
-| **`usenet`** | A lean Usenet indexer — crawl recent posts → assemble multi-file NZBs → tag quality → prune. Owns its `usenet` schema; NNTP via `loon/nntp`; publishes read + admin capabilities the host's pages consume. |
+| **`usenet`** | A full Usenet indexer — multi-provider fleet with per-backbone crawl state, multi-host coordination (leases + term assignment), pluggable staging (Postgres or Redis), a data-driven 24-rule junk engine + operator blacklist, NZB assembly, and health checking. Runs standalone or, in host-sink mode, hands assembled releases to a host's NZB domain (the `ReleaseSink`/`ReleaseHealthStore` seams). Owns its `usenet` schema; NNTP via `loon/nntp`. |
 | **`scraper`** | Generic metadata scraper — shared jobs over a registry of pluggable `catalog.MetadataSource` modules (anidb, tmdb, mangadex, …). |
-| **`backups`** | Site backup — dumps the DB and runs every plugin's `Backupable` hook into one archive. |
+| **`catalog`** | Newznab category-tree taxonomy — the content classification a host and the usenet plugin categorise releases against. |
+| **`backup`** | Single-job site backup: `pg_dump` + static dirs into one archive, with a free-disk pre-flight. |
+| **`backups`** | Capability-hook backup — runs every plugin's `Backupable` hook into one archive. |
+| **`dbmaint`** | Database maintenance jobs — `pg_repack`, reindex, and vacuum, off-peak-gated. |
 | **`stats`** | Collects every plugin's `StatContributor` hook into a cached site-stats snapshot. |
+| **`dailyreward`** | A home-page daily-points card (points sink demo). |
+| **`pointstore`** | A points sink / profile-flair store. |
 | **`anidbscraper`** | Mechanics demo — AniDB as a standalone host-data worker plugin (injected ports + `SetDeps`). |
-| **`pluginapi`** | Neutral capability contracts both sides import (never each other): `UsenetIndex`/`UsenetAdmin`, `CatalogSink`/`Fillable`, `Backupable`/`StatContributor`, host-data ports. |
+| **`pluginapi`** | Neutral capability contracts both sides import (never each other): `UsenetIndex`/`UsenetAdmin`, the `ReleaseSink`/`ReleaseHealthStore` seams, `CatalogSink`/`Fillable`, `Backupable`/`StatContributor`, host-data ports. |
 
 ## Plugin archetypes
 
@@ -55,7 +60,7 @@ of narrow ports the host injects.
    `COPY --from=loonplugins`) — the same three-way contract loon uses.
 
 See [loon-demo-site](https://github.com/The-Loon-Clan/loon-demo-site) for a working host
-that wires `usenet`, `scraper`, `backups`, and `stats`.
+that wires `usenet`, `scraper`, `catalog`, `backups`, `stats`, `dailyreward`, and `pointstore`.
 
 ## Development
 
