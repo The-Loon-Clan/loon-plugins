@@ -96,6 +96,10 @@ type BackfillStore interface {
 	recordFilterHits(ctx context.Context, hits map[filterHitKey]*filterHitVal) error
 	filterHitRows(ctx context.Context) ([]filterHitRow, error)
 	resetFilterHits(ctx context.Context) error
+
+	// live activity (dashboard.go)
+	recentArticles(ctx context.Context, limit int) ([]recentArticle, error)
+	recentNZBs(ctx context.Context, limit int) ([]recentNZB, error)
 }
 
 // AssemblerStore is the staging area the NZB assembler reads + drains.

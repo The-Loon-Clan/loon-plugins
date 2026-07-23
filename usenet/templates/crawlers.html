@@ -65,6 +65,56 @@
 {{end}}
 
 <div class="card">
+    <h2>Recent activity</h2>
+    <p class="text-muted small">
+        The newest staged articles and assembled releases. Watermarks barely move over a
+        single pass, so this is the readout that shows the crawler is actually alive.
+    </p>
+    <div class="row g-3">
+        <div class="col-lg-7">
+            <h3 class="h6 text-muted">Just staged</h3>
+            {{if .RecentArticles}}
+            <div class="table-responsive" style="max-height:22rem;overflow-y:auto">
+                <table class="table table-dark table-sm align-middle">
+                    <thead><tr><th>Subject</th><th>Group</th><th class="text-end">Size</th><th>Posted</th></tr></thead>
+                    <tbody>
+                    {{range .RecentArticles}}
+                        <tr>
+                            <td class="small" style="max-width:28rem;overflow-wrap:anywhere">{{.Subject}}</td>
+                            <td class="small text-muted">{{.Group}}</td>
+                            <td class="text-end small">{{.Size}}</td>
+                            <td class="small text-muted">{{.Posted}}</td>
+                        </tr>
+                    {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}<div class="empty">Nothing staged. Either the crawl has not run, or everything it saw was filtered.</div>{{end}}
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 text-muted">Just built</h3>
+            {{if .RecentNzbs}}
+            <div class="table-responsive" style="max-height:22rem;overflow-y:auto">
+                <table class="table table-dark table-sm align-middle">
+                    <thead><tr><th>Release</th><th class="text-end">Size</th><th>Built</th></tr></thead>
+                    <tbody>
+                    {{range .RecentNzbs}}
+                        <tr>
+                            <td class="small" style="max-width:22rem;overflow-wrap:anywhere">{{.Title}}
+                                <div class="text-muted" style="font-size:.75rem">{{.Group}}</div></td>
+                            <td class="text-end small">{{.Size}}</td>
+                            <td class="small text-muted">{{.Created}}</td>
+                        </tr>
+                    {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}<div class="empty">No releases assembled yet.</div>{{end}}
+        </div>
+    </div>
+</div>
+
+<div class="card">
     <h2>Coverage</h2>
     <div class="cov-legend">
         <span><span class="dot" style="background:var(--warning)"></span>pending backfill</span>

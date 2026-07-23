@@ -653,13 +653,49 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 	if d, ok := backfillETA(stats.TotalBackfillRemaining, p.tel.backfill.rate()); ok {
 		eta = fmtETA(d)
 	}
+	// Best-effort: recent activity is a liveness readout, and a failed query
+	// there must not blank the status page it sits on.
+	arts, aerr := p.st.recentArticles(ctx, 25)
+	if aerr != nil {
+		p.reportErr(ctx, "usenet/recent-articles", aerr)
+	}
+	nzbs, nerr := p.st.recentNZBs(ctx, 10)
+	if nerr != nil {
+		p.reportErr(ctx, "usenet/recent-nzbs", nerr)
+	}
+	recentArts := make([]recentArticleVM, len(arts))
+	for i, a := range arts {
+		recentArts[i] = recentArticleVM{
+			Subject: a.Subject, Group: a.Group, Poster: a.Poster,
+			Size: fmtBytes(a.Bytes), Posted: fmtTime(a.Posted),
+		}
+	}
+	recentNzbs := make([]recentNZBVM, len(nzbs))
+	for i, n := range nzbs {
+		recentNzbs[i] = recentNZBVM{
+			Title: n.Title, Group: n.Group,
+			Size: fmtBytes(n.Size), Created: fmtTime(n.Created),
+		}
+	}
 	return p.frag("crawlers.html", map[string]any{
 		"Stats": stats, "Groups": groups, "Backbones": backbones,
 		"Backfill": trackerVM(&p.tel.backfill), "BackfillETA": eta, "Jobs": jobs, "Builder": builder,
 		"Fleet": p.fleetVMs(ctx), "Workers": p.workerVMs(ctx),
-		"Health":      p.healthVM(ctx),
+		"Health":         p.healthVM(ctx),
+		"RecentArticles": recentArts, "RecentNzbs": recentNzbs,
 		"AutoRefresh": running, "Msg": msg, "Err": errMsg,
 	})
+}
+
+// recentArticleVM / recentNZBVM are the liveness readouts: what just got staged,
+// and what just got built. Watermarks barely move over one pass, so these are
+// what actually show the crawler is alive.
+type recentArticleVM struct {
+	Subject, Group, Poster, Size, Posted string
+}
+
+type recentNZBVM struct {
+	Title, Group, Size, Created string
 }
 
 // jobVMs snapshots this plugin's own jobs so the page shows what each is doing.

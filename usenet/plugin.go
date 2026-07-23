@@ -15,6 +15,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"html/template"
 	"sync"
 	"time"
@@ -146,6 +147,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 		}
 		if err := p.registerViews(c); err != nil {
 			return err
+		}
+		// Machine-readable status, on the ADMIN group: it carries provider
+		// hostnames, group names and raw error text, none of which belong on a
+		// public route. Lets a run be watched without scraping the admin HTML.
+		if r := c.Router.Admin("usenet"); r != nil {
+			r.GET("/status.json", func(gc *gin.Context) {
+				gc.JSON(200, p.status(gc.Request.Context()))
+			})
 		}
 	}
 
