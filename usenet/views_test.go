@@ -37,19 +37,28 @@ func TestSettingsRendersProviders(t *testing.T) {
 		"Server":       pluginapi.Server{Host: "news.eweka.nl", Port: 563, TLS: true, Username: "u"},
 		"Knobs":        []knob{{Key: "connections", Label: "NNTP connections", Value: 10, Help: "h"}},
 		"SkipBackfill": false,
-		"Groups":       nil,
-		"GroupQuery":   "",
-		"GroupTotal":   0,
-		"Shown":        0,
-		"Msg":          "",
-		"Err":          "",
+		"Groups": []pluginapi.GroupInfo{
+			{Name: "alt.binaries.anime", Active: true, NZBs: 4211, RetentionDays: 0, ThrottleMs: 0},
+			{Name: "alt.binaries.hdtv", Active: true, NZBs: 900, RetentionDays: 30, ThrottleMs: 250, LowPriority: true},
+			{Name: "alt.binaries.misc", Active: false},
+		},
+		"GroupQuery": "",
+		"GroupTotal": 3,
+		"Shown":      3,
+		"Msg":        "",
+		"Err":        "",
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "settings.html", data); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	out := buf.String()
-	for _, want := range []string{"news.eweka.nl", "news.other.com", "omicron", "backup", "Add a provider"} {
+	for _, want := range []string{
+		"news.eweka.nl", "news.other.com", "omicron", "backup", "Add a provider",
+		// per-group tuning controls
+		"alt.binaries.anime", "group-tune", "retention_days", "throttle_ms",
+		"low_priority", "group-move", "group-del", "groups-purge",
+	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered settings page is missing %q", want)
 		}
