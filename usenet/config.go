@@ -29,8 +29,8 @@ type Config struct {
 	Connections int `json:"connections"` // default 10
 
 	SkipBackfill          bool `json:"skip_backfill"`            // "new articles only" — disable the backfill job
-	BackfillBatchesPerRun int  `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 10)
-	BackfillIntervalMin   int  `json:"backfill_interval_min"`    // backfill cadence (default 30)
+	BackfillBatchesPerRun int  `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 25)
+	BackfillIntervalMin   int  `json:"backfill_interval_min"`    // backfill cadence (default 5)
 
 	// Staging backend (USENET-STAGING-MODES.md). Boot config, not a live knob:
 	// switching backends at runtime would strand staged data.

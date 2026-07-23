@@ -55,7 +55,6 @@ type GroupStore interface {
 	deleteInactiveGroups(ctx context.Context) (int64, error)
 	upsertGroups(ctx context.Context, names []string) (int, error)
 	seedNewsgroups(ctx context.Context, groups []seedGroup) (int, error)
-	updateGroupState(ctx context.Context, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error
 }
 
 // ServerStore holds the single NNTP server row.
@@ -77,10 +76,10 @@ type SettingStore interface {
 
 // BackfillStore drives the backward crawl + its builder view.
 type BackfillStore interface {
-	groupsNeedingBackfill(ctx context.Context, limit int) ([]backfillRow, error)
 	groupsNeedingBackfillForBackbone(ctx context.Context, backbone string, limit int) ([]backfillRow, error)
 	updateBackWatermarkForBackbone(ctx context.Context, backbone, name string, back int64, oldest time.Time) error
 	markBackfillDoneForBackbone(ctx context.Context, backbone, name string) error
+	anyBackfillPending(ctx context.Context) (bool, error)
 	resetBackfillForGroup(ctx context.Context, group string) error
 	builderInfo(ctx context.Context, limit int) (BuilderInfo, error)
 	recordFetchedRangeFor(ctx context.Context, backbone, group string, start, end int64) error

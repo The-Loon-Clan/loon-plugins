@@ -550,36 +550,6 @@ type backfillRow struct {
 	ThrottleMs    int
 }
 
-// groupsNeedingBackfill lists active groups not yet marked done whose backfill
-// pointer is still above the server's oldest article.
-func (s *PGStore) groupsNeedingBackfill(ctx context.Context, limit int) ([]backfillRow, error) {
-	if limit <= 0 {
-		limit = 20
-	}
-	type row struct {
-		Name string `db:"name"`
-		Back int64  `db:"back_watermark"`
-		Low  int64  `db:"server_low"`
-	}
-	var rows []row
-	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		return tx.SelectContext(ctx, &rows,
-			`SELECT name, COALESCE(back_watermark, high_watermark) AS back_watermark, server_low
-			 FROM newsgroups
-			 WHERE active = TRUE AND NOT backfill_done
-			   AND COALESCE(back_watermark, high_watermark) > server_low
-			 ORDER BY name LIMIT $1`, limit)
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]backfillRow, len(rows))
-	for i, r := range rows {
-		out[i] = backfillRow{Name: r.Name, BackWatermark: r.Back, ServerLow: r.Low}
-	}
-	return out, nil
-}
-
 // retagUntagged re-parses tags for NZBs that have none set (rows from before a
 // parser change, or that genuinely had no tags in the title). Idempotent.
 func (s *PGStore) retagUntagged(ctx context.Context, limit int) (int, error) {

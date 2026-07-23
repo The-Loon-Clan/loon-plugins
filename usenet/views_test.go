@@ -264,3 +264,29 @@ func TestFiltersRenders(t *testing.T) {
 		}
 	}
 }
+
+// TestJobsWidgetRenders executes the one template nothing else exercised.
+// Parsing catches syntax; only execution catches a field missing from the VM,
+// and html/template aborts mid-stream when that happens.
+func TestJobsWidgetRenders(t *testing.T) {
+	tmpl, err := template.ParseFS(viewFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	err = tmpl.ExecuteTemplate(&buf, "jobswidget.html", map[string]any{
+		"Jobs": []crawlerJobVM{
+			{Name: "Usenet Crawler", Status: "idle", Activity: "last pass: 12 staged", Running: false},
+			{Name: "Usenet Backfill", Status: "running", Running: true},
+		},
+		"Stats": pluginapi.IndexStats{TotalNZBs: 42, TotalStaged: 7, TotalBackfillRemaining: 1000},
+	})
+	if err != nil {
+		t.Fatalf("render jobswidget: %v", err)
+	}
+	for _, want := range []string{"Usenet Crawler", "42", "last pass: 12 staged"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("jobswidget missing %q", want)
+		}
+	}
+}

@@ -211,3 +211,93 @@ func TestResetBackfillClearsRanges(t *testing.T) {
 		t.Error("group still reads as backfill-complete after a reset")
 	}
 }
+
+// TestRangesSurviveRealArticleNumbers is the regression test for a bug every
+// other range test missed by using cosy small numbers: article numbers on major
+// backbones are in the BILLIONS, and the merge query's "$4 + 1" arithmetic made
+// Postgres infer the params as int4 — so recording coverage failed with a 22003
+// range error on every batch of every large group, and backfill refetched the
+// same spans forever. Reproduced against PG 13 before fixing; pinned here with
+// numbers a real binaries group actually has.
+func TestRangesSurviveRealArticleNumbers(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	mustGroups(t, s, "alt.binaries.anime")
+
+	const base = int64(41_000_000_000) // > 2^31 by a wide margin
+	if err := s.recordFetchedRangeFor(ctx, "omicron", "alt.binaries.anime", base, base+2999); err != nil {
+		t.Fatalf("recordFetchedRangeFor with billion-range article numbers: %v", err)
+	}
+	// Adjacent batch must merge, exercising the +1/-1 arithmetic at scale.
+	if err := s.recordFetchedRangeFor(ctx, "omicron", "alt.binaries.anime", base+3000, base+5999); err != nil {
+		t.Fatalf("adjacent record: %v", err)
+	}
+
+	all, err := s.allCoveredRanges(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs := all[coverKey{"omicron", "alt.binaries.anime"}]
+	if len(runs) != 1 || runs[0].Start != base || runs[0].End != base+5999 {
+		t.Fatalf("merged run = %+v, want [%d..%d] as one row", runs, base, base+5999)
+	}
+
+	gaps, err := s.backfillGapsFor(ctx, "omicron", "alt.binaries.anime", base-10_000, base+5999)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gaps) != 1 || gaps[0].End != base-1 {
+		t.Fatalf("gap complement at scale = %+v, want one gap ending at %d", gaps, base-1)
+	}
+
+	// Watermarks at the same scale, exercising updateGroupStateForBackbone.
+	if err := s.updateGroupStateForBackbone(ctx, "omicron", "alt.binaries.anime",
+		base-10_000, base+5999, base+5999, base-1, time.Now()); err != nil {
+		t.Fatalf("watermarks at billion scale: %v", err)
+	}
+}
+
+// TestAnyBackfillPending pins what "idle" means for the health job: pending
+// while any backbone of any ACTIVE group has history left, idle once every
+// backbone is done. The query this replaced read the dead legacy columns on
+// newsgroups, which made a fresh install look permanently caught-up (health ran
+// during backfill) and an upgraded one permanently busy (idle health never ran).
+func TestAnyBackfillPending(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	mustGroups(t, s, "alt.binaries.anime")
+
+	// No state rows at all: nothing pending.
+	if p, err := s.anyBackfillPending(ctx); err != nil || p {
+		t.Fatalf("fresh install: pending=%v err=%v, want false/nil", p, err)
+	}
+
+	// A crawled group with history left below its back watermark: pending.
+	if err := s.updateGroupStateForBackbone(ctx, "omicron", "alt.binaries.anime",
+		1000, 9000, 5000, 4999, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s.anyBackfillPending(ctx); !p {
+		t.Fatal("history remains but pending=false — health would steal connections from backfill")
+	}
+
+	// Done on the only backbone: idle again.
+	if err := s.markBackfillDoneForBackbone(ctx, "omicron", "alt.binaries.anime"); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s.anyBackfillPending(ctx); p {
+		t.Fatal("backfill complete but pending=true — idle health would never run")
+	}
+
+	// An INACTIVE group's leftover state must not count.
+	if err := s.setGroupActive(ctx, "alt.binaries.anime", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.updateGroupStateForBackbone(ctx, "usenetfarm", "alt.binaries.anime",
+		1, 400, 300, 299, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s.anyBackfillPending(ctx); p {
+		t.Fatal("inactive group's state counted as pending work")
+	}
+}

@@ -138,6 +138,26 @@ func (s *PGStore) updateBackWatermarkForBackbone(ctx context.Context, backbone, 
 	})
 }
 
+// anyBackfillPending reports whether ANY backbone still has history to pull for
+// an active group. This is what "idle" means for the health job: checking per
+// backbone matters because the legacy per-group columns on newsgroups are dead
+// (nothing writes them since the state moved to newsgroup_state) — the old
+// query against them made a fresh install look permanently caught-up and an
+// upgraded one permanently busy.
+func (s *PGStore) anyBackfillPending(ctx context.Context) (bool, error) {
+	var pending bool
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.GetContext(ctx, &pending,
+			`SELECT EXISTS (
+			    SELECT 1 FROM newsgroup_state st
+			      JOIN newsgroups g ON g.name = st.group_name AND g.active = TRUE
+			     WHERE st.backfill_done = FALSE
+			       AND st.back_watermark IS NOT NULL
+			       AND st.back_watermark > st.server_low)`)
+	})
+	return pending, err
+}
+
 func (s *PGStore) markBackfillDoneForBackbone(ctx context.Context, backbone, name string) error {
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		_, err := tx.ExecContext(ctx,
@@ -159,8 +179,16 @@ func (s *PGStore) recordFetchedRangeFor(ctx context.Context, backbone, group str
 			`WITH absorbed AS (
 			     DELETE FROM newsgroup_ranges
 			      WHERE backbone = $1 AND group_name = $2
-			        AND range_start <= $4 + 1
-			        AND range_end   >= $3 - 1
+			        -- $3/$4 are article numbers (int64). Their FIRST use in this
+			        -- statement is inside "+ 1"/"- 1" arithmetic, and an untyped
+			        -- param next to an integer literal is inferred int4 — so without
+			        -- the casts, any group whose article numbers exceed 2^31 (every
+			        -- large binaries group on a major backbone) fails here with a
+			        -- 22003 range error on EVERY batch: coverage is never recorded
+			        -- and backfill refetches the same spans forever. Same trap as
+			        -- the size_bytes bug; reproduced against PG 13 before fixing.
+			        AND range_start <= $4::bigint + 1
+			        AND range_end   >= $3::bigint - 1
 			  RETURNING range_start, range_end
 			 )
 			 INSERT INTO newsgroup_ranges (backbone, group_name, range_start, range_end)

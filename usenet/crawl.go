@@ -208,8 +208,8 @@ func (p *Plugin) idleHealthCheck(ctx context.Context) {
 	if ctx == nil || ctx.Err() != nil {
 		return
 	}
-	pending, err := p.st.groupsNeedingBackfill(ctx, 1)
-	if err != nil || len(pending) > 0 {
+	pending, err := p.st.anyBackfillPending(ctx)
+	if err != nil || pending {
 		return // backfill still has history to pull; it goes first
 	}
 	p.runHealthCheck(ctx)
@@ -515,28 +515,6 @@ func (s *PGStore) stageArticles(ctx context.Context, arts []stagedArticle) (int,
 		return nil
 	})
 	return n, err
-}
-
-// updateGroupState records the server's bounds and, when watermark > 0, advances
-// high_watermark. The watermark is passed separately from serverHigh because a
-// pass may only complete part of its window (see advanceWatermarks); GREATEST
-// keeps it monotonic, and backSeed initialises back_watermark on the first crawl
-// so the backfill knows where history begins.
-func (s *PGStore) updateGroupState(ctx context.Context, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error {
-	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		var hw sql.NullTime
-		if !hwDate.IsZero() {
-			hw = sql.NullTime{Time: hwDate, Valid: true}
-		}
-		_, err := tx.ExecContext(ctx,
-			`UPDATE newsgroups
-			   SET high_watermark = GREATEST(high_watermark, $2),
-			       server_low = $3, server_high = $4, last_crawl = now(),
-			       back_watermark = COALESCE(back_watermark, $5),
-			       high_watermark_date = COALESCE($6, high_watermark_date)
-			 WHERE name = $1`, name, watermark, serverLow, serverHigh, backSeed, hw)
-		return err
-	})
 }
 
 // newestDate / oldestDate scan an overview batch for its date bounds (used to
