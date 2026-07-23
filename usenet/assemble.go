@@ -564,3 +564,88 @@ func (p *Plugin) resolveSink() (releaseSink, error) {
 	}
 	return internalSink{p: p}, nil
 }
+
+// BuilderInfo is the NZB Builder's view of staging: how many articles are
+// staged, how many distinct releases they form, how many are ready to assemble,
+// and the largest still-incomplete releases (with unit progress) — so an admin
+// can see WHY nothing is building (usually huge multi-file releases only
+// partly crawled).
+type BuilderInfo struct {
+	StagedArticles int
+	Releases       int
+	Ready          int
+	Pending        []PendingRelease
+}
+
+// PendingRelease is one incomplete staged release. Units are files for
+// multi-file releases, else segments.
+type PendingRelease struct {
+	Base     string
+	Have     int
+	Need     int
+	Segments int
+	Multi    bool
+}
+
+// Pct is the unit-completion percentage (0-100).
+func (p PendingRelease) Pct() int {
+	if p.Need <= 0 {
+		return 0
+	}
+	v := p.Have * 100 / p.Need
+	if v > 100 {
+		v = 100
+	}
+	return v
+}
+
+func (s *PGStore) builderInfo(ctx context.Context, limit int) (BuilderInfo, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var bi BuilderInfo
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		if err := tx.GetContext(ctx, &bi.StagedArticles, `SELECT COUNT(*) FROM articles`); err != nil {
+			return err
+		}
+		// One GROUP BY over staging; the derived per-release "have/need units"
+		// mirrors candidateGroups (files for multi-file, parts otherwise).
+		const setsCTE = `
+			WITH sets AS (
+			  SELECT bool_or(file_parts) AS multi,
+			         CASE WHEN bool_or(file_parts) THEN COUNT(DISTINCT file_num) ELSE COUNT(DISTINCT part_num) END AS have,
+			         CASE WHEN bool_or(file_parts) THEN MAX(total_files)          ELSE MAX(total_parts)          END AS need,
+			         base_subject, COUNT(*) AS segs
+			  FROM articles GROUP BY group_name, base_subject
+			)`
+		// sqllint:allow setsCTE is a const CTE concatenated with a literal tail; no interpolation
+		if err := tx.GetContext(ctx, &bi.Releases, setsCTE+` SELECT COUNT(*) FROM sets`); err != nil {
+			return err
+		}
+		// sqllint:allow setsCTE is a const CTE concatenated with a literal tail; no interpolation
+		if err := tx.GetContext(ctx, &bi.Ready, setsCTE+` SELECT COUNT(*) FROM sets WHERE need > 0 AND have >= need`); err != nil {
+			return err
+		}
+		var rows []struct {
+			Base  string `db:"base_subject"`
+			Have  int    `db:"have"`
+			Need  int    `db:"need"`
+			Segs  int    `db:"segs"`
+			Multi bool   `db:"multi"`
+		}
+		// sqllint:allow setsCTE is a const CTE concatenated with a literal tail; no interpolation
+		if err := tx.SelectContext(ctx, &rows, setsCTE+`
+			SELECT base_subject, have, need, segs, multi FROM sets
+			WHERE NOT (need > 0 AND have >= need)
+			ORDER BY segs DESC LIMIT $1`, limit); err != nil {
+			return err
+		}
+		for _, r := range rows {
+			bi.Pending = append(bi.Pending, PendingRelease{
+				Base: r.Base, Have: r.Have, Need: r.Need, Segments: r.Segs, Multi: r.Multi,
+			})
+		}
+		return nil
+	})
+	return bi, err
+}

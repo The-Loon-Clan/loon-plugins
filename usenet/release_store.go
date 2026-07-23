@@ -1,0 +1,162 @@
+package usenet
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"strconv"
+	"strings"
+
+	"github.com/jmoiron/sqlx"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
+)
+
+// Release reads: search, browse, the Newznab feed, and single-release detail.
+
+func (s *PGStore) searchNzbs(ctx context.Context, q string, limit int) ([]pluginapi.Release, error) {
+	return s.queryReleases(ctx, `title ILIKE '%' || $1 || '%'`, q, limit)
+}
+
+func (s *PGStore) browseNzbs(ctx context.Context, group string, limit int) ([]pluginapi.Release, error) {
+	return s.queryReleases(ctx, `($1 = '' OR group_name = $1)`, group, limit)
+}
+
+// queryReleases lists completed NZBs newest-first. cond is a fixed literal
+// referencing $1 (the search term or group name); arg flows through the
+// placeholder, so there is no injection despite the concatenation.
+func (s *PGStore) queryReleases(ctx context.Context, cond, arg string, limit int) ([]pluginapi.Release, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	var rows []releaseRow
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		// sqllint:allow cond is a fixed WHERE fragment from the two internal callers (searchNzbs/browseNzbs); the search value flows through $1
+		return tx.SelectContext(ctx, &rows,
+			`SELECT id, title, size, posted_at, group_name,
+			        resolution, source, video_codec, audio, language, category_id
+			 FROM nzbs
+			 WHERE status = 'completed' AND `+cond+`
+			 ORDER BY COALESCE(posted_at, created_at) DESC LIMIT $2`, arg, limit)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return releasesToAPI(rows), nil
+}
+
+// feedReleases pages completed releases for the Newznab feed: optional title
+// filter (empty = recent-all), newest first, with the matching total for the
+// newznab:response offset/total attrs. query flows through $1 (no injection).
+func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, limit, offset int) ([]pluginapi.Release, int, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	// cat filter: category ids are ints, so an inlined IN() list is injection-safe.
+	catClause := ""
+	if len(cats) > 0 {
+		parts := make([]string, 0, len(cats))
+		for _, c := range cats {
+			parts = append(parts, strconv.Itoa(c))
+		}
+		catClause = " AND category_id IN (" + strings.Join(parts, ",") + ")"
+	}
+	var rows []releaseRow
+	var total int
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		// sqllint:allow catClause is a literal built from int-only category ids (strconv.Itoa); all values flow through $N
+		if err := tx.GetContext(ctx, &total,
+			`SELECT COUNT(*) FROM nzbs
+			 WHERE status = 'completed' AND ($1 = '' OR title ILIKE '%' || $1 || '%')`+catClause, query); err != nil {
+			return err
+		}
+		// sqllint:allow catClause is a literal built from int-only category ids (strconv.Itoa); all values flow through $N
+		return tx.SelectContext(ctx, &rows,
+			`SELECT id, title, size, posted_at, group_name,
+			        resolution, source, video_codec, audio, language, category_id
+			 FROM nzbs
+			 WHERE status = 'completed' AND ($1 = '' OR title ILIKE '%' || $1 || '%')`+catClause+`
+			 ORDER BY COALESCE(posted_at, created_at) DESC
+			 LIMIT $2 OFFSET $3`, query, limit, offset)
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return releasesToAPI(rows), total, nil
+}
+
+// releaseRow is the scan shape for a completed release across search, browse,
+// and the Newznab feed — the columns pluginapi.Release exposes.
+type releaseRow struct {
+	ID         int64        `db:"id"`
+	Title      string       `db:"title"`
+	Size       int64        `db:"size"`
+	Posted     sql.NullTime `db:"posted_at"`
+	Group      string       `db:"group_name"`
+	Resolution string       `db:"resolution"`
+	Source     string       `db:"source"`
+	Codec      string       `db:"video_codec"`
+	Audio      string       `db:"audio"`
+	Language   string       `db:"language"`
+	CategoryID int          `db:"category_id"`
+}
+
+func (r releaseRow) toAPI() pluginapi.Release {
+	rel := pluginapi.Release{
+		ID: r.ID, Title: r.Title, Size: r.Size, Group: r.Group,
+		Resolution: r.Resolution, Source: r.Source, Codec: r.Codec,
+		Audio: r.Audio, Language: r.Language, CategoryID: r.CategoryID,
+	}
+	if r.Posted.Valid {
+		rel.Posted = r.Posted.Time
+	}
+	return rel
+}
+
+func releasesToAPI(rows []releaseRow) []pluginapi.Release {
+	out := make([]pluginapi.Release, len(rows))
+	for i, r := range rows {
+		out[i] = r.toAPI()
+	}
+	return out
+}
+
+// detailRow is a release row with its gzipped NZB blob, for the detail page.
+type detailRow struct {
+	releaseRow
+	Data []byte `db:"nzb_data"`
+}
+
+// releaseByID loads one completed release + its NZB blob; nil if absent.
+func (s *PGStore) releaseByID(ctx context.Context, id int64) (*detailRow, error) {
+	var r detailRow
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.GetContext(ctx, &r,
+			`SELECT id, title, size, posted_at, group_name,
+			        resolution, source, video_codec, audio, language, category_id, nzb_data
+			 FROM nzbs WHERE id = $1 AND status = 'completed'`, id)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (s *PGStore) nzbData(ctx context.Context, id int64) ([]byte, string, error) {
+	var data []byte
+	var filename string
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.QueryRowContext(ctx,
+			`SELECT nzb_data, filename FROM nzbs WHERE id = $1`, id).Scan(&data, &filename)
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	return data, filename, nil
+}

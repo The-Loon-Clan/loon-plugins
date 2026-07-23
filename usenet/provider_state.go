@@ -251,3 +251,32 @@ func (s *PGStore) resetBackfillForGroup(ctx context.Context, group string) error
 		return err
 	})
 }
+
+// allCoveredRanges returns every backbone's merged runs keyed by coverKey. One query for the whole page: the crawlers view needs
+// coverage for every group it renders, and a query per row is a needless N+1 on
+// a page that already refreshes on a timer while a crawl is running.
+func (s *PGStore) allCoveredRanges(ctx context.Context) (map[coverKey][]articleRange, error) {
+	type row struct {
+		Backbone string `db:"backbone"`
+		Group    string `db:"group_name"`
+		Start    int64  `db:"start"`
+		End      int64  `db:"end"`
+	}
+	var rows []row
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &rows,
+			`SELECT r.backbone, r.group_name, r.range_start AS start, r.range_end AS end
+			   FROM newsgroup_ranges r
+			   JOIN newsgroups g ON g.name = r.group_name AND g.active = TRUE
+			  ORDER BY r.backbone, r.group_name, r.range_start`)
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[coverKey][]articleRange)
+	for _, r := range rows {
+		k := coverKey{r.Backbone, r.Group}
+		out[k] = append(out[k], articleRange{Start: r.Start, End: r.End})
+	}
+	return out, nil
+}

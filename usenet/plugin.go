@@ -14,10 +14,11 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"html/template"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
 	"github.com/the-loon-clan/loon/nntp"
