@@ -327,11 +327,19 @@ func (p *Plugin) runPrune(ctx context.Context) {
 func (p *Plugin) runPruneLocked(ctx context.Context) {
 	p.pruneJob.SetRunning()
 	cfg := p.effective(ctx)
-	n, err := p.st.pruneNzbs(ctx, cfg.RetentionDays)
-	if err != nil {
-		p.pruneJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/prune", err)
-		return
+	// Releases are kept forever unless an operator explicitly sets a horizon.
+	// This used to delete anything older than the CRAWL DEPTH (3 days by
+	// default), which quietly destroyed the catalogue of any install left
+	// running — the two are completely different concerns.
+	var n int64
+	if cfg.NZBRetentionDays > 0 {
+		var err error
+		n, err = p.st.pruneNzbs(ctx, cfg.NZBRetentionDays)
+		if err != nil {
+			p.pruneJob.SetError(err.Error())
+			p.reportErr(ctx, "usenet/prune", err)
+			return
+		}
 	}
 	staged, _ := p.staging.prune(ctx)
 	// Sweep junk left over from before ingest filtering (obfuscated random-token
@@ -344,8 +352,12 @@ func (p *Plugin) runPruneLocked(ctx context.Context) {
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/prune-junk-staged", err)
 	}
-	p.pruneJob.Log("pruned %d NZBs (older than %dd) + %d stale staged; swept %d junk NZBs + %d junk staged",
-		n, cfg.RetentionDays, staged, junkNzbs, junkStaged)
+	kept := "kept forever"
+	if cfg.NZBRetentionDays > 0 {
+		kept = fmt.Sprintf("older than %dd", cfg.NZBRetentionDays)
+	}
+	p.pruneJob.Log("pruned %d NZB(s) (%s) + %d stale staged; swept %d junk NZBs + %d junk staged",
+		n, kept, staged, junkNzbs, junkStaged)
 	p.pruneJob.SetIdle(time.Now().Add(24 * time.Hour))
 }
 

@@ -147,3 +147,32 @@ func TestFmtBytes(t *testing.T) {
 		}
 	}
 }
+
+// TestNZBRetentionDefaultsToKeepForever guards against a regression that would
+// silently destroy a catalogue: retention_days is CRAWL DEPTH (default 3), and
+// it once also drove DELETE FROM nzbs. Any install left running lost everything
+// older than three days. NZB deletion must stay opt-in.
+func TestNZBRetentionDefaultsToKeepForever(t *testing.T) {
+	var c Config
+	c.applyDefaults()
+	if c.NZBRetentionDays != 0 {
+		t.Fatalf("nzb_retention_days defaults to %d; it MUST default to 0 (keep forever) — "+
+			"any positive default deletes releases on the nightly prune",
+			c.NZBRetentionDays)
+	}
+	if c.RetentionDays <= 0 {
+		t.Errorf("crawl depth = %d, want a positive default", c.RetentionDays)
+	}
+	// A negative value must clamp to "keep", never to "delete everything".
+	c2 := Config{NZBRetentionDays: -5}
+	c2.applyDefaults()
+	if c2.NZBRetentionDays != 0 {
+		t.Errorf("negative retention became %d, want 0", c2.NZBRetentionDays)
+	}
+	// The two knobs must be independent.
+	c3 := Config{RetentionDays: 30}
+	c3.applyDefaults()
+	if c3.NZBRetentionDays != 0 {
+		t.Error("setting crawl depth changed the deletion horizon — they must stay separate")
+	}
+}

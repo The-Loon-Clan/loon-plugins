@@ -8,12 +8,20 @@ import "strconv"
 // (edited on the host's /admin/settings page) override them at job run time
 // via withOverrides.
 type Config struct {
-	Server              ServerConfig `json:"server"`
-	RetentionDays       int          `json:"retention_days"`         // keep the last N days (default 3)
-	CrawlIntervalMin    int          `json:"crawl_interval_min"`     // crawl cadence (default 15)
-	Batch               int          `json:"batch"`                  // article-number span per OVER request (default 3000)
-	MaxGroups           int          `json:"max_groups"`             // cap active groups crawled per run (default 20)
-	MaxArticlesPerGroup int          `json:"max_articles_per_group"` // cap the first-pass volume so a busy group can't pull millions (default 20000)
+	Server ServerConfig `json:"server"`
+	// RetentionDays is CRAWL DEPTH: how far back to fetch and backfill. It does
+	// NOT delete anything.
+	RetentionDays int `json:"retention_days"` // default 3
+
+	// NZBRetentionDays deletes assembled releases older than N days. 0 = keep
+	// forever, which is the default and what prod does. Deleting a catalogue is
+	// not something a default should ever do quietly.
+	NZBRetentionDays int `json:"nzb_retention_days"` // default 0 = never delete
+
+	CrawlIntervalMin    int `json:"crawl_interval_min"`     // crawl cadence (default 15)
+	Batch               int `json:"batch"`                  // article-number span per OVER request (default 3000)
+	MaxGroups           int `json:"max_groups"`             // cap active groups crawled per run (default 20)
+	MaxArticlesPerGroup int `json:"max_articles_per_group"` // cap the first-pass volume so a busy group can't pull millions (default 20000)
 
 	// Connections is the NNTP pool size — how many articles can be fetched in
 	// parallel. Providers cap concurrent connections per account; the pool keeps
@@ -66,6 +74,10 @@ type ServerConfig struct {
 func (c *Config) applyDefaults() {
 	if c.RetentionDays <= 0 {
 		c.RetentionDays = 3
+	}
+	// Deliberately NOT defaulted: 0 means "keep everything".
+	if c.NZBRetentionDays < 0 {
+		c.NZBRetentionDays = 0
 	}
 	if c.CrawlIntervalMin <= 0 {
 		c.CrawlIntervalMin = 15
@@ -139,6 +151,7 @@ func (c *Config) knobFields() map[string]*int {
 	return map[string]*int{
 		"connections":                &c.Connections,
 		"retention_days":             &c.RetentionDays,
+		"nzb_retention_days":         &c.NZBRetentionDays,
 		"crawl_interval_min":         &c.CrawlIntervalMin,
 		"batch":                      &c.Batch,
 		"max_groups":                 &c.MaxGroups,
