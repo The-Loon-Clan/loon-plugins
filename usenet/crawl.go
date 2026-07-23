@@ -121,7 +121,13 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 		p.crawlJob.Log("no active groups — pick some in the admin wizard")
 		return 0
 	}
-	// Take only the groups no other worker is already crawling on this backbone.
+	// Split first, then lease. Assignment decides what to ATTEMPT so N crawlers
+	// divide the work instead of racing; the lease then guarantees no two
+	// workers touch one group even while a membership change settles.
+	groups = p.myGroups(ctx, groups, cfg)
+	if len(groups) == 0 {
+		return 0
+	}
 	groups, release := p.claimGroupLeases(ctx, bb, groups, p.leaseTTL(cfg))
 	defer release()
 	if len(groups) == 0 {

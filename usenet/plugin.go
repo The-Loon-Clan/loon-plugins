@@ -201,6 +201,8 @@ func (p *Plugin) Start(ctx context.Context) error {
 		return nil // web-only process: capability is registered, no jobs run here
 	}
 	p.seedServer(ctx)
+	// Announce ourselves before the first crawl, so the split sees this worker.
+	p.startHeartbeat(ctx, p.cfg)
 	// Ship the reference data: junk rules (then compiled into memory) and the
 	// curated newsgroup pack.
 	p.seedAndLoadJunkRules(ctx)

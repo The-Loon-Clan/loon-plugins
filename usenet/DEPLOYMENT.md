@@ -30,7 +30,36 @@ Two consequences worth noting:
 
 ## Running two workers (supported)
 
-Workers coordinate through leases in the `leases` table. Two scopes:
+Two mechanisms, doing different jobs. **Assignment** decides what each worker
+should attempt so N crawlers divide the groups instead of racing for them;
+**leases** guarantee no two workers ever touch one group. Assignment alone would
+be unsafe during a membership change; leases alone would be unfair — the first
+worker to start would claim everything and the rest would idle.
+
+### Assignment: splitting the groups
+
+Workers heartbeat into `crawler_workers`. Each one independently computes the
+same split: groups are hashed to a worker slot, so `groups / crawlers` each,
+with no coordinator and no negotiation.
+
+Membership is fixed for a **term** (`assign_term_min`, default 15 minutes). A
+crawler that appears mid-term is not counted until the next boundary — so
+**adding a third crawler means it waits out the term**, then takes its third.
+That is deliberate: changing the divisor mid-pass would reshuffle groups
+underneath work already in flight. A worker that stops heartbeating
+(`worker_stale_sec`, default 90s) drops out at the next term and its groups are
+redistributed.
+
+Assignment is by hash of the group NAME, not by position, so adding or removing
+a newsgroup moves only that group. Adding a worker does reshuffle — which is
+exactly why that only happens on a term boundary.
+
+A lone crawler always takes everything; it never stalls waiting for a quorum it
+is the only member of.
+
+### Leases: making it safe
+
+Leases in the `leases` table. Two scopes:
 
 - **`group`** — one backbone's view of one newsgroup. Crawl state is keyed
   `(backbone, group_name)`, so two workers crawling *different groups* touch

@@ -26,6 +26,7 @@ type Store interface {
 	JunkStore
 	HealthStore
 	LeaseStore
+	WorkerStore
 }
 
 // ReleaseReader is the read side: search, browse, feed, detail, raw NZB, stats.
@@ -105,6 +106,13 @@ type HealthStore interface {
 	updateNzbHealth(ctx context.Context, id int64, status string, total, missing, par2 int) error
 	touchHealthChecked(ctx context.Context, id int64) error
 	healthBreakdown(ctx context.Context) (map[string]int, error)
+}
+
+// WorkerStore is crawler presence, used to split groups between hosts (assign.go).
+type WorkerStore interface {
+	heartbeat(ctx context.Context, worker string) error
+	eligibleWorkers(ctx context.Context, termStart time.Time, staleAfter time.Duration) ([]string, error)
+	reapWorkers(ctx context.Context, staleAfter time.Duration) error
 }
 
 // LeaseStore is cross-host coordination (lease.go): who crawls which backbone,
