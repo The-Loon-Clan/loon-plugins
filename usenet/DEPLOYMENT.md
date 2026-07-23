@@ -1,7 +1,7 @@
 # Running the crawler on its own host
 
-Short version: **yes, and it needs no special support — but run exactly one
-worker.**
+Short version: **yes — a worker-only process runs the crawler on its own host,
+and two workers can now run in parallel via leases.**
 
 ## What already works
 
@@ -60,80 +60,16 @@ Two caveats:
   Nothing prevents an operator pointing two workers at the same account and
   over-subscribing it.
 
-## What used to not work: two workers
+## Other ways to scale ingest
 
-There is no cross-host job lock. The plugin's `crawlMu` / `backfillMu` /
-`buildMu` are ordinary in-process mutexes — they stop a manual trigger racing a
-scheduled run **inside one process**, and do nothing at all between hosts.
+Before adding a host, note that two things scale throughput without touching
+deployment topology: raise `connections` (up to what the account allows), or add
+a provider on a **different backbone**. The second also improves completeness,
+since backbones expire different articles and staging merges them by message-id.
 
-Start a second worker and both will:
+## What leases do NOT solve
 
-1. **Crawl the same groups at the same time.** Watermark writes use `GREATEST`
-   and coverage merges, so this does not corrupt state — but every article is
-   fetched twice, and you pay for it twice in bandwidth and time.
-2. **Double the connection count.** This is the one that bites. Provider limits
-   are per *account*, not per host: two workers each opening `connections`
-   connections to the same account puts you at 2× the cap. The provider responds
-   by refusing connections (482/502), the pool benches the provider, and — if a
-   backup is configured — the fleet fails over to a server that is not actually
-   broken.
-3. **Duplicate the health sweep**, competing for the same idle connections that
-   the crawler wants.
-
-So today the supported topology is: **N web replicas, N api replicas, exactly
-one worker.**
-
-## Making multiple workers safe
-
-Two designs, and the second is better for this workload.
-
-### Option A — job singleton (simple, no throughput gain)
-
-Take a Postgres advisory lock keyed on the job name at the start of each run and
-skip the run if it is already held. loon already uses this pattern for plugin
-migrations (`core/migrations.go`), so the mechanism is proven and needs no new
-infrastructure.
-
-Effect: a second worker becomes a warm standby. It costs nothing, breaks
-nothing, and takes over automatically if the first dies. It adds **no crawl
-throughput**, because only one worker is ever crawling.
-
-### Option B — shard by backbone (real horizontal scale)
-
-This is what the per-backbone state model makes possible, and it falls out
-almost for free.
-
-Crawl state — watermarks, server bounds, coverage — is keyed by **backbone**
-(see PROVIDERS.md). Two different backbones share no mutable state whatsoever.
-The only thing they do share is the staging area, and that is deduplicated by
-message-id, so concurrent writes from different workers are safe by
-construction.
-
-So backbones are a natural shard key: give each worker a disjoint set of
-providers and they can crawl fully in parallel without coordination beyond the
-assignment itself.
-
-That assignment wants to be *leased*, not configured, so a dead worker's
-backbones get picked up rather than going dark:
-
-- a `worker_leases` table of `(backbone, worker_id, expires_at)`;
-- each worker renews its leases on a heartbeat and claims any expired ones;
-- a worker only crawls backbones it currently holds.
-
-This also fixes the connection-budget problem properly rather than by
-convention: a backbone is crawled by exactly one worker, so that worker owns the
-whole per-account connection allowance and no arithmetic is needed.
-
-### Recommendation
-
-Do **Option A first** — it is small, removes the footgun, and makes a second
-worker a genuine hot standby. Reach for Option B only when one worker's
-connections are actually the bottleneck, since it introduces leases, heartbeats
-and expiry, all of which are new failure modes.
-
-## Until then
-
-Run one worker. If you need more crawl throughput, raise `connections` (up to
-what your provider allows) or add a provider on a **different backbone** —
-both scale ingest without touching deployment topology, and the second also
-improves completeness.
+They coordinate this plugin's jobs. They do not stop an operator pointing two
+workers at one provider account and over-subscribing its connection limit — see
+the caveat above — and they are not a general cluster lock: another plugin's
+jobs are its own business.
