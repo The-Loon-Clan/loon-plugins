@@ -65,7 +65,10 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		if len(arts) == 0 || !isComplete(arts) {
 			continue // not actually complete yet — leave staged for next round
 		}
-		if rule := whichJunkRule(k.Base); rule != "" {
+		// Sized check, as prod's assembler does: the size-band rules (tiny
+		// payloads, the under-1/5MiB catchalls) only make sense once the whole
+		// release's size is known, and this is the first point where it is.
+		if rule := whichJunkRuleSized(k.Base, totalBytes(arts)); rule != "" {
 			p.hits.note("junk", rule, k.Base)
 			_ = p.staging.deleteStaged(ctx, k.Group, k.Base) // drop, don't build
 			continue
@@ -425,6 +428,16 @@ func (s *PGStore) deleteStaged(ctx context.Context, group, base string) error {
 			`DELETE FROM articles WHERE group_name = $1 AND base_subject = $2`, group, base)
 		return err
 	})
+}
+
+// totalBytes sums a staged set's payload — the release size the sized junk
+// rules are banded on.
+func totalBytes(arts []stagedArticle) int64 {
+	var n int64
+	for _, a := range arts {
+		n += a.Bytes
+	}
+	return n
 }
 
 // firstPoster returns the poster of the first article in a set. Every part of a

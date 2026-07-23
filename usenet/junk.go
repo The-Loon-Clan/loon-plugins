@@ -4,22 +4,43 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 	"sync/atomic"
 )
 
-// Junk-title detection, ported from the prod site's isJunkTitle
-// (indexer-site/pkg/services/nzb_assembler.go). Obfuscated Usenet posts use
-// random-token subjects ("Pzz8CzBPoBNsCu8oRPpDYwESRkpq5UU3jGlz…") that would
+// Junk-title detection — a FULL port of prod's whichJunkPattern /
+// whichJunkPatternSized (indexer-site/pkg/services/nzb_assembler.go), which is
+// the source of truth. Obfuscated Usenet posts use random-token subjects
+// ("0N70ZyFoz8n50", "Pzz8CzBPoBNsCu8oRPpDYwESRkpq5UU3jGlz…") that would
 // otherwise assemble into garbage "releases". We drop them at ingest (before
-// staging) and again at build (defensive), and sweep already-staged/built junk
-// in the prune job.
+// staging) and again at build (with the release size in hand), and sweep
+// already-staged/built junk in the prune job.
 //
-// The rules are DATA, not code: seed/junk_rules.tsv is embedded (so the filter
-// works before any database exists), seeds the junk_rules table, and the live
-// set is then loaded from that table and compiled ONCE into an immutable
-// junkMatcher held in an atomic pointer. The check runs per article on the
-// ingest hot path, so it must never touch the database — reload swaps the whole
-// matcher in one atomic store.
+// HISTORY: the first lift carried only 6 of prod's ~26 patterns, and the first
+// live crawl proved it immediately — "0N70ZyFoz8n50" was indexed because
+// short_alnum_token (prod's single largest junk class, 34k+ rows there) had
+// never been ported. This file is now rule-for-rule, threshold-for-threshold,
+// ORDER-for-order identical to prod; the reported names match prod's pattern
+// names so hit counters are comparable across both.
+//
+// The rules are DATA: seed/junk_rules.tsv is embedded (so the filter works
+// before any database exists), seeds the junk_rules table, and the live set is
+// then loaded from that table and compiled ONCE into an immutable junkMatcher
+// held in an atomic pointer. Rules run in TSV/table order — which ships as
+// prod's evaluation order, so attribution matches too. The check runs per
+// article on the ingest hot path, so it must never touch the database; reload
+// swaps the whole matcher in one atomic store.
+//
+// Two kinds of rule:
+//   - kind=regex: the pattern lives in the data and is operator-editable.
+//   - kind=heuristic: the rule names a built-in algorithm below (shapes RE2
+//     cannot express: backreferences, ratios, per-segment analysis). Operators
+//     can still disable or re-order them; the thresholds are prod's constants.
+//
+// SIZED rules only fire when the caller knows the release size (size > 0) —
+// the build path does, the per-article ingest path does not. That mirrors prod,
+// where isJunkTitle is the unsized subset and the assembler calls the sized
+// form with the summed release size.
 
 const junkSeedPath = "seed/junk_rules.tsv"
 
@@ -39,9 +60,23 @@ type junkParams struct {
 	RequireLower bool `json:"require_lower,omitempty"`
 	RequireDigit bool `json:"require_digit,omitempty"`
 	MinLen       int  `json:"min_len,omitempty"`
+	MaxLen       int  `json:"max_len,omitempty"`
 	MinSegLen    int  `json:"min_seg_len,omitempty"`
 	MinChaotic   int  `json:"min_chaotic,omitempty"`
+	// Size gates. A rule with MaxSizeBytes > 0 fires only when the caller
+	// supplied a size AND size < MaxSizeBytes; MinSizeBytes additionally
+	// requires size >= MinSizeBytes. Rules with either set are skipped
+	// entirely when the size is unknown (ingest path).
+	MinSizeBytes int64 `json:"min_size_bytes,omitempty"`
+	MaxSizeBytes int64 `json:"max_size_bytes,omitempty"`
+	// SizedOnly marks a rule with no size BOUND that still belongs to the
+	// sized section: it fires at any size, yet never on the unsized ingest
+	// path. Prod's short_random_token works exactly this way — size-agnostic
+	// since May 2026, but only ever consulted by the assembler.
+	SizedOnly bool `json:"sized_only,omitempty"`
 }
+
+func (p junkParams) sized() bool { return p.MinSizeBytes > 0 || p.MaxSizeBytes > 0 }
 
 // compiledRule is the runtime form: regexes already compiled, no allocation or
 // parsing on the hot path.
@@ -118,6 +153,28 @@ func parseJunkRulesTSV(path string) ([]junkRuleSpec, error) {
 	return out, nil
 }
 
+// junkHeuristics are the built-in algorithm ids a kind=heuristic rule may name.
+var junkHeuristics = map[string]bool{
+	"multi_segment_chaos": true, // 2+ chaotic segments (prod: multi_seg_random)
+	"bare_alnum_token":    true, // bare alnum run, length-banded, optional digit gate
+	"repeated_short_tok":  true, // "rtNJ rtNJ" — same short token twice
+	"high_special_chars":  true, // 15%+ garbled punctuation
+	"random_words":        true, // 70%+ of non-punct chars from random-looking words
+	"tiny_no_space":       true, // sized: no whitespace at all under the size cap
+	"long_no_space":       true, // sized: 60+ chars, no whitespace, 5+ garbled
+	"chaotic_specials":    true, // sized: 30+ chars, HAS whitespace, 3+ garbled
+	"size_catchall":       true, // sized: everything in a size band is junk
+}
+
+// sizedInputHeuristics and sizedInputRules consume the LIGHTLY-normalised title
+// (trim + quote/bracket strip, NO extension strip) — prod's sized section works
+// on that form; e.g. word_word_hex deliberately tolerates a trailing extension.
+var sizedInputNames = map[string]bool{
+	"word_word_hex": true, "tiny_no_space": true, "short_lowercase_token": true,
+	"long_no_space": true, "chaotic_specials_small": true, "short_random_token": true,
+	"under_1mib": true, "under_5mib": true,
+}
+
 // newJunkMatcher compiles specs. Disabled rules are dropped here so the hot path
 // never has to check a flag.
 func newJunkMatcher(specs []junkRuleSpec) (*junkMatcher, error) {
@@ -134,9 +191,7 @@ func newJunkMatcher(specs []junkRuleSpec) (*junkMatcher, error) {
 			}
 			m.rules = append(m.rules, compiledRule{name: s.Name, re: re, params: s.Params})
 		case "heuristic":
-			switch s.Rule {
-			case "bare_token", "multi_segment_chaos":
-			default:
+			if !junkHeuristics[s.Rule] {
 				return nil, fmt.Errorf("junk rule %q: unknown heuristic %q", s.Name, s.Rule)
 			}
 			m.rules = append(m.rules, compiledRule{name: s.Name, heuristic: s.Rule, params: s.Params})
@@ -191,43 +246,94 @@ func stripReleaseExts(s string) string {
 	}
 }
 
-// isJunkTitle reports whether a parsed release name is machine-generated junk.
+// isJunkTitle reports whether a parsed release name is machine-generated junk,
+// judged on the title alone (prod's isJunkTitle — the unsized subset).
 func isJunkTitle(title string) bool { return whichJunkRule(title) != "" }
 
-// whichJunkRule returns the name of the first rule that fires, or "" if the
-// title looks real. Naming the rule is what makes the filter tunable — you can
-// see which rule is doing the work before changing it.
-func whichJunkRule(title string) string {
+// isJunkTitleSized additionally applies the size-gated rules; sizeBytes is the
+// whole release's payload (prod's isJunkTitleSized).
+func isJunkTitleSized(title string, sizeBytes int64) bool {
+	return whichJunkRuleSized(title, sizeBytes) != ""
+}
+
+// whichJunkRule is whichJunkRuleSized with the size unknown.
+func whichJunkRule(title string) string { return whichJunkRuleSized(title, 0) }
+
+// whichJunkRuleSized returns the name of the first rule that fires, or "" if
+// the title looks real. Naming the rule is what makes the filter tunable — you
+// can see which rule is doing the work before changing it.
+func whichJunkRuleSized(title string, sizeBytes int64) string {
+	// Full normalisation for the title-shape rules: extensions peeled, then
+	// wrapping decoration posters put around hashes: 'x', {x}, [x], - x.
 	t := trimSpace(stripReleaseExts(title))
-	// strip wrapping decoration posters put around hashes: 'x', {x}, [x], - x
 	t = trimCut(t, "'\"{}[]- ")
 	if len(t) == 0 {
 		return "empty" // nothing left after stripping
 	}
-	return activeJunk.Load().match(t)
+	// Light normalisation for the sized rules — prod's sized section does NOT
+	// strip extensions (word_word_hex tolerates one on purpose) and does not
+	// trim dashes/spaces beyond the outer whitespace.
+	ts := strings.Trim(trimSpace(title), "'\"{}[]")
+	return activeJunk.Load().match(t, ts, sizeBytes)
 }
 
-// match runs the compiled rules in order against an already-normalised title.
-func (m *junkMatcher) match(t string) string {
+// match runs the compiled rules in order. t is the fully-normalised title, ts
+// the lightly-normalised one for sized-section rules, sizeBytes 0 when unknown.
+func (m *junkMatcher) match(t, ts string, sizeBytes int64) string {
 	for _, r := range m.rules {
+		// Size gates: a size-banded (or sized-section) rule never fires on an
+		// unknown size — the per-article ingest path.
+		if r.params.SizedOnly && sizeBytes <= 0 {
+			continue
+		}
+		if r.params.sized() {
+			if sizeBytes <= 0 || (r.params.MaxSizeBytes > 0 && sizeBytes >= r.params.MaxSizeBytes) ||
+				(r.params.MinSizeBytes > 0 && sizeBytes < r.params.MinSizeBytes) {
+				continue
+			}
+		}
+		in := t
+		if sizedInputNames[r.name] {
+			in = ts
+		}
 		if r.re != nil {
-			if r.re.MatchString(t) && gatesPass(t, r.params) {
+			if r.re.MatchString(in) && gatesPass(in, r.params) {
 				return r.name
 			}
 			continue
 		}
-		switch r.heuristic {
-		case "bare_token":
-			if bareMixedCaseToken(t, r.params) {
-				return r.name
-			}
-		case "multi_segment_chaos":
-			if multiSegmentChaos(t, r.params) {
-				return r.name
-			}
+		if runJunkHeuristic(r.heuristic, in, r.params) {
+			return r.name
 		}
 	}
 	return ""
+}
+
+// runJunkHeuristic dispatches a built-in algorithm.
+func runJunkHeuristic(id, t string, p junkParams) bool {
+	switch id {
+	case "multi_segment_chaos":
+		return multiSegmentChaos(t, p)
+	case "bare_alnum_token":
+		return bareAlnumToken(t, p)
+	case "repeated_short_tok":
+		return isRepeatedShortTokenJunk(t)
+	case "high_special_chars":
+		return highSpecialChars(t, p)
+	case "random_words":
+		return randomWordsJunk(t)
+	case "tiny_no_space":
+		return !strings.ContainsAny(t, " \t\r\n\v\f")
+	case "long_no_space":
+		return len(t) >= max(p.MinLen, 1) && !strings.ContainsAny(t, " \t\r\n\v\f") &&
+			countGarbledPunct(t) >= 5
+	case "chaotic_specials":
+		return len(t) >= max(p.MinLen, 1) && strings.ContainsAny(t, " \t") &&
+			countGarbledPunct(t) >= 3
+	case "size_catchall":
+		return true // the size gate in match() is the whole rule
+	}
+	return false
 }
 
 // gatesPass applies the optional character-class requirements. A rule with no
@@ -245,22 +351,160 @@ func gatesPass(t string, p junkParams) bool {
 	return true
 }
 
-// bareMixedCaseToken: a naked run with no separator that mixes upper and lower
-// at min_len+ chars. Real releases ALWAYS carry a separator (space/dot/dash/
-// bracket), so a bare mixed-case run is machine junk. Catches the tokens that
-// slip under the long-alphanumeric-run rule.
-func bareMixedCaseToken(t string, p junkParams) bool {
+// bareAlnumToken: the whole title is one bare alphanumeric run inside the
+// configured length band, optionally required to carry at least one digit and
+// one letter. Three shipped bands mirror prod exactly:
+//
+//	short_alnum_token  6-15, digit+letter — prod's single largest junk class
+//	mid_alnum_token   16-19, digit+letter — "pE9F9wMjNxWZqpq9V"
+//	single_token_20   20+,   any mix      — dashless UUIDs, hashes, base64
+//
+// The digit gate on the short bands is what spares pure-letter real titles
+// ("Lamune", "Heroman", "Gunbuster"); at 20+ no real title is a bare run at
+// all, so the gate drops away.
+func bareAlnumToken(t string, p junkParams) bool {
+	if len(t) < p.MinLen || (p.MaxLen > 0 && len(t) > p.MaxLen) {
+		return false
+	}
+	var hasDigit, hasLetter bool
+	for _, c := range t {
+		if !isAlnum(c) {
+			return false
+		}
+		if c >= '0' && c <= '9' {
+			hasDigit = true
+		} else {
+			hasLetter = true
+		}
+	}
+	if p.RequireDigit && !(hasDigit && hasLetter) {
+		return false
+	}
+	return true
+}
+
+// isRepeatedShortTokenJunk: the same 2-20 char alphanumeric token repeated
+// twice ("rtNJ rtNJ", "PoYS PoYS"). Programmatic because RE2 has no
+// backreferences. Tokens over 5 chars must mix digits and letters — repeated
+// real words ("New York New York" style) stay safe.
+func isRepeatedShortTokenJunk(title string) bool {
+	chunks := strings.FieldsFunc(title, func(r rune) bool { return !isAlnum(r) })
+	if len(chunks) != 2 || chunks[0] != chunks[1] {
+		return false
+	}
+	n := len(chunks[0])
+	if n < 2 || n > 20 {
+		return false
+	}
+	if n <= 5 {
+		return true
+	}
+	var hasDigit, hasLetter bool
+	for _, c := range chunks[0] {
+		if c >= '0' && c <= '9' {
+			hasDigit = true
+		} else if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+			hasLetter = true
+		}
+	}
+	return hasDigit && hasLetter
+}
+
+// highSpecialChars: 15%+ of the title is "garbled" punctuation. Release-style
+// separators (.-_()[] and space) are allowed, and so are angle brackets —
+// legitimate posters wrap signatures in them ("<<<Nimue>>>< file >") and they
+// over-caught real rips before prod excluded them.
+func highSpecialChars(t string, p junkParams) bool {
 	minLen := p.MinLen
 	if minLen <= 0 {
-		minLen = 16
+		minLen = 12
 	}
-	return len(t) >= minLen && !hasSeparator(t) &&
-		containsAny(t, 'A', 'Z') && containsAny(t, 'a', 'z')
+	if len(t) < minLen {
+		return false
+	}
+	var special int
+	for _, c := range t {
+		if !isAlnum(c) && c != ' ' && c != '.' && c != '-' && c != '_' &&
+			c != '[' && c != ']' && c != '(' && c != ')' &&
+			c != '<' && c != '>' {
+			special++
+		}
+	}
+	return float64(special)/float64(len(t)) > 0.15
+}
+
+// randomWordsJunk: random alphanumeric words make up 70%+ of the non-punct
+// characters — a single 12+ char random word, or several totalling 16+.
+func randomWordsJunk(t string) bool {
+	words := strings.Fields(t)
+	if len(words) == 0 {
+		return false
+	}
+	var junkChars, totalNonPunct int
+	for _, w := range words {
+		if isAllPunct(w) {
+			continue
+		}
+		totalNonPunct += len(w)
+		if isRandomWord(w) {
+			junkChars += len(w)
+		}
+	}
+	minChars := 16
+	if len(words) <= 2 {
+		minChars = 12 // catch short single-word junk like "EXxxUeCnKNXD"
+	}
+	return junkChars >= minChars && totalNonPunct > 0 &&
+		float64(junkChars)/float64(totalNonPunct) >= 0.7
+}
+
+// isRandomWord: an 8+ char pure-alnum word mixing digits and letters. Real
+// words are letters; real numbers are digits; the mix is machine output.
+func isRandomWord(w string) bool {
+	if len(w) < 8 {
+		return false
+	}
+	var hasDigit, hasLetter bool
+	for _, c := range w {
+		if !isAlnum(c) {
+			return false
+		}
+		if c >= '0' && c <= '9' {
+			hasDigit = true
+		} else {
+			hasLetter = true
+		}
+	}
+	return hasDigit && hasLetter
+}
+
+// isAllPunct reports whether every character in w is punctuation/separator.
+func isAllPunct(w string) bool {
+	for _, c := range w {
+		if isAlnum(c) {
+			return false
+		}
+	}
+	return true
+}
+
+// countGarbledPunct counts characters from the "spam-grade" punctuation set —
+// distinct from the release-style separators (.-_()[]) real titles use.
+func countGarbledPunct(s string) int {
+	n := 0
+	for _, c := range s {
+		switch c {
+		case '|', '@', '#', '$', '%', '^', '&', '*', '<', '>', '=', '+', '~', '?', '{', '}', '!', '\\', ';', ':':
+			n++
+		}
+	}
+	return n
 }
 
 // multiSegmentChaos: min_chaotic+ segments (split on _ or space) of min_seg_len+
 // chars that EACH mix upper, lower and digit. Real tokens rarely do all three,
-// almost never in two segments.
+// almost never in two segments. Gated on the alnum+underscore+space-only
+// structural shape — real titles always carry other punctuation somewhere.
 func multiSegmentChaos(t string, p junkParams) bool {
 	minLen, minSegLen, minChaotic := p.MinLen, p.MinSegLen, p.MinChaotic
 	if minLen <= 0 {
@@ -312,64 +556,26 @@ func multiSegmentChaos(t string, p junkParams) bool {
 
 // ── small string helpers (avoid importing strings twice across files) ──
 
-func trimSpace(s string) string {
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t' || s[0] == '\n' || s[0] == '\r') {
-		s = s[1:]
-	}
-	for len(s) > 0 {
-		c := s[len(s)-1]
-		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
-			break
-		}
-		s = s[:len(s)-1]
-	}
-	return s
+func isAlnum(c rune) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
-func trimCut(s, cutset string) string {
-	in := func(b byte) bool {
-		for i := 0; i < len(cutset); i++ {
-			if cutset[i] == b {
-				return true
-			}
-		}
-		return false
-	}
-	for len(s) > 0 && in(s[0]) {
-		s = s[1:]
-	}
-	for len(s) > 0 && in(s[len(s)-1]) {
-		s = s[:len(s)-1]
-	}
-	return s
-}
+func trimSpace(s string) string { return strings.TrimSpace(s) }
+
+func trimCut(s, cutset string) string { return strings.Trim(s, cutset) }
 
 func toLowerTail(s string) string {
-	start := len(s) - 8
-	if start < 0 {
-		start = 0
+	const tail = 24
+	if len(s) > tail {
+		return strings.ToLower(s[len(s)-tail:])
 	}
-	b := []byte(s[start:])
-	for i := range b {
-		if b[i] >= 'A' && b[i] <= 'Z' {
-			b[i] += 'a' - 'A'
-		}
-	}
-	return string(b)
+	return strings.ToLower(s)
 }
 
-func hasSuffix(s, suf string) bool {
-	return len(s) >= len(suf) && s[len(s)-len(suf):] == suf
-}
+func hasSuffix(s, suf string) bool { return strings.HasSuffix(s, suf) }
 
 func hasSeparator(s string) bool {
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case ' ', '.', '_', '-', '[', ']', '(', ')', '{', '}', '\'', '"', '|', '/', '\\':
-			return true
-		}
-	}
-	return false
+	return strings.ContainsAny(s, " .-_[](){}")
 }
 
 func containsAny(s string, lo, hi byte) bool {
@@ -379,4 +585,11 @@ func containsAny(s string, lo, hi byte) bool {
 		}
 	}
 	return false
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

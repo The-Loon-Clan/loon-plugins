@@ -1,0 +1,14 @@
+-- Rule evaluation order.
+--
+-- The junk engine is now a full port of prod's pattern set, and with the
+-- size-band catchalls in it, ORDER became part of the semantics: the catchalls
+-- must run last so specific rules get attribution credit, and attribution
+-- itself (which rule name a hit is counted under) follows first-match. The
+-- loader previously ordered by (source, name) — alphabetical — which was
+-- harmless for six order-independent rules and is wrong now.
+--
+-- Seeded rules get explicit positions from the shipped TSV's order. The 500
+-- default places operator-authored rules after every specific seeded rule but
+-- before the catchalls, so a custom pattern still wins attribution over
+-- under_1mib/under_5mib (seeded at 900+).
+ALTER TABLE junk_rules ADD COLUMN IF NOT EXISTS position INT NOT NULL DEFAULT 500;

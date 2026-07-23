@@ -641,13 +641,17 @@ func (s *PGStore) deleteJunkNzbs(ctx context.Context) (int, error) {
 		var rows []struct {
 			ID    int64  `db:"id"`
 			Title string `db:"title"`
+			Size  int64  `db:"size"`
 		}
-		if err := tx.SelectContext(ctx, &rows, `SELECT id, title FROM nzbs`); err != nil {
+		if err := tx.SelectContext(ctx, &rows, `SELECT id, title, size FROM nzbs`); err != nil {
 			return err
 		}
 		var ids []int64
 		for _, r := range rows {
-			if isJunkTitle(r.Title) {
+			// Sized: built releases have a known payload, so the size-band rules
+			// apply — this sweep is what retroactively cleans junk that predates
+			// a rule (prod's TagJunkTitlesBatch is the SQL equivalent).
+			if isJunkTitleSized(r.Title, r.Size) {
 				ids = append(ids, r.ID)
 			}
 		}

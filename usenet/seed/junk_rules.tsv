@@ -1,34 +1,53 @@
-# Junk-title rules — the shipped defaults.
+# Junk-title rules — the shipped defaults, a FULL port of prod's
+# whichJunkPattern / whichJunkPatternSized (prod is the source of truth; names,
+# thresholds and ORDER match prod exactly, so hit counters are comparable).
 #
 # This file is the SINGLE SOURCE OF TRUTH: it is embedded in the binary (so the
 # filter works with no database), and it seeds the junk_rules table on boot. The
 # live filter is then loaded from that table into memory, so operators can add,
-# tune, or disable rules without a code release.
+# tune, or disable rules without a code release. Rules run in THIS order.
 #
 # One rule per line so diffs are per-rule and a community PR adding a pattern
 # reads as one line. Tab-separated. Lines starting with # are comments.
 #
 # Columns:
-#   name    stable identifier, also what gets reported when a rule fires
+#   name    stable identifier (prod's pattern name), reported when a rule fires
 #   kind    regex | heuristic
 #   rule    kind=regex: the pattern. kind=heuristic: the built-in algorithm id.
-#   params  JSON object; {} when unused. Gates for regex rules, tuning for
-#           heuristics. Recognised keys:
-#             require_upper / require_lower / require_digit  (bool)
-#             min_len, min_seg_len, min_chaotic              (int)
+#   params  JSON object; {} when unused. Recognised keys:
+#             require_upper / require_lower / require_digit    (bool)
+#             min_len, max_len, min_seg_len, min_chaotic       (int)
+#             min_size_bytes, max_size_bytes                   (int64)
+#           A rule with a size bound fires ONLY when the caller knows the
+#           release size (the build path) — never on per-article ingest.
 #   notes   why the rule exists
 #
-# Order matters only for which name is reported first; the verdict is the same.
-#
 # Obfuscated posts use random-token subjects that would otherwise assemble into
-# garbage "releases". Note that PATTERNS are what generalise here — a denylist of
-# seen subjects is useless, because every obfuscated post is a fresh random
-# string.
+# garbage "releases". PATTERNS are what generalise here — a denylist of seen
+# subjects is useless, because every obfuscated post is a fresh random string.
 #
 # name	kind	rule	params	notes
 long_alnum_run	regex	[A-Za-z0-9]{24,}	{}	24+ consecutive alphanumerics anywhere = a hash or token. The workhorse rule.
-bare_mixed_case_token	heuristic	bare_token	{"min_len":16}	A naked 16+ char run mixing upper and lower with NO separator. Real releases always carry a separator, so this catches the 16-23 char tokens that slip under long_alnum_run.
-multi_segment_chaos	heuristic	multi_segment_chaos	{"min_len":24,"min_seg_len":5,"min_chaotic":2}	2+ segments (split on _ or space) of 5+ chars that each mix upper, lower AND digit. Real titles rarely do all three, almost never twice.
-uuid	regex	(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b	{}	A canonical UUID as the release name.
+multi_seg_random	heuristic	multi_segment_chaos	{"min_len":24,"min_seg_len":5,"min_chaotic":2}	2+ segments (split on _ or space) of 5+ chars that each mix upper, lower AND digit, in an alnum+underscore+space-only title. Each segment sits at 20-23 chars so long_alnum_run never sees a single 24+ run.
+uuid	regex	(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b	{}	A canonical UUID anywhere in the title. The 8-4-4-4-12 shape never appears in real release names.
+software_warez	regex	(?i)(cracked[\s.]+license|multilingual[\s.]+(latest|complete)[\s.]+package|proffesional[\s.]+plus|installation[\s.]+and[\s.]+activation|free[\s.]+download|wing[\s.]+ftp|ftpgetter|driver[\s.]+booster|nitro[\s.]+pdf|microsoft[\s.]+office|youtube[\s.]+to[\s.]+mp3|videoproc|systemcare|uninstaller|pdfelement|foxit[\s.]+pdf|winrar|adobe[\s.]+dreamweaver|partition[\s.]+master|pinnacle[\s.]+studio|uniconverter|adobe[\s.]+photoshop|technical[\s.]+suite|kms[\s.]+tools|heu[\s.]+kms[\s.]+activator|keepbeats|office[\s.]+timeline|coreldraw|nero[\s.]+burning[\s.]+rom|recorder[\s.]+for[\s.]+windows|toolbox[\s.]+for[\s.]+excel|mediamonkey[\s.]+gold|partition[\s.]+assistant|ccleaner|autocad|photoscape|driver[\s.]+updater|adobe[\s.]+lightroom|pre[\s.-]+cracked|adobe[\s.]+after[\s.]+effects|adobe[\s.]+premiere|adobe[\s.]+media[\s.]+encoder|adobe[\s.]+animate|ftuapps|notepad(\+\+|[\s.]+plus[\s.]+plus)|free[\s.]+amazon[\s.]+prime|sketchbook[\s.]+pro|faceswap|tiktok|hng\][\s.]+tatakae|\(x(86|64)\)|\b\d{1,2}(\.\d+){3,}\b|^\s*input\s*$)	{}	Cracked-software boilerplate, curated product names, (x64)/(x86) markers, 4-part version strings, and the bare "input" full-title spam. Anime-only catalog: a 200 MB installer is junk regardless of size.
 template_token	regex	\{[A-Za-z0-9_]+\}|\{\{[^}]+\}\}	{}	Leftover poster-template tokens the poster never substituted: {total}, {{count}}.
 dot_sep_obfuscated	regex	^[A-Za-z0-9]{6,}\.[A-Za-z0-9]{1,12}$	{"require_upper":true,"require_lower":true,"require_digit":true}	Dot-separated obfuscated pair like f329yZ98AaYf2qHd.QPv2 — only when it mixes case AND digits, so real short names survive.
+rot13_archive	regex	\.(ene|cne7)\b|\b(cerfragf|CNFFJBEQ|znfgrenaqv|qbxhf9nyyr|qrfpevcgvba|cnffjbeq|fgnssry|tbyqra\s+tveyf|er\s+fraq|nf\s+nobir|fb\s+orybj|Oyh-Enl|KivQ|QIQEvC|OQEvC|jjj\.|lRap|gur|naq|vf)\b	{}	ROT13'd software cracks / DVD rips: .ene = .rar rot13'd, cerfragf = "presents", CNFFJBEQ = "PASSWORD", plus known rot13'd poster handles.
+repeated_short_tok	heuristic	repeated_short_tok	{}	The same 2-20 char alnum token repeated twice ("rtNJ rtNJ"). Programmatic: RE2 has no backreferences. Tokens over 5 chars must mix digit+letter so "New York New York" shapes stay safe.
+alnum_blob_ext	regex	^[A-Za-z0-9]{12,30}\.[A-Za-z0-9]{2,5}$	{}	<blob>.<ext> with no other separators — "07w5a8eborq1saw8zg.1v8". Not always mixed-case, so dot_sep_obfuscated misses the all-lowercase variants.
+short_alnum_token	heuristic	bare_alnum_token	{"min_len":6,"max_len":15,"require_digit":true}	Bare 6-15 char alnum token with BOTH digit and letter — "S7rEx773", "0N70ZyFoz8n50". The digit gate spares pure-letter titles (Lamune, Gunbuster). Prod's single largest junk class (34k+ rows).
+mid_alnum_token	heuristic	bare_alnum_token	{"min_len":16,"max_len":19,"require_digit":true}	Bare 16-19 char token, same digit+letter gate — "pE9F9wMjNxWZqpq9V". Fills the gap between short_alnum_token and single_token_20.
+js_template_leak	regex	\$\{[^}]*\}	{}	Unevaluated ${...} template literal — a poster's templating engine leaked its source. Real titles never contain ${...}.
+single_token_20	heuristic	bare_alnum_token	{"min_len":20}	A single pure-alnum token of 20+ chars with no separators: dashless UUIDs, 40/56/60-char hashes, base64 blobs. No digit gate — no real title is a bare 20+ run at all.
+long_digit_run	regex	[0-9]{10,}	{}	10+ consecutive digits = a Unix timestamp or hash fragment. Years are 4 digits, episode numbers <=4, IMDb ids are tt-prefixed.
+high_special_chars	heuristic	high_special_chars	{"min_len":12}	15%+ of the title is spam-grade punctuation. Release separators (.-_()[] space) and angle brackets are allowed — <<<Nimue>>> signature wrapping is legitimate.
+random_words	heuristic	random_words	{}	Random alnum words (8+ chars mixing digits and letters) make up 70%+ of the non-punct chars — one 12+ char word or several totalling 16+.
+word_word_hex	regex	^[a-z]+[ _][a-z]+[ _][0-9a-f]{8}([ _][a-z]+)?(\.[a-z0-9]+)?$	{"max_size_bytes":10485760}	"node_one_7bd4f69e" lowercase word/word/8-hex spam, gated under 10 MiB so a big legit release that coincidentally matches is spared.
+tiny_no_space	heuristic	tiny_no_space	{"max_size_bytes":790000}	Any no-whitespace title under ~790 KB — the May-2026 6.8M-row spam wave, uniformly ~740 KB. Legit tiny NZBs always have spaces in their titles.
+short_lowercase_token	regex	^[a-z]{12,20}$	{"max_size_bytes":1048576}	12-20 char pure-lowercase bare token under 1 MiB — "wardcfsejnodpdci" bot variants sitting just above the tiny_no_space cutoff.
+long_no_space	heuristic	long_no_space	{"min_len":60,"max_size_bytes":2097152}	60+ chars, no whitespace, 5+ spam-grade punct, small payload. The punct guard spares legit dot-separated names like Beyonce.-.I.Am... (at real sizes).
+chaotic_specials_small	heuristic	chaotic_specials	{"min_len":30,"max_size_bytes":2097152}	The whitespace-allowed sibling: 30+ chars WITH whitespace, 3+ spam-grade punct, small payload — the ")yury0Wgt... k2cwcKzuD!" 723 KB wave.
+short_random_token	regex	^[A-Za-z0-9]{8,19}$	{"require_upper":true,"require_lower":true,"sized_only":true}	Bare 8-19 char mixed-case alnum token, ANY size — production caught "XIfhyEYhXpZaXTVK" at 433 MB; a bare mixed-case run has no legit release-naming analogue.
+under_1mib	heuristic	size_catchall	{"max_size_bytes":1048576}	Catchall: anything under 1 MiB that survived every specific rule. Anime-only catalog — a sub-1 MiB single-file NZB is effectively never legitimate. Operator-approved breadth over precision.
+under_5mib	heuristic	size_catchall	{"min_size_bytes":1048576,"max_size_bytes":5242880}	Catchall for the 1-5 MiB band, where the word_word_hex bot wave lives. Ordered last so the specific rules above get attribution credit.

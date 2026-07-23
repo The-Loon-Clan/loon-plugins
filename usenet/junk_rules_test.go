@@ -9,20 +9,28 @@ func TestEmbeddedJunkRulesParse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("shipped seed/junk_rules.tsv does not parse: %v", err)
 	}
-	if len(specs) < 6 {
-		t.Fatalf("got %d rules, want the full shipped set", len(specs))
+	// The COMPLETE prod pattern set, in prod's evaluation order. This list is
+	// the parity contract: a prod rule missing here is a regression to the
+	// partial lift that let "0N70ZyFoz8n50" into the index on the first live
+	// crawl, and order matters because attribution is first-match and the
+	// size-band catchalls must run last.
+	wantOrder := []string{
+		"long_alnum_run", "multi_seg_random", "uuid", "software_warez",
+		"template_token", "dot_sep_obfuscated", "rot13_archive",
+		"repeated_short_tok", "alnum_blob_ext", "short_alnum_token",
+		"mid_alnum_token", "js_template_leak", "single_token_20",
+		"long_digit_run", "high_special_chars", "random_words",
+		"word_word_hex", "tiny_no_space", "short_lowercase_token",
+		"long_no_space", "chaotic_specials_small", "short_random_token",
+		"under_1mib", "under_5mib",
 	}
-	want := map[string]string{
-		"long_alnum_run":        "regex",
-		"bare_mixed_case_token": "heuristic",
-		"multi_segment_chaos":   "heuristic",
-		"uuid":                  "regex",
-		"template_token":        "regex",
-		"dot_sep_obfuscated":    "regex",
+	if len(specs) != len(wantOrder) {
+		t.Fatalf("got %d rules, want %d (the full prod set)", len(specs), len(wantOrder))
 	}
-	got := map[string]string{}
-	for _, s := range specs {
-		got[s.Name] = s.Kind
+	for i, s := range specs {
+		if s.Name != wantOrder[i] {
+			t.Errorf("rule %d = %q, want %q (prod evaluation order)", i, s.Name, wantOrder[i])
+		}
 		if s.Notes == "" {
 			t.Errorf("rule %q has no notes — every shipped rule should say why it exists", s.Name)
 		}
@@ -30,9 +38,11 @@ func TestEmbeddedJunkRulesParse(t *testing.T) {
 			t.Errorf("rule %q ships disabled", s.Name)
 		}
 	}
-	for name, kind := range want {
-		if got[name] != kind {
-			t.Errorf("rule %q: kind = %q, want %q", name, got[name], kind)
+	// The catchalls and every other size-banded rule must be inert without a
+	// size, or ingest would junk everything (ingest never knows the size).
+	for _, s := range specs {
+		if (s.Params.sized() || s.Params.SizedOnly) && s.Name == "long_alnum_run" {
+			t.Errorf("unsized workhorse rule %q acquired a size gate", s.Name)
 		}
 	}
 	if _, err := newJunkMatcher(specs); err != nil {
@@ -49,7 +59,7 @@ func TestWhichJunkRuleNames(t *testing.T) {
 		want  string
 	}{
 		{"Pzz8CzBPoBNsCu8oRPpDYwESRkpq5UU3jGlz", "long_alnum_run"},
-		{"aBcDeFgHiJkLmNoP", "bare_mixed_case_token"}, // 16 chars, no separator
+		{"aBcDeFgHiJkLmNoP", ""}, // 16 no-digit bare token: prod only flags this on the SIZED path
 		{"550e8400-e29b-41d4-a716-446655440000", "uuid"},
 		{"My {total} Release", "template_token"},
 		// 16-char run is under the 24 threshold, and the "." is a separator so the
@@ -120,22 +130,22 @@ func TestJunkParamsTune(t *testing.T) {
 	title := "aBcDeFgHiJkL" // 12 chars, mixed case, no separator
 
 	strict, err := newJunkMatcher([]junkRuleSpec{
-		{Name: "bare", Kind: "heuristic", Rule: "bare_token", Params: junkParams{MinLen: 10}, Enabled: true},
+		{Name: "bare", Kind: "heuristic", Rule: "bare_alnum_token", Params: junkParams{MinLen: 10}, Enabled: true},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strict.match(title); got != "bare" {
+	if got := strict.match(title, title, 0); got != "bare" {
 		t.Errorf("min_len=10: match = %q, want %q", got, "bare")
 	}
 
 	lax, err := newJunkMatcher([]junkRuleSpec{
-		{Name: "bare", Kind: "heuristic", Rule: "bare_token", Params: junkParams{MinLen: 20}, Enabled: true},
+		{Name: "bare", Kind: "heuristic", Rule: "bare_alnum_token", Params: junkParams{MinLen: 20}, Enabled: true},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := lax.match(title); got != "" {
+	if got := lax.match(title, title, 0); got != "" {
 		t.Errorf("min_len=20: match = %q, want no match", got)
 	}
 }

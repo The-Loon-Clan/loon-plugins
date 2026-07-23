@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -16,22 +15,39 @@ import (
 func (s *PGStore) seedJunkRules(ctx context.Context, specs []junkRuleSpec) (int, error) {
 	n := 0
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		for _, sp := range specs {
+		// Retire seed rows superseded by the full prod port: the partial lift's
+		// bare_mixed_case_token (prod has no such rule — short/mid_alnum_token
+		// and short_random_token cover its ground with prod's exact gates) and
+		// multi_segment_chaos (renamed to prod's multi_seg_random). Only
+		// source='seed' rows: an operator-authored rule is never touched.
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM junk_rules WHERE source = 'seed'
+			    AND name IN ('bare_mixed_case_token', 'multi_segment_chaos')`); err != nil {
+			return err
+		}
+		for i, sp := range specs {
+			// Positions follow the shipped order; the size-band catchalls sit at
+			// 900+ so operator rules (default 500) keep attribution over them.
+			pos := (i + 1) * 10
+			if sp.Rule == "size_catchall" {
+				pos = 900 + i
+			}
 			params, err := json.Marshal(sp.Params)
 			if err != nil {
 				return fmt.Errorf("rule %q: %w", sp.Name, err)
 			}
 			res, err := tx.ExecContext(ctx,
-				`INSERT INTO junk_rules (name, kind, rule, params, enabled, source, notes)
-				 VALUES ($1,$2,$3,$4,TRUE,'seed',$5)
+				`INSERT INTO junk_rules (name, kind, rule, params, enabled, source, notes, position)
+				 VALUES ($1,$2,$3,$4,TRUE,'seed',$5,$6)
 				 ON CONFLICT (name) DO UPDATE
 				   SET kind = EXCLUDED.kind,
 				       rule = EXCLUDED.rule,
 				       params = EXCLUDED.params,
 				       notes = EXCLUDED.notes,
+				       position = EXCLUDED.position,
 				       updated_at = now()
 				 WHERE junk_rules.source = 'seed'`,
-				sp.Name, sp.Kind, sp.Rule, string(params), sp.Notes)
+				sp.Name, sp.Kind, sp.Rule, string(params), sp.Notes, pos)
 			if err != nil {
 				return fmt.Errorf("rule %q: %w", sp.Name, err)
 			}
@@ -61,7 +77,7 @@ func (s *PGStore) junkRules(ctx context.Context) ([]junkRuleSpec, error) {
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.SelectContext(ctx, &rows,
 			`SELECT name, kind, rule, params, enabled, notes, source
-			   FROM junk_rules ORDER BY source, name`)
+			   FROM junk_rules ORDER BY position, name`)
 	})
 	if err != nil {
 		return nil, err
@@ -83,14 +99,15 @@ func (s *PGStore) junkRules(ctx context.Context) ([]junkRuleSpec, error) {
 }
 
 // junkFingerprint is a cheap change-detector so we only recompile the regex set
-// when the rules actually changed.
+// when the rules actually changed. ORDER-SENSITIVE on purpose: evaluation order
+// is part of the semantics now (attribution, and the catchalls running last),
+// so a reorder must count as a change.
 func junkFingerprint(specs []junkRuleSpec) string {
 	parts := make([]string, 0, len(specs))
-	for _, s := range specs {
+	for i, s := range specs {
 		p, _ := json.Marshal(s.Params)
-		parts = append(parts, fmt.Sprintf("%s|%s|%s|%s|%t", s.Name, s.Kind, s.Rule, p, s.Enabled))
+		parts = append(parts, fmt.Sprintf("%d|%s|%s|%s|%s|%t", i, s.Name, s.Kind, s.Rule, p, s.Enabled))
 	}
-	sort.Strings(parts)
 	return strings.Join(parts, "\n")
 }
 
