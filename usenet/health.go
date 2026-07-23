@@ -231,7 +231,7 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 	if err != nil {
 		// A blob we can't parse is a storage problem, not evidence about the
 		// articles — never let it downgrade a verdict.
-		p.core.Errors.Report(ctx, "usenet/health-parse", fmt.Errorf("nzb %d: %w", row.ID, err))
+		p.reportErr(ctx, "usenet/health-parse", fmt.Errorf("nzb %d: %w", row.ID, err))
 		return "", 0, 0, 0, healthSkipPermanent
 	}
 	total := len(segs.Data) + len(segs.Par2)
@@ -288,7 +288,7 @@ type healthBackend interface {
 	touch(ctx context.Context, id int64) error
 }
 
-type internalHealth struct{ st Store }
+type internalHealth struct{ st HealthStore }
 
 func (b internalHealth) candidates(ctx context.Context, limit, recheckDays, minAgeHours int) ([]healthRow, error) {
 	return b.st.nzbsNeedingHealthCheck(ctx, limit, recheckDays, minAgeHours)
@@ -320,14 +320,15 @@ func (b hostHealth) touch(ctx context.Context, id int64) error {
 	return b.hs.TouchHealthChecked(ctx, id)
 }
 
-// resolveHealthBackend mirrors storeRelease's sink rule: host mode without the
-// capability refuses loudly — silently sweeping the plugin's (empty) table
-// while the host catalogue rots unchecked is the worse failure.
+// resolveHealthBackend mirrors resolveSink: host mode without the capability
+// refuses loudly — silently sweeping the plugin's (empty) table while the host
+// catalogue rots unchecked is the worse failure.
 func (p *Plugin) resolveHealthBackend() (healthBackend, error) {
 	if p.cfg.Sink == "host" {
 		hs, ok := pluginapi.LookupReleaseHealthStore(p.core)
 		if !ok {
-			return nil, fmt.Errorf("sink=host but no %q capability is registered", pluginapi.UsenetHealthStoreName)
+			return nil, fmt.Errorf(
+				"sink=host but this host registered no ReleaseHealthStore — deploy a host build that wires the health store, or set plugins.usenet.sink=internal for a standalone catalogue")
 		}
 		return hostHealth{hs: hs}, nil
 	}
@@ -361,25 +362,25 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 	pool, err := p.ensurePool(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, errNoServer) {
-			p.healthJob.Log("no server configured")
+			p.healthJob.Log("no server configured — add one in the admin wizard")
 			p.healthJob.SetIdle(p.nextHealth(cfg))
 			return
 		}
 		p.healthJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/health-pool", err)
+		p.reportErr(ctx, "usenet/health-pool", err)
 		return
 	}
 
 	backend, err := p.resolveHealthBackend()
 	if err != nil {
 		p.healthJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/health-backend", err)
+		p.reportErr(ctx, "usenet/health-backend", err)
 		return
 	}
 	rows, err := backend.candidates(ctx, cfg.HealthBatchSize, cfg.HealthRecheckDays, cfg.HealthMinAgeHours)
 	if err != nil {
 		p.healthJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/health-candidates", err)
+		p.reportErr(ctx, "usenet/health-candidates", err)
 		return
 	}
 	if len(rows) == 0 {
@@ -399,7 +400,7 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 		switch outcome {
 		case healthWritten:
 			if err := backend.setVerdict(ctx, row.ID, verdict, total, missing, par2); err != nil {
-				p.core.Errors.Report(ctx, "usenet/health-update", fmt.Errorf("nzb %d: %w", row.ID, err))
+				p.reportErr(ctx, "usenet/health-update", fmt.Errorf("nzb %d: %w", row.ID, err))
 				continue
 			}
 			checked++
@@ -408,7 +409,7 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 			// Bad data, not bad luck. Stamp it so an unreadable row doesn't sit at
 			// the head of the queue forever, but leave its verdict untouched.
 			if err := backend.touch(ctx, row.ID); err != nil {
-				p.core.Errors.Report(ctx, "usenet/health-touch", err)
+				p.reportErr(ctx, "usenet/health-touch", err)
 			}
 			unreadable++
 		case healthSkipTransient:

@@ -32,7 +32,7 @@ type Config struct {
 	BackfillBatchesPerRun int  `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 25)
 	BackfillIntervalMin   int  `json:"backfill_interval_min"`    // backfill cadence (default 5)
 
-	// Staging backend (USENET-STAGING-MODES.md). Boot config, not a live knob:
+	// Staging backend (README.md). Boot config, not a live knob:
 	// switching backends at runtime would strand staged data.
 	Staging string `json:"staging"` // pg (durable, default) | redis (fast, best-effort)
 

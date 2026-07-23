@@ -17,7 +17,7 @@ import (
 // redisStaging is the fast, best-effort backend — a faithful lift of prod's
 // Redis assembly pipeline (indexer-site pkg/storage/postgres/article_staging.go
 // + redis_articles.go), adapted to the plugin's stagedArticle type and go-redis
-// v9. See USENET-STAGING-MODES.md.
+// v9. See README.md.
 //
 // Unlike pgStaging, completeness is detected inline at Stage time (a set that
 // just completed is pushed to nzb:ready) and hopeless sets are evicted on the
@@ -58,8 +58,8 @@ func boolStr(b bool) string {
 }
 
 // groupHashKey is the 16-hex key suffix for a (group, base_subject) pair. It is
-// distinct from assemble.go's hashKey (the NZB content_hash) — this one keys the
-// transient Redis set, that one keys the durable nzbs row.
+// distinct from assemble.go's contentHashArticles (the NZB content_hash) — this
+// one keys the transient Redis set, that one keys the durable nzbs row.
 func groupHashKey(group, base string) string {
 	d := sha256.New()
 	d.Write([]byte(group))

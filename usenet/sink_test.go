@@ -147,7 +147,7 @@ func TestStoreReleaseHostMode(t *testing.T) {
 		PostedAt: time.Now(), NZBGz: []byte{1}, Segments: 1,
 	}
 
-	// Direct-dispatch through the same code path storeRelease uses for a
+	// Direct-dispatch through the same code path the resolved releaseSink uses for a
 	// resolved sink (the capability lookup itself is loon-core plumbing,
 	// exercised by the demo).
 	id, created, err := sink.IngestAssembled(context.Background(), rel)

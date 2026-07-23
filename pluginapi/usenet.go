@@ -245,27 +245,41 @@ const UsenetReleaseSinkName = "usenet.releasesink"
 // junk filtering, category hinting — has already run in the plugin, mirroring
 // where prod's assembler runs the same checks.
 type AssembledRelease struct {
-	Title       string // extracted + UTF-8-sanitised release title
-	BaseSubject string // the raw grouping key, for diagnostics
-	Group       string
-	Poster      string
+	Title  string // extracted + UTF-8-sanitised release title
+	Group  string
+	Poster string
 	// ContentHash identifies the CONTENT: hex of sha256 over the sorted
 	// segment message-ids (prod's scheme). Two posts of the same title with
 	// different articles hash differently; the same articles always collide.
-	ContentHash  string
-	SizeBytes    int64
-	PostedAt     time.Time // earliest article date; zero when unknown
-	NZBGz        []byte    // gzipped NZB XML
-	Segments     int
-	CategoryHint string // explicit title tag or comic-archive sniff; "" = none
+	// This is the dedup key — a sink SHOULD store it and use it to reject
+	// duplicates (e.g. ON CONFLICT (content_hash) DO NOTHING).
+	ContentHash string
+	SizeBytes   int64
+	PostedAt    time.Time // earliest article date; zero when unknown
+	NZBGz       []byte    // gzipped NZB XML
+	// CategoryHint is a FREE-TEXT category label the host maps into its own
+	// taxonomy; "" = no hint. The plugin emits either the explicit bracket tag
+	// off the title or the literal "Manga" (comic-archive sniff). It is a hint,
+	// not an id — the host decides what it means. (In internal-sink mode the
+	// plugin ignores this and categorises via its own catalog plugin instead.)
+	CategoryHint string
+	// BaseSubject and Segments are INFORMATIONAL — the plugin sets them (the raw
+	// grouping key; the segment count) but neither sink path reads them. Present
+	// for a host that wants them for diagnostics or a UI.
+	BaseSubject string
+	Segments    int
 }
 
 // ReleaseSink stores an assembled release in the host's NZB domain.
 //
-// Contract: (id, false, nil) means the release was a duplicate — the plugin
-// clears its staging and moves on. An error means the host could not store it —
-// the plugin leaves the set staged and retries on a later pass, so a transient
-// host failure never loses a release.
+// Contract:
+//   - success is (id > 0, true, nil) — the id is INFORMATIONAL (the current
+//     plugin ignores it; return your row id or 0);
+//   - (_, false, nil) means the release was a DUPLICATE — the plugin clears its
+//     staging and moves on;
+//   - a non-nil error means the host could not store it — the plugin leaves the
+//     set staged and retries on a later pass, so a transient host failure never
+//     loses a release. Dedup on ContentHash is what makes that retry safe.
 type ReleaseSink interface {
 	IngestAssembled(ctx context.Context, r AssembledRelease) (id int64, created bool, err error)
 }
@@ -302,12 +316,21 @@ type HealthCandidate struct {
 // which is what preserves a definitive prior label without the host having to
 // expose it).
 type ReleaseHealthStore interface {
-	// HealthCandidates returns up to limit releases due a check: never checked
-	// first, then not checked within recheckDays; releases newer than
-	// minAgeHours are excluded (propagation guard).
+	// HealthCandidates returns up to limit releases due a check. Ordering
+	// (a SHOULD, because it changes which losses are found first): never-checked
+	// rows first, then rows not checked within recheckDays; among never-checked
+	// rows, OLDEST POSTED CONTENT first — old articles are the likeliest to have
+	// expired, so checking them first surfaces real losses soonest. Releases
+	// newer than minAgeHours are excluded (a propagation guard: a fresh upload
+	// may not have reached every server yet, and STATting it would wrongly read
+	// as missing).
 	HealthCandidates(ctx context.Context, limit, recheckDays, minAgeHours int) ([]HealthCandidate, error)
-	// SetHealthVerdict records a trustworthy verdict (healthy|broken|dead) with
-	// its segment counts, stamping the checked-at time.
+	// SetHealthVerdict records a trustworthy verdict and stamps the checked-at
+	// time. status is one of "healthy" | "broken" | "dead" — store it verbatim.
+	// The three counts are, precisely:
+	//   total   — data + PAR2 segments in the release
+	//   missing — missing DATA segments only (PAR2 losses are excluded)
+	//   par2    — TOTAL PAR2 segment count (not the missing count)
 	SetHealthVerdict(ctx context.Context, id int64, status string, total, missing, par2 int) error
 	// TouchHealthChecked stamps checked-at WITHOUT changing the verdict — used
 	// for unreadable blobs so they stop jamming the queue head.

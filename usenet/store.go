@@ -14,11 +14,9 @@ import (
 	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
-// store is the usenet-schema data layer. Every method runs through the
-// SchemaDB's WithTx, which scopes search_path to "usenet" so unqualified table
-// names resolve into the plugin's own schema.
-// PGStore is the Postgres implementation of Store (schema-scoped via SchemaDB;
-// every method runs through WithTx so search_path resolves the usenet schema).
+// PGStore is the Postgres implementation of Store. Every method runs through
+// the SchemaDB's WithTx, which scopes search_path to "usenet" so unqualified
+// table names resolve into the plugin's own schema.
 type PGStore struct{ db *core.SchemaDB }
 
 // NewPGStore builds the Postgres-backed store over a plugin-scoped SchemaDB.
@@ -41,20 +39,7 @@ func (s *PGStore) queryReleases(ctx context.Context, cond, arg string, limit int
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	type row struct {
-		ID         int64        `db:"id"`
-		Title      string       `db:"title"`
-		Size       int64        `db:"size"`
-		Posted     sql.NullTime `db:"posted_at"`
-		Group      string       `db:"group_name"`
-		Resolution string       `db:"resolution"`
-		Source     string       `db:"source"`
-		Codec      string       `db:"video_codec"`
-		Audio      string       `db:"audio"`
-		Language   string       `db:"language"`
-		CategoryID int          `db:"category_id"`
-	}
-	var rows []row
+	var rows []releaseRow
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		// sqllint:allow cond is a fixed WHERE fragment from the two internal callers (searchNzbs/browseNzbs); the search value flows through $1
 		return tx.SelectContext(ctx, &rows,
@@ -67,18 +52,7 @@ func (s *PGStore) queryReleases(ctx context.Context, cond, arg string, limit int
 	if err != nil {
 		return nil, err
 	}
-	out := make([]pluginapi.Release, len(rows))
-	for i, r := range rows {
-		out[i] = pluginapi.Release{
-			ID: r.ID, Title: r.Title, Size: r.Size, Group: r.Group,
-			Resolution: r.Resolution, Source: r.Source, Codec: r.Codec,
-			Audio: r.Audio, Language: r.Language, CategoryID: r.CategoryID,
-		}
-		if r.Posted.Valid {
-			out[i].Posted = r.Posted.Time
-		}
-	}
-	return out, nil
+	return releasesToAPI(rows), nil
 }
 
 // feedReleases pages completed releases for the Newznab feed: optional title
@@ -100,20 +74,7 @@ func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, li
 		}
 		catClause = " AND category_id IN (" + strings.Join(parts, ",") + ")"
 	}
-	type row struct {
-		ID         int64        `db:"id"`
-		Title      string       `db:"title"`
-		Size       int64        `db:"size"`
-		Posted     sql.NullTime `db:"posted_at"`
-		Group      string       `db:"group_name"`
-		Resolution string       `db:"resolution"`
-		Source     string       `db:"source"`
-		Codec      string       `db:"video_codec"`
-		Audio      string       `db:"audio"`
-		Language   string       `db:"language"`
-		CategoryID int          `db:"category_id"`
-	}
-	var rows []row
+	var rows []releaseRow
 	var total int
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		// sqllint:allow catClause is a literal built from int-only category ids (strconv.Itoa); all values flow through $N
@@ -134,18 +95,7 @@ func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, li
 	if err != nil {
 		return nil, 0, err
 	}
-	out := make([]pluginapi.Release, len(rows))
-	for i, r := range rows {
-		out[i] = pluginapi.Release{
-			ID: r.ID, Title: r.Title, Size: r.Size, Group: r.Group,
-			Resolution: r.Resolution, Source: r.Source, Codec: r.Codec,
-			Audio: r.Audio, Language: r.Language, CategoryID: r.CategoryID,
-		}
-		if r.Posted.Valid {
-			out[i].Posted = r.Posted.Time
-		}
-	}
-	return out, total, nil
+	return releasesToAPI(rows), total, nil
 }
 
 // stats returns crawl progress: total NZBs, total staged articles, and per
@@ -250,8 +200,9 @@ func (s *PGStore) groups(ctx context.Context) ([]pluginapi.GroupInfo, error) {
 	return out, nil
 }
 
-// detailRow is a release row with its gzipped NZB blob, for the detail page.
-type detailRow struct {
+// releaseRow is the scan shape for a completed release across search, browse,
+// and the Newznab feed — the columns pluginapi.Release exposes.
+type releaseRow struct {
 	ID         int64        `db:"id"`
 	Title      string       `db:"title"`
 	Size       int64        `db:"size"`
@@ -263,7 +214,32 @@ type detailRow struct {
 	Audio      string       `db:"audio"`
 	Language   string       `db:"language"`
 	CategoryID int          `db:"category_id"`
-	Data       []byte       `db:"nzb_data"`
+}
+
+func (r releaseRow) toAPI() pluginapi.Release {
+	rel := pluginapi.Release{
+		ID: r.ID, Title: r.Title, Size: r.Size, Group: r.Group,
+		Resolution: r.Resolution, Source: r.Source, Codec: r.Codec,
+		Audio: r.Audio, Language: r.Language, CategoryID: r.CategoryID,
+	}
+	if r.Posted.Valid {
+		rel.Posted = r.Posted.Time
+	}
+	return rel
+}
+
+func releasesToAPI(rows []releaseRow) []pluginapi.Release {
+	out := make([]pluginapi.Release, len(rows))
+	for i, r := range rows {
+		out[i] = r.toAPI()
+	}
+	return out
+}
+
+// detailRow is a release row with its gzipped NZB blob, for the detail page.
+type detailRow struct {
+	releaseRow
+	Data []byte `db:"nzb_data"`
 }
 
 // releaseByID loads one completed release + its NZB blob; nil if absent.
@@ -275,7 +251,7 @@ func (s *PGStore) releaseByID(ctx context.Context, id int64) (*detailRow, error)
 			        resolution, source, video_codec, audio, language, category_id, nzb_data
 			 FROM nzbs WHERE id = $1 AND status = 'completed'`, id)
 	})
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -304,7 +280,7 @@ func (s *PGStore) getServer(ctx context.Context) (pluginapi.Server, bool, error)
 		e := tx.QueryRowContext(ctx,
 			`SELECT host, port, tls, username, password, enabled, backbone FROM servers ORDER BY id LIMIT 1`).
 			Scan(&srv.Host, &srv.Port, &srv.TLS, &srv.Username, &srv.Password, &srv.Enabled, &srv.Backbone)
-		if e == sql.ErrNoRows {
+		if errors.Is(e, sql.ErrNoRows) {
 			return nil
 		}
 		if e != nil {

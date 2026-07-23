@@ -10,7 +10,7 @@ import (
 // stagingStore is the transient article-assembly buffer — the seam that lets a
 // durable Postgres backend (pgStaging, today) and a best-effort Redis backend
 // (redisStaging, Phase B — a verbatim lift of prod's pipeline) be swapped by
-// config (plugins.usenet.staging: pg|redis). See USENET-STAGING-MODES.md.
+// config (plugins.usenet.staging: pg|redis). See README.md.
 //
 // The durable NZB output (the nzbs table) is written by PGStore in BOTH modes;
 // only this buffer differs. The method set is exactly the ingest path
@@ -71,7 +71,7 @@ var _ stagingStore = (*pgStaging)(nil)
 
 // newStaging selects the staging backend by config mode. `redis` fails fast when
 // the host has no Redis (core.Redis nil) rather than silently running pg — a
-// mode/behavior mismatch is worse than a boot error (USENET-STAGING-MODES.md).
+// mode/behavior mismatch is worse than a boot error (README.md).
 func newStaging(mode string, pg *PGStore, redisSvc core.RedisService, limits func(context.Context) (int, int)) (stagingStore, error) {
 	switch mode {
 	case "", "pg":

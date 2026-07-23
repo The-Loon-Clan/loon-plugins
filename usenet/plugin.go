@@ -7,8 +7,7 @@
 // Staging (the transient article-assembly buffer) is pluggable behind the
 // stagingStore seam: durable Postgres by default (never-lost, the base site's
 // mode), or prod's Redis pipeline lifted verbatim via staging: redis (fast,
-// best-effort) when the host has Redis. See USENET-PLUGIN.md and, for the seam,
-// USENET-STAGING-MODES.md.
+// best-effort) when the host has Redis. See README.md.
 package usenet
 
 import (

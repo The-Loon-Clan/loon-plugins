@@ -221,21 +221,21 @@ var staticReleaseExts = []string{
 // "f2c8b393559540cfb9e33471cfda340c.par2" reduces to the bare hash before the
 // pattern checks run. Repeats until stable (handles ".part01.rar" etc.).
 func stripReleaseExts(s string) string {
-	s = trimSpace(s)
+	s = strings.TrimSpace(s)
 	for {
 		n := len(s)
 		if n == 0 {
 			return s
 		}
 		if next := reReleaseExtDynamic.ReplaceAllString(s, ""); next != s {
-			s = trimSpace(next)
+			s = strings.TrimSpace(next)
 			continue
 		}
 		stripped := false
 		low := toLowerTail(s)
 		for _, ext := range staticReleaseExts {
-			if hasSuffix(low, ext) {
-				s = trimSpace(s[:n-len(ext)])
+			if strings.HasSuffix(low, ext) {
+				s = strings.TrimSpace(s[:n-len(ext)])
 				stripped = true
 				break
 			}
@@ -265,15 +265,15 @@ func whichJunkRule(title string) string { return whichJunkRuleSized(title, 0) }
 func whichJunkRuleSized(title string, sizeBytes int64) string {
 	// Full normalisation for the title-shape rules: extensions peeled, then
 	// wrapping decoration posters put around hashes: 'x', {x}, [x], - x.
-	t := trimSpace(stripReleaseExts(title))
-	t = trimCut(t, "'\"{}[]- ")
+	t := strings.TrimSpace(stripReleaseExts(title))
+	t = strings.Trim(t, "'\"{}[]- ")
 	if len(t) == 0 {
 		return "empty" // nothing left after stripping
 	}
 	// Light normalisation for the sized rules — prod's sized section does NOT
 	// strip extensions (word_word_hex tolerates one on purpose) and does not
 	// trim dashes/spaces beyond the outer whitespace.
-	ts := strings.Trim(trimSpace(title), "'\"{}[]")
+	ts := strings.Trim(strings.TrimSpace(title), "'\"{}[]")
 	return activeJunk.Load().match(t, ts, sizeBytes)
 }
 
@@ -339,13 +339,13 @@ func runJunkHeuristic(id, t string, p junkParams) bool {
 // gatesPass applies the optional character-class requirements. A rule with no
 // gates passes trivially.
 func gatesPass(t string, p junkParams) bool {
-	if p.RequireUpper && !containsAny(t, 'A', 'Z') {
+	if p.RequireUpper && !hasByteInRange(t, 'A', 'Z') {
 		return false
 	}
-	if p.RequireLower && !containsAny(t, 'a', 'z') {
+	if p.RequireLower && !hasByteInRange(t, 'a', 'z') {
 		return false
 	}
-	if p.RequireDigit && !containsAny(t, '0', '9') {
+	if p.RequireDigit && !hasByteInRange(t, '0', '9') {
 		return false
 	}
 	return true
@@ -554,16 +554,14 @@ func multiSegmentChaos(t string, p junkParams) bool {
 	return chaotic >= minChaotic
 }
 
-// ── small string helpers (avoid importing strings twice across files) ──
+// ── small string helpers ──
 
 func isAlnum(c rune) bool {
 	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
-func trimSpace(s string) string { return strings.TrimSpace(s) }
-
-func trimCut(s, cutset string) string { return strings.Trim(s, cutset) }
-
+// toLowerTail lowercases only the last 24 bytes — enough to match any release
+// extension without allocating a lowercase copy of a long subject.
 func toLowerTail(s string) string {
 	const tail = 24
 	if len(s) > tail {
@@ -572,24 +570,14 @@ func toLowerTail(s string) string {
 	return strings.ToLower(s)
 }
 
-func hasSuffix(s, suf string) bool { return strings.HasSuffix(s, suf) }
-
-func hasSeparator(s string) bool {
-	return strings.ContainsAny(s, " .-_[](){}")
-}
-
-func containsAny(s string, lo, hi byte) bool {
+// hasByteInRange reports whether any byte of s falls in [lo, hi]. Byte-range,
+// NOT strings.ContainsAny (which takes a char set) — the gate checks are
+// character-class membership (has-an-uppercase, has-a-digit).
+func hasByteInRange(s string, lo, hi byte) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] >= lo && s[i] <= hi {
 			return true
 		}
 	}
 	return false
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

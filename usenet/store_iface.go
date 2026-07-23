@@ -9,9 +9,9 @@ import (
 
 // Store is usenet's persistence contract. It's segmented into concern-based
 // interfaces (interface-segregation) so a consumer can depend on only the slice
-// it uses — e.g. the assembler needs AssemblerStore, the backfiller
-// BackfillStore — and the read tier could one day bind ReleaseReader to a
-// replica. The plugin field holds the union; PGStore is the Postgres impl.
+// it uses — internalHealth (health.go) takes just HealthStore, and the read tier
+// could one day bind ReleaseReader to a replica. The plugin field holds the
+// union; PGStore is the Postgres impl.
 //
 // The methods are package-private on purpose: this is an internal contract, so
 // only an in-package impl (PGStore) or test double can satisfy it.
@@ -21,6 +21,8 @@ type Store interface {
 	ServerStore
 	SettingStore
 	BackfillStore
+	BlacklistStore
+	ActivityStore
 	AssemblerStore
 	MaintenanceStore
 	JunkStore
@@ -87,8 +89,11 @@ type BackfillStore interface {
 	backfillGapsFor(ctx context.Context, backbone, group string, low, high int64) ([]articleRange, error)
 	coveredRangesFor(ctx context.Context, backbone, group string) ([]articleRange, error)
 	allCoveredRanges(ctx context.Context) (map[coverKey][]articleRange, error)
+}
 
-	// blacklist + filter-hit counters (blacklist_store.go)
+// BlacklistStore is the operator blacklist + the per-rule filter-hit counters
+// (blacklist_store.go).
+type BlacklistStore interface {
 	blacklistRules(ctx context.Context) ([]blacklistRule, error)
 	addBlacklistRule(ctx context.Context, pattern, field string) error
 	deleteBlacklistRule(ctx context.Context, id int64) error
@@ -96,8 +101,10 @@ type BackfillStore interface {
 	recordFilterHits(ctx context.Context, hits map[filterHitKey]*filterHitVal) error
 	filterHitRows(ctx context.Context) ([]filterHitRow, error)
 	resetFilterHits(ctx context.Context) error
+}
 
-	// live activity (dashboard.go)
+// ActivityStore is the live-activity readout on the crawlers page (dashboard.go).
+type ActivityStore interface {
 	recentArticles(ctx context.Context, limit int) ([]recentArticle, error)
 	recentNZBs(ctx context.Context, limit int) ([]recentNZB, error)
 }

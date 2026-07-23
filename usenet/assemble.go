@@ -47,10 +47,20 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 	p.reloadBlacklist(ctx)
 	defer p.flushFilterHits(ctx)
 
+	// Resolve the sink ONCE for the pass (mirrors resolveHealthBackend): a
+	// host-misconfigured pass fails here with one error instead of flooding the
+	// error log with one per candidate.
+	sink, err := p.resolveSink()
+	if err != nil {
+		p.buildJob.SetError(err.Error())
+		p.reportErr(ctx, "usenet/build-sink", err)
+		return
+	}
+
 	keys, err := p.staging.candidateGroups(ctx, 500)
 	if err != nil {
 		p.buildJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/build-scan", err)
+		p.reportErr(ctx, "usenet/build-scan", err)
 		return
 	}
 	built := 0
@@ -60,7 +70,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		}
 		arts, err := p.staging.groupArticles(ctx, k.Group, k.Base)
 		if err != nil {
-			p.core.Errors.Report(ctx, "usenet/build-load", err)
+			p.reportErr(ctx, "usenet/build-load", err)
 			continue
 		}
 		if len(arts) == 0 || !isComplete(arts) {
@@ -102,7 +112,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		}
 		gz, err := gzipBytes(xmlBytes)
 		if err != nil {
-			p.core.Errors.Report(ctx, "usenet/build-gzip", err)
+			p.reportErr(ctx, "usenet/build-gzip", err)
 			continue
 		}
 		size, posted := summarize(arts)
@@ -113,7 +123,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			SizeBytes:   size, PostedAt: posted,
 			NZBGz: gz, Segments: len(arts), CategoryHint: cat,
 		}
-		created, err := p.storeRelease(ctx, rel)
+		created, err := sink.store(ctx, rel)
 		if err != nil {
 			// Storage failed — leave the set staged so a later pass retries.
 			// A transient sink outage must never lose a release.
@@ -512,27 +522,45 @@ func classifyRelease(base string, arts []stagedArticle) (title, cat, junkRule st
 	return title, cat, "", false
 }
 
-// storeRelease hands the release to the configured sink. Internal mode is the
-// plugin's own minimal nzbs table (standalone installs, the demo); host mode
-// looks up the ReleaseSink capability so a rich host owns storage — resolved
-// per pass, not at boot, because the host may register it after Provision.
-func (p *Plugin) storeRelease(ctx context.Context, rel pluginapi.AssembledRelease) (created bool, err error) {
-	if p.cfg.Sink == "host" {
-		sink, ok := pluginapi.LookupReleaseSink(p.core)
-		if !ok {
-			// Refuse loudly rather than quietly self-storing: an operator who
-			// configured host mode expects releases in the HOST's catalogue,
-			// and silently splitting them across two tables is far worse than
-			// a visible stall that retries.
-			return false, fmt.Errorf("sink=host but no %q capability is registered", pluginapi.UsenetReleaseSinkName)
-		}
-		_, created, err = sink.IngestAssembled(ctx, rel)
-		return created, err
-	}
-	return p.st.insertNzb(ctx, nzbRow{
+// releaseSink stores one assembled release. Internal mode is the plugin's own
+// minimal nzbs table (standalone installs, the demo); host mode is the
+// ReleaseSink capability, so a rich host owns storage. Sibling of healthBackend
+// — same two-implementation shape, and resolved ONCE per build pass (see
+// resolveSink) rather than per release, so a host-misconfigured pass fails with
+// a single error instead of one per candidate.
+type releaseSink interface {
+	store(ctx context.Context, rel pluginapi.AssembledRelease) (created bool, err error)
+}
+
+type internalSink struct{ p *Plugin }
+
+func (s internalSink) store(ctx context.Context, rel pluginapi.AssembledRelease) (bool, error) {
+	return s.p.st.insertNzb(ctx, nzbRow{
 		Title: rel.Title, Filename: safeFilename(rel.Title) + ".nzb",
 		Size: rel.SizeBytes, Group: rel.Group, ContentHash: rel.ContentHash,
 		Posted: rel.PostedAt, Data: rel.NZBGz, Tags: parseTags(rel.Title),
-		CategoryID: p.categoryFor(rel.Group, rel.Title),
+		CategoryID: s.p.categoryFor(rel.Group, rel.Title),
 	})
+}
+
+type hostSink struct{ sink pluginapi.ReleaseSink }
+
+func (s hostSink) store(ctx context.Context, rel pluginapi.AssembledRelease) (bool, error) {
+	_, created, err := s.sink.IngestAssembled(ctx, rel)
+	return created, err
+}
+
+// resolveSink mirrors resolveHealthBackend: host mode without the capability
+// refuses loudly — silently self-storing splits the catalogue across two tables,
+// far worse than a visible stall that retries once the host build is deployed.
+func (p *Plugin) resolveSink() (releaseSink, error) {
+	if p.cfg.Sink == "host" {
+		sink, ok := pluginapi.LookupReleaseSink(p.core)
+		if !ok {
+			return nil, fmt.Errorf(
+				"sink=host but this host registered no ReleaseSink — deploy a host build that wires the release sink, or set plugins.usenet.sink=internal for a standalone catalogue")
+		}
+		return hostSink{sink: sink}, nil
+	}
+	return internalSink{p: p}, nil
 }
