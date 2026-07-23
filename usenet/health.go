@@ -324,7 +324,7 @@ func (b hostHealth) touch(ctx context.Context, id int64) error {
 // refuses loudly — silently sweeping the plugin's (empty) table while the host
 // catalogue rots unchecked is the worse failure.
 func (p *Plugin) resolveHealthBackend() (healthBackend, error) {
-	if p.cfg.Sink == "host" {
+	if p.cfg.Sink == SinkHost {
 		hs, ok := pluginapi.LookupReleaseHealthStore(p.core)
 		if !ok {
 			return nil, fmt.Errorf(

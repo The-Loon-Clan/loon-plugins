@@ -2,6 +2,25 @@ package usenet
 
 import "strconv"
 
+// SinkMode selects where assembled releases are stored. It drives the
+// catalogue-splitting branch in resolveSink/resolveHealthBackend, so it is a
+// closed type rather than a raw string: a mistyped literal would silently fall
+// through to internal mode and split the catalogue across two tables.
+type SinkMode string
+
+const (
+	SinkInternal SinkMode = "internal" // the plugin's own nzbs table (default)
+	SinkHost     SinkMode = "host"     // the host's NZB domain, via the ReleaseSink capability
+)
+
+// StagingMode selects the transient article-assembly backend.
+type StagingMode string
+
+const (
+	StagingPG    StagingMode = "pg"    // durable Postgres (default)
+	StagingRedis StagingMode = "redis" // prod's Redis pipeline (fast, best-effort)
+)
+
 // Config is the plugins.usenet section of config.yml. The server here seeds the
 // servers table on first boot if it's empty; after that the wizard owns it.
 // The numeric knobs are DEFAULTS — rows in the plugin's settings table
@@ -34,15 +53,15 @@ type Config struct {
 
 	// Staging backend (README.md). Boot config, not a live knob:
 	// switching backends at runtime would strand staged data.
-	Staging string `json:"staging"` // pg (durable, default) | redis (fast, best-effort)
+	Staging StagingMode `json:"staging"` // pg (durable, default) | redis (fast, best-effort)
 
-	// Sink is where assembled releases go: "internal" (the plugin's own minimal
-	// nzbs table — standalone installs, the demo) or "host" (the host registers
+	// Sink is where assembled releases go: SinkInternal (the plugin's own minimal
+	// nzbs table — standalone installs, the demo) or SinkHost (the host registers
 	// the ReleaseSink capability and owns the NZB domain — how prod adopts the
 	// crawler). Boot config: switching sinks live would split the catalogue.
-	Sink              string `json:"sink"`
-	StagingMaxRows    int    `json:"staging_max_rows"`    // pg back-pressure denominator: staged rows / this (default 2_000_000)
-	StagingPruneHours int    `json:"staging_prune_hours"` // pg stale-staging horizon in hours (default 6)
+	Sink              SinkMode `json:"sink"`
+	StagingMaxRows    int      `json:"staging_max_rows"`    // pg back-pressure denominator: staged rows / this (default 2_000_000)
+	StagingPruneHours int      `json:"staging_prune_hours"` // pg stale-staging horizon in hours (default 6)
 
 	// Splitting groups between crawlers (assign.go). Membership is fixed for a
 	// TERM, so a crawler that joins mid-term waits for the next boundary rather
@@ -111,10 +130,10 @@ func (c *Config) applyDefaults() {
 		c.Connections = 10
 	}
 	if c.Staging == "" {
-		c.Staging = "pg"
+		c.Staging = StagingPG
 	}
 	if c.Sink == "" {
-		c.Sink = "internal"
+		c.Sink = SinkInternal
 	}
 	if c.StagingMaxRows <= 0 {
 		c.StagingMaxRows = 2_000_000

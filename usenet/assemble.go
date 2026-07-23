@@ -554,7 +554,7 @@ func (s hostSink) store(ctx context.Context, rel pluginapi.AssembledRelease) (bo
 // refuses loudly — silently self-storing splits the catalogue across two tables,
 // far worse than a visible stall that retries once the host build is deployed.
 func (p *Plugin) resolveSink() (releaseSink, error) {
-	if p.cfg.Sink == "host" {
+	if p.cfg.Sink == SinkHost {
 		sink, ok := pluginapi.LookupReleaseSink(p.core)
 		if !ok {
 			return nil, fmt.Errorf(

@@ -41,7 +41,7 @@ const adoptedSettingKey = "host_adopted"
 // adoptHostState runs the one-time carry. Only meaningful in host-sink mode —
 // internal mode has nothing to adopt from — and safe to call every boot.
 func (p *Plugin) adoptHostState(ctx context.Context) {
-	if p.cfg.Sink != "host" {
+	if p.cfg.Sink != SinkHost {
 		return
 	}
 	settings, err := p.st.getSettings(ctx)
