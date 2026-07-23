@@ -58,6 +58,10 @@ type GroupStore interface {
 type ServerStore interface {
 	getServer(ctx context.Context) (pluginapi.Server, bool, error)
 	providers(ctx context.Context) ([]provider, error)
+	listServers(ctx context.Context) ([]provider, error)
+	upsertServer(ctx context.Context, pr provider) error
+	deleteServer(ctx context.Context, id int) error
+	toggleServer(ctx context.Context, id int) error
 	saveServer(ctx context.Context, srv pluginapi.Server) error
 }
 

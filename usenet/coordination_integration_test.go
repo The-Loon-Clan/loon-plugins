@@ -257,3 +257,91 @@ func TestHeartbeatPreservesJoinedAt(t *testing.T) {
 			"would make a steady worker permanently ineligible", got)
 	}
 }
+
+// TestProviderCRUD covers the management surface, including the rule that would
+// be worst to get wrong: an empty password on update must KEEP the stored one.
+// The list view never sends passwords to the browser, so blank means
+// "unchanged" — clearing it instead would silently break authentication the
+// next time that provider crawled.
+func TestProviderCRUD(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	if err := s.upsertServer(ctx, provider{
+		Host: "news.eweka.nl", Port: 563, TLS: true, Username: "u", Password: "secret",
+		Enabled: true, Role: roleActive, Priority: 10, Connections: 20, Backbone: "omicron",
+	}); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	list, err := s.listServers(ctx)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("list = %d err=%v, want 1", len(list), err)
+	}
+	first := list[0]
+	if first.Name != "news.eweka.nl" {
+		t.Errorf("name should default to the host, got %q", first.Name)
+	}
+	if first.Password != "" {
+		t.Error("listServers returned a password — it must never reach the browser")
+	}
+
+	// Edit everything EXCEPT the password.
+	first.Priority = 5
+	first.Role = roleBackup
+	first.Password = ""
+	if err := s.upsertServer(ctx, first); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	var pw string
+	if err := s.db.DB().QueryRowContext(ctx,
+		`SELECT password FROM `+s.db.Schema()+`.servers WHERE id = $1`, first.ID).Scan(&pw); err != nil {
+		t.Fatal(err)
+	}
+	if pw != "secret" {
+		t.Fatalf("password = %q after an edit with a blank field; it must be preserved", pw)
+	}
+
+	// A non-empty password does replace it.
+	first.Password = "rotated"
+	if err := s.upsertServer(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.DB().QueryRowContext(ctx,
+		`SELECT password FROM `+s.db.Schema()+`.servers WHERE id = $1`, first.ID).Scan(&pw); err != nil {
+		t.Fatal(err)
+	}
+	if pw != "rotated" {
+		t.Errorf("password = %q, want the rotated value", pw)
+	}
+
+	// Toggle parks a provider without losing it; providers() then skips it.
+	if err := s.toggleServer(ctx, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	enabled, err := s.providers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(enabled) != 0 {
+		t.Errorf("providers() returned %d disabled server(s)", len(enabled))
+	}
+	if all, _ := s.listServers(ctx); len(all) != 1 {
+		t.Error("a disabled provider vanished from the management list")
+	}
+
+	if err := s.deleteServer(ctx, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if all, _ := s.listServers(ctx); len(all) != 0 {
+		t.Error("delete did not remove the provider")
+	}
+}
+
+// TestUpsertServerRejectsHostless: a provider with no host would be dialled as
+// ":119" every pass and bench itself.
+func TestUpsertServerRejectsHostless(t *testing.T) {
+	s := testStore(t)
+	if err := s.upsertServer(context.Background(), provider{Host: "  "}); err == nil {
+		t.Fatal("expected a hostless provider to be rejected")
+	}
+}

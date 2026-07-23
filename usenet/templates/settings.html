@@ -3,6 +3,13 @@
 
 <div class="card">
     <h2>NNTP server</h2>
+    <h4 style="margin:0 0 .3rem">Connection test</h4>
+    <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
+      Checks credentials against a server before you commit to them, and seeds the
+      first provider on a fresh install. Manage the full fleet — additional
+      providers, backups, roles and per-provider connection caps — in
+      <em>Providers</em> below.
+    </p>
     <form method="post" action="/admin/settings/usenet/server">
         <label>Host</label>
         <input type="text" name="host" value="{{.Server.Host}}" placeholder="news.example.com">
@@ -43,6 +50,79 @@
 
 <div class="card">
     <h2>Indexing</h2>
+
+<h4 style="margin:1.4rem 0 .4rem">Providers</h4>
+<p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
+  Active providers are crawled every pass. Backups stay idle and are promoted only
+  to cover an active provider that is failing. Newsgroups are split across
+  providers and across crawler hosts, so adding a provider on a
+  <em>different backbone</em> adds content, while a second account on the
+  <em>same</em> backbone adds connections. See <code>PROVIDERS.md</code>.
+</p>
+
+<table class="table" style="font-size:.9rem">
+  <thead><tr>
+    <th>Name / host</th><th>Role</th><th>Priority</th><th>Conns</th><th>Backbone</th><th></th>
+  </tr></thead>
+  <tbody>
+  {{range .Servers}}
+  <tr>
+    <td colspan="6" style="padding-top:.6rem">
+      <form method="post" action="/admin/settings/usenet/provider" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <input type="text" name="name" value="{{.Name}}" placeholder="label" style="width:9rem">
+        <input type="text" name="host" value="{{.Host}}" placeholder="news.example.com" style="width:14rem" required>
+        <input type="text" name="port" value="{{.Port}}" style="width:4.5rem">
+        <label style="white-space:nowrap"><input type="checkbox" name="tls" {{if .TLS}}checked{{end}}> TLS</label>
+        <input type="text" name="username" value="{{.Username}}" placeholder="user" style="width:8rem">
+        <input type="password" name="password" value="" placeholder="password (unchanged)" style="width:11rem">
+        <select name="role" style="width:7rem">
+          <option value="active" {{if ne .Role "backup"}}selected{{end}}>active</option>
+          <option value="backup" {{if eq .Role "backup"}}selected{{end}}>backup</option>
+        </select>
+        <input type="text" name="priority" value="{{.Priority}}" title="lower runs first" style="width:4.5rem">
+        <input type="text" name="connections" value="{{.Connections}}" title="0 = use the default ({{$.DefaultConns}})" style="width:4.5rem">
+        <input type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" title="blank = detected from the host, or its own" style="width:9rem">
+        <label style="white-space:nowrap"><input type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> enabled</label>
+        <button type="submit">Save</button>
+      </form>
+    </td>
+  </tr>
+  <tr><td colspan="6" style="padding-bottom:.6rem;border-bottom:1px solid rgba(128,128,128,.25)">
+      <form method="post" action="/admin/settings/usenet/provider-del" style="display:inline"
+            onsubmit="return confirm('Remove this provider? Its crawl history is kept.')">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <button type="submit">Remove</button>
+      </form>
+      <span style="opacity:.6;font-size:.8rem;margin-left:.5rem">
+        {{if .Enabled}}in the fleet{{else}}disabled — not crawled{{end}}
+      </span>
+  </td></tr>
+  {{else}}
+  <tr><td colspan="6" style="opacity:.7">No providers configured yet — add one below.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+
+<h5 style="margin:1rem 0 .4rem">Add a provider</h5>
+<form method="post" action="/admin/settings/usenet/provider" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
+  <input type="hidden" name="id" value="0">
+  <input type="text" name="name" placeholder="label (optional)" style="width:9rem">
+  <input type="text" name="host" placeholder="news.example.com" style="width:14rem" required>
+  <input type="text" name="port" value="119" style="width:4.5rem">
+  <label style="white-space:nowrap"><input type="checkbox" name="tls"> TLS</label>
+  <input type="text" name="username" placeholder="user" style="width:8rem">
+  <input type="password" name="password" placeholder="password" style="width:11rem">
+  <select name="role" style="width:7rem">
+    <option value="active">active</option>
+    <option value="backup">backup</option>
+  </select>
+  <input type="text" name="priority" value="100" title="lower runs first" style="width:4.5rem">
+  <input type="text" name="connections" value="0" title="0 = use the default" style="width:4.5rem">
+  <input type="text" name="backbone" placeholder="auto-detected" style="width:9rem">
+  <button type="submit">Add provider</button>
+</form>
+
     <form method="post" action="/admin/settings/usenet/knobs">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem">
             {{range .Knobs}}

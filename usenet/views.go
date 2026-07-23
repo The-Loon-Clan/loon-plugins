@@ -155,7 +155,12 @@ func (p *Plugin) knobs(ctx context.Context) []knob {
 func (p *Plugin) renderSettings(ctx context.Context, srv pluginapi.Server, gq, msg, errMsg string) (template.HTML, error) {
 	groups, _ := p.st.allGroups(ctx, gq, 300)
 	total, _ := p.st.groupCount(ctx)
+	servers, err := p.st.listServers(ctx)
+	if err != nil {
+		p.core.Errors.Report(ctx, "usenet/list-servers", err)
+	}
 	return p.frag("settings.html", map[string]any{
+		"Servers": servers, "DefaultConns": p.effective(ctx).Connections,
 		"Server": srv, "Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,
 		"Groups": groups, "GroupQuery": gq,
 		"GroupTotal": total, "Shown": len(groups),
@@ -202,6 +207,77 @@ func (p *Plugin) actionTestServer(gc *gin.Context) (template.HTML, error) {
 		return p.renderSettings(gc.Request.Context(), srv, "", "", "connection failed: "+err.Error())
 	}
 	return p.renderSettings(gc.Request.Context(), srv, "", "connection ok — click Save to keep it", "")
+}
+
+// formProvider reads a provider row from the management form. A blank password
+// means "unchanged" — the list never sends the stored one to the browser.
+func formProvider(gc *gin.Context) provider {
+	id, _ := strconv.Atoi(gc.PostForm("id"))
+	port, _ := strconv.Atoi(gc.PostForm("port"))
+	prio, _ := strconv.Atoi(gc.PostForm("priority"))
+	conns, _ := strconv.Atoi(gc.PostForm("connections"))
+	tls := gc.PostForm("tls")
+	pr := provider{
+		ID:          id,
+		Name:        strings.TrimSpace(gc.PostForm("name")),
+		Host:        strings.TrimSpace(gc.PostForm("host")),
+		Port:        port,
+		TLS:         tls == "on" || tls == "true",
+		Username:    gc.PostForm("username"),
+		Password:    gc.PostForm("password"),
+		Enabled:     gc.PostForm("enabled") != "",
+		Role:        gc.PostForm("role"),
+		Priority:    prio,
+		Connections: conns,
+		Backbone:    strings.TrimSpace(gc.PostForm("backbone")),
+	}
+	// Same rule as the wizard: only ever fill a blank, never overwrite a
+	// deliberate answer with a lookup that may be stale.
+	if pr.Backbone == "" {
+		pr.Backbone = backboneForHost(pr.Host)
+	}
+	return pr
+}
+
+func (p *Plugin) actionSaveProvider(gc *gin.Context) (template.HTML, error) {
+	pr := formProvider(gc)
+	if pr.ID == 0 {
+		// A brand-new provider defaults to enabled; an edit keeps whatever the
+		// checkbox says.
+		pr.Enabled = true
+	}
+	if err := p.st.upsertServer(gc.Request.Context(), pr); err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
+	msg := "provider saved"
+	if pr.ID == 0 {
+		msg = "provider added — it joins the fleet on the next crawl"
+	}
+	return settingsRedirect(gc, "msg", msg)
+}
+
+func (p *Plugin) actionDeleteProvider(gc *gin.Context) (template.HTML, error) {
+	id, _ := strconv.Atoi(gc.PostForm("id"))
+	if id <= 0 {
+		return settingsRedirect(gc, "err", "no provider selected")
+	}
+	if err := p.st.deleteServer(gc.Request.Context(), id); err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
+	// Crawl state survives on purpose: it is keyed by backbone, so it may belong
+	// to another account, and discarding it would re-crawl that history.
+	return settingsRedirect(gc, "msg", "provider removed (its crawl history is kept)")
+}
+
+func (p *Plugin) actionToggleProvider(gc *gin.Context) (template.HTML, error) {
+	id, _ := strconv.Atoi(gc.PostForm("id"))
+	if id <= 0 {
+		return settingsRedirect(gc, "err", "no provider selected")
+	}
+	if err := p.st.toggleServer(gc.Request.Context(), id); err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
+	return settingsRedirect(gc, "msg", "provider updated")
 }
 
 // actionSaveKnobs persists the numeric settings; they apply on each job's next
