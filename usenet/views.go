@@ -119,6 +119,105 @@ func settingsRedirect(gc *gin.Context, key, msg string) (template.HTML, error) {
 	return redirect(gc, settingsURL+"?"+key+"="+url.QueryEscape(msg)+"#s-usenet")
 }
 
+// providerVM is one provider row on the crawlers page: what it is, and whether
+// its connections are actually working. Prod has no equivalent — it only ever
+// had a fixed primary/secondary pair.
+type providerVM struct {
+	Name, Host, Backbone, Role string
+	Enabled, Down, Dialled     bool
+	Open, Target               int
+	Resets                     int64
+}
+
+func (p *Plugin) fleetVMs(ctx context.Context) []providerVM {
+	servers, err := p.st.listServers(ctx)
+	if err != nil {
+		p.core.Errors.Report(ctx, "usenet/fleet-view", err)
+		return nil
+	}
+	stats := map[int]providerStat{}
+	if p.fleet != nil {
+		stats = p.fleet.snapshotStats(time.Now())
+	}
+	out := make([]providerVM, len(servers))
+	for i, sv := range servers {
+		vm := providerVM{
+			Name: sv.label(), Host: sv.addr(), Backbone: sv.backboneKey(),
+			Role: sv.Role, Enabled: sv.Enabled,
+		}
+		if st, ok := stats[sv.ID]; ok {
+			vm.Dialled = true
+			vm.Open, vm.Target, vm.Resets, vm.Down = st.Open, st.Target, st.Resets, st.Down
+		}
+		out[i] = vm
+	}
+	return out
+}
+
+// workerVM is one crawler host. This is the view that makes a multi-host setup
+// debuggable: who is alive, and how much of the work each one currently holds.
+type workerVM struct {
+	ID     string
+	Me     bool
+	Groups int
+}
+
+func (p *Plugin) workerVMs(ctx context.Context) []workerVM {
+	cfg := p.effective(ctx)
+	stale := time.Duration(cfg.WorkerStaleSec) * time.Second
+	if stale <= 0 {
+		stale = 90 * time.Second
+	}
+	term := time.Duration(cfg.AssignTermMin) * time.Minute
+	// Everyone alive, not just this term's members — a worker waiting out the
+	// term is exactly what an operator wants to see after adding a host.
+	workers, err := p.st.eligibleWorkers(ctx, time.Now().Add(term), stale)
+	if err != nil {
+		p.core.Errors.Report(ctx, "usenet/worker-view", err)
+		return nil
+	}
+	held, err := p.st.leaseHolders(ctx, leaseScopeGroup)
+	if err != nil {
+		p.core.Errors.Report(ctx, "usenet/lease-view", err)
+	}
+	counts := map[string]int{}
+	for _, owner := range held {
+		counts[owner]++
+	}
+	me := workerID()
+	out := make([]workerVM, len(workers))
+	for i, w := range workers {
+		out[i] = workerVM{ID: w, Me: w == me, Groups: counts[w]}
+	}
+	return out
+}
+
+// healthVM is the healthy/broken/dead/unknown split, the one prod card worth
+// copying wholesale — it answers "is the archive still downloadable" at a glance.
+type healthVM struct {
+	Healthy, Broken, Dead, Unknown, Total int
+	HealthyPct, BrokenPct, DeadPct        int
+}
+
+func (p *Plugin) healthVM(ctx context.Context) healthVM {
+	counts, err := p.st.healthBreakdown(ctx)
+	if err != nil {
+		p.core.Errors.Report(ctx, "usenet/health-view", err)
+		return healthVM{}
+	}
+	vm := healthVM{
+		Healthy: counts[healthHealthy], Broken: counts[healthBroken],
+		Dead: counts[healthDead], Unknown: counts[healthUnknown],
+	}
+	vm.Total = vm.Healthy + vm.Broken + vm.Dead + vm.Unknown
+	if vm.Total > 0 {
+		vm.HealthyPct = vm.Healthy * 100 / vm.Total
+		vm.BrokenPct = vm.Broken * 100 / vm.Total
+		vm.DeadPct = vm.Dead * 100 / vm.Total
+	}
+	return vm
+}
+
 // ── settings section ────────────────────────────────────────────────
 
 // knob is one editable numeric setting row in the settings form.
@@ -372,6 +471,8 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 	}
 	return p.frag("crawlers.html", map[string]any{
 		"Stats": stats, "Groups": groups, "Jobs": jobs, "Builder": builder,
+		"Fleet": p.fleetVMs(ctx), "Workers": p.workerVMs(ctx),
+		"Health":      p.healthVM(ctx),
 		"AutoRefresh": running, "Msg": msg, "Err": errMsg,
 	})
 }

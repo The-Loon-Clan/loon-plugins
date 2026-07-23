@@ -120,6 +120,82 @@
     {{else}}
     <div class="empty">No active groups. Enable some in <a href="/admin/p/usenet">Usenet setup</a>, then crawl.</div>
     {{end}}
+
+<div class="card" style="margin-bottom:1rem">
+  <div class="card-body">
+    <h5 style="margin:0 0 .5rem">Providers</h5>
+    <table class="table" style="font-size:.88rem;margin:0">
+      <thead><tr><th>Provider</th><th>Backbone</th><th>Role</th><th>Connections</th><th>State</th></tr></thead>
+      <tbody>
+      {{range .Fleet}}
+        <tr{{if not .Enabled}} style="opacity:.5"{{end}}>
+          <td>{{.Name}}<div style="opacity:.6;font-size:.8rem">{{.Host}}</div></td>
+          <td><code>{{.Backbone}}</code></td>
+          <td>{{.Role}}</td>
+          <td>{{if .Dialled}}{{.Open}} / {{.Target}}{{if gt .Resets 0}}
+                <span style="opacity:.6" title="connections discarded after an error">· {{.Resets}} reset</span>{{end}}
+              {{else}}<span style="opacity:.6">not dialled yet</span>{{end}}</td>
+          <td>
+            {{if not .Enabled}}<span style="opacity:.7">disabled</span>
+            {{else if .Down}}<span style="color:#e0a030">benched — failing, backup may cover it</span>
+            {{else if .Dialled}}<span style="color:#4caf50">connected</span>
+            {{else}}<span style="opacity:.7">idle</span>{{end}}
+          </td>
+        </tr>
+      {{else}}
+        <tr><td colspan="5" style="opacity:.7">No providers configured — add one in Settings.</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+    <p style="opacity:.6;font-size:.8rem;margin:.5rem 0 0">
+      Providers on the same backbone share crawl progress; different backbones add content.
+    </p>
+  </div>
+</div>
+
+{{if .Workers}}
+<div class="card" style="margin-bottom:1rem">
+  <div class="card-body">
+    <h5 style="margin:0 0 .5rem">Crawler hosts</h5>
+    <table class="table" style="font-size:.88rem;margin:0">
+      <thead><tr><th>Worker</th><th>Groups held</th></tr></thead>
+      <tbody>
+      {{range .Workers}}
+        <tr><td><code>{{.ID}}</code>{{if .Me}} <span style="opacity:.6">(this host)</span>{{end}}</td>
+            <td>{{.Groups}}</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+    <p style="opacity:.6;font-size:.8rem;margin:.5rem 0 0">
+      Newsgroups are split across hosts each term. A host added mid-term shows here
+      with 0 groups until the next boundary, then takes its share.
+    </p>
+  </div>
+</div>
+{{end}}
+
+{{if gt .Health.Total 0}}
+<div class="card" style="margin-bottom:1rem">
+  <div class="card-body">
+    <h5 style="margin:0 0 .5rem">Release health</h5>
+    <div style="display:flex;height:14px;border-radius:3px;overflow:hidden;background:rgba(128,128,128,.2)">
+      <div style="width:{{.Health.HealthyPct}}%;background:#4caf50" title="healthy"></div>
+      <div style="width:{{.Health.BrokenPct}}%;background:#e0a030" title="broken but repairable"></div>
+      <div style="width:{{.Health.DeadPct}}%;background:#c0392b" title="dead"></div>
+    </div>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:.85rem;margin-top:.45rem">
+      <span><span style="color:#4caf50">■</span> {{.Health.Healthy}} healthy</span>
+      <span><span style="color:#e0a030">■</span> {{.Health.Broken}} broken</span>
+      <span><span style="color:#c0392b">■</span> {{.Health.Dead}} dead</span>
+      <span style="opacity:.7">{{.Health.Unknown}} unchecked</span>
+    </div>
+    <p style="opacity:.6;font-size:.8rem;margin:.5rem 0 0">
+      Broken means missing segments that the surviving PAR2 could still repair.
+      Checks run when the crawler has nothing else to do.
+    </p>
+  </div>
+</div>
+{{end}}
 </div>
 
 {{if .AutoRefresh}}<script>setTimeout(function(){location.reload()},6000)</script>{{end}}

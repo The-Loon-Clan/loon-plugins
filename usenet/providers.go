@@ -267,6 +267,30 @@ func (f *providerFleet) get(ctx context.Context, pr provider, defConns int) (*nn
 	return pool, nil
 }
 
+// providerStat is one provider's live pool state for the admin page.
+type providerStat struct {
+	Open, Target, Busy int
+	Resets             int64
+	Down               bool
+}
+
+// snapshotStats reports pool health per provider id. Only providers that have
+// been dialled appear; a configured-but-never-used one simply has no entry.
+func (f *providerFleet) snapshotStats(now time.Time) map[int]providerStat {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make(map[int]providerStat, len(f.pools))
+	for id, pp := range f.pools {
+		st := providerStat{Down: now.Before(pp.downUntil)}
+		if pp.pool != nil {
+			ps := pp.pool.Stats()
+			st.Open, st.Target, st.Busy, st.Resets = ps.Open, ps.Target, ps.Busy, ps.Resets
+		}
+		out[id] = st
+	}
+	return out
+}
+
 // closeAll tears every pool down on shutdown.
 func (f *providerFleet) closeAll() {
 	f.mu.Lock()
