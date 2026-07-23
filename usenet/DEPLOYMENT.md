@@ -81,13 +81,17 @@ useful — it works other groups rather than sitting idle.
 
 Two caveats:
 
-- **The connection budget is still per account.** If both workers use the same
-  provider credentials, each opens up to `connections` connections, so set that
-  to roughly half your account's limit per worker, or give each worker its own
-  account.
+- **Set `account_cap` per server to share one account across workers safely.**
+  `connections` is the per-worker pool size, so N workers on one account would
+  open N× that. Set the server's `account_cap` to the account's real per-endpoint
+  limit and each worker instead takes `account_cap / live_workers` (min 1) — the
+  fleet sum stays under the cap however many workers run, re-dividing only on a
+  term boundary so it doesn't thrash. Leave it `0` to keep the old behaviour
+  (size `connections` to ~half the limit by hand, or give each worker its own
+  account).
 - Leases are advisory-by-convention: they stop the plugin's own jobs colliding.
-  Nothing prevents an operator pointing two workers at the same account and
-  over-subscribing it.
+  `account_cap` now keeps the plugin's own fleet under an account's limit, but
+  nothing stops an operator pointing a *separate* crawler at the same account.
 
 ## Other ways to scale ingest
 
@@ -98,7 +102,8 @@ since backbones expire different articles and staging merges them by message-id.
 
 ## What leases do NOT solve
 
-They coordinate this plugin's jobs. They do not stop an operator pointing two
-workers at one provider account and over-subscribing its connection limit — see
-the caveat above — and they are not a general cluster lock: another plugin's
-jobs are its own business.
+They coordinate this plugin's jobs. Over-subscribing a shared account is now
+handled separately by `account_cap` (above), which divides the endpoint's limit
+across the live fleet — but that only governs *this* plugin's workers, not a
+separate crawler pointed at the same account. Leases are also not a general
+cluster lock: another plugin's jobs are its own business.
