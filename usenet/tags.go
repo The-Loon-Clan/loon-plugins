@@ -104,3 +104,84 @@ func capitalize(s string) string {
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
 }
+
+// ── prod-ported title/category helpers (source of truth: indexer-site) ──
+
+// extractTitle pulls the quoted filename out of a base subject when one is
+// present — the Usenet convention is `Release Name "file.ext" yEnc (n/m)`.
+var (
+	reTagAdult    = regexp.MustCompile(`(?i)\b(porn|porno|hentai|jav|xxx|sextape|cumshot|gangbang|milf)\b`)
+	reTagCategory = regexp.MustCompile(`(?i)\b(OVA|ONA|OAD|Gekijouban)\b`)
+)
+
+func extractTitle(base string) string {
+	if q1 := strings.IndexByte(base, '"'); q1 >= 0 {
+		if q2 := strings.IndexByte(base[q1+1:], '"'); q2 >= 0 {
+			return base[q1+1 : q1+1+q2]
+		}
+	}
+	return base
+}
+
+// parseCategoryTag returns the category an EXPLICIT title marker declares, or
+// "". Adult wins over Anime so a title that is both lands behind the NSFW
+// filter. An explicit tag also vouches for the release: prod skips the junk
+// check entirely when one is present, and the plugin mirrors that.
+func parseCategoryTag(title string) string {
+	if reTagAdult.MatchString(title) {
+		return "Hentai"
+	}
+	if reTagCategory.MatchString(title) {
+		return "Anime"
+	}
+	return ""
+}
+
+// blockedExtensions are file types that are never legitimate releases —
+// executables, scripts, shortcuts. A title ending in one is refused at
+// assembly. Prod's list, verbatim.
+var blockedExtensions = map[string]bool{
+	"ade": true, "adp": true, "app": true, "application": true, "appref-ms": true,
+	"asp": true, "aspx": true, "asx": true, "bas": true, "bat": true, "bgi": true,
+	"cab": true, "cer": true, "chm": true, "cmd": true, "cnt": true, "com": true,
+	"cpl": true, "crt": true, "csh": true, "der": true, "diagcab": true, "exe": true,
+	"fxp": true, "gadget": true, "grp": true, "hlp": true, "hpj": true, "hta": true,
+	"htc": true, "inf": true, "ins": true, "iso": true, "isp": true, "its": true,
+	"jar": true, "jnlp": true, "js": true, "jse": true, "ksh": true, "lnk": true,
+	"mad": true, "maf": true, "mag": true, "mam": true, "maq": true, "mar": true,
+	"mas": true, "mat": true, "mau": true, "mav": true, "maw": true, "mcf": true,
+	"mda": true, "mdb": true, "mde": true, "mdt": true, "mdw": true, "mdz": true,
+	"msc": true, "msh": true, "msh1": true, "msh2": true, "mshxml": true,
+	"msh1xml": true, "msh2xml": true, "msi": true, "msp": true, "mst": true,
+	"msu": true, "ops": true, "osd": true, "pcd": true, "pif": true, "pl": true,
+	"plg": true, "prf": true, "prg": true, "printerexport": true, "ps1": true,
+	"ps1xml": true, "ps2": true, "ps2xml": true, "psc1": true, "psc2": true,
+	"psd1": true, "psdm1": true, "pst": true, "py": true, "pyc": true, "pyo": true,
+	"pyw": true, "pyz": true, "pyzw": true, "reg": true, "scf": true, "scr": true,
+	"sct": true, "shb": true, "shs": true, "sln": true, "theme": true, "tmp": true,
+	"url": true, "vb": true, "vbe": true, "vbp": true, "vbs": true, "vcxproj": true,
+	"vhd": true, "vhdx": true, "vsmacros": true, "vsw": true, "webpnp": true,
+	"website": true, "ws": true, "wsc": true, "wsf": true, "wsh": true, "xbap": true,
+	"xll": true, "xnk": true,
+}
+
+// hasBlockedExtension reports whether the title ends in a blocked file type.
+func hasBlockedExtension(title string) bool {
+	dot := strings.LastIndex(title, ".")
+	if dot < 0 || dot == len(title)-1 {
+		return false
+	}
+	return blockedExtensions[strings.ToLower(title[dot+1:])]
+}
+
+// articlesContainComicArchive reports whether any article filename names a
+// .cbz/.cbr — the release is manga regardless of what the title reads.
+func articlesContainComicArchive(arts []stagedArticle) bool {
+	for _, a := range arts {
+		s := strings.ToLower(a.Subject)
+		if strings.Contains(s, ".cbz") || strings.Contains(s, ".cbr") {
+			return true
+		}
+	}
+	return false
+}

@@ -67,9 +67,9 @@ func TestBuildNZBAndGzip(t *testing.T) {
 		{MessageID: "<a@x>", Subject: "rel (1/2) yEnc", Poster: "p", Bytes: 100, Group: "a.b", PartNum: 1},
 		{MessageID: "<b@x>", Subject: "rel (2/2) yEnc", Poster: "p", Bytes: 120, Group: "a.b", PartNum: 2},
 	}
-	xmlBytes := buildNZB(arts)
-	if len(xmlBytes) == 0 {
-		t.Fatal("buildNZB returned empty")
+	xmlBytes, err := buildNZB(arts)
+	if err != nil || len(xmlBytes) == 0 {
+		t.Fatalf("buildNZB: %v (len %d)", err, len(xmlBytes))
 	}
 	s := string(xmlBytes)
 	for _, want := range []string{"<nzb", "a@x", "b@x", `number="1"`, `number="2"`, "a.b"} {
@@ -113,7 +113,11 @@ func TestMultiFileGrouping(t *testing.T) {
 	if isComplete(arts[:3]) {
 		t.Error("dropping a segment should make it incomplete")
 	}
-	if n := strings.Count(string(buildNZB(arts)), "<file "); n != 2 {
+	xmlOut, err := buildNZB(arts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(xmlOut), "<file "); n != 2 {
 		t.Errorf("multi-file NZB should have 2 <file> elements, got %d", n)
 	}
 }

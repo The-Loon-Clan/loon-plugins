@@ -34,7 +34,13 @@ type Config struct {
 
 	// Staging backend (USENET-STAGING-MODES.md). Boot config, not a live knob:
 	// switching backends at runtime would strand staged data.
-	Staging           string `json:"staging"`             // pg (durable, default) | redis (fast, best-effort)
+	Staging string `json:"staging"` // pg (durable, default) | redis (fast, best-effort)
+
+	// Sink is where assembled releases go: "internal" (the plugin's own minimal
+	// nzbs table — standalone installs, the demo) or "host" (the host registers
+	// the ReleaseSink capability and owns the NZB domain — how prod adopts the
+	// crawler). Boot config: switching sinks live would split the catalogue.
+	Sink              string `json:"sink"`
 	StagingMaxRows    int    `json:"staging_max_rows"`    // pg back-pressure denominator: staged rows / this (default 2_000_000)
 	StagingPruneHours int    `json:"staging_prune_hours"` // pg stale-staging horizon in hours (default 6)
 
@@ -106,6 +112,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Staging == "" {
 		c.Staging = "pg"
+	}
+	if c.Sink == "" {
+		c.Sink = "internal"
 	}
 	if c.StagingMaxRows <= 0 {
 		c.StagingMaxRows = 2_000_000

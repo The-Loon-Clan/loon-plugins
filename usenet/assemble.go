@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"sort"
 	"strings"
@@ -65,12 +66,13 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		if len(arts) == 0 || !isComplete(arts) {
 			continue // not actually complete yet — leave staged for next round
 		}
-		// Sized check, as prod's assembler does: the size-band rules (tiny
-		// payloads, the under-1/5MiB catchalls) only make sense once the whole
-		// release's size is known, and this is the first point where it is.
-		if rule := whichJunkRuleSized(k.Base, totalBytes(arts)); rule != "" {
-			p.hits.note("junk", rule, k.Base)
-			_ = p.staging.deleteStaged(ctx, k.Group, k.Base) // drop, don't build
+		// Classification runs in PROD'S order: title extraction, blocked
+		// extensions, the operator blacklist, then the sized junk check — which
+		// an explicit category tag bypasses, exactly as prod's assembler does.
+		title, cat, junkRule, blockedExt := classifyRelease(k.Base, arts)
+		if blockedExt {
+			p.buildJob.Log("SKIP blocked ext: %q", title)
+			_ = p.staging.deleteStaged(ctx, k.Group, k.Base)
 			continue
 		}
 		// Operator policy, checked at build like prod does. Deliberately NOT at
@@ -78,7 +80,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		// filtering at build means a new rule applies to everything already
 		// staged instead of only to what arrives after it.
 		if pat := whichBlacklistRule(release{
-			Subject: k.Base, Title: strings.TrimSpace(k.Base),
+			Subject: k.Base, Title: title,
 			Poster: firstPoster(arts), Group: k.Group,
 		}); pat != "" {
 			p.hits.note("blacklist", pat, k.Base)
@@ -86,28 +88,40 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			_ = p.staging.deleteStaged(ctx, k.Group, k.Base)
 			continue
 		}
-		gz, err := gzipBytes(buildNZB(arts))
+		if junkRule != "" {
+			p.hits.note("junk", junkRule, k.Base)
+			_ = p.staging.deleteStaged(ctx, k.Group, k.Base) // drop, don't build
+			continue
+		}
+		xmlBytes, err := buildNZB(arts)
+		if err != nil {
+			// Malformed input the sanitising didn't cover. Leave the set staged:
+			// the prune horizon clears it if it never becomes buildable.
+			p.reportErr(ctx, "usenet/build-xml", fmt.Errorf("%s/%s: %w", k.Group, k.Base, err))
+			continue
+		}
+		gz, err := gzipBytes(xmlBytes)
 		if err != nil {
 			p.core.Errors.Report(ctx, "usenet/build-gzip", err)
 			continue
 		}
-		title := strings.TrimSpace(k.Base)
-		if title == "" {
-			title = "release"
-		}
 		size, posted := summarize(arts)
-		ins, err := p.st.insertNzb(ctx, nzbRow{
-			Title: title, Filename: safeFilename(title) + ".nzb",
-			Size: size, Group: k.Group, ContentHash: hashKey(k.Group, k.Base),
-			Posted: posted, Data: gz, Tags: parseTags(title),
-			CategoryID: p.categoryFor(k.Group, title),
-		})
+		rel := pluginapi.AssembledRelease{
+			Title: title, BaseSubject: k.Base, Group: k.Group,
+			Poster:      firstPoster(arts),
+			ContentHash: contentHashArticles(arts),
+			SizeBytes:   size, PostedAt: posted,
+			NZBGz: gz, Segments: len(arts), CategoryHint: cat,
+		}
+		created, err := p.storeRelease(ctx, rel)
 		if err != nil {
-			p.core.Errors.Report(ctx, "usenet/build-insert", err)
+			// Storage failed — leave the set staged so a later pass retries.
+			// A transient sink outage must never lose a release.
+			p.reportErr(ctx, "usenet/build-store", fmt.Errorf("%s: %w", title, err))
 			continue
 		}
 		_ = p.staging.deleteStaged(ctx, k.Group, k.Base)
-		if ins {
+		if created {
 			built++
 		}
 	}
@@ -174,7 +188,14 @@ func isComplete(arts []stagedArticle) bool {
 
 // buildNZB serializes a complete set into NZB XML. A multi-file release gets one
 // <file> element per file number; a single-file release gets one <file>.
-func buildNZB(arts []stagedArticle) []byte {
+//
+// The error return exists because xml.Marshal REFUSES invalid UTF-8, and Usenet
+// subjects carry arbitrary bytes. The old form returned nil on error, which
+// gzipped fine and produced a "completed" release whose NZB downloads as zero
+// bytes — invisible until a user tries it. Attributes are sanitised so the
+// error path is nearly unreachable, but if it fires the release is skipped
+// loudly rather than stored empty.
+func buildNZB(arts []stagedArticle) ([]byte, error) {
 	multi := false
 	for _, a := range arts {
 		if a.FileParts {
@@ -201,9 +222,9 @@ func buildNZB(arts []stagedArticle) []byte {
 	}
 	out, err := xml.MarshalIndent(doc, "", "  ")
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return append([]byte(xml.Header), out...)
+	return append([]byte(xml.Header), out...), nil
 }
 
 // makeFile builds one <file> from the articles of a single file, segments
@@ -211,9 +232,9 @@ func buildNZB(arts []stagedArticle) []byte {
 func makeFile(arts []stagedArticle) nzbFile {
 	first := arts[0]
 	f := nzbFile{
-		Poster:  first.Poster,
+		Poster:  strings.ToValidUTF8(first.Poster, "\uFFFD"),
 		Date:    first.Posted.Unix(),
-		Subject: first.Subject,
+		Subject: strings.ToValidUTF8(first.Subject, "\uFFFD"),
 		Groups:  nzbGroups{Group: []string{first.Group}},
 	}
 	seen := make(map[int]bool, len(arts))
@@ -291,9 +312,25 @@ func summarize(arts []stagedArticle) (size int64, posted time.Time) {
 	return size, posted
 }
 
-func hashKey(group, base string) string {
-	sum := sha256.Sum256([]byte(group + "|" + base))
-	return hex.EncodeToString(sum[:])
+// contentHashArticles is prod's content identity: sha256 over the SORTED
+// segment message-ids, first 16 bytes as hex. It identifies the ARTICLES, not
+// the name — a re-post of the same title with fresh articles hashes new (and
+// can be indexed), while the same articles always collide (and dedup). The old
+// hash-of-(group|base) meant two different releases sharing a subject collided
+// forever and a re-post could never be indexed again.
+func contentHashArticles(arts []stagedArticle) string {
+	ids := make([]string, 0, len(arts))
+	for _, a := range arts {
+		if a.MessageID != "" {
+			ids = append(ids, a.MessageID)
+		}
+	}
+	sort.Strings(ids)
+	h := sha256.New()
+	for _, id := range ids {
+		h.Write([]byte(id))
+	}
+	return hex.EncodeToString(h.Sum(nil)[:16])
 }
 
 func safeFilename(s string) string {
@@ -448,4 +485,54 @@ func firstPoster(arts []stagedArticle) string {
 		return ""
 	}
 	return arts[0].Poster
+}
+
+// classifyRelease runs the title-domain checks in prod's order and returns the
+// decision inputs the build loop acts on: the extracted sanitised title, the
+// category hint (explicit tag, else comic-archive sniff), the junk rule that
+// fired (empty when clean OR when an explicit category tag vouched for the
+// release — prod's bypass), and whether the title names a blocked file type.
+func classifyRelease(base string, arts []stagedArticle) (title, cat, junkRule string, blockedExt bool) {
+	title = strings.TrimSpace(strings.ToValidUTF8(extractTitle(base), "\uFFFD"))
+	if title == "" {
+		title = "release"
+	}
+	if hasBlockedExtension(title) {
+		return title, "", "", true
+	}
+	cat = parseCategoryTag(title)
+	if cat == "" {
+		if junkRule = whichJunkRuleSized(title, totalBytes(arts)); junkRule != "" {
+			return title, "", junkRule, false
+		}
+		if articlesContainComicArchive(arts) {
+			cat = "Manga"
+		}
+	}
+	return title, cat, "", false
+}
+
+// storeRelease hands the release to the configured sink. Internal mode is the
+// plugin's own minimal nzbs table (standalone installs, the demo); host mode
+// looks up the ReleaseSink capability so a rich host owns storage — resolved
+// per pass, not at boot, because the host may register it after Provision.
+func (p *Plugin) storeRelease(ctx context.Context, rel pluginapi.AssembledRelease) (created bool, err error) {
+	if p.cfg.Sink == "host" {
+		sink, ok := pluginapi.LookupReleaseSink(p.core)
+		if !ok {
+			// Refuse loudly rather than quietly self-storing: an operator who
+			// configured host mode expects releases in the HOST's catalogue,
+			// and silently splitting them across two tables is far worse than
+			// a visible stall that retries.
+			return false, fmt.Errorf("sink=host but no %q capability is registered", pluginapi.UsenetReleaseSinkName)
+		}
+		_, created, err = sink.IngestAssembled(ctx, rel)
+		return created, err
+	}
+	return p.st.insertNzb(ctx, nzbRow{
+		Title: rel.Title, Filename: safeFilename(rel.Title) + ".nzb",
+		Size: rel.SizeBytes, Group: rel.Group, ContentHash: rel.ContentHash,
+		Posted: rel.PostedAt, Data: rel.NZBGz, Tags: parseTags(rel.Title),
+		CategoryID: p.categoryFor(rel.Group, rel.Title),
+	})
 }

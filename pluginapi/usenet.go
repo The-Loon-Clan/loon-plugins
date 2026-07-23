@@ -2,9 +2,11 @@ package pluginapi
 
 import (
 	"context"
+
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/the-loon-clan/loon/core"
 	"time"
 )
 
@@ -46,7 +48,7 @@ type GroupStat struct {
 	// Backbone this row's article numbers belong to. Coverage is only ever
 	// meaningful within one backbone: two backbones number the same articles
 	// differently, so their watermarks cannot be compared or merged.
-	Backbone string
+	Backbone          string
 	Name              string
 	NZBs              int
 	Staged            int // articles waiting in staging (not yet assembled)
@@ -226,4 +228,54 @@ func NewznabCacheKey(r NewznabRequest) string {
 	b, _ := json.Marshal(payload)
 	sum := sha256.Sum256(b)
 	return NewznabCachePrefix + hex.EncodeToString(sum[:16])
+}
+
+// ── release sink (the NZB handoff seam) ─────────────────────────────
+
+// UsenetReleaseSinkName is the capability a HOST registers to take ownership of
+// assembled releases. With the plugin's sink mode set to "host", the builder
+// stops writing its own minimal nzbs table and hands each release here instead —
+// which is how a rich host (prod's ~50-column NZB domain: anime matching,
+// posters, release groups, media pipeline) adopts the crawler without the
+// plugin knowing any of that exists.
+const UsenetReleaseSinkName = "usenet.releasesink"
+
+// AssembledRelease is one complete, filtered, ready-to-store release. Everything
+// upstream of it — completeness, blocked extensions, the operator blacklist,
+// junk filtering, category hinting — has already run in the plugin, mirroring
+// where prod's assembler runs the same checks.
+type AssembledRelease struct {
+	Title       string // extracted + UTF-8-sanitised release title
+	BaseSubject string // the raw grouping key, for diagnostics
+	Group       string
+	Poster      string
+	// ContentHash identifies the CONTENT: hex of sha256 over the sorted
+	// segment message-ids (prod's scheme). Two posts of the same title with
+	// different articles hash differently; the same articles always collide.
+	ContentHash  string
+	SizeBytes    int64
+	PostedAt     time.Time // earliest article date; zero when unknown
+	NZBGz        []byte    // gzipped NZB XML
+	Segments     int
+	CategoryHint string // explicit title tag or comic-archive sniff; "" = none
+}
+
+// ReleaseSink stores an assembled release in the host's NZB domain.
+//
+// Contract: (id, false, nil) means the release was a duplicate — the plugin
+// clears its staging and moves on. An error means the host could not store it —
+// the plugin leaves the set staged and retries on a later pass, so a transient
+// host failure never loses a release.
+type ReleaseSink interface {
+	IngestAssembled(ctx context.Context, r AssembledRelease) (id int64, created bool, err error)
+}
+
+// LookupReleaseSink resolves the host-registered sink, if any.
+func LookupReleaseSink(c *core.Core) (ReleaseSink, bool) {
+	v, ok := c.Lookup(UsenetReleaseSinkName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(ReleaseSink)
+	return s, ok
 }
