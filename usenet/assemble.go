@@ -41,6 +41,11 @@ func (p *Plugin) runBuild(ctx context.Context) {
 func (p *Plugin) buildLocked(ctx context.Context) {
 	p.buildJob.SetRunning()
 
+	// Pick up admin edits, and make sure last pass's counters are persisted even
+	// if that pass died before its own flush.
+	p.reloadBlacklist(ctx)
+	defer p.flushFilterHits(ctx)
+
 	keys, err := p.staging.candidateGroups(ctx, 500)
 	if err != nil {
 		p.buildJob.SetError(err.Error())
@@ -60,8 +65,22 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		if len(arts) == 0 || !isComplete(arts) {
 			continue // not actually complete yet — leave staged for next round
 		}
-		if isJunkTitle(k.Base) {
+		if rule := whichJunkRule(k.Base); rule != "" {
+			p.hits.note("junk", rule, k.Base)
 			_ = p.staging.deleteStaged(ctx, k.Group, k.Base) // drop, don't build
+			continue
+		}
+		// Operator policy, checked at build like prod does. Deliberately NOT at
+		// ingest: blacklist rules are edited far more often than junk rules, and
+		// filtering at build means a new rule applies to everything already
+		// staged instead of only to what arrives after it.
+		if pat := whichBlacklistRule(release{
+			Subject: k.Base, Title: strings.TrimSpace(k.Base),
+			Poster: firstPoster(arts), Group: k.Group,
+		}); pat != "" {
+			p.hits.note("blacklist", pat, k.Base)
+			p.buildJob.Log("SKIP blacklisted (%s): %q", pat, k.Base)
+			_ = p.staging.deleteStaged(ctx, k.Group, k.Base)
 			continue
 		}
 		gz, err := gzipBytes(buildNZB(arts))
@@ -406,4 +425,14 @@ func (s *PGStore) deleteStaged(ctx context.Context, group, base string) error {
 			`DELETE FROM articles WHERE group_name = $1 AND base_subject = $2`, group, base)
 		return err
 	})
+}
+
+// firstPoster returns the poster of the first article in a set. Every part of a
+// release comes from one poster in practice, and prod matches on the same single
+// value; scanning them all would let one spoofed part veto a whole release.
+func firstPoster(arts []stagedArticle) string {
+	if len(arts) == 0 {
+		return ""
+	}
+	return arts[0].Poster
 }

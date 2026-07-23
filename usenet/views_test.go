@@ -209,3 +209,45 @@ func TestCrawlersRendersCoverage(t *testing.T) {
 		}
 	}
 }
+
+// TestFiltersRenders covers the blacklist + hit-counter page, including the
+// invalid-rule warning — a rule edited straight into SQL is the one case where
+// nothing else would tell the operator their rule is inert.
+func TestFiltersRenders(t *testing.T) {
+	tmpl, err := template.ParseFS(viewFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	err = tmpl.ExecuteTemplate(&buf, "filters.html", map[string]any{
+		"Rules": []blacklistVM{
+			{ID: 1, Pattern: "(?i)spam", Field: "poster", Enabled: true},
+			{ID: 2, Pattern: "([unclosed", Field: "title", Invalid: "missing closing )"},
+		},
+		"Fields": blacklistFields,
+		"Hits": []filterHitVM{
+			{Kind: "junk", Rule: "bare-token", Count: 900, Pct: 90, Sample: "AbC123xyz", LastSeen: "12:00"},
+			{Kind: "blacklist", Rule: "(?i)spam", Count: 100, Pct: 10, Sample: "Some.Release", LastSeen: "12:01"},
+		},
+		"TotalHits": 1000, "Msg": "", "Err": "",
+	})
+	if err != nil {
+		t.Fatalf("render filters: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"(?i)spam", "poster", "bare-token", "this rule is inert",
+		"filters/add", "filters/toggle", "filters/delete", "filters/reset",
+		"90.0%", "1000 release(s) dropped",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("filters page missing %q", want)
+		}
+	}
+	// Every field must be offered, or a rule type becomes unreachable from the UI.
+	for _, f := range blacklistFields {
+		if !strings.Contains(out, ">"+f+"</option>") {
+			t.Errorf("field %q not offered in the form", f)
+		}
+	}
+}

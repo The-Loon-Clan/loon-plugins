@@ -322,7 +322,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) ba
 	res.maxDate = newestDate(ovs)
 	res.minDate = oldestDate(ovs)
 
-	arts := parseOverviews(ovs, j.group, j.cutoff)
+	arts := parseOverviews(ovs, j.group, j.cutoff, p.hits)
 	if len(arts) > 0 {
 		n, err := p.staging.stageArticles(ctx, arts)
 		if err != nil {
@@ -414,7 +414,9 @@ func contiguousEnd(start int, rs []batchResult) (int, time.Time) {
 
 // parseOverviews turns overview lines into staged articles, dropping ones with
 // no message-id and ones posted before the retention cutoff.
-func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time) []stagedArticle {
+//
+// hits may be nil (tests): junk counting is observability, not behaviour.
+func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, hits *filterHits) []stagedArticle {
 	out := make([]stagedArticle, 0, len(ovs))
 	for _, ov := range ovs {
 		if ov.MessageId == "" {
@@ -424,7 +426,8 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time) 
 			continue
 		}
 		base, pn, tp, seg, fn, tf, fp := parseSubject(ov.Subject)
-		if isJunkTitle(base) {
+		if rule := whichJunkRule(base); rule != "" {
+			hits.note("junk", rule, base)
 			continue // obfuscated random-token post — never index it
 		}
 		out = append(out, stagedArticle{

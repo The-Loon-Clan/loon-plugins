@@ -87,6 +87,15 @@ type BackfillStore interface {
 	backfillGapsFor(ctx context.Context, backbone, group string, low, high int64) ([]articleRange, error)
 	coveredRangesFor(ctx context.Context, backbone, group string) ([]articleRange, error)
 	allCoveredRanges(ctx context.Context) (map[coverKey][]articleRange, error)
+
+	// blacklist + filter-hit counters (blacklist_store.go)
+	blacklistRules(ctx context.Context) ([]blacklistRule, error)
+	addBlacklistRule(ctx context.Context, pattern, field string) error
+	deleteBlacklistRule(ctx context.Context, id int64) error
+	toggleBlacklistRule(ctx context.Context, id int64) error
+	recordFilterHits(ctx context.Context, hits map[filterHitKey]*filterHitVal) error
+	filterHitRows(ctx context.Context) ([]filterHitRow, error)
+	resetFilterHits(ctx context.Context) error
 }
 
 // AssemblerStore is the staging area the NZB assembler reads + drains.
