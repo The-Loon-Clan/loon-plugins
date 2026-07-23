@@ -62,12 +62,12 @@
 
 <table class="table" style="font-size:.9rem">
   <thead><tr>
-    <th>Name / host</th><th>Role</th><th>Priority</th><th>Conns</th><th>Backbone</th><th></th>
+    <th>Name / host</th><th>Role</th><th>Priority</th><th>Conns</th><th>Cap</th><th>Backbone</th><th></th>
   </tr></thead>
   <tbody>
   {{range .Servers}}
   <tr>
-    <td colspan="6" style="padding-top:.6rem">
+    <td colspan="7" style="padding-top:.6rem">
       <form method="post" action="/admin/settings/usenet/provider" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
         <input type="hidden" name="id" value="{{.ID}}">
         <input type="text" name="name" value="{{.Name}}" placeholder="label" style="width:9rem">
@@ -81,14 +81,15 @@
           <option value="backup" {{if eq .Role "backup"}}selected{{end}}>backup</option>
         </select>
         <input type="text" name="priority" value="{{.Priority}}" title="lower runs first" style="width:4.5rem">
-        <input type="text" name="connections" value="{{.Connections}}" title="0 = use the default ({{$.DefaultConns}})" style="width:4.5rem">
+        <input type="text" name="connections" value="{{.Connections}}" title="per-worker pool size; 0 = use the default ({{$.DefaultConns}})" style="width:4.5rem">
+        <input type="text" name="account_cap" value="{{.AccountCap}}" placeholder="cap" title="fleet cap: total connections this account allows to this endpoint across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
         <input type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" title="blank = detected from the host, or its own" style="width:9rem">
         <label style="white-space:nowrap"><input type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> enabled</label>
         <button type="submit">Save</button>
       </form>
     </td>
   </tr>
-  <tr><td colspan="6" style="padding-bottom:.6rem;border-bottom:1px solid rgba(128,128,128,.25)">
+  <tr><td colspan="7" style="padding-bottom:.6rem;border-bottom:1px solid rgba(128,128,128,.25)">
       <form method="post" action="/admin/settings/usenet/provider-del" style="display:inline"
             onsubmit="return confirm('Remove this provider? Its crawl history is kept.')">
         <input type="hidden" name="id" value="{{.ID}}">
@@ -99,7 +100,7 @@
       </span>
   </td></tr>
   {{else}}
-  <tr><td colspan="6" style="opacity:.7">No providers configured yet — add one below.</td></tr>
+  <tr><td colspan="7" style="opacity:.7">No providers configured yet — add one below.</td></tr>
   {{end}}
   </tbody>
 </table>
@@ -118,7 +119,8 @@
     <option value="backup">backup</option>
   </select>
   <input type="text" name="priority" value="100" title="lower runs first" style="width:4.5rem">
-  <input type="text" name="connections" value="0" title="0 = use the default" style="width:4.5rem">
+  <input type="text" name="connections" value="0" title="per-worker pool size; 0 = use the default" style="width:4.5rem">
+  <input type="text" name="account_cap" value="0" placeholder="cap" title="fleet cap across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
   <input type="text" name="backbone" placeholder="auto-detected" style="width:9rem">
   <button type="submit">Add provider</button>
 </form>

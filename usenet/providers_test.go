@@ -133,6 +133,34 @@ func TestProviderConns(t *testing.T) {
 	}
 }
 
+// TestEffectiveConns: connections is the per-worker ceiling; the account cap
+// bounds the SUM across live workers, so each worker gets min(conns, cap/W). A
+// zero cap never divides, and the cap binds even a lone worker (min 1).
+func TestEffectiveConns(t *testing.T) {
+	cases := []struct {
+		name            string
+		conns, cap, def int
+		workers         int
+		want            int
+	}{
+		{"no cap, lone worker", 50, 0, 10, 1, 50},
+		{"no cap, many workers", 50, 0, 10, 4, 50}, // cap 0 never divides
+		{"cap not binding", 40, 100, 10, 2, 40},    // 100/2=50 >= 40, keep 40
+		{"cap binds, 2 workers", 100, 100, 10, 2, 50},
+		{"cap binds, 4 workers", 100, 100, 10, 4, 25},
+		{"cap binds a lone worker", 100, 50, 10, 1, 50}, // one crawler must not exceed 50
+		{"cap floors at 1", 100, 3, 10, 8, 1},           // 3/8=0 -> 1
+		{"conns fallback then cap", 0, 60, 30, 3, 20},   // conns=0 -> def 30; 60/3=20 < 30
+	}
+	for _, c := range cases {
+		pr := provider{Connections: c.conns, AccountCap: c.cap}
+		if got := pr.effectiveConns(c.def, c.workers); got != c.want {
+			t.Errorf("%s: effectiveConns(def=%d, workers=%d) = %d, want %d",
+				c.name, c.def, c.workers, got, c.want)
+		}
+	}
+}
+
 // TestProviderPoolKey: the key must change with anything that alters how we dial,
 // so a settings edit rebuilds the pool instead of silently reusing a stale one.
 func TestProviderPoolKey(t *testing.T) {
@@ -147,12 +175,16 @@ func TestProviderPoolKey(t *testing.T) {
 		{"port", func() provider { c := base; c.Port = 119; return c }()},
 		{"tls", func() provider { c := base; c.TLS = false; return c }()},
 		{"user", func() provider { c := base; c.Username = "v"; return c }()},
-		{"conns", func() provider { c := base; c.Connections = 11; return c }()},
 		{"id", func() provider { c := base; c.ID = 2; return c }()},
 	} {
 		if mut.p.poolKey(20) == k {
 			t.Errorf("changing %s did not change the pool key", mut.name)
 		}
+	}
+	// The resolved size is part of the key: when the fleet grows and each
+	// worker's budget shrinks at a term boundary, the pool must rebuild.
+	if base.poolKey(21) == k {
+		t.Error("a different resolved size must change the pool key")
 	}
 	if base.poolKey(20) != k {
 		t.Error("pool key is not stable for identical settings")

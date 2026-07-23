@@ -28,13 +28,14 @@ func (s *PGStore) listServers(ctx context.Context) ([]provider, error) {
 		Role        string `db:"role"`
 		Priority    int    `db:"priority"`
 		Connections int    `db:"connections"`
+		AccountCap  int    `db:"account_cap"`
 		Backbone    string `db:"backbone"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		// Password is deliberately NOT selected: it is never sent to the browser.
 		return tx.SelectContext(ctx, &rows,
-			`SELECT id, name, host, port, tls, username, enabled, role, priority, connections, backbone
+			`SELECT id, name, host, port, tls, username, enabled, role, priority, connections, account_cap, backbone
 			   FROM servers ORDER BY role, priority, id`)
 	})
 	if err != nil {
@@ -45,7 +46,8 @@ func (s *PGStore) listServers(ctx context.Context) ([]provider, error) {
 		out[i] = provider{
 			ID: r.ID, Name: r.Name, Host: r.Host, Port: r.Port, TLS: r.TLS,
 			Username: r.Username, Enabled: r.Enabled, Role: r.Role,
-			Priority: r.Priority, Connections: r.Connections, Backbone: r.Backbone,
+			Priority: r.Priority, Connections: r.Connections, AccountCap: r.AccountCap,
+			Backbone: r.Backbone,
 		}
 	}
 	return out, nil
@@ -74,20 +76,21 @@ func (s *PGStore) upsertServer(ctx context.Context, pr provider) error {
 		if pr.ID == 0 {
 			_, err := tx.ExecContext(ctx,
 				`INSERT INTO servers (name, host, port, tls, username, password, enabled,
-				                      role, priority, connections, backbone)
-				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+				                      role, priority, connections, account_cap, backbone)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
 				pr.Name, pr.Host, pr.Port, pr.TLS, pr.Username, pr.Password, pr.Enabled,
-				pr.Role, pr.Priority, pr.Connections, pr.Backbone)
+				pr.Role, pr.Priority, pr.Connections, pr.AccountCap, pr.Backbone)
 			return err
 		}
 		_, err := tx.ExecContext(ctx,
 			`UPDATE servers
 			    SET name = $2, host = $3, port = $4, tls = $5, username = $6,
 			        password = CASE WHEN $7 = '' THEN password ELSE $7 END,
-			        enabled = $8, role = $9, priority = $10, connections = $11, backbone = $12
+			        enabled = $8, role = $9, priority = $10, connections = $11,
+			        account_cap = $12, backbone = $13
 			  WHERE id = $1`,
 			pr.ID, pr.Name, pr.Host, pr.Port, pr.TLS, pr.Username, pr.Password,
-			pr.Enabled, pr.Role, pr.Priority, pr.Connections, pr.Backbone)
+			pr.Enabled, pr.Role, pr.Priority, pr.Connections, pr.AccountCap, pr.Backbone)
 		return err
 	})
 }

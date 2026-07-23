@@ -1,0 +1,15 @@
+-- Per-server fleet cap for the per-worker connection controller.
+--
+-- `connections` stays the per-WORKER pool size: how many connections a single
+-- crawler opens to this endpoint. `account_cap`, when > 0, is the TOTAL the
+-- provider account permits to this endpoint across the WHOLE fleet, so each of
+-- the N live workers opens at most account_cap/N and the sum never breaches the
+-- account limit. 0 keeps the historical behaviour — no fleet cap, every worker
+-- opens its full per-worker size.
+--
+-- Per-server, not global, because providers sell asymmetric limits per backbone
+-- (e.g. 100 to the EU server, 100 to NA, 50 to their own) that a single number
+-- can't express. The division reuses the same term-stable worker membership
+-- that splits the newsgroups (assign.go), so the budget only re-divides on a
+-- term boundary — no mid-pass connection thrash.
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS account_cap INT NOT NULL DEFAULT 0;

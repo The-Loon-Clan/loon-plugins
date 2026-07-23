@@ -119,19 +119,40 @@ func groupSlot(name string, n uint32) uint32 {
 	return h.Sum32() % n
 }
 
+// termParams resolves the assignment term and staleness window from config,
+// applying the shared defaults so myGroups and the connection controller agree
+// on which crawlers count this term.
+func termParams(cfg Config) (term, stale time.Duration) {
+	term = time.Duration(cfg.AssignTermMin) * time.Minute
+	if term <= 0 {
+		term = 15 * time.Minute
+	}
+	stale = time.Duration(cfg.WorkerStaleSec) * time.Second
+	if stale <= 0 {
+		stale = 90 * time.Second
+	}
+	return term, stale
+}
+
+// liveWorkerCount is how many crawlers share the fleet this term — the same
+// membership myGroups uses to split the groups, reused by activeFleet to divide
+// each server's account cap. Min 1: a lone worker (or one that can't read the
+// presence table) owns the whole budget rather than stalling.
+func (p *Plugin) liveWorkerCount(ctx context.Context, cfg Config) int {
+	term, stale := termParams(cfg)
+	workers, err := p.st.eligibleWorkers(ctx, termStart(time.Now(), term), stale)
+	if err != nil || len(workers) == 0 {
+		return 1
+	}
+	return len(workers)
+}
+
 // myGroups narrows the active groups to this worker's share for the current
 // term. On any error it returns everything: a presence problem must not stop a
 // single-worker install from crawling, and the leases still prevent overlap.
 func (p *Plugin) myGroups(ctx context.Context, groups []groupRow, cfg Config) []groupRow {
 	me := workerID()
-	term := time.Duration(cfg.AssignTermMin) * time.Minute
-	if term <= 0 {
-		term = 15 * time.Minute
-	}
-	stale := time.Duration(cfg.WorkerStaleSec) * time.Second
-	if stale <= 0 {
-		stale = 90 * time.Second
-	}
+	term, stale := termParams(cfg)
 
 	workers, err := p.st.eligibleWorkers(ctx, termStart(time.Now(), term), stale)
 	if err != nil {

@@ -171,7 +171,7 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	}
 
 	p.backfillJob.Log("%s: backfilling %d group(s), %d batch(es) over %d connection(s)…",
-		run.prov.label(), len(targets), len(jobs), run.prov.conns(cfg.Connections))
+		run.prov.label(), len(targets), len(jobs), run.size)
 	p.tel.backfill.noteGroups(len(targets))
 	results := p.runBatches(ctx, pool, jobs, cfg)
 	for _, r := range results {

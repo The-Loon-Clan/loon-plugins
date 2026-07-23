@@ -111,6 +111,7 @@ func formProvider(gc *gin.Context) provider {
 	port, _ := strconv.Atoi(gc.PostForm("port"))
 	prio, _ := strconv.Atoi(gc.PostForm("priority"))
 	conns, _ := strconv.Atoi(gc.PostForm("connections"))
+	acctCap, _ := strconv.Atoi(gc.PostForm("account_cap"))
 	tls := gc.PostForm("tls")
 	pr := provider{
 		ID:          id,
@@ -124,6 +125,7 @@ func formProvider(gc *gin.Context) provider {
 		Role:        gc.PostForm("role"),
 		Priority:    prio,
 		Connections: conns,
+		AccountCap:  acctCap,
 		Backbone:    strings.TrimSpace(gc.PostForm("backbone")),
 	}
 	// Same rule as the wizard: only ever fill a blank, never overwrite a

@@ -187,7 +187,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 
 	// 2. Fetch + stage in parallel over the pool.
 	p.crawlJob.Log("%s: crawling %d group(s), %d batch(es) over %d connection(s)…",
-		run.prov.label(), len(plans), len(jobs), run.prov.conns(cfg.Connections))
+		run.prov.label(), len(plans), len(jobs), run.size)
 	results := p.runBatches(ctx, pool, jobs, cfg)
 
 	// 3. Advance watermarks to the last contiguous success per group.

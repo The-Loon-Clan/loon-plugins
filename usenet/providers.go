@@ -33,7 +33,8 @@ type provider struct {
 	Enabled     bool
 	Role        string
 	Priority    int
-	Connections int    // 0 = fall back to the plugin-wide default
+	Connections int    // per-worker pool size; 0 = fall back to the plugin-wide default
+	AccountCap  int    // fleet total this account allows here; 0 = no cap (each worker gets its full per-worker size)
 	Backbone    string // shared numbering identity; empty = this server alone
 }
 
@@ -79,10 +80,32 @@ func (pr provider) conns(def int) int {
 	return 1
 }
 
+// effectiveConns is the per-worker pool size once the fleet cap is applied.
+// conns() gives the per-worker ceiling; when AccountCap is set it also bounds
+// the SUM across the `workers` live crawlers, so each opens at most
+// AccountCap/workers. The smaller of the two wins (min 1). The cap binds even
+// for a lone worker — one crawler must not exceed the account limit either. A
+// zero cap leaves the per-worker size untouched.
+func (pr provider) effectiveConns(def, workers int) int {
+	perWorker := pr.conns(def)
+	if pr.AccountCap > 0 && workers > 0 {
+		share := pr.AccountCap / workers
+		if share < 1 {
+			share = 1
+		}
+		if share < perWorker {
+			return share
+		}
+	}
+	return perWorker
+}
+
 // poolKey changes whenever anything about how we'd dial changes, so the pool is
-// rebuilt rather than silently kept against stale settings.
-func (pr provider) poolKey(def int) string {
-	return fmt.Sprintf("%d|%s|%s|%t|%d", pr.ID, pr.addr(), pr.Username, pr.TLS, pr.conns(def))
+// rebuilt rather than silently kept against stale settings. `size` is the
+// resolved per-worker connection budget for this pass — it moves when the fleet
+// size changes at a term boundary, so the pool is rebuilt to the new budget.
+func (pr provider) poolKey(size int) string {
+	return fmt.Sprintf("%d|%s|%s|%t|%d", pr.ID, pr.addr(), pr.Username, pr.TLS, size)
 }
 
 // chooseProviders decides who crawls this pass: every healthy active provider,
@@ -165,12 +188,13 @@ func (s *PGStore) providers(ctx context.Context) ([]provider, error) {
 		Role        string `db:"role"`
 		Priority    int    `db:"priority"`
 		Connections int    `db:"connections"`
+		AccountCap  int    `db:"account_cap"`
 		Backbone    string `db:"backbone"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.SelectContext(ctx, &rows,
-			`SELECT id, name, host, port, tls, username, password, enabled, role, priority, connections, backbone
+			`SELECT id, name, host, port, tls, username, password, enabled, role, priority, connections, account_cap, backbone
 			   FROM servers WHERE enabled = TRUE ORDER BY priority, id`)
 	})
 	if err != nil {
@@ -182,7 +206,7 @@ func (s *PGStore) providers(ctx context.Context) ([]provider, error) {
 			ID: r.ID, Name: r.Name, Host: r.Host, Port: r.Port, TLS: r.TLS,
 			Username: r.Username, Password: r.Password, Enabled: r.Enabled,
 			Role: r.Role, Priority: r.Priority, Connections: r.Connections,
-			Backbone: r.Backbone,
+			AccountCap: r.AccountCap, Backbone: r.Backbone,
 		}
 	}
 	return out, nil
@@ -227,8 +251,8 @@ func (f *providerFleet) bench(pr provider, now time.Time) {
 }
 
 // get returns an open pool for the provider, dialling or rebuilding as needed.
-func (f *providerFleet) get(ctx context.Context, pr provider, defConns int) (*nntp.Pool, error) {
-	key := pr.poolKey(defConns)
+func (f *providerFleet) get(ctx context.Context, pr provider, size int) (*nntp.Pool, error) {
+	key := pr.poolKey(size)
 
 	f.mu.Lock()
 	pp := f.pools[pr.ID]
@@ -248,7 +272,7 @@ func (f *providerFleet) get(ctx context.Context, pr provider, defConns int) (*nn
 		TLS:         pr.TLS,
 		Username:    pr.Username,
 		Password:    pr.Password,
-		Size:        pr.conns(defConns),
+		Size:        size,
 		DialTimeout: 30 * time.Second,
 		OpTimeout:   60 * time.Second,
 	})
@@ -319,16 +343,22 @@ func (p *Plugin) activeFleet(ctx context.Context, cfg Config) ([]providerRun, er
 	now := time.Now()
 	chosen := chooseProviders(all, func(id int) bool { return p.fleet.isDown(id, now) })
 
+	// The account cap is split across the crawlers sharing this account, using
+	// the same term-stable membership that splits the groups (assign.go). A lone
+	// worker owns the whole cap.
+	workers := p.liveWorkerCount(ctx, cfg)
+
 	var runs []providerRun
 	for _, pr := range chosen {
-		pool, err := p.fleet.get(ctx, pr, cfg.Connections)
+		size := pr.effectiveConns(cfg.Connections, workers)
+		pool, err := p.fleet.get(ctx, pr, size)
 		if err != nil {
 			p.fleet.bench(pr, now)
 			p.core.Errors.Report(ctx, "usenet/provider-open",
 				fmt.Errorf("%s: %w", pr.label(), err))
 			continue
 		}
-		runs = append(runs, providerRun{prov: pr, pool: pool})
+		runs = append(runs, providerRun{prov: pr, pool: pool, size: size})
 	}
 	if len(runs) == 0 {
 		return nil, fmt.Errorf("no usable provider (%d configured)", len(all))
@@ -340,4 +370,5 @@ func (p *Plugin) activeFleet(ctx context.Context, cfg Config) ([]providerRun, er
 type providerRun struct {
 	prov provider
 	pool *nntp.Pool
+	size int // resolved per-worker connection budget this pass (after the fleet cap)
 }
