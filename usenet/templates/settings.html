@@ -12,14 +12,14 @@
     </p>
     <form method="post" action="/admin/settings/usenet/server">
         <label>Host</label>
-        <input type="text" name="host" value="{{.Server.Host}}" placeholder="news.example.com">
+        <input class="form-control" type="text" name="host" value="{{.Server.Host}}" placeholder="news.example.com">
         <div style="display:flex;gap:1rem;margin-top:.5rem">
             <div style="flex:1"><label>Port</label>
-                <input type="text" name="port" value="{{if .Server.Port}}{{.Server.Port}}{{else}}119{{end}}"></div>
+                <input class="form-control" type="text" name="port" value="{{if .Server.Port}}{{.Server.Port}}{{else}}119{{end}}"></div>
             <div style="flex:2"><label>Username</label>
-                <input type="text" name="username" value="{{.Server.Username}}"></div>
+                <input class="form-control" type="text" name="username" value="{{.Server.Username}}"></div>
             <div style="flex:2"><label>Password</label>
-                <input type="password" name="password" value="{{.Server.Password}}"></div>
+                <input class="form-control" type="password" name="password" value="{{.Server.Password}}"></div>
         </div>
         <label style="margin-top:.6rem">
             <input type="checkbox" name="tls" {{if .Server.TLS}}checked{{end}}> TLS (SSL) — usually port <code>563</code>
@@ -30,7 +30,7 @@
         </div>
         <div style="margin-top:.6rem">
             <label for="backbone">Backbone <span style="opacity:.6;font-weight:400">(optional)</span></label>
-            <input type="text" id="backbone" name="backbone" value="{{.Server.Backbone}}"
+            <input class="form-control" type="text" id="backbone" name="backbone" value="{{.Server.Backbone}}"
                    placeholder="e.g. omicron, usenetexpress, abavia">
             <p style="opacity:.7;font-size:.85rem;margin:.35rem 0 0">
               The upstream network this account resells. Article <em>numbers</em> are handed out by the
@@ -70,20 +70,20 @@
     <td colspan="7" style="padding-top:.6rem">
       <form method="post" action="/admin/settings/usenet/provider" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
         <input type="hidden" name="id" value="{{.ID}}">
-        <input type="text" name="name" value="{{.Name}}" placeholder="label" style="width:9rem">
-        <input type="text" name="host" value="{{.Host}}" placeholder="news.example.com" style="width:14rem" required>
-        <input type="text" name="port" value="{{.Port}}" style="width:4.5rem">
+        <input class="form-control form-control-sm" type="text" name="name" value="{{.Name}}" placeholder="label" style="width:9rem">
+        <input class="form-control form-control-sm" type="text" name="host" value="{{.Host}}" placeholder="news.example.com" style="width:14rem" required>
+        <input class="form-control form-control-sm" type="text" name="port" value="{{.Port}}" style="width:4.5rem">
         <label style="white-space:nowrap"><input type="checkbox" name="tls" {{if .TLS}}checked{{end}}> TLS</label>
-        <input type="text" name="username" value="{{.Username}}" placeholder="user" style="width:8rem">
-        <input type="password" name="password" value="" placeholder="password (unchanged)" style="width:11rem">
-        <select name="role" style="width:7rem">
+        <input class="form-control form-control-sm" type="text" name="username" value="{{.Username}}" placeholder="user" style="width:8rem">
+        <input class="form-control form-control-sm" type="password" name="password" value="" placeholder="password (unchanged)" style="width:11rem">
+        <select class="form-select form-select-sm" name="role" style="width:7rem">
           <option value="active" {{if ne .Role "backup"}}selected{{end}}>active</option>
           <option value="backup" {{if eq .Role "backup"}}selected{{end}}>backup</option>
         </select>
-        <input type="text" name="priority" value="{{.Priority}}" title="lower runs first" style="width:4.5rem">
-        <input type="text" name="connections" value="{{.Connections}}" title="per-worker pool size; 0 = use the default ({{$.DefaultConns}})" style="width:4.5rem">
-        <input type="text" name="account_cap" value="{{.AccountCap}}" placeholder="cap" title="fleet cap: total connections this account allows to this endpoint across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
-        <input type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" title="blank = detected from the host, or its own" style="width:9rem">
+        <input class="form-control form-control-sm" type="text" name="priority" value="{{.Priority}}" title="lower runs first" style="width:4.5rem">
+        <input class="form-control form-control-sm" type="text" name="connections" value="{{.Connections}}" title="per-worker pool size; 0 = use the default ({{$.DefaultConns}})" style="width:4.5rem">
+        <input class="form-control form-control-sm" type="text" name="account_cap" value="{{.AccountCap}}" placeholder="cap" title="fleet cap: total connections this account allows to this endpoint across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
+        <input class="form-control form-control-sm" type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" title="blank = detected from the host, or its own" style="width:9rem">
         <label style="white-space:nowrap"><input type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> enabled</label>
         <button type="submit">Save</button>
       </form>
@@ -108,20 +108,20 @@
 <h5 style="margin:1rem 0 .4rem">Add a provider</h5>
 <form method="post" action="/admin/settings/usenet/provider" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
   <input type="hidden" name="id" value="0">
-  <input type="text" name="name" placeholder="label (optional)" style="width:9rem">
-  <input type="text" name="host" placeholder="news.example.com" style="width:14rem" required>
-  <input type="text" name="port" value="119" style="width:4.5rem">
+  <input class="form-control form-control-sm" type="text" name="name" placeholder="label (optional)" style="width:9rem">
+  <input class="form-control form-control-sm" type="text" name="host" placeholder="news.example.com" style="width:14rem" required>
+  <input class="form-control form-control-sm" type="text" name="port" value="119" style="width:4.5rem">
   <label style="white-space:nowrap"><input type="checkbox" name="tls"> TLS</label>
-  <input type="text" name="username" placeholder="user" style="width:8rem">
-  <input type="password" name="password" placeholder="password" style="width:11rem">
-  <select name="role" style="width:7rem">
+  <input class="form-control form-control-sm" type="text" name="username" placeholder="user" style="width:8rem">
+  <input class="form-control form-control-sm" type="password" name="password" placeholder="password" style="width:11rem">
+  <select class="form-select form-select-sm" name="role" style="width:7rem">
     <option value="active">active</option>
     <option value="backup">backup</option>
   </select>
-  <input type="text" name="priority" value="100" title="lower runs first" style="width:4.5rem">
-  <input type="text" name="connections" value="0" title="per-worker pool size; 0 = use the default" style="width:4.5rem">
-  <input type="text" name="account_cap" value="0" placeholder="cap" title="fleet cap across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
-  <input type="text" name="backbone" placeholder="auto-detected" style="width:9rem">
+  <input class="form-control form-control-sm" type="text" name="priority" value="100" title="lower runs first" style="width:4.5rem">
+  <input class="form-control form-control-sm" type="text" name="connections" value="0" title="per-worker pool size; 0 = use the default" style="width:4.5rem">
+  <input class="form-control form-control-sm" type="text" name="account_cap" value="0" placeholder="cap" title="fleet cap across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
+  <input class="form-control form-control-sm" type="text" name="backbone" placeholder="auto-detected" style="width:9rem">
   <button type="submit">Add provider</button>
 </form>
 
@@ -130,7 +130,7 @@
             {{range .Knobs}}
             <div>
                 <label title="{{.Help}}">{{.Label}}</label>
-                <input type="number" min="1" name="{{.Key}}" value="{{.Value}}">
+                <input class="form-control" type="number" min="1" name="{{.Key}}" value="{{.Value}}">
                 <div class="text-muted" style="font-size:.75rem;margin-top:.2rem">{{.Help}}</div>
             </div>
             {{end}}
@@ -152,7 +152,7 @@
             <button class="btn btn-outline-primary btn-sm" type="submit">Fetch group list</button>
         </form>
         <form method="get" action="/admin/settings" style="display:flex;gap:.5rem;flex:1;min-width:220px">
-            <input type="search" name="gq" value="{{.GroupQuery}}" placeholder="search groups…" style="flex:1">
+            <input class="form-control form-control-sm" type="search" name="gq" value="{{.GroupQuery}}" placeholder="search groups…" style="flex:1">
             <button class="btn btn-outline-secondary btn-sm" type="submit">Search</button>
         </form>
     </div>
@@ -169,9 +169,9 @@
                     <td><code>{{.Name}}</code></td>
                     <td class="text-end">{{.NZBs}}</td>
                     <form method="post" action="/admin/settings/usenet/group-tune" id="tune-{{.Name}}"></form>
-                    <td><input form="tune-{{.Name}}" type="text" name="retention_days" value="{{if .RetentionDays}}{{.RetentionDays}}{{end}}"
+                    <td><input class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="retention_days" value="{{if .RetentionDays}}{{.RetentionDays}}{{end}}"
                                placeholder="site" title="blank = follow the site-wide crawl depth" style="width:4.5rem"></td>
-                    <td><input form="tune-{{.Name}}" type="text" name="throttle_ms" value="{{.ThrottleMs}}"
+                    <td><input class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="throttle_ms" value="{{.ThrottleMs}}"
                                title="pause after each batch for this group" style="width:4.5rem"></td>
                     <td><input form="tune-{{.Name}}" type="checkbox" name="low_priority" {{if .LowPriority}}checked{{end}}
                                title="crawled only after the normal groups have had their pass"></td>
