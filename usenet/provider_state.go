@@ -173,6 +173,19 @@ func (s *PGStore) recordFetchedRangeFor(ctx context.Context, backbone, group str
 	})
 }
 
+// coveredRangesFor returns this backbone's merged runs for a group, ascending.
+func (s *PGStore) coveredRangesFor(ctx context.Context, backbone, group string) ([]articleRange, error) {
+	var rows []articleRange
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &rows,
+			`SELECT range_start AS start, range_end AS end
+			   FROM newsgroup_ranges
+			  WHERE backbone = $1 AND group_name = $2
+			  ORDER BY range_start`, backbone, group)
+	})
+	return rows, err
+}
+
 // backfillGapsFor returns this backbone's uncovered spans, newest first.
 func (s *PGStore) backfillGapsFor(ctx context.Context, backbone, group string, low, high int64) ([]articleRange, error) {
 	var rows []articleRange
@@ -187,4 +200,26 @@ func (s *PGStore) backfillGapsFor(ctx context.Context, backbone, group string, l
 		return nil, err
 	}
 	return gapsBetween(rows, low, high), nil
+}
+
+// resetBackfillForGroup re-arms backfill on EVERY backbone for a group and drops
+// the fetched-range record, which is what "re-scan history" has to mean: gaps are
+// the complement of the recorded ranges, so leaving them behind would compute an
+// empty gap list and mark the group complete again on the very next pass.
+//
+// Dropping the ranges is safe — re-fetched articles collide on message-id and
+// are ignored — and it is the only way an operator can recover from ranges that
+// were recorded against content that was never really staged.
+func (s *PGStore) resetBackfillForGroup(ctx context.Context, group string) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE newsgroup_state
+			    SET back_watermark = GREATEST(high_watermark - 1, server_low),
+			        back_watermark_date = NULL, backfill_done = FALSE
+			  WHERE group_name = $1`, group); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `DELETE FROM newsgroup_ranges WHERE group_name = $1`, group)
+		return err
+	})
 }

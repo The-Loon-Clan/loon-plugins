@@ -72,6 +72,9 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		return
 	}
 
+	p.tel.backfill.passStart(len(runs))
+	defer p.tel.backfill.passEnd()
+
 	total := 0
 	for _, run := range runs {
 		if ctx.Err() != nil {
@@ -169,7 +172,11 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 
 	p.backfillJob.Log("%s: backfilling %d group(s), %d batch(es) over %d connection(s)…",
 		run.prov.label(), len(targets), len(jobs), run.prov.conns(cfg.Connections))
+	p.tel.backfill.noteGroups(len(targets))
 	results := p.runBatches(ctx, pool, jobs, cfg)
+	for _, r := range results {
+		p.tel.backfill.noteBatch(r.articles, r.staged, r.wire, r.ok)
+	}
 
 	staged := p.recordBackfill(ctx, bb, targets, results, cfg)
 

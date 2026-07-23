@@ -1,73 +1,14 @@
 package usenet
 
 import (
-	"context"
+	"math"
 	"sort"
-
-	"github.com/jmoiron/sqlx"
 )
 
 // articleRange is a closed span of article numbers [Start, End].
 type articleRange struct {
 	Start int64
 	End   int64
-}
-
-// recordFetchedRange marks a span as covered, merging it with any overlapping or
-// adjacent runs so the table holds one row per contiguous run rather than one
-// per batch. Adjacency (not just overlap) is what keeps it from growing linearly
-// with batch count: consecutive batches collapse into a single row.
-func (s *PGStore) recordFetchedRange(ctx context.Context, group string, start, end int64) error {
-	if start > end {
-		start, end = end, start
-	}
-	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		// Absorb every run touching [start-1, end+1] (the ±1 makes abutting runs
-		// merge too) and rewrite them as one span.
-		_, err := tx.ExecContext(ctx,
-			`WITH absorbed AS (
-			     DELETE FROM newsgroup_ranges
-			      WHERE group_name = $1
-			        AND range_start <= $3 + 1
-			        AND range_end   >= $2 - 1
-			  RETURNING range_start, range_end
-			 )
-			 INSERT INTO newsgroup_ranges (group_name, range_start, range_end)
-			 SELECT $1,
-			        LEAST($2, COALESCE(MIN(range_start), $2)),
-			        GREATEST($3, COALESCE(MAX(range_end), $3))
-			   FROM absorbed`,
-			group, start, end)
-		return err
-	})
-}
-
-// coveredRanges returns the merged runs for a group, ascending.
-func (s *PGStore) coveredRanges(ctx context.Context, group string) ([]articleRange, error) {
-	var rows []articleRange
-	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		return tx.SelectContext(ctx, &rows,
-			`SELECT range_start AS start, range_end AS end
-			   FROM newsgroup_ranges WHERE group_name = $1 ORDER BY range_start`, group)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return rows, nil
-}
-
-// backfillGaps returns the uncovered spans within [low, high], NEWEST FIRST —
-// backfill walks history downward, so the newest gap is the one to close next.
-//
-// Computed in Go rather than SQL: the complement of a set of ranges is awkward
-// as a window query, the input is already merged and tiny, and doing it here
-// keeps the rule ("what is still missing") readable and testable.
-func (s *PGStore) backfillGaps(ctx context.Context, group string, low, high int64) ([]articleRange, error) {
-	covered, err := s.coveredRanges(ctx, group)
-	if err != nil {
-		return nil, err
-	}
-	return gapsBetween(covered, low, high), nil
 }
 
 // gapsBetween is the pure complement calculation, split out so it can be tested
@@ -133,4 +74,58 @@ func gapJobs(group string, gaps []articleRange, batch, budget int) []batchJob {
 		}
 	}
 	return jobs
+}
+
+// coverKey identifies one group's coverage on one backbone — the only scope in
+// which article numbers mean anything.
+type coverKey struct{ backbone, group string }
+
+// coverageCells buckets merged ranges into n equal slices of [low, high] and
+// returns the covered FRACTION of each, so the page can draw where the holes
+// actually are rather than one flat "have" block.
+//
+// Bucketed rather than one element per range on purpose: parallel backfill
+// leaves hundreds of separate runs per group, and a div per run is both
+// unbounded page weight and invisible at typical article counts. A fixed cell
+// count keeps the markup constant-size whatever the fragmentation.
+func coverageCells(covered []articleRange, low, high int64, n int) []float64 {
+	if n <= 0 || high <= low {
+		return nil
+	}
+	cells := make([]float64, n)
+	// +1 because the bounds are INCLUSIVE: [0..99] is a hundred articles, not
+	// ninety-nine. Without it the last cell of a fully covered group overflows
+	// past the end of the bar.
+	span := float64(high - low + 1)
+	for _, r := range covered {
+		s, e := r.Start, r.End
+		if s < low {
+			s = low
+		}
+		if e > high {
+			e = high
+		}
+		if s > e {
+			continue
+		}
+		// Fractional cell positions: a range narrower than one cell still
+		// contributes its real weight instead of rounding away to nothing.
+		from := float64(s-low) / span * float64(n)
+		to := float64(e+1-low) / span * float64(n)
+		for c := int(from); c < n && float64(c) < to; c++ {
+			if c < 0 {
+				continue
+			}
+			lo, hi := math.Max(from, float64(c)), math.Min(to, float64(c+1))
+			if hi > lo {
+				cells[c] += hi - lo
+			}
+		}
+	}
+	for i := range cells {
+		if cells[i] > 1 {
+			cells[i] = 1
+		}
+	}
+	return cells
 }

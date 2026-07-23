@@ -81,7 +81,7 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			},
 			"reset-backfill": func(gc *gin.Context) (template.HTML, error) {
 				name := gc.PostForm("name")
-				_ = p.st.resetBackfill(gc.Request.Context(), name)
+				_ = p.st.resetBackfillForGroup(gc.Request.Context(), name)
 				return redirect(gc, crawlersURL+"?msg="+url.QueryEscape("backfill re-armed for "+name))
 			},
 		},
@@ -136,7 +136,35 @@ func (p *Plugin) passVM() passVM {
 	if p.tel == nil {
 		return passVM{}
 	}
-	cur, last, _ := p.tel.snapshot()
+	return trackerVM(&p.tel.crawl)
+}
+
+// cellLevels quantises fill fractions into four steps so the bar renders with
+// CSS classes instead of a per-cell inline style (which a strict CSP blocks).
+// Any coverage at all shows as at least level 1: a slice holding one fetched
+// batch out of thousands of articles is still meaningfully different from an
+// untouched one, and rounding it to empty would hide exactly the sparse tail
+// backfill is working through.
+func cellLevels(cells []float64) []int {
+	out := make([]int, len(cells))
+	for i, f := range cells {
+		switch {
+		case f >= 0.999:
+			out[i] = 3
+		case f >= 0.5:
+			out[i] = 2
+		case f > 0:
+			out[i] = 1
+		}
+	}
+	return out
+}
+
+func trackerVM(t *passTracker) passVM {
+	if t == nil {
+		return passVM{}
+	}
+	cur, last := t.snapshot()
 	st, running := last, false
 	if cur.InProgress {
 		st, running = cur, true
@@ -164,7 +192,7 @@ func (p *Plugin) errorVMs() []errorVM {
 	if p.tel == nil {
 		return nil
 	}
-	_, _, errs := p.tel.snapshot()
+	errs := p.tel.recentErrors()
 	out := make([]errorVM, len(errs))
 	for i, e := range errs {
 		out[i] = errorVM{When: e.At.Format("15:04:05"), Op: e.Op, Msg: e.Msg}
@@ -528,12 +556,26 @@ type crawlerGroupVM struct {
 	Name         string
 	NZBs, Staged int
 	Cover        pluginapi.CoverageBar
+	Cells        []int // per-slice fill level 0..3, drawn over the coverage bar
+	Fragments    int   // contiguous fetched runs; >1 means backfill left holes
 	FwdDate      string
 	BackDate     string
 	BackfillDone bool
 	Remaining    int64
 	LastCrawl    string
 }
+
+// backboneVM groups one backbone's rows. Coverage is per backbone, so the page
+// cannot show a single merged table without inventing numbers.
+type backboneVM struct {
+	Name   string // "" before the first crawl, rendered as "not yet crawled"
+	Groups []crawlerGroupVM
+}
+
+// coverCellCount is the resolution of the coverage sparkline. Enough slices to
+// see where the holes are, few enough to stay legible and keep the markup a
+// fixed size regardless of how fragmented backfill left a group.
+const coverCellCount = 48
 
 type crawlerJobVM struct {
 	Name     string
@@ -547,8 +589,16 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 	if err != nil {
 		return "", err
 	}
-	groups := make([]crawlerGroupVM, len(stats.Groups))
-	for i, g := range stats.Groups {
+	// Best-effort: coverage detail is decoration over the watermark bar, and a
+	// ranges query failing should not blank the whole status page.
+	ranges, rerr := p.st.allCoveredRanges(ctx)
+	if rerr != nil {
+		p.reportErr(ctx, "usenet/coverage-ranges", rerr)
+	}
+
+	var backbones []backboneVM
+	byBackbone := map[string]int{}
+	for _, g := range stats.Groups {
 		vm := crawlerGroupVM{
 			Name: g.Name, NZBs: g.NZBs, Staged: g.Staged,
 			Cover: g.Coverage(), BackfillDone: g.BackfillDone,
@@ -558,15 +608,35 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		if !g.BackfillDone && g.BackWatermark > g.ServerLow {
 			vm.Remaining = g.BackWatermark - g.ServerLow
 		}
-		groups[i] = vm
+		if runs := ranges[coverKey{g.Backbone, g.Name}]; len(runs) > 0 {
+			vm.Fragments = len(runs)
+			vm.Cells = cellLevels(coverageCells(runs, g.ServerLow, g.ServerHigh, coverCellCount))
+		}
+		idx, ok := byBackbone[g.Backbone]
+		if !ok {
+			idx = len(backbones)
+			byBackbone[g.Backbone] = idx
+			backbones = append(backbones, backboneVM{Name: g.Backbone})
+		}
+		backbones[idx].Groups = append(backbones[idx].Groups, vm)
+	}
+	// Flat list too: the summary cards and any single-backbone install read this.
+	var groups []crawlerGroupVM
+	for _, b := range backbones {
+		groups = append(groups, b.Groups...)
 	}
 	jobs, running := p.jobVMs()
 	builder, err := p.st.builderInfo(ctx, 15)
 	if err != nil {
 		return "", err
 	}
+	eta := ""
+	if d, ok := backfillETA(stats.TotalBackfillRemaining, p.tel.backfill.rate()); ok {
+		eta = fmtETA(d)
+	}
 	return p.frag("crawlers.html", map[string]any{
-		"Stats": stats, "Groups": groups, "Jobs": jobs, "Builder": builder,
+		"Stats": stats, "Groups": groups, "Backbones": backbones,
+		"Backfill": trackerVM(&p.tel.backfill), "BackfillETA": eta, "Jobs": jobs, "Builder": builder,
 		"Fleet": p.fleetVMs(ctx), "Workers": p.workerVMs(ctx),
 		"Health":      p.healthVM(ctx),
 		"AutoRefresh": running, "Msg": msg, "Err": errMsg,

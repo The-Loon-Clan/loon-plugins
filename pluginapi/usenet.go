@@ -43,6 +43,10 @@ type GroupInfo struct {
 
 // GroupStat is the crawl status of one active group.
 type GroupStat struct {
+	// Backbone this row's article numbers belong to. Coverage is only ever
+	// meaningful within one backbone: two backbones number the same articles
+	// differently, so their watermarks cannot be compared or merged.
+	Backbone string
 	Name              string
 	NZBs              int
 	Staged            int // articles waiting in staging (not yet assembled)

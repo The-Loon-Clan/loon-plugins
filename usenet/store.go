@@ -6,7 +6,6 @@ import (
 	"errors"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jmoiron/sqlx"
 
@@ -160,7 +159,16 @@ func (s *PGStore) stats(ctx context.Context) (pluginapi.IndexStats, error) {
 		if err := tx.GetContext(ctx, &st.TotalStaged, `SELECT COUNT(*) FROM articles`); err != nil {
 			return err
 		}
+		// Crawl state is per BACKBONE, so one row per (backbone, group): article
+		// numbers from two backbones describe different articles and must never be
+		// merged into one bar. Groups with no state yet still appear (LEFT JOIN)
+		// so a freshly added group is visible before its first crawl.
+		//
+		// NZB and staged counts are group-wide, not per backbone — an article is
+		// indexed once no matter which backbone fetched it — so those repeat across
+		// a group's backbone rows.
 		type row struct {
+			Backbone   string       `db:"backbone"`
 			Name       string       `db:"name"`
 			NZBs       int          `db:"nzbs"`
 			Staged     int          `db:"staged"`
@@ -175,17 +183,27 @@ func (s *PGStore) stats(ctx context.Context) (pluginapi.IndexStats, error) {
 		}
 		var rows []row
 		if err := tx.SelectContext(ctx, &rows,
-			`SELECT g.name, g.high_watermark, g.high_watermark_date,
-			        COALESCE(g.back_watermark, g.high_watermark) AS back_watermark,
-			        g.back_watermark_date, g.server_low, g.server_high, g.last_crawl, g.backfill_done,
+			`SELECT COALESCE(s.backbone, '') AS backbone, g.name,
+			        COALESCE(s.high_watermark, 0) AS high_watermark,
+			        s.high_watermark_date,
+			        COALESCE(s.back_watermark, s.high_watermark, 0) AS back_watermark,
+			        s.back_watermark_date,
+			        COALESCE(s.server_low, 0)  AS server_low,
+			        COALESCE(s.server_high, 0) AS server_high,
+			        s.last_crawl,
+			        COALESCE(s.backfill_done, FALSE) AS backfill_done,
 			        (SELECT COUNT(*) FROM nzbs n WHERE n.group_name = g.name) AS nzbs,
 			        (SELECT COUNT(*) FROM articles a WHERE a.group_name = g.name) AS staged
-			 FROM newsgroups g WHERE g.active = TRUE ORDER BY g.name`); err != nil {
+			 FROM newsgroups g
+			 LEFT JOIN newsgroup_state s ON s.group_name = g.name
+			 WHERE g.active = TRUE
+			 ORDER BY COALESCE(s.backbone, ''), g.name`); err != nil {
 			return err
 		}
 		for _, r := range rows {
 			gs := pluginapi.GroupStat{
-				Name: r.Name, NZBs: r.NZBs, Staged: r.Staged,
+				Backbone: r.Backbone,
+				Name:     r.Name, NZBs: r.NZBs, Staged: r.Staged,
 				HighWatermark: r.Watermark, BackWatermark: r.Back,
 				ServerLow: r.ServerLow, ServerHigh: r.ServerHigh, BackfillDone: r.Done,
 			}
@@ -562,43 +580,6 @@ func (s *PGStore) groupsNeedingBackfill(ctx context.Context, limit int) ([]backf
 	return out, nil
 }
 
-// updateBackWatermark lowers a group's backfill pointer and records the oldest
-// posting date reached (kept if the batch had no dated articles).
-func (s *PGStore) updateBackWatermark(ctx context.Context, name string, back int64, oldest time.Time) error {
-	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		var d sql.NullTime
-		if !oldest.IsZero() {
-			d = sql.NullTime{Time: oldest, Valid: true}
-		}
-		_, err := tx.ExecContext(ctx,
-			`UPDATE newsgroups
-			   SET back_watermark = $2,
-			       back_watermark_date = COALESCE($3, back_watermark_date)
-			 WHERE name = $1`, name, back, d)
-		return err
-	})
-}
-
-func (s *PGStore) markBackfillDone(ctx context.Context, name string) error {
-	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		_, err := tx.ExecContext(ctx, `UPDATE newsgroups SET backfill_done = TRUE WHERE name = $1`, name)
-		return err
-	})
-}
-
-// resetBackfill re-arms a group: backfill restarts just below the forward
-// watermark and walks down again (dupes are ignored on insert).
-func (s *PGStore) resetBackfill(ctx context.Context, name string) error {
-	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		_, err := tx.ExecContext(ctx,
-			`UPDATE newsgroups
-			   SET back_watermark = GREATEST(high_watermark - 1, server_low),
-			       back_watermark_date = NULL, backfill_done = FALSE
-			 WHERE name = $1`, name)
-		return err
-	})
-}
-
 // retagUntagged re-parses tags for NZBs that have none set (rows from before a
 // parser change, or that genuinely had no tags in the title). Idempotent.
 func (s *PGStore) retagUntagged(ctx context.Context, limit int) (int, error) {
@@ -779,4 +760,33 @@ func (s *PGStore) stagedCount(ctx context.Context) (int, error) {
 		return tx.GetContext(ctx, &n, `SELECT COUNT(*) FROM articles`)
 	})
 	return n, err
+}
+
+// allCoveredRanges returns every backbone's merged runs keyed by coverKey. One query for the whole page: the crawlers view needs
+// coverage for every group it renders, and a query per row is a needless N+1 on
+// a page that already refreshes on a timer while a crawl is running.
+func (s *PGStore) allCoveredRanges(ctx context.Context) (map[coverKey][]articleRange, error) {
+	type row struct {
+		Backbone string `db:"backbone"`
+		Group    string `db:"group_name"`
+		Start    int64  `db:"start"`
+		End      int64  `db:"end"`
+	}
+	var rows []row
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &rows,
+			`SELECT r.backbone, r.group_name, r.range_start AS start, r.range_end AS end
+			   FROM newsgroup_ranges r
+			   JOIN newsgroups g ON g.name = r.group_name AND g.active = TRUE
+			  ORDER BY r.backbone, r.group_name, r.range_start`)
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[coverKey][]articleRange)
+	for _, r := range rows {
+		k := coverKey{r.Backbone, r.Group}
+		out[k] = append(out[k], articleRange{Start: r.Start, End: r.End})
+	}
+	return out, nil
 }

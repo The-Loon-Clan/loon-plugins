@@ -113,27 +113,25 @@ func TestContiguousEndNoAdvanceSentinel(t *testing.T) {
 // so raising the global depth later would silently skip that group.
 func TestGroupCutoffFallback(t *testing.T) {
 	cfg := Config{RetentionDays: 100}
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
 
-	global := groupRow{Name: "a"}.cutoff(cfg)
-	wantGlobal := time.Now().AddDate(0, 0, -100)
-	if global.Sub(wantGlobal) > time.Minute || wantGlobal.Sub(global) > time.Minute {
-		t.Errorf("no override should use the global depth: got %v, want ~%v", global, wantGlobal)
+	global := groupRow{Name: "a"}.cutoffAt(cfg, now)
+	if want := now.AddDate(0, 0, -100); !global.Equal(want) {
+		t.Errorf("no override should use the global depth: got %v, want %v", global, want)
 	}
 
 	// An override wins and is independent of the global.
-	over := groupRow{Name: "b", RetentionDays: 7}.cutoff(cfg)
-	wantOver := time.Now().AddDate(0, 0, -7)
-	if over.Sub(wantOver) > time.Minute || wantOver.Sub(over) > time.Minute {
-		t.Errorf("override should win: got %v, want ~%v", over, wantOver)
+	over := groupRow{Name: "b", RetentionDays: 7}.cutoffAt(cfg, now)
+	if want := now.AddDate(0, 0, -7); !over.Equal(want) {
+		t.Errorf("override should win: got %v, want %v", over, want)
 	}
 	if !over.After(global) {
 		t.Error("a shallower per-group depth should produce a LATER cutoff than the global one")
 	}
 
-	// Zero means "no override" (composite literals need parens in a condition).
-	zero := groupRow{Name: "c", RetentionDays: 0}.cutoff(cfg)
-	none := groupRow{Name: "c"}.cutoff(cfg)
-	if !zero.Equal(none) {
+	// Zero means "no override", not "crawl nothing".
+	zero := groupRow{Name: "c", RetentionDays: 0}.cutoffAt(cfg, now)
+	if !zero.Equal(global) {
 		t.Error("zero retention should mean 'follow the global depth'")
 	}
 }

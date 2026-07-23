@@ -17,7 +17,7 @@ func TestErrorRingKeepsNewest(t *testing.T) {
 	for i := 0; i < total; i++ {
 		tel.noteError("op", fmt.Errorf("err-%03d", i))
 	}
-	_, _, errs := tel.snapshot()
+	errs := tel.recentErrors()
 	if len(errs) != errorRingSize {
 		t.Fatalf("ring holds %d, want %d", len(errs), errorRingSize)
 	}
@@ -45,12 +45,12 @@ func TestErrorRingBeforeFull(t *testing.T) {
 	tel := newTelemetry()
 	tel.noteError("a", errors.New("first"))
 	tel.noteError("b", errors.New("second"))
-	_, _, errs := tel.snapshot()
+	errs := tel.recentErrors()
 	if len(errs) != 2 || errs[0].Msg != "second" || errs[1].Msg != "first" {
 		t.Fatalf("partial ring = %+v, want newest-first [second first]", errs)
 	}
 	tel.noteError("c", nil) // nil must be ignored
-	if _, _, e := tel.snapshot(); len(e) != 2 {
+	if e := tel.recentErrors(); len(e) != 2 {
 		t.Errorf("a nil error was recorded")
 	}
 }
@@ -59,13 +59,13 @@ func TestErrorRingBeforeFull(t *testing.T) {
 // articles, or a failing crawl would look productive.
 func TestPassAccounting(t *testing.T) {
 	tel := newTelemetry()
-	tel.passStart(2)
-	tel.noteGroups(5)
-	tel.noteBatch(3000, 120, 1<<20, true)
-	tel.noteBatch(3000, 80, 1<<20, true)
-	tel.noteBatch(0, 0, 0, false)
+	tel.crawl.passStart(2)
+	tel.crawl.noteGroups(5)
+	tel.crawl.noteBatch(3000, 120, 1<<20, true)
+	tel.crawl.noteBatch(3000, 80, 1<<20, true)
+	tel.crawl.noteBatch(0, 0, 0, false)
 
-	cur, _, _ := tel.snapshot()
+	cur, _ := tel.crawl.snapshot()
 	if !cur.InProgress {
 		t.Error("pass should be in progress")
 	}
@@ -79,8 +79,8 @@ func TestPassAccounting(t *testing.T) {
 		t.Errorf("groups=%d, want 5", cur.Groups)
 	}
 
-	tel.passEnd()
-	cur, last, _ := tel.snapshot()
+	tel.crawl.passEnd()
+	cur, last := tel.crawl.snapshot()
 	if cur.InProgress {
 		t.Error("current pass should be cleared after passEnd")
 	}
@@ -111,7 +111,7 @@ func TestPassRates(t *testing.T) {
 // TestTelemetryConcurrent: batches are recorded from every pool worker at once.
 func TestTelemetryConcurrent(t *testing.T) {
 	tel := newTelemetry()
-	tel.passStart(1)
+	tel.crawl.passStart(1)
 	var wg sync.WaitGroup
 	const workers, each = 8, 50
 	for w := 0; w < workers; w++ {
@@ -119,13 +119,14 @@ func TestTelemetryConcurrent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < each; i++ {
-				tel.noteBatch(10, 5, 100, true)
+				tel.crawl.noteBatch(10, 5, 100, true)
 				tel.noteError("op", errors.New("boom"))
 			}
 		}()
 	}
 	wg.Wait()
-	cur, _, errs := tel.snapshot()
+	cur, _ := tel.crawl.snapshot()
+	errs := tel.recentErrors()
 	if cur.Batches != workers*each {
 		t.Errorf("batches = %d, want %d — a concurrent update was lost", cur.Batches, workers*each)
 	}

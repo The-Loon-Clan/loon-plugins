@@ -98,8 +98,8 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	// do share is the staging area, where message-id dedup turns the overlap into
 	// better completeness: a release short a segment on one backbone can be
 	// finished by another.
-	p.tel.passStart(len(runs))
-	defer p.tel.passEnd()
+	p.tel.crawl.passStart(len(runs))
+	defer p.tel.crawl.passEnd()
 	totalStaged := 0
 	for _, run := range runs {
 		if ctx.Err() != nil {
@@ -138,7 +138,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	}
 	groups, release := p.claimGroupLeases(ctx, bb, groups, p.leaseTTL(cfg))
 	defer release()
-	p.tel.noteGroups(len(groups))
+	p.tel.crawl.noteGroups(len(groups))
 	if len(groups) == 0 {
 		p.crawlJob.Log("%s: every group already claimed by another worker", run.prov.label())
 		return 0
@@ -315,7 +315,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) ba
 	if err != nil {
 		p.reportErr(ctx, "usenet/crawl-fetch",
 			fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
-		p.tel.noteBatch(0, 0, 0, false)
+		p.tel.crawl.noteBatch(0, 0, 0, false)
 		return res // ok stays false — the watermark will not pass this range
 	}
 	res.articles, res.wire = len(ovs), wire
@@ -331,13 +331,13 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) ba
 			// already-advanced watermark, losing those articles permanently.)
 			p.reportErr(ctx, "usenet/crawl-stage",
 				fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
-			p.tel.noteBatch(res.articles, 0, wire, false)
+			p.tel.crawl.noteBatch(res.articles, 0, wire, false)
 			return res
 		}
 		res.staged = n
 	}
 	res.ok = true
-	p.tel.noteBatch(res.articles, res.staged, wire, true)
+	p.tel.crawl.noteBatch(res.articles, res.staged, wire, true)
 	// Per-group pacing: some providers rate limit per group, and some groups are
 	// not worth saturating the pool for. Applied after the connection is back in
 	// the pool, so throttling this group frees capacity for others rather than
@@ -449,12 +449,18 @@ type groupRow struct {
 }
 
 // cutoff resolves this group's crawl horizon, falling back to the global depth.
-func (g groupRow) cutoff(cfg Config) time.Time {
+func (g groupRow) cutoff(cfg Config) time.Time { return g.cutoffAt(cfg, time.Now()) }
+
+// cutoffAt takes the reference instant so the rule can be asserted exactly.
+// Comparing two results of a time.Now()-based cutoff is a coin flip on a
+// fine-grained clock, which made the fallback test pass on Windows and fail on
+// Linux for reasons that had nothing to do with retention.
+func (g groupRow) cutoffAt(cfg Config, now time.Time) time.Time {
 	days := g.RetentionDays
 	if days <= 0 {
 		days = cfg.RetentionDays
 	}
-	return time.Now().AddDate(0, 0, -days)
+	return now.AddDate(0, 0, -days)
 }
 
 func (s *PGStore) activeGroups(ctx context.Context, limit int) ([]groupRow, error) {

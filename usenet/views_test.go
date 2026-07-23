@@ -160,3 +160,52 @@ func TestCrawlersRendersEmpty(t *testing.T) {
 		t.Error("empty provider state not shown")
 	}
 }
+
+// TestCrawlersRendersCoverage exercises the coverage table: the sparkline cells,
+// the per-backbone grouping, and the backfill ETA. The empty-state test above
+// renders none of that markup, so without this the whole block is uncovered.
+func TestCrawlersRendersCoverage(t *testing.T) {
+	tmpl, err := template.ParseFS(viewFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Two backbones: the page must key coverage per backbone, since article
+	// numbers from one say nothing about the other.
+	bbs := []backboneVM{
+		{Name: "omicron", Groups: []crawlerGroupVM{{
+			Name: "alt.binaries.anime", NZBs: 12, Staged: 3,
+			Cover:     pluginapi.CoverageBar{BackPct: 20, HavePct: 70, NewPct: 10, Known: true},
+			Cells:     cellLevels(coverageCells([]articleRange{{Start: 0, End: 40}, {Start: 60, End: 99}}, 0, 99, 8)),
+			Fragments: 2, Remaining: 5000, FwdDate: "2026-07-22", BackDate: "2026-01-01",
+		}}},
+		{Name: "srv:2", Groups: []crawlerGroupVM{{
+			Name: "alt.binaries.tv", Cover: pluginapi.CoverageBar{Known: false},
+		}}},
+	}
+	var groups []crawlerGroupVM
+	for _, b := range bbs {
+		groups = append(groups, b.Groups...)
+	}
+	var buf bytes.Buffer
+	err = tmpl.ExecuteTemplate(&buf, "crawlers.html", map[string]any{
+		"Stats":  pluginapi.IndexStats{TotalBackfillRemaining: 5000},
+		"Groups": groups, "Backbones": bbs,
+		"Backfill": passVM{Rate: "120 art/s"}, "BackfillETA": "3 hours",
+		"Jobs": nil, "Builder": BuilderInfo{}, "Fleet": []providerVM{}, "Workers": []workerVM{},
+		"Health": healthVM{}, "Pass": passVM{}, "Errors": []errorVM{},
+		"AutoRefresh": false, "Msg": "", "Err": "",
+	})
+	if err != nil {
+		t.Fatalf("render coverage: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"cov-cells", "cc3", "alt.binaries.anime", "alt.binaries.tv",
+		"3 hours", "120 art/s", "2 runs",
+		"omicron", "srv:2", // both backbones labelled when there is more than one
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("coverage render missing %q", want)
+		}
+	}
+}

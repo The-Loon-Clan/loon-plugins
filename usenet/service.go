@@ -194,5 +194,5 @@ func (s *service) TriggerBackfill() {
 }
 
 func (s *service) ResetBackfill(ctx context.Context, name string) error {
-	return s.store.resetBackfill(ctx, name)
+	return s.store.resetBackfillForGroup(ctx, name)
 }

@@ -81,15 +81,12 @@ type BackfillStore interface {
 	groupsNeedingBackfillForBackbone(ctx context.Context, backbone string, limit int) ([]backfillRow, error)
 	updateBackWatermarkForBackbone(ctx context.Context, backbone, name string, back int64, oldest time.Time) error
 	markBackfillDoneForBackbone(ctx context.Context, backbone, name string) error
-	updateBackWatermark(ctx context.Context, name string, back int64, oldest time.Time) error
-	markBackfillDone(ctx context.Context, name string) error
-	resetBackfill(ctx context.Context, name string) error
+	resetBackfillForGroup(ctx context.Context, group string) error
 	builderInfo(ctx context.Context, limit int) (BuilderInfo, error)
-	recordFetchedRange(ctx context.Context, group string, start, end int64) error
 	recordFetchedRangeFor(ctx context.Context, backbone, group string, start, end int64) error
 	backfillGapsFor(ctx context.Context, backbone, group string, low, high int64) ([]articleRange, error)
-	coveredRanges(ctx context.Context, group string) ([]articleRange, error)
-	backfillGaps(ctx context.Context, group string, low, high int64) ([]articleRange, error)
+	coveredRangesFor(ctx context.Context, backbone, group string) ([]articleRange, error)
+	allCoveredRanges(ctx context.Context) (map[coverKey][]articleRange, error)
 }
 
 // AssemblerStore is the staging area the NZB assembler reads + drains.

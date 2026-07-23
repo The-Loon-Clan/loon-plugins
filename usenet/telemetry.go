@@ -72,25 +72,21 @@ func (p passStats) Duration() time.Duration {
 	return end.Sub(p.Started)
 }
 
-// telemetry holds the live counters and the error tail. Every field is guarded:
-// batches are recorded from the pool workers concurrently.
-type telemetry struct {
-	mu      sync.Mutex
-	cur     passStats
-	last    passStats
-	errs    []crawlError
-	errNext int
+// passTracker accumulates one job's passes. Every field is guarded: batches are
+// recorded from the pool workers concurrently.
+type passTracker struct {
+	mu   sync.Mutex
+	cur  passStats
+	last passStats
 }
 
-func newTelemetry() *telemetry { return &telemetry{errs: make([]crawlError, 0, errorRingSize)} }
-
-func (t *telemetry) passStart(providers int) {
+func (t *passTracker) passStart(providers int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cur = passStats{Started: time.Now(), Providers: providers, InProgress: true}
 }
 
-func (t *telemetry) passEnd() {
+func (t *passTracker) passEnd() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.cur.Started.IsZero() {
@@ -103,7 +99,7 @@ func (t *telemetry) passEnd() {
 }
 
 // noteBatch records one fetched range. Called from every pool worker.
-func (t *telemetry) noteBatch(articles int, staged int, wire int64, ok bool) {
+func (t *passTracker) noteBatch(articles int, staged int, wire int64, ok bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cur.Batches++
@@ -116,11 +112,48 @@ func (t *telemetry) noteBatch(articles int, staged int, wire int64, ok bool) {
 	t.cur.WireBytes += wire
 }
 
-func (t *telemetry) noteGroups(n int) {
+func (t *passTracker) noteGroups(n int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cur.Groups += n
 }
+
+// snapshot returns the in-progress pass (if any) and the last completed one.
+func (t *passTracker) snapshot() (cur, last passStats) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.cur, t.last
+}
+
+// rate returns the best available articles/sec: the running pass once it has
+// enough of a sample to mean anything, otherwise the last completed one. The
+// floor exists because the first seconds of a pass are all connection setup, and
+// dividing a few hundred articles by two seconds produces an ETA off by orders
+// of magnitude.
+func (t *passTracker) rate() float64 {
+	cur, last := t.snapshot()
+	if cur.InProgress && cur.Duration() > 20*time.Second && cur.Articles > 0 {
+		return cur.Rate()
+	}
+	return last.Rate()
+}
+
+// telemetry holds each job's counters plus a shared error tail.
+//
+// Crawl and backfill are tracked SEPARATELY because their rates mean different
+// things: the forward crawl is bursty and usually idle (it only fetches what
+// arrived since last pass), while backfill runs flat out. Averaging them
+// together would make the backfill ETA swing wildly with the crawl's duty cycle.
+type telemetry struct {
+	crawl    passTracker
+	backfill passTracker
+
+	mu      sync.Mutex
+	errs    []crawlError
+	errNext int
+}
+
+func newTelemetry() *telemetry { return &telemetry{errs: make([]crawlError, 0, errorRingSize)} }
 
 // noteError appends to the ring, overwriting the oldest once full.
 func (t *telemetry) noteError(op string, err error) {
@@ -138,9 +171,8 @@ func (t *telemetry) noteError(op string, err error) {
 	t.errNext = (t.errNext + 1) % errorRingSize
 }
 
-// snapshot returns the current pass (if one is running), the last completed
-// pass, and the recent errors NEWEST FIRST.
-func (t *telemetry) snapshot() (cur, last passStats, errs []crawlError) {
+// recentErrors returns the error tail NEWEST FIRST.
+func (t *telemetry) recentErrors() []crawlError {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	out := make([]crawlError, 0, len(t.errs))
@@ -149,7 +181,7 @@ func (t *telemetry) snapshot() (cur, last passStats, errs []crawlError) {
 		idx := (t.errNext - 1 - i + len(t.errs)*2) % len(t.errs)
 		out = append(out, t.errs[idx])
 	}
-	return t.cur, t.last, out
+	return out
 }
 
 // reportErr sends an error to the host error log AND the local ring, so the
@@ -176,5 +208,37 @@ func fmtBytes(n int64) string {
 		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
 	default:
 		return fmt.Sprintf("%d B", n)
+	}
+}
+
+// backfillETA estimates how long the remaining backfill will take at the
+// observed backfill rate. Returns ok=false when there is nothing left or no
+// measured rate yet — showing "0s remaining" or a made-up number for a crawler
+// that has not run is worse than showing nothing.
+//
+// This is deliberately a FLEET-WIDE estimate. Per-group ETAs would require
+// predicting the order the scheduler visits groups in, which changes with
+// priority, leases and how many workers are up; one honest aggregate beats a
+// column of confident-looking per-group guesses.
+func backfillETA(remaining int64, rate float64) (time.Duration, bool) {
+	if remaining <= 0 || rate <= 0 {
+		return 0, false
+	}
+	return time.Duration(float64(remaining) / rate * float64(time.Second)), true
+}
+
+// fmtETA renders a duration at a resolution that matches its size — nobody needs
+// seconds on a two-week estimate, and the extra digits imply a precision this
+// estimate does not have.
+func fmtETA(d time.Duration) string {
+	switch {
+	case d >= 48*time.Hour:
+		return fmt.Sprintf("%.0f days", d.Hours()/24)
+	case d >= 2*time.Hour:
+		return fmt.Sprintf("%.0f hours", d.Hours())
+	case d >= time.Minute:
+		return fmt.Sprintf("%.0f min", d.Minutes())
+	default:
+		return "< 1 min"
 	}
 }

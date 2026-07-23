@@ -71,7 +71,12 @@
         <span><span class="dot" style="background:var(--success)"></span>indexed</span>
         <span><span class="dot" style="background:var(--info)"></span>new (not yet fetched)</span>
     </div>
+    {{if .BackfillETA}}<div class="small text-muted mb-2">Backfill: about <strong>{{.BackfillETA}}</strong> remaining at the current rate ({{.Backfill.Rate}}).</div>{{end}}
     {{if .Groups}}
+    {{range .Backbones}}
+    {{if gt (len $.Backbones) 1}}
+    <div class="small text-muted mt-3 mb-1">Backbone <code>{{if .Name}}{{.Name}}{{else}}unknown{{end}}</code> — article numbers below are this backbone's own.</div>
+    {{end}}
     <div class="table-responsive">
         <table class="table table-dark table-sm align-middle">
             <thead><tr>
@@ -94,12 +99,20 @@
                                 <span class="cov-new"  style="width:{{printf "%.1f" .Cover.NewPct}}%"></span>
                             {{else}}<span class="cov-unknown"></span>{{end}}
                         </div>
+                        {{/* Fetched ranges, bucketed. The bar above is watermark-only and
+                             reads as one solid block; parallel backfill actually leaves
+                             holes, and this is where they are. */}}
+                        {{if .Cells}}
+                        <div class="cov-cells" title="{{.Fragments}} fetched run(s) — gaps are unfetched article ranges">
+                            {{range .Cells}}<i class="cc{{.}}"></i>{{end}}
+                        </div>
+                        {{end}}
                     </td>
                     <td class="small text-muted">{{.FwdDate}}</td>
                     <td class="small">
                         {{if .BackfillDone}}<span class="text-info">✓ complete</span>
                         {{else}}<span class="text-muted">▼ {{.BackDate}}</span>
-                            {{if .Remaining}}<div class="text-muted" style="font-size:.75rem">{{.Remaining}} left</div>{{end}}
+                            {{if .Remaining}}<div class="text-muted" style="font-size:.75rem">{{.Remaining}} left{{if gt .Fragments 1}} · {{.Fragments}} runs{{end}}</div>{{end}}
                         {{end}}
                     </td>
                     <td class="text-end">{{.NZBs}}</td>
@@ -117,6 +130,7 @@
             </tbody>
         </table>
     </div>
+    {{end}}
     {{else}}
     <div class="empty">No active groups. Enable some in <a href="/admin/p/usenet">Usenet setup</a>, then crawl.</div>
     {{end}}
