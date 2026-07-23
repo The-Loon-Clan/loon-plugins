@@ -279,3 +279,47 @@ func LookupReleaseSink(c *core.Core) (ReleaseSink, bool) {
 	s, ok := v.(ReleaseSink)
 	return s, ok
 }
+
+// ── release health store (the second half of host adoption) ─────────
+
+// UsenetHealthStoreName is the capability a HOST registers so the plugin's
+// health job sweeps the HOST'S catalogue. With sink=host the releases live in
+// the host's NZB domain — without this seam nothing would health-check them:
+// the plugin's checker only knows its own table, and the host's checker is
+// exactly the code the adoption deletes.
+const UsenetHealthStoreName = "usenet.healthstore"
+
+// HealthCandidate is one release due a check.
+type HealthCandidate struct {
+	ID    int64
+	NZBGz []byte // gzipped NZB XML
+}
+
+// ReleaseHealthStore is the host's side of health checking: pick candidates,
+// record verdicts. The plugin owns everything between — the connection pool,
+// STAT batching, PAR2 scoring, and the tri-state outcome that only writes a
+// verdict it can trust (inconclusive rows are touched, never overwritten,
+// which is what preserves a definitive prior label without the host having to
+// expose it).
+type ReleaseHealthStore interface {
+	// HealthCandidates returns up to limit releases due a check: never checked
+	// first, then not checked within recheckDays; releases newer than
+	// minAgeHours are excluded (propagation guard).
+	HealthCandidates(ctx context.Context, limit, recheckDays, minAgeHours int) ([]HealthCandidate, error)
+	// SetHealthVerdict records a trustworthy verdict (healthy|broken|dead) with
+	// its segment counts, stamping the checked-at time.
+	SetHealthVerdict(ctx context.Context, id int64, status string, total, missing, par2 int) error
+	// TouchHealthChecked stamps checked-at WITHOUT changing the verdict — used
+	// for unreadable blobs so they stop jamming the queue head.
+	TouchHealthChecked(ctx context.Context, id int64) error
+}
+
+// LookupReleaseHealthStore resolves the host-registered health store, if any.
+func LookupReleaseHealthStore(c *core.Core) (ReleaseHealthStore, bool) {
+	v, ok := c.Lookup(UsenetHealthStoreName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(ReleaseHealthStore)
+	return s, ok
+}

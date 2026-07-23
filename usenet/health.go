@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/the-loon-clan/loon/nntp"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // NZB health checking: STAT every segment of a stored NZB to find out whether
@@ -275,6 +277,63 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 	return healthVerdict(missData, len(segs.Par2), missPar2), total, missData, len(segs.Par2), healthWritten
 }
 
+// healthBackend is where candidates come from and verdicts go. Internal mode
+// is the plugin's own nzbs table; host mode is the ReleaseHealthStore
+// capability, so with sink=host the plugin sweeps the HOST'S catalogue — the
+// releases it delivered through the ReleaseSink — with its own pool and
+// verdict logic.
+type healthBackend interface {
+	candidates(ctx context.Context, limit, recheckDays, minAgeHours int) ([]healthRow, error)
+	setVerdict(ctx context.Context, id int64, status string, total, missing, par2 int) error
+	touch(ctx context.Context, id int64) error
+}
+
+type internalHealth struct{ st Store }
+
+func (b internalHealth) candidates(ctx context.Context, limit, recheckDays, minAgeHours int) ([]healthRow, error) {
+	return b.st.nzbsNeedingHealthCheck(ctx, limit, recheckDays, minAgeHours)
+}
+func (b internalHealth) setVerdict(ctx context.Context, id int64, status string, total, missing, par2 int) error {
+	return b.st.updateNzbHealth(ctx, id, status, total, missing, par2)
+}
+func (b internalHealth) touch(ctx context.Context, id int64) error {
+	return b.st.touchHealthChecked(ctx, id)
+}
+
+type hostHealth struct{ hs pluginapi.ReleaseHealthStore }
+
+func (b hostHealth) candidates(ctx context.Context, limit, recheckDays, minAgeHours int) ([]healthRow, error) {
+	cands, err := b.hs.HealthCandidates(ctx, limit, recheckDays, minAgeHours)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]healthRow, len(cands))
+	for i, c := range cands {
+		rows[i] = healthRow{ID: c.ID, Data: c.NZBGz}
+	}
+	return rows, nil
+}
+func (b hostHealth) setVerdict(ctx context.Context, id int64, status string, total, missing, par2 int) error {
+	return b.hs.SetHealthVerdict(ctx, id, status, total, missing, par2)
+}
+func (b hostHealth) touch(ctx context.Context, id int64) error {
+	return b.hs.TouchHealthChecked(ctx, id)
+}
+
+// resolveHealthBackend mirrors storeRelease's sink rule: host mode without the
+// capability refuses loudly — silently sweeping the plugin's (empty) table
+// while the host catalogue rots unchecked is the worse failure.
+func (p *Plugin) resolveHealthBackend() (healthBackend, error) {
+	if p.cfg.Sink == "host" {
+		hs, ok := pluginapi.LookupReleaseHealthStore(p.core)
+		if !ok {
+			return nil, fmt.Errorf("sink=host but no %q capability is registered", pluginapi.UsenetHealthStoreName)
+		}
+		return hostHealth{hs: hs}, nil
+	}
+	return internalHealth{st: p.st}, nil
+}
+
 // runHealthCheck sweeps releases that are due a check.
 func (p *Plugin) runHealthCheck(ctx context.Context) {
 	if ctx == nil {
@@ -311,7 +370,13 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 		return
 	}
 
-	rows, err := p.st.nzbsNeedingHealthCheck(ctx, cfg.HealthBatchSize, cfg.HealthRecheckDays, cfg.HealthMinAgeHours)
+	backend, err := p.resolveHealthBackend()
+	if err != nil {
+		p.healthJob.SetError(err.Error())
+		p.core.Errors.Report(ctx, "usenet/health-backend", err)
+		return
+	}
+	rows, err := backend.candidates(ctx, cfg.HealthBatchSize, cfg.HealthRecheckDays, cfg.HealthMinAgeHours)
 	if err != nil {
 		p.healthJob.SetError(err.Error())
 		p.core.Errors.Report(ctx, "usenet/health-candidates", err)
@@ -333,7 +398,7 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 		verdict, total, missing, par2, outcome := p.checkOne(ctx, pool, row, cfg.HealthStatChunk)
 		switch outcome {
 		case healthWritten:
-			if err := p.st.updateNzbHealth(ctx, row.ID, verdict, total, missing, par2); err != nil {
+			if err := backend.setVerdict(ctx, row.ID, verdict, total, missing, par2); err != nil {
 				p.core.Errors.Report(ctx, "usenet/health-update", fmt.Errorf("nzb %d: %w", row.ID, err))
 				continue
 			}
@@ -342,7 +407,7 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 		case healthSkipPermanent:
 			// Bad data, not bad luck. Stamp it so an unreadable row doesn't sit at
 			// the head of the queue forever, but leave its verdict untouched.
-			if err := p.st.touchHealthChecked(ctx, row.ID); err != nil {
+			if err := backend.touch(ctx, row.ID); err != nil {
 				p.core.Errors.Report(ctx, "usenet/health-touch", err)
 			}
 			unreadable++
