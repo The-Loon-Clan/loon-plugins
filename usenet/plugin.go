@@ -220,6 +220,9 @@ func (p *Plugin) Start(ctx context.Context) error {
 		return nil // web-only process: capability is registered, no jobs run here
 	}
 	p.seedServer(ctx)
+	// Carry a legacy host crawler's state (watermarks, groups, blacklist) so a
+	// sink=host flip RESUMES rather than restarts. One-time; no-op elsewhere.
+	p.adoptHostState(ctx)
 	// Announce ourselves before the first crawl, so the split sees this worker.
 	p.startHeartbeat(ctx, p.cfg)
 	// Ship the reference data: junk rules (then compiled into memory) and the
