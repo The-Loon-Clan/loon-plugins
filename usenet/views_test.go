@@ -216,7 +216,8 @@ func TestCrawlersRendersCoverage(t *testing.T) {
 			Name: "alt.binaries.anime", NZBs: 12, Staged: 3,
 			Cover:     pluginapi.CoverageBar{BackPct: 20, HavePct: 70, NewPct: 10, Known: true},
 			Cells:     cellLevels(coverageCells([]articleRange{{Start: 0, End: 40}, {Start: 60, End: 99}}, 0, 99, 8)),
-			Fragments: 2, Remaining: 5000, FwdDate: "2026-07-22", BackDate: "2026-01-01",
+			Fragments: 2, RemainingFmt: "5,000",
+			FwdAt: "2026-07-22 10:31", BackAt: "2026-01-01 12:11", NewFmt: "409,395,881",
 		}}},
 		{Name: "srv:2", Groups: []crawlerGroupVM{{
 			Name: "alt.binaries.tv", Cover: pluginapi.CoverageBar{Known: false},
@@ -246,11 +247,25 @@ func TestCrawlersRendersCoverage(t *testing.T) {
 	for _, want := range []string{
 		"cov-cells", "cc3", "alt.binaries.anime", "alt.binaries.tv",
 		"3 hours", "120 art/s", "2 runs",
+		// the legacy-format watermark line: ↩ back · ↑ fwd (+N new)
+		"↩ 2026-01-01 12:11", "↑ 2026-07-22 10:31", "(+409,395,881 new)",
+		"5,000 left",
 		"Some.Release", "1.2 GB", // recently-built (telemetry ring)
 		"omicron", "srv:2", // both backbones labelled when there is more than one
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("coverage render missing %q", want)
+		}
+	}
+}
+
+// TestFmtComma pins the thousands separator the coverage line depends on.
+func TestFmtComma(t *testing.T) {
+	for in, want := range map[int64]string{
+		0: "0", 999: "999", 1000: "1,000", 409395881: "409,395,881", -12345: "-12,345",
+	} {
+		if got := fmtComma(in); got != want {
+			t.Errorf("fmtComma(%d) = %q, want %q", in, got, want)
 		}
 	}
 }

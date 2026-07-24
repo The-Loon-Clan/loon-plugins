@@ -249,10 +249,12 @@ type crawlerGroupVM struct {
 	Cover        pluginapi.CoverageBar
 	Cells        []int // per-slice fill level 0..3, drawn over the coverage bar
 	Fragments    int   // contiguous fetched runs; >1 means backfill left holes
-	FwdDate      string
-	BackDate     string
+	// The legacy-format coverage line: "↩ back-at · ↑ fwd-at (+N new)".
+	FwdAt        string // forward watermark, date+time
+	BackAt       string // backfill watermark, date+time
+	NewFmt       string // articles on the server past the forward watermark, comma-formatted; "" = none
+	RemainingFmt string // backfill articles left, comma-formatted; "" = none/done
 	BackfillDone bool
-	Remaining    int64
 	LastCrawl    string
 }
 
@@ -288,11 +290,16 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		vm := crawlerGroupVM{
 			Name: g.Name, NZBs: g.NZBs, Staged: g.Staged,
 			Cover: g.Coverage(), BackfillDone: g.BackfillDone,
-			FwdDate: fmtDate(g.HighWatermarkDate), BackDate: fmtDate(g.BackWatermarkDate),
+			FwdAt: fmtDateTime(g.HighWatermarkDate), BackAt: fmtDateTime(g.BackWatermarkDate),
 			LastCrawl: fmtTime(g.LastCrawl),
 		}
+		// "+N new" — what the server holds past our forward watermark; the
+		// number the operator watches to see the next pass's workload.
+		if g.HighWatermark > 0 && g.ServerHigh > g.HighWatermark {
+			vm.NewFmt = fmtComma(g.ServerHigh - g.HighWatermark)
+		}
 		if !g.BackfillDone && g.BackWatermark > g.ServerLow {
-			vm.Remaining = g.BackWatermark - g.ServerLow
+			vm.RemainingFmt = fmtComma(g.BackWatermark - g.ServerLow)
 		}
 		if runs := ranges[coverKey{g.Backbone, g.Name}]; len(runs) > 0 {
 			vm.Fragments = len(runs)

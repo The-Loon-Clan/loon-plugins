@@ -259,14 +259,20 @@
     {{end}}
     {{end}}
     <div class="table-responsive">
+        {{/* The legacy host table's shape, on the operator's request: one
+             Coverage cell carrying the whole story — the bar, the fetched-run
+             ticks, and the watermark line "↩ back-at · ↑ fwd-at (+N new)".
+             Read it as: history reached back to ↩ (✓ = server's oldest),
+             forward crawled to ↑, and +N articles await the next pass. Pure
+             data — the enable/order/reset controls live on the Newsgroups
+             config tab. */}}
         <table class="table table-dark table-sm align-middle">
             <thead><tr>
-                <th>Group</th><th style="min-width:160px">Coverage</th>
-                <th>Forward</th><th>Backfill</th>
+                <th>Group</th><th style="min-width:240px">Coverage</th>
                 {{/* Per-group release counts read the plugin's own table, which
                      host-sink mode leaves empty — hide rather than show 0s. */}}
                 {{if not $.HostSink}}<th class="text-end">NZBs</th>{{end}}<th class="text-end">Staged</th>
-                <th>Last crawl</th><th></th>
+                <th>Last crawl</th>
             </tr></thead>
             <tbody>
             {{range .Groups}}
@@ -290,24 +296,19 @@
                             {{range .Cells}}<i class="cc{{.}}"></i>{{end}}
                         </div>
                         {{end}}
-                    </td>
-                    <td class="small text-muted">{{.FwdDate}}</td>
-                    <td class="small">
-                        {{if .BackfillDone}}<span class="text-info">✓ complete</span>
-                        {{else}}<span class="text-muted">▼ {{.BackDate}}</span>
-                            {{if .Remaining}}<div class="text-muted" style="font-size:.75rem">{{.Remaining}} left{{if gt .Fragments 1}} · {{.Fragments}} runs{{end}}</div>{{end}}
-                        {{end}}
+                        <div class="small" style="margin-top:2px">
+                            {{if .BackAt}}
+                                {{if .BackfillDone}}<span class="text-success" title="backfill complete — reached the server's oldest article">✓ {{.BackAt}}</span>
+                                {{else}}<span class="text-warning" title="backfilling toward the server's oldest article">↩ {{.BackAt}}</span>{{if .RemainingFmt}} <span class="text-muted" style="font-size:.75rem">({{.RemainingFmt}} left{{if gt .Fragments 1}} · {{.Fragments}} runs{{end}})</span>{{end}}{{end}}
+                                <span class="text-muted">·</span>
+                            {{end}}
+                            {{if .FwdAt}}↑ {{.FwdAt}}{{else}}<span class="text-warning">not yet crawled</span>{{end}}
+                            {{if .NewFmt}}<span class="text-info">(+{{.NewFmt}} new)</span>{{end}}
+                        </div>
                     </td>
                     {{if not $.HostSink}}<td class="text-end">{{.NZBs}}</td>{{end}}
                     <td class="text-end">{{.Staged}}</td>
                     <td class="small text-muted">{{.LastCrawl}}</td>
-                    <td>
-                        <form method="post" action="/admin/p/usenet/reset-backfill" style="display:inline"
-                              onsubmit="return confirm('Re-arm backfill for {{.Name}}? It will re-scan history from the forward watermark down.')">
-                            <input type="hidden" name="name" value="{{.Name}}">
-                            <button class="btn btn-sm btn-outline-secondary py-0" type="submit">reset backfill</button>
-                        </form>
-                    </td>
                 </tr>
             {{end}}
             </tbody>

@@ -171,6 +171,32 @@ func fmtDate(t time.Time) string {
 	return t.Format("2006-01-02")
 }
 
+// fmtDateTime is the coverage line's watermark stamp — date alone hides how
+// fresh today's crawl is.
+func fmtDateTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("2006-01-02 15:04")
+}
+
+// fmtComma renders 409395881 as "409,395,881" — the legacy page's article
+// counts, kept legible.
+func fmtComma(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	neg := false
+	if strings.HasPrefix(s, "-") {
+		neg, s = true, s[1:]
+	}
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	if neg {
+		return "-" + s
+	}
+	return s
+}
+
 func fmtTime(t time.Time) string {
 	if t.IsZero() {
 		return "—"
