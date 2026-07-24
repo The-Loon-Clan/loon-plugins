@@ -281,14 +281,26 @@ func (p *Plugin) nextCrawl() time.Time {
 // which article numbers this pass should fetch.
 func (p *Plugin) planGroup(ctx context.Context, pool *nntp.Pool, g groupRow, cfg Config) (*crawlPlan, error) {
 	var low, high int
-	err := pool.Do(ctx, func(c *nntp.Conn) error {
+	sel := func(c *nntp.Conn) error {
 		_, l, h, err := c.Group(g.Name)
 		if err != nil {
 			return err
 		}
 		low, high = l, h
 		return nil
-	})
+	}
+	err := pool.Do(ctx, sel)
+	if err != nil {
+		// A pass that starts after an idle gap begins with every pooled
+		// connection dead — providers drop idle NNTP sessions, and the corpse
+		// answers "400 Idle timeout" on first use. The failed Do has already
+		// discarded the stale socket; refill and retry ONCE on a fresh dial,
+		// or one stale socket per group silently costs the whole pass
+		// (observed on prod 2026-07-24: 20/20 groups planned zero batches,
+		// pass after pass, with 575M articles behind).
+		pool.TopUp(ctx)
+		err = pool.Do(ctx, sel)
+	}
 	if err != nil {
 		return nil, err
 	}
