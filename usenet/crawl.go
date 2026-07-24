@@ -243,13 +243,33 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 		return 0, claimed
 	}
 
-	// 2. Fetch + stage in parallel over the pool.
+	// 2. Fetch + stage in parallel over the pool. Each group's watermark and
+	// coverage advance THE MOMENT its last batch lands (onGroup, called on
+	// this goroutine) — a catch-up pass runs for hours, and advancing only at
+	// pass end froze the coverage/backlog readouts for the duration and lost
+	// the whole pass's progress when a deploy killed the worker.
 	p.crawlJob.Log("%s: crawling %d group(s), %d batch(es) over %d connection(s)…",
 		run.prov.label(), len(plans), len(jobs), run.size)
-	results := p.runBatches(ctx, pool, jobs, cfg)
+	staged, advanced := 0, 0
+	leftover := p.runBatches(ctx, pool, jobs, cfg, func(name string, rs []batchResult) {
+		plan := plans[name]
+		if plan == nil {
+			return
+		}
+		s, adv := p.advanceOneGroup(ctx, bb, plan, rs)
+		staged += s
+		if adv {
+			advanced++
+			p.crawlJob.Log("%s/%s: group complete — watermark advanced, %d article(s) staged",
+				run.prov.label(), name, s)
+		}
+	})
 
-	// 3. Advance watermarks to the last contiguous success per group.
-	staged, advanced := p.advanceWatermarks(ctx, bb, plans, results)
+	// 3. Final sweep: partial credit for groups a cancelled pass left
+	// incomplete — their contiguous prefix still advances.
+	s2, a2 := p.advanceWatermarks(ctx, bb, plans, leftover)
+	staged += s2
+	advanced += a2
 
 	st := pool.Stats()
 	p.crawlJob.Log("%s: %d group(s), %d batch(es), %d article(s) staged, %d advanced (conns %d/%d, resets %d)",
@@ -320,13 +340,25 @@ func (p *Plugin) planGroup(ctx context.Context, pool *nntp.Pool, g groupRow, cfg
 // runBatches fetches every job across the pool. Worker count matches the pool
 // size — more would just queue on the pool's blocking fallback, which is the
 // backpressure that keeps us from outrunning the server.
-func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, jobs []batchJob, cfg Config) []batchResult {
+//
+// onGroup fires the moment a GROUP's last batch lands (called on this
+// goroutine, in completion order) so its watermark and coverage advance
+// mid-pass — a catch-up pass runs for hours, and batching every state write
+// to the end froze the dashboard's coverage/backlog for the duration AND
+// threw away the whole pass's progress if the worker was killed. Only the
+// results of groups that did NOT complete (context cancelled mid-pass) are
+// returned, for the caller's final partial-advance sweep.
+func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, jobs []batchJob, cfg Config, onGroup func(group string, rs []batchResult)) []batchResult {
 	workers := cfg.Connections
 	if workers > len(jobs) {
 		workers = len(jobs)
 	}
 	if workers < 1 {
 		workers = 1
+	}
+	expected := make(map[string]int, 8)
+	for _, j := range jobs {
+		expected[j.group]++
 	}
 
 	jobCh := make(chan batchJob)
@@ -342,21 +374,31 @@ func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, jobs []batchJo
 			}
 		}()
 	}
-	for _, j := range jobs {
-		if ctx.Err() != nil {
-			break
+	go func() {
+		for _, j := range jobs {
+			if ctx.Err() != nil {
+				break
+			}
+			jobCh <- j
 		}
-		jobCh <- j
-	}
-	close(jobCh)
-	wg.Wait()
-	close(resCh)
+		close(jobCh)
+		wg.Wait()
+		close(resCh)
+	}()
 
-	out := make([]batchResult, 0, len(jobs))
+	byGroup := make(map[string][]batchResult, len(expected))
 	for r := range resCh {
-		out = append(out, r)
+		byGroup[r.group] = append(byGroup[r.group], r)
+		if onGroup != nil && len(byGroup[r.group]) == expected[r.group] {
+			onGroup(r.group, byGroup[r.group])
+			delete(byGroup, r.group)
+		}
 	}
-	return out
+	var leftover []batchResult
+	for _, rs := range byGroup {
+		leftover = append(leftover, rs...)
+	}
+	return leftover
 }
 
 // fetchBatch pulls one overview range and stages it. The connection is returned
@@ -422,43 +464,55 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) ba
 	return res
 }
 
-// advanceWatermarks moves each group's high watermark to the end of its last
-// CONTIGUOUS run of successful batches. A failure in the middle stops the
-// advance there, so the failed range is refetched next pass instead of being
-// silently skipped — with parallel batches, "highest success" would strand gaps.
+// advanceWatermarks runs advanceOneGroup for every group in results — the
+// end-of-pass sweep for groups a cancelled pass left incomplete (completed
+// groups already advanced via runBatches' onGroup callback).
 func (p *Plugin) advanceWatermarks(ctx context.Context, backbone string, plans map[string]*crawlPlan, results []batchResult) (staged, advanced int) {
 	byGroup := make(map[string][]batchResult, len(plans))
 	for _, r := range results {
-		staged += r.staged
 		byGroup[r.group] = append(byGroup[r.group], r)
 	}
-
 	for name, rs := range byGroup {
 		plan := plans[name]
 		if plan == nil {
 			continue
 		}
-		for _, r := range rs {
-			if !r.ok {
-				continue
-			}
-			if err := p.st.recordFetchedRangeFor(ctx, backbone, name, int64(r.lo), int64(r.hi)); err != nil {
-				p.reportErr(ctx, "usenet/crawl-range-record", err)
-			}
-		}
-		highest, latest := contiguousEnd(plan.start, rs)
-
-		var watermark int64
-		if highest >= plan.start {
-			watermark = int64(highest)
+		s, adv := p.advanceOneGroup(ctx, backbone, plan, rs)
+		staged += s
+		if adv {
 			advanced++
-		} else {
-			p.crawlJob.Log("%s: no contiguous progress this pass — retrying from %d", name, plan.start)
 		}
-		if err := p.st.updateGroupStateForBackbone(ctx, backbone, name, int64(plan.low), int64(plan.high),
-			watermark, int64(plan.start), latest); err != nil {
-			p.reportErr(ctx, "usenet/crawl-watermark", fmt.Errorf("%s: %w", name, err))
+	}
+	return staged, advanced
+}
+
+// advanceOneGroup moves one group's high watermark to the end of its last
+// CONTIGUOUS run of successful batches, recording the fetched ranges. A
+// failure in the middle stops the advance there, so the failed range is
+// refetched next pass instead of being silently skipped — with parallel
+// batches, "highest success" would strand gaps.
+func (p *Plugin) advanceOneGroup(ctx context.Context, backbone string, plan *crawlPlan, rs []batchResult) (staged int, advanced bool) {
+	for _, r := range rs {
+		staged += r.staged
+		if !r.ok {
+			continue
 		}
+		if err := p.st.recordFetchedRangeFor(ctx, backbone, plan.group, int64(r.lo), int64(r.hi)); err != nil {
+			p.reportErr(ctx, "usenet/crawl-range-record", err)
+		}
+	}
+	highest, latest := contiguousEnd(plan.start, rs)
+
+	var watermark int64
+	if highest >= plan.start {
+		watermark = int64(highest)
+		advanced = true
+	} else {
+		p.crawlJob.Log("%s: no contiguous progress this pass — retrying from %d", plan.group, plan.start)
+	}
+	if err := p.st.updateGroupStateForBackbone(ctx, backbone, plan.group, int64(plan.low), int64(plan.high),
+		watermark, int64(plan.start), latest); err != nil {
+		p.reportErr(ctx, "usenet/crawl-watermark", fmt.Errorf("%s: %w", plan.group, err))
 	}
 	return staged, advanced
 }
