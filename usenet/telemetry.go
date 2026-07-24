@@ -151,9 +151,53 @@ type telemetry struct {
 	mu      sync.Mutex
 	errs    []crawlError
 	errNext int
+	// built is the last few releases THIS crawler assembled, newest kept.
+	// It exists because no table answers "what did the crawler just build"
+	// in every mode: with sink=host the release rows land in the host's
+	// domain (mixed with agent uploads), and the plugin's own table stays
+	// empty. In-memory and reset on restart — it is a liveness readout, not
+	// history.
+	built     []builtRelease
+	builtNext int
 }
 
+// builtRelease is one crawler-assembled release, exported for the telemetry
+// publish round trip (telemetry_publish.go).
+type builtRelease struct {
+	Title string    `json:"title"`
+	Group string    `json:"group"`
+	Size  int64     `json:"size"`
+	At    time.Time `json:"at"`
+}
+
+const builtRingSize = 10
+
 func newTelemetry() *telemetry { return &telemetry{errs: make([]crawlError, 0, errorRingSize)} }
+
+// noteBuilt appends to the built ring, overwriting the oldest once full.
+func (t *telemetry) noteBuilt(title, group string, size int64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	b := builtRelease{Title: title, Group: group, Size: size, At: time.Now()}
+	if len(t.built) < builtRingSize {
+		t.built = append(t.built, b)
+		return
+	}
+	t.built[t.builtNext] = b
+	t.builtNext = (t.builtNext + 1) % builtRingSize
+}
+
+// recentBuilt returns the built tail NEWEST FIRST.
+func (t *telemetry) recentBuilt() []builtRelease {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make([]builtRelease, 0, len(t.built))
+	for i := 0; i < len(t.built); i++ {
+		idx := (t.builtNext - 1 - i + len(t.built)*2) % len(t.built)
+		out = append(out, t.built[idx])
+	}
+	return out
+}
 
 // noteError appends to the ring, overwriting the oldest once full.
 func (t *telemetry) noteError(op string, err error) {

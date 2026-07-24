@@ -138,6 +138,10 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		_ = p.staging.deleteStaged(ctx, k.Group, k.Base)
 		if created {
 			built++
+			// Feed the "recently built" telemetry ring: with sink=host no
+			// plugin table records this, and the host table mixes in agent
+			// uploads — the ring is what the crawlers page shows.
+			p.tel.noteBuilt(title, k.Group, size)
 		}
 	}
 	p.buildJob.Log("built %d NZB file(s) from %d candidate group(s) (skipped %d blocked-ext, %d blacklisted)",

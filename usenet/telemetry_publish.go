@@ -21,13 +21,14 @@ const telemetrySettingKey = "worker_telemetry"
 // everything the store cannot answer. Store-backed numbers (group stats,
 // builder depth, providers, workers) are NOT here; they are already shared.
 type workerTelemetry struct {
-	UpdatedAt    time.Time    `json:"updated_at"`
-	CrawlCur     passStats    `json:"crawl_current"`
-	CrawlLast    passStats    `json:"crawl_last"`
-	BackfillCur  passStats    `json:"backfill_current"`
-	BackfillLast passStats    `json:"backfill_last"`
-	BackfillRate float64      `json:"backfill_rate"`
-	Errors       []crawlError `json:"errors"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	CrawlCur     passStats      `json:"crawl_current"`
+	CrawlLast    passStats      `json:"crawl_last"`
+	BackfillCur  passStats      `json:"backfill_current"`
+	BackfillLast passStats      `json:"backfill_last"`
+	BackfillRate float64        `json:"backfill_rate"`
+	Errors       []crawlError   `json:"errors"`
+	Built        []builtRelease `json:"built"`
 }
 
 // pickPass prefers the running pass, falling back to the last completed one,
@@ -49,6 +50,7 @@ func (p *Plugin) localTelemetry() workerTelemetry {
 	tv.BackfillCur, tv.BackfillLast = p.tel.backfill.snapshot()
 	tv.BackfillRate = p.tel.backfill.rate()
 	tv.Errors = p.tel.recentErrors()
+	tv.Built = p.tel.recentBuilt()
 	return tv
 }
 

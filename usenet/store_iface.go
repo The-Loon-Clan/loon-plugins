@@ -22,7 +22,6 @@ type Store interface {
 	SettingStore
 	BackfillStore
 	BlacklistStore
-	ActivityStore
 	AssemblerStore
 	MaintenanceStore
 	JunkStore
@@ -104,11 +103,9 @@ type BlacklistStore interface {
 	resetFilterHits(ctx context.Context) error
 }
 
-// ActivityStore is the live-activity readout on the crawlers page (dashboard.go).
-type ActivityStore interface {
-	recentArticles(ctx context.Context, limit int) ([]recentArticle, error)
-	recentNZBs(ctx context.Context, limit int) ([]recentNZB, error)
-}
+// (The old ActivityStore — recentArticles/recentNZBs — is gone: the crawlers
+// page's liveness readout now comes from the telemetry ring, which is correct
+// in every staging/sink mode. See telemetry.go noteBuilt.)
 
 // AssemblerStore is the staging area the NZB assembler reads + drains.
 type AssemblerStore interface {

@@ -39,7 +39,10 @@
     </div>
 </div>
 
-{{with .Builder}}
+{{/* PG-staging only: these numbers are a GROUP BY over the articles table,
+     which redis-staging installs keep in Redis — the card would show zeros
+     while the crawler works flat out. */}}
+{{if .PGStaging}}{{with .Builder}}
 <div class="card mt-3">
     <div class="card-header">Builder</div>
     <div class="card-body">
@@ -67,57 +70,34 @@
     {{else if .Releases}}<div class="text-muted small">All staged releases are complete.</div>{{end}}
     </div>
 </div>
-{{end}}
+{{end}}{{end}}
 
 <div class="card mt-3">
-    <div class="card-header">Recent activity</div>
+    <div class="card-header">Recently built</div>
     <div class="card-body">
     <p class="text-muted small">
-        The newest staged articles and assembled releases. Watermarks barely move over a
-        single pass, so this is the readout that shows the crawler is actually alive.
+        Releases THIS crawler assembled, newest first — from the worker's
+        telemetry, so agent uploads never appear here whatever the sink mode.
+        Watermarks barely move over a single pass; this is the readout that
+        shows the crawler is actually producing. Resets on worker restart.
     </p>
-    <div class="row g-3">
-        <div class="col-lg-7">
-            <h3 class="h6 text-muted">Just staged</h3>
-            {{if .RecentArticles}}
-            <div class="table-responsive" style="max-height:22rem;overflow-y:auto">
-                <table class="table table-dark table-sm align-middle">
-                    <thead><tr><th>Subject</th><th>Group</th><th class="text-end">Size</th><th>Posted</th></tr></thead>
-                    <tbody>
-                    {{range .RecentArticles}}
-                        <tr>
-                            <td class="small" style="max-width:28rem;overflow-wrap:anywhere">{{.Subject}}</td>
-                            <td class="small text-muted">{{.Group}}</td>
-                            <td class="text-end small">{{.Size}}</td>
-                            <td class="small text-muted">{{.Posted}}</td>
-                        </tr>
-                    {{end}}
-                    </tbody>
-                </table>
-            </div>
-            {{else}}<div class="empty">Nothing staged. Either the crawl has not run, or everything it saw was filtered.</div>{{end}}
-        </div>
-        <div class="col-lg-5">
-            <h3 class="h6 text-muted">Just built</h3>
-            {{if .RecentNzbs}}
-            <div class="table-responsive" style="max-height:22rem;overflow-y:auto">
-                <table class="table table-dark table-sm align-middle">
-                    <thead><tr><th>Release</th><th class="text-end">Size</th><th>Built</th></tr></thead>
-                    <tbody>
-                    {{range .RecentNzbs}}
-                        <tr>
-                            <td class="small" style="max-width:22rem;overflow-wrap:anywhere">{{.Title}}
-                                <div class="text-muted" style="font-size:.75rem">{{.Group}}</div></td>
-                            <td class="text-end small">{{.Size}}</td>
-                            <td class="small text-muted">{{.Created}}</td>
-                        </tr>
-                    {{end}}
-                    </tbody>
-                </table>
-            </div>
-            {{else}}<div class="empty">No releases assembled yet.</div>{{end}}
-        </div>
+    {{if .RecentNzbs}}
+    <div class="table-responsive" style="max-height:22rem;overflow-y:auto">
+        <table class="table table-dark table-sm align-middle">
+            <thead><tr><th>Release</th><th>Group</th><th class="text-end">Size</th><th>Built</th></tr></thead>
+            <tbody>
+            {{range .RecentNzbs}}
+                <tr>
+                    <td class="small" style="max-width:34rem;overflow-wrap:anywhere">{{.Title}}</td>
+                    <td class="small text-muted">{{.Group}}</td>
+                    <td class="text-end small">{{.Size}}</td>
+                    <td class="small text-muted">{{.Created}}</td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
     </div>
+    {{else}}<div class="empty">Nothing built since the worker started.</div>{{end}}
     </div>
 </div>
 

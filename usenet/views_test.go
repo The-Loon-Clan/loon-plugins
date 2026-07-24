@@ -164,7 +164,7 @@ func TestCrawlersRendersEmpty(t *testing.T) {
 		"Stats": pluginapi.IndexStats{}, "Groups": []crawlerGroupVM{}, "Jobs": nil,
 		"Builder": BuilderInfo{}, "Fleet": []providerVM{}, "Workers": []workerVM{},
 		"Health": healthVM{}, "Pass": passVM{}, "Errors": []errorVM{},
-		"RecentArticles": nil, "RecentNzbs": nil,
+		"PGStaging": true, "RecentNzbs": nil,
 		"AutoRefresh": false, "Msg": "", "Err": "",
 	})
 	if err != nil {
@@ -172,8 +172,8 @@ func TestCrawlersRendersEmpty(t *testing.T) {
 	}
 	// The liveness card must degrade to an explanation, not a blank panel — an
 	// empty crawler is the exact moment someone is looking at this page.
-	if !strings.Contains(buf.String(), "Nothing staged") {
-		t.Error("empty recent-activity state not explained")
+	if !strings.Contains(buf.String(), "Nothing built since the worker started") {
+		t.Error("empty recently-built state not explained")
 	}
 	if !strings.Contains(buf.String(), "No providers configured") {
 		t.Error("empty provider state not shown")
@@ -212,9 +212,7 @@ func TestCrawlersRendersCoverage(t *testing.T) {
 		"Backfill": passVM{Rate: "120 art/s"}, "BackfillETA": "3 hours",
 		"Jobs": nil, "Builder": BuilderInfo{}, "Fleet": []providerVM{}, "Workers": []workerVM{},
 		"Health": healthVM{}, "Pass": passVM{}, "Errors": []errorVM{},
-		"RecentArticles": []recentArticleVM{
-			{Subject: "[01/12] Some.Release.mkv", Group: "alt.binaries.anime", Size: "42.0 MB", Posted: "12:00"},
-		},
+		"PGStaging": true,
 		"RecentNzbs": []recentNZBVM{
 			{Title: "Some.Release", Group: "alt.binaries.anime", Size: "1.2 GB", Created: "12:05"},
 		},
@@ -227,7 +225,7 @@ func TestCrawlersRendersCoverage(t *testing.T) {
 	for _, want := range []string{
 		"cov-cells", "cc3", "alt.binaries.anime", "alt.binaries.tv",
 		"3 hours", "120 art/s", "2 runs",
-		"Some.Release.mkv", "42.0 MB", "1.2 GB", // recent activity, both columns
+		"Some.Release", "1.2 GB", // recently-built (telemetry ring)
 		"omicron", "srv:2", // both backbones labelled when there is more than one
 	} {
 		if !strings.Contains(out, want) {

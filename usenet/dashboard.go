@@ -3,8 +3,6 @@ package usenet
 import (
 	"context"
 	"time"
-
-	"github.com/jmoiron/sqlx"
 )
 
 // Live-activity reads for the crawlers page, plus the machine-readable status
@@ -20,52 +18,11 @@ import (
 // TOAST-scanning SUM on the 60-second refresh, and they became the second-worst
 // source of heap I/O on the database. Nothing on this page may scan a table.
 
-// recentArticle is one just-staged article.
-type recentArticle struct {
-	Subject string    `db:"subject"`
-	Group   string    `db:"group_name"`
-	Poster  string    `db:"poster"`
-	Bytes   int64     `db:"bytes"`
-	Posted  time.Time `db:"posted"`
-}
-
-// recentNZB is one just-built release.
-type recentNZB struct {
-	Title   string    `db:"title"`
-	Group   string    `db:"group_name"`
-	Size    int64     `db:"size_bytes"`
-	Created time.Time `db:"created_at"`
-}
-
-// recentArticles returns the newest staged articles. Ordered by ctid rather
-// than a timestamp: staging has no insertion-time column, and posted-date order
-// would show a backfill pass working through 2015 rather than what just landed.
-func (s *PGStore) recentArticles(ctx context.Context, limit int) ([]recentArticle, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 25
-	}
-	var rows []recentArticle
-	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		return tx.SelectContext(ctx, &rows,
-			`SELECT subject, group_name, poster, bytes, posted
-			   FROM articles ORDER BY ctid DESC LIMIT $1`, limit)
-	})
-	return rows, err
-}
-
-// recentNZBs returns the newest assembled releases.
-func (s *PGStore) recentNZBs(ctx context.Context, limit int) ([]recentNZB, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 10
-	}
-	var rows []recentNZB
-	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		return tx.SelectContext(ctx, &rows,
-			`SELECT title, group_name, size_bytes, created_at
-			   FROM nzbs ORDER BY id DESC LIMIT $1`, limit)
-	})
-	return rows, err
-}
+// The old recentArticles/recentNZBs queries are gone on purpose: they read the
+// PG staging and plugin nzbs tables, which are empty in redis-staging and
+// host-sink modes respectively — the modes prod runs. "What did the crawler
+// just build" now comes from the telemetry ring (telemetry.go noteBuilt),
+// which is correct in every mode.
 
 // ── status endpoint ─────────────────────────────────────────────────
 

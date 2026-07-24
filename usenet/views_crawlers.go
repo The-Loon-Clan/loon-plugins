@@ -247,40 +247,30 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		groups = append(groups, b.Groups...)
 	}
 	jobs, running := p.jobVMs()
-	builder, err := p.st.builderInfo(ctx, 15)
-	if err != nil {
-		return "", err
+	// The Builder card reads the PG staging table (a GROUP BY over articles),
+	// so it only renders on pg-staging installs — with staging=redis those
+	// queries answer zero for a crawler working flat out, which is worse than
+	// no card.
+	var builder BuilderInfo
+	pgStaging := p.cfg.Staging != StagingRedis
+	if pgStaging {
+		if builder, err = p.st.builderInfo(ctx, 15); err != nil {
+			return "", err
+		}
 	}
 	// The merged telemetry (local on the worker, worker-published on web) feeds
-	// the pass card, the error tail and the backfill rate — the numbers the
-	// store cannot answer.
+	// the pass card, the error tail, the recently-built list and the backfill
+	// rate — the numbers no shared table can answer in every mode.
 	tv := p.telemetryView(ctx)
 	eta := ""
 	if d, ok := backfillETA(stats.TotalBackfillRemaining, tv.BackfillRate); ok {
 		eta = fmtETA(d)
 	}
-	// Best-effort: recent activity is a liveness readout, and a failed query
-	// there must not blank the status page it sits on.
-	arts, aerr := p.st.recentArticles(ctx, 25)
-	if aerr != nil {
-		p.reportErr(ctx, "usenet/recent-articles", aerr)
-	}
-	nzbs, nerr := p.st.recentNZBs(ctx, 10)
-	if nerr != nil {
-		p.reportErr(ctx, "usenet/recent-nzbs", nerr)
-	}
-	recentArts := make([]recentArticleVM, len(arts))
-	for i, a := range arts {
-		recentArts[i] = recentArticleVM{
-			Subject: a.Subject, Group: a.Group, Poster: a.Poster,
-			Size: fmtBytes(a.Bytes), Posted: fmtTime(a.Posted),
-		}
-	}
-	recentNzbs := make([]recentNZBVM, len(nzbs))
-	for i, n := range nzbs {
+	recentNzbs := make([]recentNZBVM, len(tv.Built))
+	for i, b := range tv.Built {
 		recentNzbs[i] = recentNZBVM{
-			Title: n.Title, Group: n.Group,
-			Size: fmtBytes(n.Size), Created: fmtTime(n.Created),
+			Title: b.Title, Group: b.Group,
+			Size: fmtBytes(b.Size), Created: fmtTime(b.At),
 		}
 	}
 	return p.frag("crawlers.html", map[string]any{
@@ -288,21 +278,18 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		"Pass":        statsVM(pickPass(tv.CrawlCur, tv.CrawlLast)),
 		"Backfill":    statsVM(pickPass(tv.BackfillCur, tv.BackfillLast)),
 		"Errors":      errorVMs(tv.Errors),
-		"BackfillETA": eta, "Jobs": jobs, "Builder": builder,
+		"BackfillETA": eta, "Jobs": jobs,
+		"Builder": builder, "PGStaging": pgStaging,
 		"Fleet": p.fleetVMs(ctx), "Workers": p.workerVMs(ctx),
-		"Health":         p.healthVM(ctx),
-		"RecentArticles": recentArts, "RecentNzbs": recentNzbs,
+		"Health":      p.healthVM(ctx),
+		"RecentNzbs":  recentNzbs,
 		"AutoRefresh": running, "Msg": msg, "Err": errMsg,
 	})
 }
 
-// recentArticleVM / recentNZBVM are the liveness readouts: what just got staged,
-// and what just got built. Watermarks barely move over one pass, so these are
-// what actually show the crawler is alive.
-type recentArticleVM struct {
-	Subject, Group, Poster, Size, Posted string
-}
-
+// recentNZBVM is the liveness readout: what the CRAWLER just built (from the
+// telemetry ring, so it is crawler-only in every sink mode). Watermarks barely
+// move over one pass, so this is what actually shows the crawler is alive.
 type recentNZBVM struct {
 	Title, Group, Size, Created string
 }

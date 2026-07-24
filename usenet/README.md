@@ -10,7 +10,7 @@ machine-generated junk at ingest.
 Users see it two ways. **Operators** get one admin page at `/admin/p/usenet`
 (loon `SlotAdminPage`), tabbed: the provider fleet (with per-row connection
 test), indexing knobs, newsgroup curation, a live Crawlers dashboard (coverage
-bars, per-backbone progress, recent activity, an aggregate backfill ETA,
+bars, per-backbone progress, recently built releases, an aggregate backfill ETA,
 worker/fleet panels), and Filters — the operator blacklist plus per-rule hit
 counters.
 **End users** get whatever the host builds on the published index capability —
