@@ -45,7 +45,7 @@
     <div>
         <h4 class="mb-0">Usenet</h4>
         <div style="font-size:0.78rem;color:var(--bs-secondary-color);">
-            Providers, indexing, newsgroups, the crawler dashboard and the filter blacklist.
+            Providers, indexing, newsgroups, the crawler dashboard, per-job status + logs, and the filter blacklist.
         </div>
     </div>
     <div>
@@ -62,6 +62,7 @@
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#indexing">Indexing</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#newsgroups">Newsgroups <span class="tab-count">{{.GroupTotal}}</span></a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#crawlers">Crawlers</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#jobs">Jobs</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#filters">Filters</a></li>
 </ul>
 
@@ -309,6 +310,10 @@
 
 <div class="tab-pane" id="crawlers">
 {{.CrawlersTab}}
+</div>
+
+<div class="tab-pane" id="jobs">
+{{.JobsTab}}
 </div>
 
 <div class="tab-pane" id="filters">

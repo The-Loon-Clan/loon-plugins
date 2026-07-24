@@ -26,6 +26,30 @@ const telemetrySettingKey = "worker_telemetry"
 // consumes it below.
 const triggerRequestKey = "trigger_request"
 
+// fireTrigger starts the job a relay kind names. One switch shared by the
+// direct path (actionTrigger in the process that runs the jobs) and the
+// cross-process relay below, so every job the Jobs tab can trigger stays in
+// one place. Returns false for an unknown kind.
+func (p *Plugin) fireTrigger(kind string) bool {
+	switch kind {
+	case "crawl":
+		go p.runCrawl(p.ctx)
+	case "backfill":
+		go p.runBackfill(p.ctx)
+	case "build":
+		go p.runBuild(p.ctx)
+	case "tagfill":
+		go p.runTagFill(p.ctx)
+	case "prune":
+		go p.runPrune(p.ctx)
+	case "health":
+		go p.runHealthCheck(p.ctx)
+	default:
+		return false
+	}
+	return true
+}
+
 // fireTriggerRequest runs one relayed trigger. The freshness window guards a
 // worker that restarts with a stale request still in the table — an operator's
 // click should either happen promptly or not at all, never surprise-fire an
@@ -39,13 +63,8 @@ func (p *Plugin) fireTriggerRequest(req string) {
 	if err != nil || time.Since(time.Unix(ts, 0)) > 2*time.Minute {
 		return
 	}
-	switch kind {
-	case "crawl":
-		p.crawlJob.Log("crawl trigger relayed from the web process")
-		p.svc.TriggerCrawl()
-	case "backfill":
-		p.backfillJob.Log("backfill trigger relayed from the web process")
-		p.svc.TriggerBackfill()
+	if p.fireTrigger(kind) {
+		p.crawlJob.Log("%s trigger relayed from the web process", kind)
 	}
 }
 

@@ -5,59 +5,27 @@
      Providers, Index stats, Health, then the live activity/pass readouts,
      then the per-group Newsgroups table and the long-tail panels. */}}
 
+{{/* Slim provider strip: just the liveness that matters at a glance —
+     connected-or-not and how many connections are open. Everything else
+     (creds, role, backbone, priority, test) lives on the Providers tab,
+     reachable via the pencil. */}}
 <div class="card mt-3">
   <div class="card-header">Providers</div>
   <div class="card-body">
     {{if .Fleet}}
-    {{/* One pill per provider, panel below — the "tab each / list to select"
-         layout. Dial state comes from the worker-published telemetry, so it is
-         live on the web process too. */}}
-    <ul class="nav nav-pills mb-3" role="tablist" style="gap:.35rem">
-      {{range $i, $p := .Fleet}}
-      <li class="nav-item">
-        <button class="nav-link py-1{{if eq $i 0}} active{{end}}" data-bs-toggle="pill" data-bs-target="#prov-pane-{{$p.ID}}" type="button">
-          {{$p.Name}}
-          {{if not $p.Enabled}}<span class="badge bg-secondary ms-1">off</span>
-          {{else if $p.Down}}<span class="badge bg-warning text-dark ms-1">benched</span>
-          {{else if $p.Dialled}}<span class="badge bg-success ms-1">connected</span>{{end}}
-        </button>
-      </li>
-      {{end}}
-    </ul>
-    <div class="tab-content">
-      {{range $i, $p := .Fleet}}
-      <div class="tab-pane{{if eq $i 0}} active{{end}}" id="prov-pane-{{$p.ID}}">
-        <dl class="row mb-0" style="font-size:.9rem">
-          <dt class="col-sm-3">Server</dt><dd class="col-sm-9">{{$p.Host}}</dd>
-          <dt class="col-sm-3">Backbone</dt><dd class="col-sm-9"><code>{{$p.Backbone}}</code></dd>
-          <dt class="col-sm-3">Role</dt><dd class="col-sm-9">{{$p.Role}}{{if not $p.Enabled}} · <span class="text-muted">disabled — not crawled</span>{{end}}</dd>
-          <dt class="col-sm-3">Connections</dt>
-          <dd class="col-sm-9">
-            {{if $p.Dialled}}{{$p.Open}} open / {{$p.Target}} target{{if gt $p.Busy 0}} · {{$p.Busy}} busy{{end}}{{if gt $p.Resets 0}} · <span title="connections discarded after an error">{{$p.Resets}} resets</span>{{end}}
-              {{if and (gt $p.Configured 0) (ne $p.Configured $p.Target)}}<span class="text-muted small">(configured {{$p.Configured}} — the pool re-dials at the next pass)</span>{{end}}
-            {{else}}<span class="text-muted">not dialled yet</span>{{end}}
-          </dd>
-          <dt class="col-sm-3">State</dt>
-          <dd class="col-sm-9">
-            {{if not $p.Enabled}}<span class="text-muted">disabled</span>
-            {{else if $p.Down}}<span style="color:#e0a030">benched — failing, a backup may cover it</span>
-            {{else if $p.Dialled}}<span style="color:#4caf50">connected</span>
-            {{else}}<span class="text-muted">idle</span>{{end}}
-          </dd>
-        </dl>
-        <div class="mt-2 d-flex gap-2">
-          <form method="post" action="/admin/p/usenet/provider-test" style="display:inline">
-            <input type="hidden" name="id" value="{{$p.ID}}">
-            <button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="dial the stored credentials — nothing is saved">Test connection</button>
-          </form>
-          <a class="btn btn-sm btn-outline-secondary py-0" href="/admin/p/usenet#providers">Edit in Providers tab</a>
-        </div>
+    <div class="d-flex flex-column" style="gap:.35rem">
+      {{range .Fleet}}
+      <div class="d-flex align-items-center" style="gap:.6rem;font-size:.9rem">
+        <strong>{{.Name}}</strong>
+        {{if not .Enabled}}<span class="badge bg-secondary">off</span>
+        {{else if .Down}}<span class="badge bg-warning text-dark">benched</span>
+        {{else if .Dialled}}<span class="badge bg-success">connected</span>
+        {{else}}<span class="badge bg-secondary">idle</span>{{end}}
+        <span class="text-muted small">{{if .Dialled}}{{.Open}} / {{.Target}} connections{{else}}not dialled yet{{end}}</span>
+        <a class="ms-auto text-muted text-decoration-none" href="/admin/p/usenet#providers" title="edit providers">&#9998;</a>
       </div>
       {{end}}
     </div>
-    <p style="opacity:.6;font-size:.8rem;margin:.75rem 0 0">
-      Providers on the same backbone share crawl progress; different backbones add content.
-    </p>
     {{else}}
     <div class="empty">No providers configured — add one in the Providers tab.</div>
     {{end}}
@@ -95,73 +63,28 @@
 </div>
 {{end}}
 
-{{if gt .Health.Total 0}}
-<div class="card mt-3">
-  <div class="card-header">NZB health</div>
-  <div class="card-body">
-    <div style="display:flex;height:14px;border-radius:3px;overflow:hidden;background:rgba(128,128,128,.2)">
-      <div style="width:{{.Health.HealthyPct}}%;background:#4caf50" title="healthy"></div>
-      <div style="width:{{.Health.BrokenPct}}%;background:#e0a030" title="broken but repairable"></div>
-      <div style="width:{{.Health.DeadPct}}%;background:#c0392b" title="dead"></div>
+{{/* The live pass card is the dashboard's heart: the run buttons live in its
+     header and the totals line above the pass numbers. Per-job status, logs,
+     and the Builder/health panels live on the Jobs tab. */}}
+<div class="card mt-3" id="pass-card">
+  <div class="card-header d-flex align-items-center">
+    <span id="pass-title">{{if .Pass.Running}}Crawl in progress{{else if .Pass.Any}}Last crawl pass{{else}}Crawler{{end}}</span>
+    <div class="ms-auto d-flex" style="gap:.5rem">
+      <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
+        <button class="btn btn-sm btn-outline-primary py-0" type="submit">Crawl now</button>
+      </form>
+      <form method="post" action="/admin/p/usenet/backfill" style="display:inline">
+        <button class="btn btn-sm btn-outline-primary py-0" type="submit">Backfill now</button>
+      </form>
     </div>
-    <div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:.85rem;margin-top:.45rem">
-      <span><span style="color:#4caf50">■</span> {{.Health.Healthy}} healthy</span>
-      <span><span style="color:#e0a030">■</span> {{.Health.Broken}} broken</span>
-      <span><span style="color:#c0392b">■</span> {{.Health.Dead}} dead</span>
-      <span style="opacity:.7">{{.Health.Unknown}} unchecked</span>
-    </div>
-    <p style="opacity:.6;font-size:.8rem;margin:.5rem 0 0">
-      Broken means missing segments that the surviving PAR2 could still repair.
-      Checks run when the crawler has nothing else to do.
-    </p>
   </div>
-</div>
-{{end}}
-
-<div class="card mt-3">
-    <div class="card-header">Activity</div>
-    <div class="card-body">
-    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-        {{if .AutoRefresh}}<span class="badge bg-secondary">● live — auto-refreshing</span>{{end}}
-        <div style="margin-left:auto;display:flex;gap:.5rem">
-            <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
-                <button class="btn btn-sm btn-outline-primary" type="submit">Crawl now</button>
-            </form>
-            <form method="post" action="/admin/p/usenet/backfill" style="display:inline">
-                <button class="btn btn-sm btn-outline-primary" type="submit">Backfill now</button>
-            </form>
-        </div>
-    </div>
-    <p class="text-muted small mt-3 mb-2">
+  <div class="card-body">
+    <p class="text-muted small mb-2">
         {{with .Stats}}<span id="stat-nzbs">{{.TotalNZBs}}</span> NZBs ·
         <span id="stat-staged">{{.TotalStaged}}</span> articles staged ·
         <span id="stat-backlog">{{.TotalBackfillRemaining}}</span> articles left to backfill{{end}}
     </p>
-    {{if .Jobs}}
-    <div class="table-responsive">
-        <table class="table table-dark table-sm align-middle">
-            <thead><tr><th>Job</th><th>Status</th><th>Next run</th><th>Last activity</th></tr></thead>
-            <tbody>
-            {{range .Jobs}}
-                <tr data-job="{{.Name}}">
-                    <td><code>{{.Name}}</code></td>
-                    <td>{{if .Running}}<span data-role="status" class="badge bg-success">running</span>{{else}}<span data-role="status" class="badge bg-secondary">{{.Status}}</span>{{end}}</td>
-                    <td class="small text-muted" data-role="next">{{if .Next}}{{.Next}}{{else}}—{{end}}</td>
-                    <td class="small text-muted" data-role="activity">{{if .Activity}}{{.Activity}}{{else}}—{{end}}</td>
-                </tr>
-            {{end}}
-            </tbody>
-        </table>
-    </div>
-    {{else}}<div class="text-muted small">No usenet jobs registered in this process.</div>{{end}}
-    </div>
-</div>
-
-{{/* Always in the DOM (hidden until data exists) so the status poller below
-     can reveal it the moment a pass starts, without a page reload. */}}
-<div class="card mt-3" id="pass-card"{{if not .Pass.Any}} style="display:none"{{end}}>
-  <div class="card-header" id="pass-title">{{if .Pass.Running}}Crawl in progress{{else}}Last crawl pass{{end}}</div>
-  <div class="card-body">
+    <div id="pass-body"{{if not .Pass.Any}} style="display:none"{{end}}>
     {{/* The legacy page's live block, lifted 1:1: "Group N / M — <group>" on
          the left, "new / fetched" on the right, striped bar underneath. The
          plugin fetches every group's batches on one flat queue, so the bar
@@ -201,57 +124,8 @@
       Fetched counts overview lines pulled; staged counts what survived junk
       filtering and dedup, so a large gap between them is the filter working.
     </p>
+    </div>{{/* /pass-body */}}
   </div>
-</div>
-
-{{/* The Builder: staged sets -> assembled releases. Always rendered so the
-     drain path is VISIBLE — "is redis just filling up?" must be answerable
-     from this card. Redis mode: live ready-queue depth + eviction counter +
-     the incomplete-sets sample the build pass publishes; PG mode: the direct
-     GROUP BY numbers. */}}
-<div class="card mt-3">
-    <div class="card-header">Builder</div>
-    <div class="card-body">
-    {{if .PGStaging}}
-    {{with .Builder}}
-    <p class="text-muted small mb-2">
-        {{.StagedArticles}} articles staged · {{.Releases}} release(s) forming ·
-        <strong>{{.Ready}}</strong> ready to assemble
-    </p>
-    {{end}}
-    {{else}}
-    <p class="text-muted small mb-2">
-        <strong id="bld-ready">{{.IndexStats.Staging.ReadyGroups}}</strong> complete set(s) queued for assembly ·
-        <span id="bld-pending">{{len .Pending}}</span> incomplete in the latest sample ·
-        <span id="bld-evicted">{{.IndexStats.Evicted}}</span> hopeless set(s) evicted since worker start
-    </p>
-    <p class="text-muted small mb-2">
-        The build job drains the ready queue every pass and writes each release
-        into the catalog — staging is a transient buffer, never the destination.
-        Watch <em>Recently built</em> below fill as sets complete.
-    </p>
-    {{end}}
-    {{if .Pending}}
-    <p class="text-muted small mb-2">Largest incomplete releases (still missing articles — later passes complete them; stale ones are evicted):</p>
-    <div class="table-responsive">
-        <table class="table table-dark table-sm align-middle">
-            <thead><tr><th>Release</th><th>Group</th><th class="text-end">Have / need</th><th class="text-end">Missing</th></tr></thead>
-            <tbody>
-            {{range .Pending}}
-                <tr>
-                    <td class="small" style="max-width:30rem;overflow-wrap:anywhere"><code>{{.Base}}</code></td>
-                    <td class="small text-muted">{{.Group}}</td>
-                    <td class="text-end small">{{.Have}} / {{.Need}} {{if .Multi}}files{{else}}segments{{end}}</td>
-                    <td class="text-end small" style="color:#e0a030">{{.Missing}}</td>
-                </tr>
-            {{end}}
-            </tbody>
-        </table>
-    </div>
-    {{else}}
-    <div class="text-muted small">No incomplete sets in the latest sample — refreshed each build pass.</div>
-    {{end}}
-    </div>
 </div>
 
 {{if .Errors}}
@@ -427,28 +301,11 @@
   function apply(st) {
     set('stat-nzbs', st.total_nzbs); set('stat-staged', st.staged_articles);
     set('stat-backlog', st.backfill_remaining);
-    (st.jobs || []).forEach(function (j) {
-      var row = document.querySelector('tr[data-job="' + j.name + '"]');
-      if (!row) return;
-      var s = row.querySelector('[data-role=status]');
-      if (s) {
-        s.textContent = j.running ? 'running' : j.status;
-        s.className = 'badge ' + (j.running ? 'bg-success' : 'bg-secondary');
-      }
-      var n = row.querySelector('[data-role=next]');
-      if (n) n.textContent = j.next_run || '—';
-      var a = row.querySelector('[data-role=activity]');
-      if (a) a.textContent = j.activity || '—';
-    });
-    // Builder (redis body only — the ids don't exist in pg mode, set() no-ops).
-    set('bld-ready', st.ready_groups);
-    set('bld-pending', st.pending_count);
-    set('bld-evicted', st.evicted);
     var p = st.crawl || {};
     var any = p.running || p.batches > 0 || p.articles > 0;
-    var card = document.getElementById('pass-card');
-    if (!card || !any) return;
-    card.style.display = '';
+    var body = document.getElementById('pass-body');
+    if (!body || !any) return;
+    body.style.display = '';
     set('pass-title', p.running ? 'Crawl in progress' : 'Last crawl pass');
     var live = document.getElementById('pass-live');
     if (live) {

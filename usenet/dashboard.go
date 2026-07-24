@@ -111,6 +111,9 @@ type JobReport struct {
 	Activity string `json:"activity"`
 	Next     string `json:"next_run"`
 	Running  bool   `json:"running"`
+	// Logs is the recent job-log tail (jobLogTail lines) — what the Jobs
+	// tab's per-job panes poll for live logging.
+	Logs []string `json:"logs,omitempty"`
 }
 
 func passReport(st passStats) PassReport {
@@ -173,7 +176,7 @@ func (p *Plugin) status(ctx context.Context) StatusReport {
 	for _, j := range tv.Jobs {
 		rep.Jobs = append(rep.Jobs, JobReport{
 			Name: j.Name, Status: j.Status, Activity: j.Activity,
-			Next: j.Next, Running: j.Running,
+			Next: j.Next, Running: j.Running, Logs: j.Logs,
 		})
 	}
 	rep.Evicted = tv.Evicted

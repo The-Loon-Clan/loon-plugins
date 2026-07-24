@@ -154,23 +154,77 @@ func TestCrawlersRendersFleetAndWorkers(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		// provider pills + per-provider panel (dial state from telemetry)
-		"news.eweka.nl:563", "omicron", "18 open / 20 target", "2 resets",
-		"benched", `data-bs-toggle="pill"`, "provider-test",
-		"hostA/1/abcd", "(this host)", "healthy", "Crawler hosts",
+		// slim provider strip: connected state + open/target + the edit pencil
+		"Primary", "connected", "18 / 20 connections", "benched",
+		"#providers", "&#9998;",
+		"hostA/1/abcd", "(this host)", "Crawler hosts",
 		"Crawl in progress", "1333 art/s", "0.47 MB/s", "2 failed",
 		"Recent errors", "430 no such article",
 		// Index stats card: host-cached catalog + redis staging rows
 		"Index stats", "851454", "host cache, refreshed hourly",
 		"4 sets ready to assemble", "1.0 GB",
-		// backfill line + the unified Builder card (redis mode: ready queue,
-		// eviction counter, telemetry-sampled incomplete sets)
-		"Last backfill", "777", "Builder", "Some.Forming.Release",
-		"10 / 14", // have/need
-		"queued for assembly", "staging is a transient buffer",
+		// backfill line + the run buttons that moved into the pass card header
+		"Last backfill", "777", "Crawl now", "Backfill now",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("crawlers page missing %q", want)
+		}
+	}
+	// The moved surfaces must be GONE — they live on the Jobs tab now.
+	for _, gone := range []string{"provider-test", "NZB health", "Builder"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("crawlers page still contains %q (moved to the Jobs tab)", gone)
+		}
+	}
+}
+
+// TestJobsRendersPanes exercises the Jobs tab: one pane per pipeline job with
+// status, Run-now, the log tail, and the Builder/health panels that moved
+// here from the dashboard.
+func TestJobsRendersPanes(t *testing.T) {
+	tmpl, err := template.ParseFS(viewFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	panes := []jobPaneVM{
+		{crawlerJobVM: crawlerJobVM{Name: "Usenet Crawler", Status: "running", Running: true,
+			Next: "14:30:00", Logs: []string{"[14:12:01] crawling 28 group(s)"}},
+			Slug: "crawler", Short: "Crawler", Action: "run-crawl"},
+		{crawlerJobVM: crawlerJobVM{Name: "Usenet Builder", Status: "idle"},
+			Slug: "builder", Short: "Builder", Action: "run-build"},
+		{crawlerJobVM: crawlerJobVM{Name: "Usenet Health Check", Status: "idle"},
+			Slug: "health", Short: "Health Check", Action: "run-health"},
+	}
+	var buf bytes.Buffer
+	err = tmpl.ExecuteTemplate(&buf, "jobs.html", map[string]any{
+		"Jobs": panes, "PGStaging": false, "ReadyGroups": int64(4), "Evicted": int64(17),
+		"Pending": []pendingSet{
+			{Base: "Some.Forming.Release", Group: "alt.binaries.anime", Have: 10, Need: 14, Segments: 10},
+		},
+		"Builder": BuilderInfo{},
+		"Health":  healthVM{Healthy: 80, Broken: 15, Dead: 5, Unknown: 100, Total: 200, HealthyPct: 40, BrokenPct: 7, DeadPct: 2},
+		"Pass":    passVM{Any: true, Running: true, Articles: 120000, Staged: 9000, Groups: 5, Batches: 40, Duration: "1m30s", Rate: "1333 art/s"},
+		"Backfill": passVM{Any: true, Articles: 777, Staged: 700, Batches: 9,
+			Duration: "44s", Rate: "17 art/s"},
+	})
+	if err != nil {
+		t.Fatalf("render jobs: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		// pills + panes
+		`data-bs-target="#job-pane-crawler"`, "Run now", "run-crawl", "run-build", "run-health",
+		"[14:12:01] crawling 28 group(s)",
+		// builder pane (redis body + incomplete sample)
+		"4</strong> complete set(s) queued for assembly", "17</span> hopeless set(s) evicted",
+		"Some.Forming.Release", "10 / 14",
+		// health pane
+		"80 healthy", "15 broken", "100 unchecked",
+		// crawler pane pass summary
+		"Pass in progress:", "1333 art/s",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("jobs page missing %q", want)
 		}
 	}
 }

@@ -1,0 +1,159 @@
+{{/* The Jobs tab: one pill per pipeline job. Each pane: status + next run +
+     Run-now, the live log tail, and the job's own panels (the Builder and
+     NZB-health cards moved here from the dashboard). The poller below keeps
+     status badges, next-run times, and logs live while this tab is open. */}}
+<div class="card mt-3">
+  <div class="card-header">Jobs</div>
+  <div class="card-body">
+    <ul class="nav nav-pills mb-3" role="tablist" style="gap:.35rem">
+      {{range $i, $j := .Jobs}}
+      <li class="nav-item">
+        <button class="nav-link py-1{{if eq $i 0}} active{{end}}" data-bs-toggle="pill" data-bs-target="#job-pane-{{$j.Slug}}" type="button">
+          {{$j.Short}}
+          <span data-job-pill="{{$j.Name}}" class="badge ms-1 {{if $j.Running}}bg-success{{else}}bg-secondary{{end}}">{{if $j.Running}}running{{else}}{{$j.Status}}{{end}}</span>
+        </button>
+      </li>
+      {{end}}
+    </ul>
+    <div class="tab-content">
+      {{range $i, $j := .Jobs}}
+      <div class="tab-pane{{if eq $i 0}} active{{end}}" id="job-pane-{{$j.Slug}}" data-job="{{$j.Name}}">
+        <div class="d-flex align-items-center gap-3 flex-wrap mb-2" style="font-size:.9rem">
+          {{if $j.Running}}<span data-role="status" class="badge bg-success">running</span>
+          {{else}}<span data-role="status" class="badge bg-secondary">{{$j.Status}}</span>{{end}}
+          <span class="text-muted small">next run: <span data-role="next">{{if $j.Next}}{{$j.Next}}{{else}}—{{end}}</span></span>
+          <form method="post" action="/admin/p/usenet/{{$j.Action}}" class="ms-auto">
+            <button class="btn btn-sm btn-outline-primary py-0" type="submit">Run now</button>
+          </form>
+        </div>
+
+        {{if eq $j.Slug "crawler"}}
+        {{with $.Pass}}{{if .Any}}
+        <p class="text-muted small mb-2">
+          {{if .Running}}Pass in progress:{{else}}Last pass:{{end}}
+          {{.Articles}} fetched · {{.Staged}} staged · {{.Groups}} groups ·
+          {{.Batches}} batches · {{.Duration}} · {{.Rate}} —
+          the live progress bar is on the Crawlers tab.
+        </p>
+        {{end}}{{end}}
+        {{end}}
+
+        {{if eq $j.Slug "backfill"}}
+        {{with $.Backfill}}{{if .Any}}
+        <p class="text-muted small mb-2">
+          {{if .Running}}Pass in progress:{{else}}Last pass:{{end}}
+          {{.Articles}} fetched · {{.Staged}} staged · {{.Batches}} batches ·
+          {{.Duration}} · {{.Rate}}
+        </p>
+        {{end}}{{end}}
+        {{end}}
+
+        {{if eq $j.Slug "builder"}}
+        {{if $.PGStaging}}
+        {{with $.Builder}}
+        <p class="text-muted small mb-2">
+          {{.StagedArticles}} articles staged · {{.Releases}} release(s) forming ·
+          <strong>{{.Ready}}</strong> ready to assemble
+        </p>
+        {{end}}
+        {{else}}
+        <p class="text-muted small mb-2">
+          <strong id="bld-ready">{{$.ReadyGroups}}</strong> complete set(s) queued for assembly ·
+          <span id="bld-pending">{{len $.Pending}}</span> incomplete in the latest sample ·
+          <span id="bld-evicted">{{$.Evicted}}</span> hopeless set(s) evicted since worker start
+        </p>
+        {{end}}
+        {{if $.Pending}}
+        <p class="text-muted small mb-2">Largest incomplete releases (still missing articles — later passes complete them; stale ones are evicted):</p>
+        <div class="table-responsive">
+          <table class="table table-dark table-sm align-middle">
+            <thead><tr><th>Release</th><th>Group</th><th class="text-end">Have / need</th><th class="text-end">Missing</th></tr></thead>
+            <tbody>
+            {{range $.Pending}}
+              <tr>
+                <td class="small" style="max-width:30rem;overflow-wrap:anywhere"><code>{{.Base}}</code></td>
+                <td class="small text-muted">{{.Group}}</td>
+                <td class="text-end small">{{.Have}} / {{.Need}} {{if .Multi}}files{{else}}segments{{end}}</td>
+                <td class="text-end small" style="color:#e0a030">{{.Missing}}</td>
+              </tr>
+            {{end}}
+            </tbody>
+          </table>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{if eq $j.Slug "health"}}
+        {{if gt $.Health.Total 0}}
+        <div class="mb-2">
+          <div style="display:flex;height:14px;border-radius:3px;overflow:hidden;background:rgba(128,128,128,.2)">
+            <div style="width:{{$.Health.HealthyPct}}%;background:#4caf50" title="healthy"></div>
+            <div style="width:{{$.Health.BrokenPct}}%;background:#e0a030" title="broken but repairable"></div>
+            <div style="width:{{$.Health.DeadPct}}%;background:#c0392b" title="dead"></div>
+          </div>
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:.85rem;margin-top:.45rem">
+            <span><span style="color:#4caf50">■</span> {{$.Health.Healthy}} healthy</span>
+            <span><span style="color:#e0a030">■</span> {{$.Health.Broken}} broken</span>
+            <span><span style="color:#c0392b">■</span> {{$.Health.Dead}} dead</span>
+            <span style="opacity:.7">{{$.Health.Unknown}} unchecked</span>
+          </div>
+          <p style="opacity:.6;font-size:.8rem;margin:.5rem 0 0">
+            Broken means missing segments that the surviving PAR2 could still repair.
+            Checks run when the crawler has nothing else to do.
+          </p>
+        </div>
+        {{end}}
+        {{end}}
+
+        <div class="small text-muted mb-1">Log</div>
+        <pre data-role="logs" class="small mb-0" style="max-height:20rem;overflow:auto;background:rgba(128,128,128,.08);border-radius:6px;padding:.6rem .8rem;white-space:pre-wrap">{{if $j.Logs}}{{range $j.Logs}}{{.}}
+{{end}}{{else}}no log lines yet{{end}}</pre>
+      </div>
+      {{end}}
+    </div>
+  </div>
+</div>
+
+{{/* Live updates for this tab: status pills, next-run, and the log tails.
+     Only polls while the Jobs tab is the visible pane. */}}
+<script>
+(function () {
+  setInterval(function () {
+    var pane = document.getElementById('jobs');
+    if (pane && !pane.classList.contains('active')) return;
+    fetch('/admin/plugin/usenet/status.json')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (st) {
+        if (!st) return;
+        (st.jobs || []).forEach(function (j) {
+          var row = document.querySelector('#jobs .tab-pane[data-job="' + j.name + '"]');
+          if (row) {
+            var s = row.querySelector('[data-role=status]');
+            if (s) {
+              s.textContent = j.running ? 'running' : j.status;
+              s.className = 'badge ' + (j.running ? 'bg-success' : 'bg-secondary');
+            }
+            var n = row.querySelector('[data-role=next]');
+            if (n) n.textContent = j.next_run || '—';
+            var pre = row.querySelector('[data-role=logs]');
+            if (pre && j.logs && j.logs.length) {
+              var atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
+              pre.textContent = j.logs.join('\n');
+              if (atBottom) pre.scrollTop = pre.scrollHeight;
+            }
+          }
+          var pill = document.querySelector('[data-job-pill="' + j.name + '"]');
+          if (pill) {
+            pill.textContent = j.running ? 'running' : j.status;
+            pill.className = 'badge ms-1 ' + (j.running ? 'bg-success' : 'bg-secondary');
+          }
+        });
+        var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+        set('bld-ready', st.ready_groups);
+        set('bld-pending', st.pending_count);
+        set('bld-evicted', st.evicted);
+      })
+      .catch(function () {});
+  }, 5000);
+})();
+</script>

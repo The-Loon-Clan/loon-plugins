@@ -96,7 +96,8 @@ func TestWorkerTelemetryRoundTrip(t *testing.T) {
 		Errors:       []crawlError{{At: time.Now().Truncate(time.Second), Op: "usenet/crawl", Msg: "boom"}},
 		Fleet:        map[int]providerStat{7: {Open: 18, Target: 20, Busy: 3, Resets: 2, Down: true}},
 		Jobs: []crawlerJobVM{{Name: "Usenet Crawler", Status: "running",
-			Activity: "batch 12/40", Next: "14:30:00", Running: true}},
+			Activity: "batch 12/40", Next: "14:30:00", Running: true,
+			Logs: []string{"[14:29:01] crawling 28 group(s)", "[14:29:40] batch 12/40"}}},
 		Pending: []pendingSet{{Base: "Some.Release", Group: "a.b.anime", Have: 40, Need: 100}},
 		Evicted: 17,
 	}
@@ -127,6 +128,9 @@ func TestWorkerTelemetryRoundTrip(t *testing.T) {
 	if len(out.Jobs) != 1 || out.Jobs[0].Name != "Usenet Crawler" ||
 		out.Jobs[0].Next != "14:30:00" || !out.Jobs[0].Running {
 		t.Errorf("job snapshots lost in transit: %+v", out.Jobs)
+	}
+	if len(out.Jobs[0].Logs) != 2 || out.Jobs[0].Logs[1] != "[14:29:40] batch 12/40" {
+		t.Errorf("job log tail lost in transit: %+v", out.Jobs[0].Logs)
 	}
 	if len(out.Pending) != 1 || out.Pending[0].Missing() != 60 {
 		t.Errorf("pending sample lost in transit: %+v", out.Pending)

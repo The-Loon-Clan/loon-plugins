@@ -57,6 +57,14 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			// tick consumes it within ~5s (telemetry_publish.go).
 			"crawl":    p.actionTrigger("crawl", "crawl"),
 			"backfill": p.actionTrigger("backfill", "backfill"),
+			// Jobs tab: one Run-now per job. Distinct run-* paths (rather than
+			// reusing /crawl) so the post-action redirect returns to #jobs.
+			"run-crawl":    p.actionTrigger("crawl", "crawl"),
+			"run-backfill": p.actionTrigger("backfill", "backfill"),
+			"run-build":    p.actionTrigger("build", "build"),
+			"run-tagfill":  p.actionTrigger("tagfill", "tag fill"),
+			"run-prune":    p.actionTrigger("prune", "prune"),
+			"run-health":   p.actionTrigger("health", "health check"),
 			"reset-backfill": func(gc *gin.Context) (template.HTML, error) {
 				name := gc.PostForm("name")
 				if err := p.st.resetBackfillForGroup(gc.Request.Context(), name); err != nil {
@@ -101,19 +109,14 @@ func (p *Plugin) frag(name string, data any) (template.HTML, error) {
 func (p *Plugin) actionTrigger(kind, label string) func(*gin.Context) (template.HTML, error) {
 	return func(gc *gin.Context) (template.HTML, error) {
 		if p.runsJobs {
-			switch kind {
-			case "crawl":
-				p.svc.TriggerCrawl()
-			case "backfill":
-				p.svc.TriggerBackfill()
-			}
+			p.fireTrigger(kind)
 			return settingsRedirect(gc, "msg", label+" started")
 		}
 		req := kind + ":" + strconv.FormatInt(time.Now().Unix(), 10)
 		if err := p.st.setSetting(gc.Request.Context(), triggerRequestKey, req); err != nil {
 			return settingsRedirect(gc, "err", err.Error())
 		}
-		return settingsRedirect(gc, "msg", label+" requested — the worker starts it within ~5s; watch the Activity card")
+		return settingsRedirect(gc, "msg", label+" requested — the worker starts it within ~5s; watch its log on the Jobs tab")
 	}
 }
 
@@ -149,6 +152,10 @@ func tabForAction(path string) string {
 		strings.HasSuffix(path, "/group-del"), strings.HasSuffix(path, "/groups-purge"),
 		strings.HasSuffix(path, "/fetch-groups"), strings.HasSuffix(path, "/group"):
 		return "newsgroups"
+	case strings.HasSuffix(path, "/run-crawl"), strings.HasSuffix(path, "/run-backfill"),
+		strings.HasSuffix(path, "/run-build"), strings.HasSuffix(path, "/run-tagfill"),
+		strings.HasSuffix(path, "/run-prune"), strings.HasSuffix(path, "/run-health"):
+		return "jobs"
 	case strings.HasSuffix(path, "/crawl"), strings.HasSuffix(path, "/backfill"),
 		strings.HasSuffix(path, "/reset-backfill"):
 		return "crawlers"

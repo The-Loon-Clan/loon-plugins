@@ -292,7 +292,13 @@ type crawlerJobVM struct {
 	Activity string
 	Next     string // next scheduled run (HH:MM:SS) — answers "when will it run"
 	Running  bool
+	// Logs is the recent job-log tail — the Jobs tab's live logging. Capped
+	// (jobLogTail) because it rides the worker-telemetry publish.
+	Logs []string
 }
+
+// jobLogTail bounds how many log lines each job publishes cross-process.
+const jobLogTail = 25
 
 func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (template.HTML, error) {
 	stats, err := p.st.stats(ctx)
@@ -359,17 +365,6 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 			}
 		}
 	}
-	// The Builder card reads the PG staging table (a GROUP BY over articles),
-	// so it only renders on pg-staging installs — with staging=redis those
-	// queries answer zero for a crawler working flat out, which is worse than
-	// no card. Redis installs get the telemetry-sampled Pending list instead.
-	var builder BuilderInfo
-	pgStaging := p.cfg.Staging != StagingRedis
-	if pgStaging {
-		if builder, err = p.st.builderInfo(ctx, 15); err != nil {
-			return "", err
-		}
-	}
 	eta := ""
 	if d, ok := backfillETA(stats.TotalBackfillRemaining, tv.BackfillRate); ok {
 		eta = fmtETA(d)
@@ -381,8 +376,9 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 			Size: fmtBytes(b.Size), Created: fmtTime(b.At),
 		}
 	}
-	// One catalog-stats fetch feeds both the health card and Index Stats (host
-	// mode; internal mode reads the plugin's own tables inside each VM).
+	// Catalog-stats fetch feeds Index Stats in host mode (internal mode reads
+	// the plugin's own tables inside the VM). Per-job status, logs, and the
+	// Builder/health panels moved to the Jobs tab (views_jobs.go).
 	var cs *pluginapi.CatalogStats
 	if p.cfg.Sink == SinkHost {
 		if prov, ok := pluginapi.LookupCatalogStats(p.core); ok {
@@ -398,10 +394,8 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		"Pass":        statsVM(pickPass(tv.CrawlCur, tv.CrawlLast)),
 		"Backfill":    statsVM(pickPass(tv.BackfillCur, tv.BackfillLast)),
 		"Errors":      errorVMs(tv.Errors),
-		"BackfillETA": eta, "Jobs": jobs,
-		"Builder": builder, "PGStaging": pgStaging, "Pending": tv.Pending,
-		"Fleet": p.fleetVMs(ctx, tv.Fleet), "Workers": p.workerVMs(ctx),
-		"Health":      p.healthVM(ctx, cs),
+		"BackfillETA": eta,
+		"Fleet":       p.fleetVMs(ctx, tv.Fleet), "Workers": p.workerVMs(ctx),
 		"IndexStats":  p.indexStatsWithTel(ctx, len(stats.Groups), cs, tv),
 		"HostSink":    p.cfg.Sink == SinkHost,
 		"RecentNzbs":  recentNzbs,
@@ -439,6 +433,13 @@ func (p *Plugin) jobVMs() (jobs []crawlerJobVM, anyRunning bool) {
 			j.Activity = s.LastError
 		} else if len(s.Logs) > 0 {
 			j.Activity = s.Logs[len(s.Logs)-1]
+		}
+		if n := len(s.Logs); n > 0 {
+			start := n - jobLogTail
+			if start < 0 {
+				start = 0
+			}
+			j.Logs = s.Logs[start:]
 		}
 		if s.Status == "running" || s.ElapsedSecs > 0 {
 			j.Running, anyRunning = true, true

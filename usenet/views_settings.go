@@ -62,6 +62,10 @@ func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string) (te
 	if err != nil {
 		return "", err
 	}
+	jobsTab, err := p.renderJobs(ctx)
+	if err != nil {
+		return "", err
+	}
 	filtersTab, err := p.renderFilters(ctx, "", "")
 	if err != nil {
 		return "", err
@@ -72,7 +76,7 @@ func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string) (te
 		"CrawlNoCatchup": p.effective(ctx).CrawlNoCatchup,
 		"Groups":         groups, "GroupQuery": gq,
 		"GroupTotal": total, "Shown": len(groups),
-		"CrawlersTab": crawlersTab, "FiltersTab": filtersTab,
+		"CrawlersTab": crawlersTab, "JobsTab": jobsTab, "FiltersTab": filtersTab,
 		"Msg": msg, "Err": errMsg,
 	})
 }
