@@ -3,6 +3,7 @@ package usenet
 import (
 	"context"
 	"database/sql"
+	"sort"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -17,40 +18,88 @@ import (
 // activeGroupsForBackbone lists the groups to crawl along with THIS backbone's
 // progress. A group with no state row yet reports watermark 0, which the crawler
 // reads as "first pass" and caps accordingly.
+//
+// Tier rule (the operator's): NORMAL groups with known new articles own the
+// pass. When the normal tier is caught up, the LOW-PRIORITY backlog takes the
+// slots and runs until finished — with leftover slots still polling normal
+// groups (stalest first) so new arrivals on the normal tier are noticed and
+// reclaim the next pass. The old "ORDER BY low_priority LIMIT n" ordering
+// silently starved low-pri groups FOREVER once n or more normal groups were
+// active — "after the normal groups" must never mean "never".
 func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, limit int) ([]groupRow, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	type row struct {
-		Name      string        `db:"name"`
-		HW        int64         `db:"high_watermark"`
-		Retention sql.NullInt64 `db:"retention_days"`
-		Throttle  int           `db:"throttle_ms"`
-		LowPri    bool          `db:"low_priority"`
+		Name       string        `db:"name"`
+		HW         int64         `db:"high_watermark"`
+		ServerHigh int64         `db:"server_high"`
+		LastCrawl  sql.NullTime  `db:"last_crawl"`
+		Retention  sql.NullInt64 `db:"retention_days"`
+		Throttle   int           `db:"throttle_ms"`
+		LowPri     bool          `db:"low_priority"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		// Ordered by tier first: low-priority groups are crawled only after the
-		// normal ones, so a huge low-value group cannot starve the rest.
+		// All active rows (a curated catalog, not a firehose) — the tier split
+		// and cap happen below where the rule is readable.
 		return tx.SelectContext(ctx, &rows,
 			`SELECT g.name, COALESCE(st.high_watermark, 0) AS high_watermark,
+			        COALESCE(st.server_high, 0) AS server_high, st.last_crawl,
 			        g.retention_days, g.throttle_ms, g.low_priority
 			   FROM newsgroups g
 			   LEFT JOIN newsgroup_state st
 			     ON st.group_name = g.name AND st.backbone = $1
 			  WHERE g.active = TRUE
-			  ORDER BY g.low_priority, g.sort_order, g.name
-			  LIMIT $2`, backbone, limit)
+			  ORDER BY g.low_priority, g.sort_order, g.name`, backbone)
 	})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]groupRow, len(rows))
-	for i, r := range rows {
-		out[i] = groupRow{
+
+	toGroup := func(r row) groupRow {
+		return groupRow{
 			Name: r.Name, HighWatermark: r.HW,
 			RetentionDays: int(r.Retention.Int64), ThrottleMs: r.Throttle, LowPriority: r.LowPri,
 		}
+	}
+	var normal, lowpri []row
+	var normalBehind int64
+	for _, r := range rows {
+		if r.LowPri {
+			lowpri = append(lowpri, r)
+			continue
+		}
+		normal = append(normal, r)
+		if r.ServerHigh > r.HW {
+			// A never-crawled group (server_high 0 until its first poll) counts
+			// as pending too — HW 0 keeps the comparison honest either way.
+			normalBehind += r.ServerHigh - r.HW
+		}
+	}
+
+	pick := normal
+	if normalBehind == 0 && len(lowpri) > 0 {
+		// Normal tier caught up (as of its last recorded state): the low-pri
+		// backlog owns the pass. Normal groups fill the remaining slots as
+		// polls, stalest first, so their next arrivals get noticed.
+		sort.Slice(normal, func(i, j int) bool {
+			a, b := normal[i].LastCrawl, normal[j].LastCrawl
+			if a.Valid != b.Valid {
+				return !a.Valid // never-crawled first
+			}
+			return a.Time.Before(b.Time)
+		})
+		pick = append(append([]row{}, lowpri...), normal...)
+	} else if len(pick) < limit {
+		pick = append(append([]row{}, normal...), lowpri...)
+	}
+	if len(pick) > limit {
+		pick = pick[:limit]
+	}
+	out := make([]groupRow, len(pick))
+	for i, r := range pick {
+		out[i] = toGroup(r)
 	}
 	return out, nil
 }

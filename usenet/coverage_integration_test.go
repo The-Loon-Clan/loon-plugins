@@ -301,3 +301,55 @@ func TestAnyBackfillPending(t *testing.T) {
 		t.Fatal("inactive group's state counted as pending work")
 	}
 }
+
+// TestLowPriorityTierRule pins the operator's scheduling rule: normal groups
+// with known new articles own the pass; once the normal tier is caught up,
+// the low-priority backlog takes the slots (and normal groups ride along as
+// polls, so their next arrivals are noticed). The original "ORDER BY
+// low_priority LIMIT n" starved low-pri groups FOREVER once n normal groups
+// existed — observed on prod 2026-07-24.
+func TestLowPriorityTierRule(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	const bb = "omicron"
+
+	mustGroups(t, s, "n.one", "n.two", "l.big")
+	if err := s.setGroupTuning(ctx, "l.big", 0, 0, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Normal tier behind: n.one has 100 new articles on the server.
+	if err := s.updateGroupStateForBackbone(ctx, bb, "n.one", 1, 1100, 1000, 1000, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.updateGroupStateForBackbone(ctx, bb, "n.two", 1, 500, 500, 500, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.updateGroupStateForBackbone(ctx, bb, "l.big", 1, 9000, 10, 10, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.activeGroupsForBackbone(ctx, bb, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].LowPriority || got[1].LowPriority {
+		t.Fatalf("normal tier behind: want the 2 normal groups first, got %+v", got)
+	}
+
+	// Normal tier catches up: the low-pri backlog must now own the pass, with
+	// a normal group riding along as a poll.
+	if err := s.updateGroupStateForBackbone(ctx, bb, "n.one", 1, 1100, 1100, 1000, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.activeGroupsForBackbone(ctx, bb, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || !got[0].LowPriority {
+		t.Fatalf("normal tier caught up: want the low-pri group first, got %+v", got)
+	}
+	if got[1].LowPriority {
+		t.Fatalf("leftover slot should poll a normal group, got %+v", got[1])
+	}
+}
