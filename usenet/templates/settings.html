@@ -197,9 +197,20 @@
 <div class="card mt-3">
     <div class="card-header">Newsgroups</div>
     <div class="card-body">
+    <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
+      Only <strong>active</strong> groups are crawled. <strong>Fetch group
+      list</strong> asks the primary provider for its complete newsgroup
+      catalog (NNTP <code>LIST</code> — often tens of thousands of names) and
+      adds any that are new, all <em>disabled</em>; nothing you have configured
+      is touched. Then search for the groups you want, <strong>enable</strong>
+      them, and clear the rest with <em>Remove all inactive groups</em>. A
+      fresh install starts with a curated anime set, so fetching is only
+      needed to index beyond it.
+    </p>
     <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
         <form method="post" action="/admin/p/usenet/fetch-groups" style="display:inline">
-            <button class="btn btn-outline-primary btn-sm" type="submit">Fetch group list</button>
+            <button class="btn btn-outline-primary btn-sm" type="submit"
+                    title="NNTP LIST against the primary provider — adds new names as disabled; existing groups untouched">Fetch group list</button>
         </form>
         <form method="get" action="/admin/p/usenet" style="display:flex;gap:.5rem;flex:1;min-width:220px">
             <input class="form-control form-control-sm" type="search" name="gq" value="{{.GroupQuery}}" placeholder="search groups…" style="flex:1">
