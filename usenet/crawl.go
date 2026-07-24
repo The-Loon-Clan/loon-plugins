@@ -159,6 +159,14 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 			break
 		}
 		p.crawlJob.Log("catch-up: %s article(s) still behind — continuing without waiting for the interval", fmtComma(behind))
+		// Re-resolve the fleet each round: catch-up passes run for HOURS, and
+		// an operator adding or disabling a provider mid-pass should take
+		// effect on the next round, not after the whole pass — "I added the
+		// EU server and can't start it" was exactly this. A resolve failure
+		// keeps the current fleet rather than aborting a working pass.
+		if newRuns, err := p.activeFleet(ctx, cfg); err == nil && len(newRuns) > 0 {
+			runs = newRuns
+		}
 	}
 	p.crawlJob.Log("crawl complete across %d provider(s): %d article(s) staged", len(runs), totalStaged)
 	p.crawlJob.SetIdle(p.nextCrawl())
