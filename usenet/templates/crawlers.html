@@ -1,5 +1,5 @@
-{{if .Msg}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Err}}</div>{{end}}
+{{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
 
 <div class="card mt-3">
     <div class="card-header">Activity</div>
@@ -124,9 +124,9 @@
     <div class="card-header">Coverage</div>
     <div class="card-body">
     <div class="cov-legend">
-        <span><span class="dot" style="background:var(--warning)"></span>pending backfill</span>
-        <span><span class="dot" style="background:var(--success)"></span>indexed</span>
-        <span><span class="dot" style="background:var(--info)"></span>new (not yet fetched)</span>
+        <span><span class="dot" style="background:var(--bs-warning)"></span>pending backfill</span>
+        <span><span class="dot" style="background:var(--bs-success)"></span>indexed</span>
+        <span><span class="dot" style="background:var(--bs-info)"></span>new (not yet fetched)</span>
     </div>
     {{if .BackfillETA}}<div class="small text-muted mb-2">Backfill: about <strong>{{.BackfillETA}}</strong> remaining at the current rate ({{.Backfill.Rate}}).</div>{{end}}
     {{if .Groups}}
