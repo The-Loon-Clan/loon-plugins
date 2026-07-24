@@ -5,7 +5,20 @@
 <div class="container page-wide" style="padding-top:1.25rem">
 {{if .Msg}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Err}}</div>{{end}}
-<h1 class="h3 mb-3">Usenet</h1>
+{{/* Native admin-page header: h4 title + muted one-liner + Back, then flat
+     sections — the site's admin pages don't box every section in a card, so
+     the tabs group and headings separate. */}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="mb-0">Usenet</h4>
+        <div style="font-size:0.78rem;color:var(--text-muted);">
+            Providers, indexing, newsgroups, the crawler dashboard and the filter blacklist.
+        </div>
+    </div>
+    <div>
+        <a href="/admin" class="btn btn-sm btn-outline-secondary">Back</a>
+    </div>
+</div>
 
 <ul class="nav tabs" role="tablist">
   <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#nntp">NNTP</a></li>
@@ -19,9 +32,9 @@
 <div class="tab-content">
 
 <div class="tab-pane active" id="nntp">
-<div class="card">
-    <h2>NNTP server</h2>
-    <h4 style="margin:0 0 .3rem">Connection test</h4>
+<div class="mb-4">
+    <h5>NNTP server</h5>
+    <h6 style="margin:0 0 .3rem">Connection test</h6>
     <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
       Checks credentials against a server before you commit to them, and seeds the
       first provider on a fresh install. Manage the full fleet — additional
@@ -68,8 +81,8 @@
 </div>
 
 <div class="tab-pane" id="providers">
-<div class="card">
-    <h2>Providers</h2>
+<div class="mb-4">
+    <h5>Providers</h5>
     <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
       Active providers are crawled every pass. Backups stay idle and are promoted only
       to cover an active provider that is failing. Newsgroups are split across
@@ -146,8 +159,8 @@
 </div>
 
 <div class="tab-pane" id="indexing">
-<div class="card">
-    <h2>Indexing</h2>
+<div class="mb-4">
+    <h5>Indexing</h5>
     <form method="post" action="/admin/p/usenet/knobs">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem">
             {{range .Knobs}}
@@ -170,8 +183,8 @@
 </div>
 
 <div class="tab-pane" id="newsgroups">
-<div class="card">
-    <h2>Newsgroups</h2>
+<div class="mb-4">
+    <h5>Newsgroups</h5>
     <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
         <form method="post" action="/admin/p/usenet/fetch-groups" style="display:inline">
             <button class="btn btn-outline-primary btn-sm" type="submit">Fetch group list</button>

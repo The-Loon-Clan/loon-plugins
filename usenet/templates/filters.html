@@ -1,8 +1,8 @@
 {{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
 
-<div class="card">
-    <h2>Blacklist</h2>
+<div class="mb-4">
+    <h5>Blacklist</h5>
     <p class="text-muted small">
         Your own rules, checked when a release is assembled. A match drops the release
         and its staged articles — it is never indexed. Separate from the shipped junk
@@ -67,8 +67,8 @@
     {{end}}
 </div>
 
-<div class="card">
-    <h2>Filter hits</h2>
+<div class="mb-4">
+    <h5>Filter hits</h5>
     <p class="text-muted small">
         What each rule has actually dropped, accumulated across restarts. Read it two ways:
         a rule near zero is probably not earning its cost, and a rule at the top with a

@@ -1,9 +1,9 @@
 {{if .Msg}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Err}}</div>{{end}}
 
-<div class="card">
+<div class="mb-4">
     <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-        <h2 style="margin:0">Activity</h2>
+        <h5 style="margin:0">Activity</h5>
         {{if .AutoRefresh}}<span class="badge bg-secondary">● live — auto-refreshing</span>{{end}}
         <div style="margin-left:auto;display:flex;gap:.5rem">
             <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
@@ -37,8 +37,8 @@
 </div>
 
 {{with .Builder}}
-<div class="card">
-    <h2>Builder</h2>
+<div class="mb-4">
+    <h5>Builder</h5>
     <p class="text-muted small mb-2">
         {{.StagedArticles}} articles staged · {{.Releases}} release(s) forming ·
         <strong>{{.Ready}}</strong> ready to assemble
@@ -64,8 +64,8 @@
 </div>
 {{end}}
 
-<div class="card">
-    <h2>Recent activity</h2>
+<div class="mb-4">
+    <h5>Recent activity</h5>
     <p class="text-muted small">
         The newest staged articles and assembled releases. Watermarks barely move over a
         single pass, so this is the readout that shows the crawler is actually alive.
@@ -114,8 +114,8 @@
     </div>
 </div>
 
-<div class="card">
-    <h2>Coverage</h2>
+<div class="mb-4">
+    <h5>Coverage</h5>
     <div class="cov-legend">
         <span><span class="dot" style="background:var(--warning)"></span>pending backfill</span>
         <span><span class="dot" style="background:var(--success)"></span>indexed</span>
@@ -187,7 +187,7 @@
 
 
 {{if .Pass.Any}}
-<div class="card" style="margin-bottom:1rem">
+<div class="mb-4">
   <div class="card-body">
     <h5 style="margin:0 0 .5rem">
       {{if .Pass.Running}}Crawl in progress{{else}}Last crawl pass{{end}}
@@ -212,7 +212,7 @@
 {{end}}
 
 {{if .Errors}}
-<div class="card" style="margin-bottom:1rem">
+<div class="mb-4">
   <div class="card-body">
     <h5 style="margin:0 0 .5rem">Recent errors <span style="opacity:.6;font-weight:400">({{len .Errors}})</span></h5>
     <div style="max-height:14rem;overflow:auto;font-size:.85rem">
@@ -234,7 +234,7 @@
   </div>
 </div>
 {{end}}
-<div class="card" style="margin-bottom:1rem">
+<div class="mb-4">
   <div class="card-body">
     <h5 style="margin:0 0 .5rem">Providers</h5>
     <table class="table" style="font-size:.88rem;margin:0">
@@ -267,7 +267,7 @@
 </div>
 
 {{if .Workers}}
-<div class="card" style="margin-bottom:1rem">
+<div class="mb-4">
   <div class="card-body">
     <h5 style="margin:0 0 .5rem">Crawler hosts</h5>
     <table class="table" style="font-size:.88rem;margin:0">
@@ -288,7 +288,7 @@
 {{end}}
 
 {{if gt .Health.Total 0}}
-<div class="card" style="margin-bottom:1rem">
+<div class="mb-4">
   <div class="card-body">
     <h5 style="margin:0 0 .5rem">Release health</h5>
     <div style="display:flex;height:14px;border-radius:3px;overflow:hidden;background:rgba(128,128,128,.2)">
