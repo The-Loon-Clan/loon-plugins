@@ -109,13 +109,16 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	// spin), the off-peak gate is honored between rounds, and the operator can
 	// disable it (crawl_no_catchup).
 	prevBehind := int64(-1)
+	blockedRetries := 0
 	for {
-		staged := 0
+		staged, claimed := 0, 0
 		for _, run := range runs {
 			if ctx.Err() != nil {
 				return
 			}
-			staged += p.crawlProvider(ctx, run, cfg)
+			s, c := p.crawlProvider(ctx, run, cfg)
+			staged += s
+			claimed += c
 		}
 		totalStaged += staged
 		if cfg.CrawlNoCatchup || ctx.Err() != nil {
@@ -125,6 +128,27 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		if err != nil || behind <= int64(cfg.Batch) {
 			break // caught up (within one batch) — the interval takes over
 		}
+		if claimed == 0 {
+			// Every group is lease-held by someone else. Right after a deploy
+			// that someone is the KILLED predecessor, whose heartbeat hasn't
+			// aged past the takeover window yet (the boot delay is shorter
+			// than leaseOwnerDeadAfter, so the first pass loses that race by
+			// design). Blocked is temporary — retry shortly instead of
+			// sleeping out the interval, which idled every boot for 15
+			// minutes. Bounded: with a genuinely live sibling holding the
+			// groups, we stop retrying and let the interval take over.
+			blockedRetries++
+			if blockedRetries > 6 {
+				p.crawlJob.Log("groups still lease-held by another worker after %d retries — waiting for the next interval", blockedRetries-1)
+				break
+			}
+			p.crawlJob.Log("all groups lease-held by another worker — retrying in 45s (%s article(s) behind)", fmtComma(behind))
+			if !schedule.SleepCtx(ctx, 45*time.Second) {
+				return
+			}
+			continue
+		}
+		blockedRetries = 0
 		if prevBehind >= 0 && behind >= prevBehind {
 			p.crawlJob.Log("catch-up stalled at %s article(s) behind — waiting for the next interval", fmtComma(behind))
 			break
@@ -144,41 +168,44 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	}
 }
 
-// crawlProvider runs one provider's forward pass and returns articles staged.
-func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config) int {
+// crawlProvider runs one provider's forward pass. Returns articles staged and
+// how many groups this worker actually CLAIMED — the catch-up loop treats an
+// all-blocked pass (claimed == 0 fleet-wide) as retry-shortly, not stalled.
+func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config) (int, int) {
 	pool, bb := run.pool, run.prov.backboneKey()
 	pool.TopUp(ctx) // refill anything the last pass discarded
 
 	groups, err := p.st.activeGroupsForBackbone(ctx, bb, cfg.MaxGroups)
 	if err != nil {
 		p.reportErr(ctx, "usenet/crawl-groups", err)
-		return 0
+		return 0, 0
 	}
 	if len(groups) == 0 {
 		p.crawlJob.Log("no active groups — pick some in the admin wizard")
-		return 0
+		return 0, 0
 	}
 	// Split first, then lease. Assignment decides what to ATTEMPT so N crawlers
 	// divide the work instead of racing; the lease then guarantees no two
 	// workers touch one group even while a membership change settles.
 	groups = p.myGroups(ctx, groups, cfg)
 	if len(groups) == 0 {
-		return 0
+		return 0, 0
 	}
 	groups, release := p.claimGroupLeases(ctx, bb, groups, p.leaseTTL(cfg))
 	defer release()
 	p.tel.crawl.noteGroups(len(groups))
 	if len(groups) == 0 {
 		p.crawlJob.Log("%s: every group already claimed by another worker", run.prov.label())
-		return 0
+		return 0, 0
 	}
+	claimed := len(groups)
 
 	// 1. Resolve each group's window and enqueue its batches.
 	plans := make(map[string]*crawlPlan, len(groups))
 	var jobs []batchJob
 	for _, g := range groups {
 		if ctx.Err() != nil {
-			return 0
+			return 0, claimed
 		}
 		plan, err := p.planGroup(ctx, pool, g, cfg)
 		if err != nil {
@@ -213,7 +240,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	}
 	if len(jobs) == 0 {
 		p.crawlJob.Log("%s: %d group(s), nothing new", run.prov.label(), len(plans))
-		return 0
+		return 0, claimed
 	}
 
 	// 2. Fetch + stage in parallel over the pool.
@@ -227,7 +254,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	st := pool.Stats()
 	p.crawlJob.Log("%s: %d group(s), %d batch(es), %d article(s) staged, %d advanced (conns %d/%d, resets %d)",
 		run.prov.label(), len(plans), len(jobs), staged, advanced, st.Open, st.Target, st.Resets)
-	return staged
+	return staged, claimed
 }
 
 // idleHealthCheck runs a health pass only when the indexer has nothing better to
