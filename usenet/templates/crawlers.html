@@ -186,17 +186,35 @@
   </div>
 </div>
 
-{{/* Redis staging: the incomplete-sets sample the build pass publishes with
-     the worker telemetry — which releases are still missing articles, and how
-     many. PG installs get the same readout from the Builder card below. */}}
-{{if and (not .PGStaging) .Pending}}
+{{/* The Builder: staged sets -> assembled releases. Always rendered so the
+     drain path is VISIBLE — "is redis just filling up?" must be answerable
+     from this card. Redis mode: live ready-queue depth + eviction counter +
+     the incomplete-sets sample the build pass publishes; PG mode: the direct
+     GROUP BY numbers. */}}
 <div class="card mt-3">
-    <div class="card-header">Forming releases ({{len .Pending}} incomplete)</div>
+    <div class="card-header">Builder</div>
     <div class="card-body">
+    {{if .PGStaging}}
+    {{with .Builder}}
     <p class="text-muted small mb-2">
-        Staged releases still missing articles — later passes complete them, and
-        stale ones expire out of staging. Sampled each build pass.
+        {{.StagedArticles}} articles staged · {{.Releases}} release(s) forming ·
+        <strong>{{.Ready}}</strong> ready to assemble
     </p>
+    {{end}}
+    {{else}}
+    <p class="text-muted small mb-2">
+        <strong>{{.IndexStats.Staging.ReadyGroups}}</strong> complete set(s) queued for assembly ·
+        {{len .Pending}} incomplete in the latest sample{{if .IndexStats.Evicted}} ·
+        {{.IndexStats.Evicted}} hopeless set(s) evicted since worker start{{end}}
+    </p>
+    <p class="text-muted small mb-2">
+        The build job drains the ready queue every pass and writes each release
+        into the catalog — staging is a transient buffer, never the destination.
+        Watch <em>Recently built</em> below fill as sets complete.
+    </p>
+    {{end}}
+    {{if .Pending}}
+    <p class="text-muted small mb-2">Largest incomplete releases (still missing articles — later passes complete them; stale ones are evicted):</p>
     <div class="table-responsive">
         <table class="table table-dark table-sm align-middle">
             <thead><tr><th>Release</th><th>Group</th><th class="text-end">Have / need</th><th class="text-end">Missing</th></tr></thead>
@@ -212,9 +230,11 @@
             </tbody>
         </table>
     </div>
+    {{else}}
+    <div class="text-muted small">No incomplete sets in the latest sample — refreshed each build pass.</div>
+    {{end}}
     </div>
 </div>
-{{end}}
 
 {{if .Errors}}
 <div class="card mt-3">
@@ -320,39 +340,6 @@
     {{end}}
     </div>
 </div>
-
-{{/* PG-staging only: these numbers are a GROUP BY over the articles table,
-     which redis-staging installs keep in Redis — the card would show zeros
-     while the crawler works flat out. */}}
-{{if .PGStaging}}{{with .Builder}}
-<div class="card mt-3">
-    <div class="card-header">Builder</div>
-    <div class="card-body">
-    <p class="text-muted small mb-2">
-        {{.StagedArticles}} articles staged · {{.Releases}} release(s) forming ·
-        <strong>{{.Ready}}</strong> ready to assemble
-    </p>
-    {{if .Pending}}
-    <p class="text-muted small mb-2">Largest incomplete releases (still crawling their segments — this is why they haven't built yet):</p>
-    <div class="table-responsive">
-        <table class="table table-dark table-sm align-middle">
-            <thead><tr><th>Release</th><th style="min-width:150px">Progress</th><th class="text-end">Have / need</th><th class="text-end">Segments</th></tr></thead>
-            <tbody>
-            {{range .Pending}}
-                <tr>
-                    <td style="word-break:break-all"><code>{{.Base}}</code></td>
-                    <td><div class="cov-bar"><span class="cov-have" style="width:{{.Pct}}%"></span></div></td>
-                    <td class="text-end small">{{.Have}} / {{.Need}} {{if .Multi}}files{{else}}parts{{end}}</td>
-                    <td class="text-end small text-muted">{{.Segments}}</td>
-                </tr>
-            {{end}}
-            </tbody>
-        </table>
-    </div>
-    {{else if .Releases}}<div class="text-muted small">All staged releases are complete.</div>{{end}}
-    </div>
-</div>
-{{end}}{{end}}
 
 <div class="card mt-3">
     <div class="card-header">Recently built</div>

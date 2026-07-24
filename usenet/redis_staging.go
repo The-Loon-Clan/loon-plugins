@@ -37,10 +37,14 @@ import (
 // hash = hex(sha256(group + ":" + base)[:8]).
 type redisStaging struct {
 	rdb redis.UniversalClient
+	// onEvict reports hopeless-set evictions to the caller (telemetry) — the
+	// eviction is silent by design, and "is it failing or filtering?" is a
+	// question the dashboard must be able to answer.
+	onEvict func(n int)
 }
 
-func newRedisStaging(rdb redis.UniversalClient) *redisStaging {
-	return &redisStaging{rdb: rdb}
+func newRedisStaging(rdb redis.UniversalClient, onEvict func(int)) *redisStaging {
+	return &redisStaging{rdb: rdb, onEvict: onEvict}
 }
 
 var _ stagingStore = (*redisStaging)(nil)
@@ -313,6 +317,9 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 			evPipe.SRem(ctx, activeKey(em.group), em.hash)
 		}
 		_, _ = evPipe.Exec(ctx)
+		if r.onEvict != nil {
+			r.onEvict(len(evictMembers))
+		}
 	}
 
 	return len(arts), nil

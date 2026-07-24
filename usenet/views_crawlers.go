@@ -216,6 +216,15 @@ type indexStatsVM struct {
 	CatalogCached             bool // host mode: numbers are the host's hourly cache
 	Staging                   stagingInfo
 	MemUsed, MemMax           string
+	Evicted                   int64 // hopeless sets shed since worker start (redis mode)
+}
+
+// indexStatsWithTel augments the store/staging numbers with the ones only the
+// worker's telemetry knows.
+func (p *Plugin) indexStatsWithTel(ctx context.Context, activeGroups int, cs *pluginapi.CatalogStats, tv workerTelemetry) indexStatsVM {
+	vm := p.indexStatsVM(ctx, activeGroups, cs)
+	vm.Evicted = tv.Evicted
+	return vm
 }
 
 func (p *Plugin) indexStatsVM(ctx context.Context, activeGroups int, cs *pluginapi.CatalogStats) indexStatsVM {
@@ -324,11 +333,13 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 	// table can answer in every mode.
 	tv := p.telemetryView(ctx)
 	jobs, running := p.jobVMs()
-	if len(jobs) == 0 && len(tv.Jobs) > 0 {
-		// Jobs register only in the worker process; on web the local registry
-		// is empty, so render the worker-published snapshots — without this
-		// the page cannot say whether anything is running.
-		jobs = tv.Jobs
+	if !p.runsJobs {
+		// The web registry can only hold HOST jobs that happen to share a
+		// name (a web-side "NZB Tag Fill" once masked the worker's whole job
+		// set here, showing "idle" mid-crawl). The worker's published
+		// snapshots are the only truth on this process — use them
+		// unconditionally.
+		jobs, running = tv.Jobs, false
 		for _, j := range jobs {
 			if j.Running {
 				running = true
@@ -378,7 +389,7 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		"Builder": builder, "PGStaging": pgStaging, "Pending": tv.Pending,
 		"Fleet": p.fleetVMs(ctx, tv.Fleet), "Workers": p.workerVMs(ctx),
 		"Health":      p.healthVM(ctx, cs),
-		"IndexStats":  p.indexStatsVM(ctx, len(stats.Groups), cs),
+		"IndexStats":  p.indexStatsWithTel(ctx, len(stats.Groups), cs, tv),
 		"HostSink":    p.cfg.Sink == SinkHost,
 		"RecentNzbs":  recentNzbs,
 		"AutoRefresh": running, "Msg": msg, "Err": errMsg,

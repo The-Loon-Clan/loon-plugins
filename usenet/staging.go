@@ -112,7 +112,7 @@ var _ stagingStore = (*pgStaging)(nil)
 // newStaging selects the staging backend by config mode. `redis` fails fast when
 // the host has no Redis (core.Redis nil) rather than silently running pg — a
 // mode/behavior mismatch is worse than a boot error (README.md).
-func newStaging(mode StagingMode, pg *PGStore, redisSvc core.RedisService, limits func(context.Context) (int, int)) (stagingStore, error) {
+func newStaging(mode StagingMode, pg *PGStore, redisSvc core.RedisService, limits func(context.Context) (int, int), onEvict func(int)) (stagingStore, error) {
 	switch mode {
 	case "", StagingPG:
 		return newPGStaging(pg, limits), nil
@@ -120,7 +120,7 @@ func newStaging(mode StagingMode, pg *PGStore, redisSvc core.RedisService, limit
 		if redisSvc == nil || redisSvc.Client() == nil {
 			return nil, fmt.Errorf("staging mode redis requires Redis, but the host has none configured (core.Redis is nil) — configure the host's Redis or use staging: pg")
 		}
-		return newRedisStaging(redisSvc.Client()), nil
+		return newRedisStaging(redisSvc.Client(), onEvict), nil
 	default:
 		return nil, fmt.Errorf("unknown staging mode %q (want pg|redis)", mode)
 	}

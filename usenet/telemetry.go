@@ -161,6 +161,9 @@ type telemetry struct {
 	builtNext int
 	// pending is the latest incomplete-sets sample (see pendingSet).
 	pending []pendingSet
+	// evicted counts hopeless sets shed by redis staging since the worker
+	// started — proof the eviction machinery is working, not failing.
+	evicted int64
 }
 
 // builtRelease is one crawler-assembled release, exported for the telemetry
@@ -208,6 +211,20 @@ func (p pendingSet) Missing() int {
 		return 0
 	}
 	return p.Need - p.Have
+}
+
+// noteEvicted counts hopeless-set evictions (wired into redis staging as a
+// callback — the staging layer has no telemetry reference of its own).
+func (t *telemetry) noteEvicted(n int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.evicted += int64(n)
+}
+
+func (t *telemetry) evictedCount() int64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.evicted
 }
 
 // setPending replaces the incomplete-sets sample wholesale (one build pass =

@@ -163,9 +163,11 @@ func TestCrawlersRendersFleetAndWorkers(t *testing.T) {
 		// Index stats card: host-cached catalog + redis staging rows
 		"Index stats", "851454", "host cache, refreshed hourly",
 		"4 sets ready to assemble", "1.0 GB",
-		// backfill line + the telemetry-sampled incomplete sets (redis mode)
-		"Last backfill", "777", "Forming releases", "Some.Forming.Release",
+		// backfill line + the unified Builder card (redis mode: ready queue,
+		// eviction counter, telemetry-sampled incomplete sets)
+		"Last backfill", "777", "Builder", "Some.Forming.Release",
 		"10 / 14", // have/need
+		"queued for assembly", "staging is a transient buffer",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("crawlers page missing %q", want)

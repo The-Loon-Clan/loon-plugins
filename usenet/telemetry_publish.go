@@ -73,6 +73,9 @@ type workerTelemetry struct {
 	// Pending is the incomplete-sets sample the build pass takes — the
 	// "which releases are still missing articles" readout.
 	Pending []pendingSet `json:"pending,omitempty"`
+	// Evicted counts hopeless sets shed by redis staging since worker start —
+	// the answer to "is eviction failing or filtering".
+	Evicted int64 `json:"evicted,omitempty"`
 }
 
 // pickPass prefers the running pass, falling back to the last completed one,
@@ -102,6 +105,7 @@ func (p *Plugin) localTelemetry() workerTelemetry {
 	}
 	tv.Jobs, _ = p.jobVMs()
 	tv.Pending = p.tel.pendingSets()
+	tv.Evicted = p.tel.evictedCount()
 	return tv
 }
 
