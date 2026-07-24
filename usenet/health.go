@@ -240,6 +240,7 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 	}
 
 	var missData, missPar2, unknown int
+	transportFails := 0
 	count := func(ids []string, missing *int) error {
 		for start := 0; start < len(ids); start += chunk {
 			if ctx.Err() != nil {
@@ -251,6 +252,20 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 				// The crawler needs the connections; stop and try again later
 				// rather than waiting for them.
 				return err
+			}
+			if err != nil {
+				// Transport failure: the pool discarded that connection, and the
+				// next chunk would draw another. One bad socket is a blip, but a
+				// run of them means the POOL is sick (providers kill idle NNTP
+				// sessions, so after an idle gap every socket is a corpse) — and
+				// grinding on costs an op-timeout per corpse. A sweep on prod
+				// spent 10+ silent minutes doing exactly that. Yield; the rows
+				// stay untouched and the next sweep gets a refreshed pool.
+				transportFails++
+				if transportFails >= 3 {
+					return err
+				}
+				continue
 			}
 			for _, r := range res {
 				switch r {
@@ -388,6 +403,11 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 		p.healthJob.SetIdle(p.nextHealth(cfg))
 		return
 	}
+	// Log the sweep's start, not just its end: a big release is thousands of
+	// STATs and a sweep can legitimately run for minutes — "running with no
+	// logs" reads as hung (and once, grinding a corpse pool, it effectively
+	// was).
+	p.healthJob.Log("health check: sweeping %d release(s) due a check", len(rows))
 
 	var checked, unreadable int
 	var yielded bool
