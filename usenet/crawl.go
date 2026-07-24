@@ -197,6 +197,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 			}
 			continue
 		}
+		before := len(jobs)
 		for i := plan.start; i <= plan.high; i += cfg.Batch {
 			end := i + cfg.Batch - 1
 			if end > plan.high {
@@ -208,6 +209,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 				throttle: time.Duration(g.ThrottleMs) * time.Millisecond,
 			})
 		}
+		p.tel.crawl.notePlanned(plan.group, len(jobs)-before)
 	}
 	if len(jobs) == 0 {
 		p.crawlJob.Log("%s: %d group(s), nothing new", run.prov.label(), len(plans))
@@ -325,6 +327,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) ba
 	if ctx.Err() != nil {
 		return res
 	}
+	p.tel.crawl.noteReading(j.group)
 
 	var ovs []nntp.MessageOverview
 	var wire int64
@@ -344,7 +347,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) ba
 	if err != nil {
 		p.reportErr(ctx, "usenet/crawl-fetch",
 			fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
-		p.tel.crawl.noteBatch(0, 0, 0, false)
+		p.tel.crawl.noteBatchFor(j.group, 0, 0, 0, false)
 		return res // ok stays false — the watermark will not pass this range
 	}
 	res.articles, res.wire = len(ovs), wire
@@ -360,13 +363,13 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) ba
 			// already-advanced watermark, losing those articles permanently.)
 			p.reportErr(ctx, "usenet/crawl-stage",
 				fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
-			p.tel.crawl.noteBatch(res.articles, 0, wire, false)
+			p.tel.crawl.noteBatchFor(j.group, res.articles, 0, wire, false)
 			return res
 		}
 		res.staged = n
 	}
 	res.ok = true
-	p.tel.crawl.noteBatch(res.articles, res.staged, wire, true)
+	p.tel.crawl.noteBatchFor(j.group, res.articles, res.staged, wire, true)
 	// Per-group pacing: some providers rate limit per group, and some groups are
 	// not worth saturating the pool for. Applied after the connection is back in
 	// the pool, so throttling this group frees capacity for others rather than

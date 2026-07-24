@@ -22,6 +22,9 @@ type passVM struct {
 	Running                       bool
 	Any                           bool
 	Groups, Batches, Failed       int
+	GroupsDone, BatchesTotal      int
+	Pct                           int // completed/planned batches, 0-100
+	Reading                       string
 	Articles, Staged              int
 	Wire, Duration, Rate, Through string
 	Providers                     int
@@ -55,15 +58,24 @@ func statsVM(st passStats) passVM {
 	if st.Started.IsZero() {
 		return passVM{}
 	}
-	return passVM{
+	vm := passVM{
 		Running: st.InProgress, Any: true,
 		Groups: st.Groups, Batches: st.Batches, Failed: st.Failed,
+		GroupsDone: st.GroupsDone, BatchesTotal: st.BatchesTotal,
+		Reading:  st.Reading,
 		Articles: st.Articles, Staged: st.Staged, Providers: st.Providers,
 		Wire:     fmtBytes(st.WireBytes),
 		Duration: st.Duration().Truncate(time.Second).String(),
 		Rate:     fmt.Sprintf("%.0f art/s", st.Rate()),
 		Through:  fmt.Sprintf("%.2f MB/s", st.Throughput()),
 	}
+	if st.BatchesTotal > 0 {
+		vm.Pct = st.Batches * 100 / st.BatchesTotal
+		if vm.Pct > 100 {
+			vm.Pct = 100
+		}
+	}
+	return vm
 }
 
 // errorVM is one recent failure, newest first.

@@ -162,6 +162,23 @@
 <div class="card mt-3" id="pass-card"{{if not .Pass.Any}} style="display:none"{{end}}>
   <div class="card-header" id="pass-title">{{if .Pass.Running}}Crawl in progress{{else}}Last crawl pass{{end}}</div>
   <div class="card-body">
+    {{/* The legacy page's live block, lifted 1:1: "Group N / M — <group>" on
+         the left, "new / fetched" on the right, striped bar underneath. The
+         plugin fetches every group's batches on one flat queue, so the bar
+         tracks batches (finer than the legacy per-group bar) and the group
+         label shows what a worker most recently started reading. */}}
+    <div id="pass-live"{{if not .Pass.Running}} style="display:none"{{end}} class="mb-2">
+      <div class="d-flex justify-content-between mb-1">
+        <span class="small text-muted">
+          Group <span id="pass-groups-done">{{.Pass.GroupsDone}}</span> / <span id="pass-groups-total">{{.Pass.Groups}}</span><span id="pass-reading-wrap"{{if not .Pass.Reading}} hidden{{end}}> — <strong id="pass-reading">{{.Pass.Reading}}</strong></span>
+        </span>
+        <span class="small text-muted"><span id="pass-line-new">{{.Pass.Staged}}</span> new / <span id="pass-line-fetched">{{.Pass.Articles}}</span> fetched</span>
+      </div>
+      <div class="progress" style="height:8px">
+        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+             id="pass-bar" role="progressbar" style="width:{{.Pass.Pct}}%"></div>
+      </div>
+    </div>
     <div style="display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.9rem">
       <span><strong id="pass-articles">{{.Pass.Articles}}</strong> <span style="opacity:.6">fetched</span></span>
       <span><strong id="pass-staged">{{.Pass.Staged}}</strong> <span style="opacity:.6">staged</span></span>
@@ -433,6 +450,18 @@
     if (!card || !any) return;
     card.style.display = '';
     set('pass-title', p.running ? 'Crawl in progress' : 'Last crawl pass');
+    var live = document.getElementById('pass-live');
+    if (live) {
+      live.style.display = p.running ? '' : 'none';
+      set('pass-groups-done', p.groups_done); set('pass-groups-total', p.groups);
+      set('pass-line-new', p.staged); set('pass-line-fetched', p.articles);
+      var wrap = document.getElementById('pass-reading-wrap');
+      if (wrap) { wrap.hidden = !p.reading; set('pass-reading', p.reading || ''); }
+      var bar = document.getElementById('pass-bar');
+      if (bar && p.batches_total > 0) {
+        bar.style.width = Math.min(100, Math.round(p.batches * 100 / p.batches_total)) + '%';
+      }
+    }
     set('pass-articles', p.articles); set('pass-staged', p.staged);
     set('pass-groups', p.groups); set('pass-batches', p.batches);
     set('pass-duration', fmtDur(p.duration_seconds));

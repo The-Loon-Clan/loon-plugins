@@ -68,15 +68,21 @@ type StatusReport struct {
 
 // PassReport is one job's current or last pass.
 type PassReport struct {
-	Running     bool    `json:"running"`
-	Groups      int     `json:"groups"`
-	Batches     int     `json:"batches"`
-	Failed      int     `json:"failed_batches"`
-	Articles    int     `json:"articles"`
-	Staged      int     `json:"staged"`
-	WireBytes   int64   `json:"wire_bytes"`
-	DurationSec float64 `json:"duration_seconds"`
-	ArticlesSec float64 `json:"articles_per_second"`
+	Running bool `json:"running"`
+	Groups  int  `json:"groups"`
+	// GroupsDone / BatchesTotal / Reading are the legacy dashboard's live
+	// progress trio: "Group N / M — <what it is reading>" plus the bar's
+	// denominator (batches/batches_total).
+	GroupsDone   int     `json:"groups_done"`
+	Batches      int     `json:"batches"`
+	BatchesTotal int     `json:"batches_total"`
+	Reading      string  `json:"reading"`
+	Failed       int     `json:"failed_batches"`
+	Articles     int     `json:"articles"`
+	Staged       int     `json:"staged"`
+	WireBytes    int64   `json:"wire_bytes"`
+	DurationSec  float64 `json:"duration_seconds"`
+	ArticlesSec  float64 `json:"articles_per_second"`
 }
 
 type ProviderReport struct {
@@ -109,7 +115,8 @@ type JobReport struct {
 
 func passReport(st passStats) PassReport {
 	return PassReport{
-		Running: st.InProgress, Groups: st.Groups, Batches: st.Batches,
+		Running: st.InProgress, Groups: st.Groups, GroupsDone: st.GroupsDone,
+		Batches: st.Batches, BatchesTotal: st.BatchesTotal, Reading: st.Reading,
 		Failed: st.Failed, Articles: st.Articles, Staged: st.Staged,
 		WireBytes:   st.WireBytes,
 		DurationSec: st.Duration().Seconds(),

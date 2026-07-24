@@ -136,6 +136,40 @@ func TestWorkerTelemetryRoundTrip(t *testing.T) {
 	}
 }
 
+// TestPassProgressAccounting pins the legacy dashboard's progress trio:
+// BatchesTotal is the planned denominator, GroupsDone advances only when a
+// group's LAST batch lands (success or failure), and Reading tracks the most
+// recently started group.
+func TestPassProgressAccounting(t *testing.T) {
+	var tr passTracker
+	tr.passStart(1)
+	tr.notePlanned("a.b.anime", 2)
+	tr.notePlanned("a.b.hdtv", 1)
+
+	tr.noteReading("a.b.anime")
+	tr.noteBatchFor("a.b.anime", 100, 90, 1000, true)
+	cur, _ := tr.snapshot()
+	if cur.BatchesTotal != 3 || cur.GroupsDone != 0 || cur.Reading != "a.b.anime" {
+		t.Errorf("after first batch: %+v", cur)
+	}
+
+	tr.noteReading("a.b.hdtv")
+	tr.noteBatchFor("a.b.hdtv", 0, 0, 0, false) // failure still completes the group
+	tr.noteBatchFor("a.b.anime", 50, 40, 500, true)
+	cur, _ = tr.snapshot()
+	if cur.GroupsDone != 2 || cur.Batches != 3 || cur.Reading != "a.b.hdtv" {
+		t.Errorf("after all batches: %+v", cur)
+	}
+
+	// A group the plan never seeded (plain noteBatch — the backfill path)
+	// must not corrupt the counters.
+	tr.noteBatch(10, 10, 100, true)
+	cur, _ = tr.snapshot()
+	if cur.GroupsDone != 2 {
+		t.Errorf("untracked batch moved GroupsDone: %+v", cur)
+	}
+}
+
 // TestBackfillETASecondsZeroMeansUnknown documents the one field that could be
 // misread: zero is "no measured rate", never "finished". A monitor that alerted
 // on eta==0 would fire on every fresh install.

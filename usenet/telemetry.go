@@ -31,15 +31,25 @@ type crawlError struct {
 
 // passStats is one completed crawl pass.
 type passStats struct {
-	Started    time.Time
-	Finished   time.Time
-	Groups     int
+	Started  time.Time
+	Finished time.Time
+	Groups   int
+	// GroupsDone counts groups whose LAST planned batch has completed — the
+	// legacy page's "Group N / M" readout. Batches from every group interleave
+	// on the flat queue, so this advances slower than the batch counter.
+	GroupsDone int
 	Batches    int
-	Failed     int
-	Articles   int // overview lines fetched
-	Staged     int // newly staged after junk filtering and dedup
-	WireBytes  int64
-	Providers  int
+	// BatchesTotal is the planned batch count, known up front from the plan
+	// enumeration — Batches/BatchesTotal is the pass progress bar.
+	BatchesTotal int
+	Failed       int
+	Articles     int // overview lines fetched
+	Staged       int // newly staged after junk filtering and dedup
+	WireBytes    int64
+	Providers    int
+	// Reading is the group a pool worker most recently started fetching — the
+	// legacy dashboard's "what is it reading right now" label.
+	Reading    string
 	InProgress bool
 }
 
@@ -78,12 +88,16 @@ type passTracker struct {
 	mu   sync.Mutex
 	cur  passStats
 	last passStats
+	// groupsLeft is the current pass's outstanding batch count per group,
+	// seeded by notePlanned; a group is "done" when it hits zero.
+	groupsLeft map[string]int
 }
 
 func (t *passTracker) passStart(providers int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cur = passStats{Started: time.Now(), Providers: providers, InProgress: true}
+	t.groupsLeft = nil
 }
 
 func (t *passTracker) passEnd() {
@@ -100,9 +114,24 @@ func (t *passTracker) passEnd() {
 
 // noteBatch records one fetched range. Called from every pool worker.
 func (t *passTracker) noteBatch(articles int, staged int, wire int64, ok bool) {
+	t.noteBatchFor("", articles, staged, wire, ok)
+}
+
+// noteBatchFor is noteBatch plus per-group completion accounting: when a
+// group's last planned batch lands (success OR failure — either way it is no
+// longer outstanding), GroupsDone advances.
+func (t *passTracker) noteBatchFor(group string, articles, staged int, wire int64, ok bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cur.Batches++
+	if n, tracked := t.groupsLeft[group]; tracked {
+		if n <= 1 {
+			delete(t.groupsLeft, group)
+			t.cur.GroupsDone++
+		} else {
+			t.groupsLeft[group] = n - 1
+		}
+	}
 	if !ok {
 		t.cur.Failed++
 		return
@@ -110,6 +139,28 @@ func (t *passTracker) noteBatch(articles int, staged int, wire int64, ok bool) {
 	t.cur.Articles += articles
 	t.cur.Staged += staged
 	t.cur.WireBytes += wire
+}
+
+// notePlanned seeds the pass's planned work: the progress denominator and the
+// per-group outstanding counts.
+func (t *passTracker) notePlanned(group string, batches int) {
+	if batches <= 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.cur.BatchesTotal += batches
+	if t.groupsLeft == nil {
+		t.groupsLeft = map[string]int{}
+	}
+	t.groupsLeft[group] += batches
+}
+
+// noteReading marks the group a pool worker just started fetching.
+func (t *passTracker) noteReading(group string) {
+	t.mu.Lock()
+	t.cur.Reading = group
+	t.mu.Unlock()
 }
 
 func (t *passTracker) noteGroups(n int) {
