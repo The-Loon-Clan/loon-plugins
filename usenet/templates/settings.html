@@ -1,16 +1,29 @@
 {{if .Msg}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Err}}</div>{{end}}
 
+<div class="page" style="padding-top:1.25rem">
+<h1 class="h3 mb-3">Usenet</h1>
+
+<ul class="nav tabs" role="tablist">
+  <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#nntp">NNTP</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#providers">Providers <span class="tab-count">{{len .Servers}}</span></a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#indexing">Indexing</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#newsgroups">Newsgroups <span class="tab-count">{{.GroupTotal}}</span></a></li>
+</ul>
+
+<div class="tab-content">
+
+<div class="tab-pane active" id="nntp">
 <div class="card">
     <h2>NNTP server</h2>
     <h4 style="margin:0 0 .3rem">Connection test</h4>
     <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
       Checks credentials against a server before you commit to them, and seeds the
       first provider on a fresh install. Manage the full fleet — additional
-      providers, backups, roles and per-provider connection caps — in
-      <em>Providers</em> below.
+      providers, backups, roles and per-provider connection caps — in the
+      <em>Providers</em> tab.
     </p>
-    <form method="post" action="/admin/settings/usenet/server">
+    <form method="post" action="/admin/p/usenet/server">
         <label>Host</label>
         <input class="form-control" type="text" name="host" value="{{.Server.Host}}" placeholder="news.example.com">
         <div style="display:flex;gap:1rem;margin-top:.5rem">
@@ -26,7 +39,7 @@
         </label>
         <div style="margin-top:.75rem;display:flex;gap:.5rem">
             <button class="btn btn-primary" type="submit">Save</button>
-            <button class="btn btn-outline-secondary" type="submit" formaction="/admin/settings/usenet/test">Test connection</button>
+            <button class="btn btn-outline-secondary" type="submit" formaction="/admin/p/usenet/test">Test connection</button>
         </div>
         <div style="margin-top:.6rem">
             <label for="backbone">Backbone <span style="opacity:.6;font-weight:400">(optional)</span></label>
@@ -47,85 +60,90 @@
         </div>
     </form>
 </div>
+</div>
 
+<div class="tab-pane" id="providers">
+<div class="card">
+    <h2>Providers</h2>
+    <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
+      Active providers are crawled every pass. Backups stay idle and are promoted only
+      to cover an active provider that is failing. Newsgroups are split across
+      providers and across crawler hosts, so adding a provider on a
+      <em>different backbone</em> adds content, while a second account on the
+      <em>same</em> backbone adds connections. See <code>PROVIDERS.md</code>.
+    </p>
+
+    <table class="table" style="font-size:.9rem">
+      <thead><tr>
+        <th>Name / host</th><th>Role</th><th>Priority</th><th>Conns</th><th>Cap</th><th>Backbone</th><th></th>
+      </tr></thead>
+      <tbody>
+      {{range .Servers}}
+      <tr>
+        <td colspan="7" style="padding-top:.6rem">
+          <form method="post" action="/admin/p/usenet/provider" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
+            <input type="hidden" name="id" value="{{.ID}}">
+            <input class="form-control form-control-sm" type="text" name="name" value="{{.Name}}" placeholder="label" style="width:9rem">
+            <input class="form-control form-control-sm" type="text" name="host" value="{{.Host}}" placeholder="news.example.com" style="width:14rem" required>
+            <input class="form-control form-control-sm" type="text" name="port" value="{{.Port}}" style="width:4.5rem">
+            <label style="white-space:nowrap"><input type="checkbox" name="tls" {{if .TLS}}checked{{end}}> TLS</label>
+            <input class="form-control form-control-sm" type="text" name="username" value="{{.Username}}" placeholder="user" style="width:8rem">
+            <input class="form-control form-control-sm" type="password" name="password" value="" placeholder="password (unchanged)" style="width:11rem">
+            <select class="form-select form-select-sm" name="role" style="width:7rem">
+              <option value="active" {{if ne .Role "backup"}}selected{{end}}>active</option>
+              <option value="backup" {{if eq .Role "backup"}}selected{{end}}>backup</option>
+            </select>
+            <input class="form-control form-control-sm" type="text" name="priority" value="{{.Priority}}" title="lower runs first" style="width:4.5rem">
+            <input class="form-control form-control-sm" type="text" name="connections" value="{{.Connections}}" title="per-worker pool size; 0 = use the default ({{$.DefaultConns}})" style="width:4.5rem">
+            <input class="form-control form-control-sm" type="text" name="account_cap" value="{{.AccountCap}}" placeholder="cap" title="fleet cap: total connections this account allows to this endpoint across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
+            <input class="form-control form-control-sm" type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" title="blank = detected from the host, or its own" style="width:9rem">
+            <label style="white-space:nowrap"><input type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> enabled</label>
+            <button type="submit">Save</button>
+          </form>
+        </td>
+      </tr>
+      <tr><td colspan="7" style="padding-bottom:.6rem;border-bottom:1px solid rgba(128,128,128,.25)">
+          <form method="post" action="/admin/p/usenet/provider-del" style="display:inline"
+                onsubmit="return confirm('Remove this provider? Its crawl history is kept.')">
+            <input type="hidden" name="id" value="{{.ID}}">
+            <button type="submit">Remove</button>
+          </form>
+          <span style="opacity:.6;font-size:.8rem;margin-left:.5rem">
+            {{if .Enabled}}in the fleet{{else}}disabled — not crawled{{end}}
+          </span>
+      </td></tr>
+      {{else}}
+      <tr><td colspan="7" style="opacity:.7">No providers configured yet — add one below.</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+
+    <h5 style="margin:1rem 0 .4rem">Add a provider</h5>
+    <form method="post" action="/admin/p/usenet/provider" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
+      <input type="hidden" name="id" value="0">
+      <input class="form-control form-control-sm" type="text" name="name" placeholder="label (optional)" style="width:9rem">
+      <input class="form-control form-control-sm" type="text" name="host" placeholder="news.example.com" style="width:14rem" required>
+      <input class="form-control form-control-sm" type="text" name="port" value="119" style="width:4.5rem">
+      <label style="white-space:nowrap"><input type="checkbox" name="tls"> TLS</label>
+      <input class="form-control form-control-sm" type="text" name="username" placeholder="user" style="width:8rem">
+      <input class="form-control form-control-sm" type="password" name="password" placeholder="password" style="width:11rem">
+      <select class="form-select form-select-sm" name="role" style="width:7rem">
+        <option value="active">active</option>
+        <option value="backup">backup</option>
+      </select>
+      <input class="form-control form-control-sm" type="text" name="priority" value="100" title="lower runs first" style="width:4.5rem">
+      <input class="form-control form-control-sm" type="text" name="connections" value="0" title="per-worker pool size; 0 = use the default" style="width:4.5rem">
+      <input class="form-control form-control-sm" type="text" name="account_cap" value="0" placeholder="cap" title="fleet cap across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
+      <input class="form-control form-control-sm" type="text" name="backbone" placeholder="auto-detected" style="width:9rem">
+      <button type="submit">Add provider</button>
+    </form>
+</div>
+</div>
+
+<div class="tab-pane" id="indexing">
 <div class="card">
     <h2>Indexing</h2>
-
-<h4 style="margin:1.4rem 0 .4rem">Providers</h4>
-<p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
-  Active providers are crawled every pass. Backups stay idle and are promoted only
-  to cover an active provider that is failing. Newsgroups are split across
-  providers and across crawler hosts, so adding a provider on a
-  <em>different backbone</em> adds content, while a second account on the
-  <em>same</em> backbone adds connections. See <code>PROVIDERS.md</code>.
-</p>
-
-<table class="table" style="font-size:.9rem">
-  <thead><tr>
-    <th>Name / host</th><th>Role</th><th>Priority</th><th>Conns</th><th>Cap</th><th>Backbone</th><th></th>
-  </tr></thead>
-  <tbody>
-  {{range .Servers}}
-  <tr>
-    <td colspan="7" style="padding-top:.6rem">
-      <form method="post" action="/admin/settings/usenet/provider" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
-        <input type="hidden" name="id" value="{{.ID}}">
-        <input class="form-control form-control-sm" type="text" name="name" value="{{.Name}}" placeholder="label" style="width:9rem">
-        <input class="form-control form-control-sm" type="text" name="host" value="{{.Host}}" placeholder="news.example.com" style="width:14rem" required>
-        <input class="form-control form-control-sm" type="text" name="port" value="{{.Port}}" style="width:4.5rem">
-        <label style="white-space:nowrap"><input type="checkbox" name="tls" {{if .TLS}}checked{{end}}> TLS</label>
-        <input class="form-control form-control-sm" type="text" name="username" value="{{.Username}}" placeholder="user" style="width:8rem">
-        <input class="form-control form-control-sm" type="password" name="password" value="" placeholder="password (unchanged)" style="width:11rem">
-        <select class="form-select form-select-sm" name="role" style="width:7rem">
-          <option value="active" {{if ne .Role "backup"}}selected{{end}}>active</option>
-          <option value="backup" {{if eq .Role "backup"}}selected{{end}}>backup</option>
-        </select>
-        <input class="form-control form-control-sm" type="text" name="priority" value="{{.Priority}}" title="lower runs first" style="width:4.5rem">
-        <input class="form-control form-control-sm" type="text" name="connections" value="{{.Connections}}" title="per-worker pool size; 0 = use the default ({{$.DefaultConns}})" style="width:4.5rem">
-        <input class="form-control form-control-sm" type="text" name="account_cap" value="{{.AccountCap}}" placeholder="cap" title="fleet cap: total connections this account allows to this endpoint across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
-        <input class="form-control form-control-sm" type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" title="blank = detected from the host, or its own" style="width:9rem">
-        <label style="white-space:nowrap"><input type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> enabled</label>
-        <button type="submit">Save</button>
-      </form>
-    </td>
-  </tr>
-  <tr><td colspan="7" style="padding-bottom:.6rem;border-bottom:1px solid rgba(128,128,128,.25)">
-      <form method="post" action="/admin/settings/usenet/provider-del" style="display:inline"
-            onsubmit="return confirm('Remove this provider? Its crawl history is kept.')">
-        <input type="hidden" name="id" value="{{.ID}}">
-        <button type="submit">Remove</button>
-      </form>
-      <span style="opacity:.6;font-size:.8rem;margin-left:.5rem">
-        {{if .Enabled}}in the fleet{{else}}disabled — not crawled{{end}}
-      </span>
-  </td></tr>
-  {{else}}
-  <tr><td colspan="7" style="opacity:.7">No providers configured yet — add one below.</td></tr>
-  {{end}}
-  </tbody>
-</table>
-
-<h5 style="margin:1rem 0 .4rem">Add a provider</h5>
-<form method="post" action="/admin/settings/usenet/provider" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
-  <input type="hidden" name="id" value="0">
-  <input class="form-control form-control-sm" type="text" name="name" placeholder="label (optional)" style="width:9rem">
-  <input class="form-control form-control-sm" type="text" name="host" placeholder="news.example.com" style="width:14rem" required>
-  <input class="form-control form-control-sm" type="text" name="port" value="119" style="width:4.5rem">
-  <label style="white-space:nowrap"><input type="checkbox" name="tls"> TLS</label>
-  <input class="form-control form-control-sm" type="text" name="username" placeholder="user" style="width:8rem">
-  <input class="form-control form-control-sm" type="password" name="password" placeholder="password" style="width:11rem">
-  <select class="form-select form-select-sm" name="role" style="width:7rem">
-    <option value="active">active</option>
-    <option value="backup">backup</option>
-  </select>
-  <input class="form-control form-control-sm" type="text" name="priority" value="100" title="lower runs first" style="width:4.5rem">
-  <input class="form-control form-control-sm" type="text" name="connections" value="0" title="per-worker pool size; 0 = use the default" style="width:4.5rem">
-  <input class="form-control form-control-sm" type="text" name="account_cap" value="0" placeholder="cap" title="fleet cap across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
-  <input class="form-control form-control-sm" type="text" name="backbone" placeholder="auto-detected" style="width:9rem">
-  <button type="submit">Add provider</button>
-</form>
-
-    <form method="post" action="/admin/settings/usenet/knobs">
+    <form method="post" action="/admin/p/usenet/knobs">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem">
             {{range .Knobs}}
             <div>
@@ -144,14 +162,16 @@
         </div>
     </form>
 </div>
+</div>
 
+<div class="tab-pane" id="newsgroups">
 <div class="card">
     <h2>Newsgroups</h2>
     <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
-        <form method="post" action="/admin/settings/usenet/fetch-groups" style="display:inline">
+        <form method="post" action="/admin/p/usenet/fetch-groups" style="display:inline">
             <button class="btn btn-outline-primary btn-sm" type="submit">Fetch group list</button>
         </form>
-        <form method="get" action="/admin/settings" style="display:flex;gap:.5rem;flex:1;min-width:220px">
+        <form method="get" action="/admin/p/usenet" style="display:flex;gap:.5rem;flex:1;min-width:220px">
             <input class="form-control form-control-sm" type="search" name="gq" value="{{.GroupQuery}}" placeholder="search groups…" style="flex:1">
             <button class="btn btn-outline-secondary btn-sm" type="submit">Search</button>
         </form>
@@ -168,7 +188,7 @@
                 <tr{{if not .Active}} class="text-muted"{{end}}>
                     <td><code>{{.Name}}</code></td>
                     <td class="text-end">{{.NZBs}}</td>
-                    <form method="post" action="/admin/settings/usenet/group-tune" id="tune-{{.Name}}"></form>
+                    <form method="post" action="/admin/p/usenet/group-tune" id="tune-{{.Name}}"></form>
                     <td><input class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="retention_days" value="{{if .RetentionDays}}{{.RetentionDays}}{{end}}"
                                placeholder="site" title="blank = follow the site-wide crawl depth" style="width:4.5rem"></td>
                     <td><input class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="throttle_ms" value="{{.ThrottleMs}}"
@@ -176,11 +196,11 @@
                     <td><input form="tune-{{.Name}}" type="checkbox" name="low_priority" {{if .LowPriority}}checked{{end}}
                                title="crawled only after the normal groups have had their pass"></td>
                     <td style="white-space:nowrap">
-                        <form method="post" action="/admin/settings/usenet/group-move" style="display:inline">
+                        <form method="post" action="/admin/p/usenet/group-move" style="display:inline">
                             <input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="dir" value="up">
                             <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="crawl earlier">&uarr;</button>
                         </form>
-                        <form method="post" action="/admin/settings/usenet/group-move" style="display:inline">
+                        <form method="post" action="/admin/p/usenet/group-move" style="display:inline">
                             <input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="dir" value="down">
                             <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="crawl later">&darr;</button>
                         </form>
@@ -188,13 +208,13 @@
                     <td style="white-space:nowrap">
                         <input form="tune-{{.Name}}" type="hidden" name="name" value="{{.Name}}">
                         <button form="tune-{{.Name}}" class="btn btn-sm py-0 btn-outline-primary" type="submit">Save</button>
-                        <form method="post" action="/admin/settings/usenet/group" style="display:inline">
+                        <form method="post" action="/admin/p/usenet/group" style="display:inline">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="active" value="{{if .Active}}false{{else}}true{{end}}">
                             <input type="hidden" name="gq" value="{{$.GroupQuery}}">
                             <button class="btn btn-sm py-0 {{if .Active}}btn-primary{{else}}btn-outline-secondary{{end}}" type="submit">{{if .Active}}active{{else}}enable{{end}}</button>
                         </form>
-                        <form method="post" action="/admin/settings/usenet/group-del" style="display:inline"
+                        <form method="post" action="/admin/p/usenet/group-del" style="display:inline"
                               onsubmit="return confirm('Remove {{.Name}} from the catalogue? Its crawl history is kept.')">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <button class="btn btn-sm py-0 btn-outline-danger" type="submit">&times;</button>
@@ -205,7 +225,7 @@
             </tbody>
         </table>
     </div>
-    <form method="post" action="/admin/settings/usenet/groups-purge" class="mt-2"
+    <form method="post" action="/admin/p/usenet/groups-purge" class="mt-2"
           onsubmit="return confirm('Remove every inactive group? Crawl history is kept.')">
         <button class="btn btn-sm btn-outline-danger" type="submit">Remove all inactive groups</button>
         <span class="text-muted small ms-2">Clears the long tail left by a full group-list fetch.</span>
@@ -223,7 +243,25 @@
     {{else}}
     <div class="empty">
         {{if .GroupQuery}}No groups match &ldquo;{{.GroupQuery}}&rdquo;.
-        {{else}}No groups yet. Save a server above, then <strong>Fetch group list</strong> to pull the server's newsgroups.{{end}}
+        {{else}}No groups yet. Save a server in the NNTP tab, then <strong>Fetch group list</strong> to pull the server's newsgroups.{{end}}
     </div>
     {{end}}
 </div>
+</div>
+
+</div>
+</div>
+
+<script>
+// Reopen the tab an action redirected back to (/admin/p/usenet?...#providers),
+// and default to Newsgroups after a group search. Runs on DOMContentLoaded, by
+// which point plugin_page.html has loaded the Bootstrap bundle.
+document.addEventListener('DOMContentLoaded', function () {
+  var hash = location.hash;
+  if (!hash && /[?&]gq=/.test(location.search)) hash = '#newsgroups';
+  if (/^#[a-z-]+$/.test(hash) && window.bootstrap) {
+    var t = document.querySelector('.nav.tabs .nav-link[href="' + hash + '"]');
+    if (t) bootstrap.Tab.getOrCreateInstance(t).show();
+  }
+});
+</script>

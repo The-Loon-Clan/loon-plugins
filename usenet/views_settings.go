@@ -259,9 +259,9 @@ func (p *Plugin) actionFetchGroups(gc *gin.Context) (template.HTML, error) {
 
 func (p *Plugin) actionToggleGroup(gc *gin.Context) (template.HTML, error) {
 	_ = p.st.setGroupActive(gc.Request.Context(), gc.PostForm("name"), gc.PostForm("active") == "true")
-	dest := settingsURL + "#s-usenet"
+	dest := usenetURL + "#newsgroups"
 	if gq := gc.PostForm("gq"); gq != "" {
-		dest = settingsURL + "?gq=" + url.QueryEscape(gq) + "#s-usenet" // keep the current group search
+		dest = usenetURL + "?gq=" + url.QueryEscape(gq) + "#newsgroups" // keep the current group search
 	}
 	return redirect(gc, dest)
 }

@@ -58,6 +58,9 @@ func TestSettingsRendersProviders(t *testing.T) {
 		// per-group tuning controls
 		"alt.binaries.anime", "group-tune", "retention_days", "throttle_ms",
 		"low_priority", "group-move", "group-del", "groups-purge",
+		// tabbed layout on its own admin page (SlotAdminPage), forms post to /admin/p/usenet
+		`class="nav tabs"`, `data-bs-toggle="tab"`, `id="providers"`, `id="newsgroups"`,
+		"/admin/p/usenet/provider", "/admin/p/usenet/group-tune",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered settings page is missing %q", want)

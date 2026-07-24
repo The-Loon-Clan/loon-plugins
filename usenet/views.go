@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,7 +18,7 @@ import (
 var viewFS embed.FS
 
 const (
-	settingsURL = "/admin/settings"
+	usenetURL   = "/admin/p/usenet"
 	crawlersURL = "/admin/p/crawlers"
 	filtersURL  = "/admin/p/filters"
 )
@@ -30,7 +31,7 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	p.tmpl = t
 
 	if err := c.RegisterView(core.View{
-		Slug: "usenet", Title: "Usenet", Slot: core.SlotAdminSettings,
+		Slug: "usenet", Title: "Usenet", Slot: core.SlotAdminPage,
 		Render: func(gc *gin.Context) (template.HTML, error) {
 			srv, _, _ := p.st.getServer(gc.Request.Context())
 			return p.renderSettings(gc.Request.Context(), srv, gc.Query("gq"), gc.Query("msg"), gc.Query("err"))
@@ -41,6 +42,12 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			"knobs":        p.actionSaveKnobs,
 			"fetch-groups": p.actionFetchGroups,
 			"group":        p.actionToggleGroup,
+			"provider":     p.actionSaveProvider,
+			"provider-del": p.actionDeleteProvider,
+			"group-tune":   p.actionTuneGroup,
+			"group-move":   p.actionMoveGroup,
+			"group-del":    p.actionDeleteGroup,
+			"groups-purge": p.actionPurgeInactive,
 		},
 	}); err != nil {
 		return err
@@ -116,8 +123,32 @@ func redirect(gc *gin.Context, to string) (template.HTML, error) {
 }
 
 // settingsRedirect lands back on the usenet section of the settings page.
+// settingsRedirect flashes a message and returns to the usenet admin page,
+// reopening the tab the action belongs to (derived from the POST path) so a
+// save doesn't bounce the operator back to the first tab.
 func settingsRedirect(gc *gin.Context, key, msg string) (template.HTML, error) {
-	return redirect(gc, settingsURL+"?"+key+"="+url.QueryEscape(msg)+"#s-usenet")
+	dest := usenetURL + "?" + key + "=" + url.QueryEscape(msg)
+	if tab := tabForAction(gc.Request.URL.Path); tab != "" {
+		dest += "#" + tab
+	}
+	return redirect(gc, dest)
+}
+
+// tabForAction maps an action's POST path (/admin/p/usenet/<action>) to the tab
+// it lives on, so the post-action redirect reopens it. Empty = the first (NNTP)
+// tab, which is where the server/test actions belong.
+func tabForAction(path string) string {
+	switch {
+	case strings.HasSuffix(path, "/provider"), strings.HasSuffix(path, "/provider-del"):
+		return "providers"
+	case strings.HasSuffix(path, "/knobs"):
+		return "indexing"
+	case strings.HasSuffix(path, "/group-tune"), strings.HasSuffix(path, "/group-move"),
+		strings.HasSuffix(path, "/group-del"), strings.HasSuffix(path, "/groups-purge"),
+		strings.HasSuffix(path, "/fetch-groups"), strings.HasSuffix(path, "/group"):
+		return "newsgroups"
+	}
+	return ""
 }
 
 // coverCellCount is the resolution of the coverage sparkline. Enough slices to
