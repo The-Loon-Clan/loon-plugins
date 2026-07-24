@@ -61,6 +61,9 @@ func TestWhichJunkRuleNames(t *testing.T) {
 		{"Pzz8CzBPoBNsCu8oRPpDYwESRkpq5UU3jGlz", "long_alnum_run"},
 		{"aBcDeFgHiJkLmNoP", ""}, // 16 no-digit bare token: prod only flags this on the SIZED path
 		{"550e8400-e29b-41d4-a716-446655440000", "uuid"},
+		// Underscore-adjacent uuid: \b missed this (the agent's obfuscated
+		// "Upload_<uuid>" posts crawled back), boundary-less must catch it.
+		{"Upload_eb851d5b-77d8-4774-bc07-0c1a7e549aa3", "uuid"},
 		{"My {total} Release", "template_token"},
 		// 16-char run is under the 24 threshold, and the "." is a separator so the
 		// bare-token rule is out — the dot-separated rule is what catches this.
