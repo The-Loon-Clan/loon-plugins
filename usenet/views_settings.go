@@ -47,7 +47,7 @@ func (p *Plugin) knobs(ctx context.Context) []knob {
 	}
 }
 
-func (p *Plugin) renderSettings(ctx context.Context, srv pluginapi.Server, gq, msg, errMsg string) (template.HTML, error) {
+func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string) (template.HTML, error) {
 	groups, _ := p.st.allGroups(ctx, gq, 300)
 	total, _ := p.st.groupCount(ctx)
 	servers, err := p.st.listServers(ctx)
@@ -67,7 +67,7 @@ func (p *Plugin) renderSettings(ctx context.Context, srv pluginapi.Server, gq, m
 	}
 	return p.frag("settings.html", map[string]any{
 		"Servers": servers, "DefaultConns": p.effective(ctx).Connections,
-		"Server": srv, "Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,
+		"Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,
 		"Groups": groups, "GroupQuery": gq,
 		"GroupTotal": total, "Shown": len(groups),
 		"CrawlersTab": crawlersTab, "FiltersTab": filtersTab,
@@ -75,45 +75,28 @@ func (p *Plugin) renderSettings(ctx context.Context, srv pluginapi.Server, gq, m
 	})
 }
 
-func formServer(gc *gin.Context) pluginapi.Server {
-	port, _ := strconv.Atoi(gc.PostForm("port"))
-	if port == 0 {
-		port = 119
+// actionTestProvider dials one provider row's credentials (or the add-row's)
+// without saving anything. A blank password on an existing row means
+// "unchanged" — the stored secret is used, or testing a saved provider would
+// always fail auth since the list never sends passwords to the browser.
+func (p *Plugin) actionTestProvider(gc *gin.Context) (template.HTML, error) {
+	pr := formProvider(gc)
+	if pr.Password == "" && pr.ID > 0 {
+		if pw, err := p.st.serverPassword(gc.Request.Context(), pr.ID); err == nil {
+			pr.Password = pw
+		}
 	}
-	tls := gc.PostForm("tls")
+	if pr.Port <= 0 {
+		pr.Port = 119
+	}
 	srv := pluginapi.Server{
-		Host:     strings.TrimSpace(gc.PostForm("host")),
-		Port:     port,
-		TLS:      tls == "on" || tls == "true",
-		Username: gc.PostForm("username"),
-		Password: gc.PostForm("password"),
-		Enabled:  true,
-		Backbone: strings.TrimSpace(gc.PostForm("backbone")),
+		Host: pr.Host, Port: pr.Port, TLS: pr.TLS,
+		Username: pr.Username, Password: pr.Password,
 	}
-	// Only ever FILL A BLANK. An operator's explicit value always wins: the
-	// lookup table is a convenience that can go stale, and quietly rewriting a
-	// deliberate answer is how two providers end up wrongly sharing crawl state.
-	if srv.Backbone == "" {
-		srv.Backbone = backboneForHost(srv.Host)
-	}
-	return srv
-}
-
-func (p *Plugin) actionSaveServer(gc *gin.Context) (template.HTML, error) {
-	if err := p.st.saveServer(gc.Request.Context(), formServer(gc)); err != nil {
-		return settingsRedirect(gc, "err", err.Error())
-	}
-	return settingsRedirect(gc, "msg", "server saved")
-}
-
-// actionTestServer re-renders the fragment with the SUBMITTED values (not a
-// redirect) so the form keeps everything typed, whatever the result.
-func (p *Plugin) actionTestServer(gc *gin.Context) (template.HTML, error) {
-	srv := formServer(gc)
 	if err := testConnect(srv); err != nil {
-		return p.renderSettings(gc.Request.Context(), srv, "", "", "connection failed: "+err.Error())
+		return settingsRedirect(gc, "err", "connection failed: "+err.Error())
 	}
-	return p.renderSettings(gc.Request.Context(), srv, "", "connection ok — click Save to keep it", "")
+	return settingsRedirect(gc, "msg", "connection ok — credentials verified, nothing saved")
 }
 
 // formProvider reads a provider row from the management form. A blank password

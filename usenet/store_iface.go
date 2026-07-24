@@ -65,6 +65,7 @@ type ServerStore interface {
 	providers(ctx context.Context) ([]provider, error)
 	listServers(ctx context.Context) ([]provider, error)
 	upsertServer(ctx context.Context, pr provider) error
+	serverPassword(ctx context.Context, id int) (string, error)
 	deleteServer(ctx context.Context, id int) error
 	toggleServer(ctx context.Context, id int) error
 	saveServer(ctx context.Context, srv pluginapi.Server) error

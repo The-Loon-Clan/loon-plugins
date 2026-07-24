@@ -34,7 +34,6 @@ func TestSettingsRendersProviders(t *testing.T) {
 				Enabled: false, Role: roleBackup, Priority: 50},
 		},
 		"DefaultConns": 10,
-		"Server":       pluginapi.Server{Host: "news.eweka.nl", Port: 563, TLS: true, Username: "u"},
 		"Knobs":        []knob{{Key: "connections", Label: "NNTP connections", Value: 10, Help: "h"}},
 		"SkipBackfill": false,
 		"Groups": []pluginapi.GroupInfo{
@@ -56,7 +55,10 @@ func TestSettingsRendersProviders(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"news.eweka.nl", "news.other.com", "omicron", "backup", "Add a provider",
+		"news.eweka.nl", "news.other.com", "omicron", "backup",
+		// the aligned provider table: per-row external forms + add row + test
+		`form="prov-1"`, `form="prov-del-1"`, `id="prov-new"`,
+		"/admin/p/usenet/provider-test",
 		// per-group tuning controls
 		"alt.binaries.anime", "group-tune", "retention_days", "throttle_ms",
 		"low_priority", "group-move", "group-del", "groups-purge",
@@ -87,7 +89,7 @@ func TestSettingsRendersWithNoProviders(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	err = tmpl.ExecuteTemplate(&buf, "settings.html", map[string]any{
-		"Servers": []provider{}, "DefaultConns": 10, "Server": pluginapi.Server{},
+		"Servers": []provider{}, "DefaultConns": 10,
 		"Knobs": []knob{}, "SkipBackfill": false, "Groups": nil,
 		"GroupQuery": "", "GroupTotal": 0, "Shown": 0, "Msg": "", "Err": "",
 		"CrawlersTab": template.HTML(""), "FiltersTab": template.HTML(""),

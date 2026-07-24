@@ -28,29 +28,27 @@ func (p *Plugin) registerViews(c *core.Core) error {
 
 	// One view = one page = one card on the host's admin hub. Everything the
 	// plugin can configure or show lives on /admin/p/usenet as a tab: config
-	// (NNTP / Providers / Indexing / Newsgroups) plus the Crawlers dashboard and
-	// the Filters blacklist, which render as embedded fragments. Their actions
-	// are registered here so their forms post under the same page and land back
-	// on their own tab.
+	// (Providers / Indexing / Newsgroups) plus the Crawlers dashboard and the
+	// Filters blacklist, which render as embedded fragments. Their actions are
+	// registered here so their forms post under the same page and land back on
+	// their own tab.
 	if err := c.RegisterView(core.View{
 		Slug: "usenet", Title: "Usenet", Slot: core.SlotAdminPage,
 		Description: "Providers, indexing, newsgroups, crawlers + filters.",
 		Render: func(gc *gin.Context) (template.HTML, error) {
-			srv, _, _ := p.st.getServer(gc.Request.Context())
-			return p.renderSettings(gc.Request.Context(), srv, gc.Query("gq"), gc.Query("msg"), gc.Query("err"))
+			return p.renderSettings(gc.Request.Context(), gc.Query("gq"), gc.Query("msg"), gc.Query("err"))
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
-			"server":       p.actionSaveServer,
-			"test":         p.actionTestServer,
-			"knobs":        p.actionSaveKnobs,
-			"fetch-groups": p.actionFetchGroups,
-			"group":        p.actionToggleGroup,
-			"provider":     p.actionSaveProvider,
-			"provider-del": p.actionDeleteProvider,
-			"group-tune":   p.actionTuneGroup,
-			"group-move":   p.actionMoveGroup,
-			"group-del":    p.actionDeleteGroup,
-			"groups-purge": p.actionPurgeInactive,
+			"knobs":         p.actionSaveKnobs,
+			"fetch-groups":  p.actionFetchGroups,
+			"group":         p.actionToggleGroup,
+			"provider":      p.actionSaveProvider,
+			"provider-del":  p.actionDeleteProvider,
+			"provider-test": p.actionTestProvider,
+			"group-tune":    p.actionTuneGroup,
+			"group-move":    p.actionMoveGroup,
+			"group-del":     p.actionDeleteGroup,
+			"groups-purge":  p.actionPurgeInactive,
 			// Crawlers tab
 			"crawl": func(gc *gin.Context) (template.HTML, error) {
 				p.svc.TriggerCrawl()
@@ -103,7 +101,6 @@ func redirect(gc *gin.Context, to string) (template.HTML, error) {
 	return "", nil
 }
 
-// settingsRedirect lands back on the usenet section of the settings page.
 // settingsRedirect flashes a message and returns to the usenet admin page,
 // reopening the tab the action belongs to (derived from the POST path) so a
 // save doesn't bounce the operator back to the first tab.
@@ -116,11 +113,12 @@ func settingsRedirect(gc *gin.Context, key, msg string) (template.HTML, error) {
 }
 
 // tabForAction maps an action's POST path (/admin/p/usenet/<action>) to the tab
-// it lives on, so the post-action redirect reopens it. Empty = the first (NNTP)
-// tab, which is where the server/test actions belong.
+// it lives on, so the post-action redirect reopens it. Empty = the first
+// (Providers) tab.
 func tabForAction(path string) string {
 	switch {
-	case strings.HasSuffix(path, "/provider"), strings.HasSuffix(path, "/provider-del"):
+	case strings.HasSuffix(path, "/provider"), strings.HasSuffix(path, "/provider-del"),
+		strings.HasSuffix(path, "/provider-test"):
 		return "providers"
 	case strings.HasSuffix(path, "/knobs"):
 		return "indexing"

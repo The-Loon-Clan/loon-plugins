@@ -8,8 +8,8 @@ catalogue over time (are the articles still on the server?) and filters
 machine-generated junk at ingest.
 
 Users see it two ways. **Operators** get one admin page at `/admin/p/usenet`
-(loon `SlotAdminPage`), tabbed: NNTP setup + connection test, the provider
-fleet, indexing knobs, newsgroup curation, a live Crawlers dashboard (coverage
+(loon `SlotAdminPage`), tabbed: the provider fleet (with per-row connection
+test), indexing knobs, newsgroup curation, a live Crawlers dashboard (coverage
 bars, per-backbone progress, recent activity, an aggregate backfill ETA,
 worker/fleet panels), and Filters — the operator blacklist plus per-rule hit
 counters.
@@ -34,12 +34,13 @@ Routes:
   admin-gated, not public.
 - **admin views** (registered via `Core.RegisterView`, mounted by the host):
   - `SlotAdminPage` slug `usenet` — the single tabbed admin page
-    (`/admin/p/usenet`): NNTP wizard, provider fleet, indexing knobs,
-    newsgroups, the Crawlers dashboard and the Filters blacklist. Actions:
-    `server`, `test`, `knobs`, `fetch-groups`, `group`, `provider`,
-    `provider-del`, `group-tune`, `group-move`, `group-del`, `groups-purge`,
-    `crawl`, `backfill`, `reset-backfill`, `filter-add`, `filter-toggle`,
-    `filter-del`, `filter-reset`. Each action redirects back to its own tab.
+    (`/admin/p/usenet`): the provider fleet (per-row save/test/remove),
+    indexing knobs, newsgroups, the Crawlers dashboard and the Filters
+    blacklist. Actions: `knobs`, `fetch-groups`, `group`, `provider`,
+    `provider-del`, `provider-test`, `group-tune`, `group-move`, `group-del`,
+    `groups-purge`, `crawl`, `backfill`, `reset-backfill`, `filter-add`,
+    `filter-toggle`, `filter-del`, `filter-reset`. Each action redirects back
+    to its own tab.
   - `SlotJobsWidget` anchor `Usenet` — a richer card for the Usenet job group
     on the host's `/admin/jobs`.
 - **public / api**: the plugin publishes read capabilities rather than mounting

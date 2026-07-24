@@ -95,6 +95,18 @@ func (s *PGStore) upsertServer(ctx context.Context, pr provider) error {
 	})
 }
 
+// serverPassword returns one server row's stored password. Deliberately not
+// part of listServers (which feeds the browser and must never carry secrets);
+// this exists solely so a per-row "Test connection" can fall back to the
+// stored secret when the form's password field was left blank ("unchanged").
+func (s *PGStore) serverPassword(ctx context.Context, id int) (string, error) {
+	var pw string
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.GetContext(ctx, &pw, `SELECT password FROM servers WHERE id = $1`, id)
+	})
+	return pw, err
+}
+
 // deleteServer removes a provider. Its crawl state is left alone on purpose:
 // state is keyed by BACKBONE, so it may still belong to another account on the
 // same backbone — and even if not, deleting watermarks would silently re-crawl

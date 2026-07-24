@@ -48,9 +48,12 @@
     </div>
 </div>
 
+{{/* No separate NNTP tab: the old wizard edited the same first server row the
+     fleet table edits — two editors for one thing. Its two unique features
+     live on here: per-row "Test" (provider-test action) and the backbone
+     explainer under the table. */}}
 <ul class="nav tabs" role="tablist">
-  <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#nntp">NNTP</a></li>
-  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#providers">Providers <span class="tab-count">{{len .Servers}}</span></a></li>
+  <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#providers">Providers <span class="tab-count">{{len .Servers}}</span></a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#indexing">Indexing</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#newsgroups">Newsgroups <span class="tab-count">{{.GroupTotal}}</span></a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#crawlers">Crawlers</a></li>
@@ -59,133 +62,107 @@
 
 <div class="tab-content">
 
-<div class="tab-pane active" id="nntp">
-<div class="card mt-3">
-    <div class="card-header">NNTP server</div>
-    <div class="card-body">
-    <h6 style="margin:0 0 .3rem">Connection test</h6>
-    <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
-      Checks credentials against a server before you commit to them, and seeds the
-      first provider on a fresh install. Manage the full fleet — additional
-      providers, backups, roles and per-provider connection caps — in the
-      <em>Providers</em> tab.
-    </p>
-    <form method="post" action="/admin/p/usenet/server">
-        <label>Host</label>
-        <input class="form-control" type="text" name="host" value="{{.Server.Host}}" placeholder="news.example.com">
-        <div style="display:flex;gap:1rem;margin-top:.5rem">
-            <div style="flex:1"><label>Port</label>
-                <input class="form-control" type="text" name="port" value="{{if .Server.Port}}{{.Server.Port}}{{else}}119{{end}}"></div>
-            <div style="flex:2"><label>Username</label>
-                <input class="form-control" type="text" name="username" value="{{.Server.Username}}"></div>
-            <div style="flex:2"><label>Password</label>
-                <input class="form-control" type="password" name="password" value="{{.Server.Password}}"></div>
-        </div>
-        <label style="margin-top:.6rem">
-            <input type="checkbox" name="tls" {{if .Server.TLS}}checked{{end}}> TLS (SSL) — usually port <code>563</code>
-        </label>
-        <div style="margin-top:.75rem;display:flex;gap:.5rem">
-            <button class="btn btn-primary" type="submit">Save</button>
-            <button class="btn btn-outline-secondary" type="submit" formaction="/admin/p/usenet/test">Test connection</button>
-        </div>
-        <div style="margin-top:.6rem">
-            <label for="backbone">Backbone <span style="opacity:.6;font-weight:400">(optional)</span></label>
-            <input class="form-control" type="text" id="backbone" name="backbone" value="{{.Server.Backbone}}"
-                   placeholder="e.g. omicron, usenetexpress, abavia">
-            <p style="opacity:.7;font-size:.85rem;margin:.35rem 0 0">
-              The upstream network this account resells. Article <em>numbers</em> are handed out by the
-              backbone, not by your provider — two accounts on the same backbone see the same numbers for
-              the same articles, while different backbones agree on nothing numeric.
-              <br>
-              Name it only when you are sure: providers sharing a backbone then share crawl progress
-              (the second account adds <em>connections</em>, not extra content). Leave it blank and this
-              server is treated as its own backbone, which is the safe assumption — wrongly marking two
-              servers as the same backbone makes each skip articles the other fetched.
-              <br>
-              See <code>PROVIDERS.md</code>. A picker of known providers and their backbones is planned.
-            </p>
-        </div>
-    </form>
-    </div>
-</div>
-</div>
-
-<div class="tab-pane" id="providers">
+<div class="tab-pane active" id="providers">
 <div class="card mt-3">
     <div class="card-header">Providers</div>
     <div class="card-body">
     <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
-      Active providers are crawled every pass. Backups stay idle and are promoted only
-      to cover an active provider that is failing. Newsgroups are split across
-      providers and across crawler hosts, so adding a provider on a
-      <em>different backbone</em> adds content, while a second account on the
-      <em>same</em> backbone adds connections. See <code>PROVIDERS.md</code>.
+      Active providers are crawled every pass; backups stay idle until an active
+      provider fails. <strong>Test</strong> dials a row's credentials without
+      saving anything — a blank password tests the stored one. The last row adds
+      a new provider.
     </p>
 
-    <table class="table" style="font-size:.9rem">
+    {{/* Forms can't span table rows, so each row's inputs reference an empty
+         <form> by id (the same pattern as the group-tune forms below). One
+         column per field keeps the headers aligned with the inputs — the old
+         flex-wrapped row scrambled at narrow widths into unlabeled boxes. */}}
+    {{range .Servers}}
+    <form id="prov-{{.ID}}" method="post" action="/admin/p/usenet/provider"></form>
+    <form id="prov-del-{{.ID}}" method="post" action="/admin/p/usenet/provider-del"
+          onsubmit="return confirm('Remove this provider? Its crawl history is kept.')"></form>
+    {{end}}
+    <form id="prov-new" method="post" action="/admin/p/usenet/provider"></form>
+
+    <div class="table-responsive">
+    <table class="table table-sm align-middle" style="font-size:.88rem;min-width:1100px">
       <thead><tr>
-        <th>Name / host</th><th>Role</th><th>Priority</th><th>Conns</th><th>Cap</th><th>Backbone</th><th></th>
+        <th>Label</th><th>Host</th><th style="width:5.5rem">Port</th><th>TLS</th>
+        <th>Username</th><th>Password</th><th>Role</th>
+        <th style="width:5rem" title="lower runs first">Priority</th>
+        <th style="width:5rem" title="NNTP pool size PER WORKER; 0 = the plugin-wide default ({{.DefaultConns}})">Conns</th>
+        <th style="width:5rem" title="account cap: total connections this account allows, shared across ALL crawler hosts; 0 = no cap. Each worker opens min(Conns, Cap / live workers).">Cap</th>
+        <th title="upstream network this account resells; blank = auto-detected from the host">Backbone</th>
+        <th></th>
       </tr></thead>
       <tbody>
       {{range .Servers}}
       <tr>
-        <td colspan="7" style="padding-top:.6rem">
-          <form method="post" action="/admin/p/usenet/provider" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
-            <input type="hidden" name="id" value="{{.ID}}">
-            <input class="form-control form-control-sm" type="text" name="name" value="{{.Name}}" placeholder="label" style="width:9rem">
-            <input class="form-control form-control-sm" type="text" name="host" value="{{.Host}}" placeholder="news.example.com" style="width:14rem" required>
-            <input class="form-control form-control-sm" type="text" name="port" value="{{.Port}}" style="width:4.5rem">
-            <label style="white-space:nowrap"><input type="checkbox" name="tls" {{if .TLS}}checked{{end}}> TLS</label>
-            <input class="form-control form-control-sm" type="text" name="username" value="{{.Username}}" placeholder="user" style="width:8rem">
-            <input class="form-control form-control-sm" type="password" name="password" value="" placeholder="password (unchanged)" style="width:11rem">
-            <select class="form-select form-select-sm" name="role" style="width:7rem">
+        <td>
+          <input type="hidden" form="prov-{{.ID}}" name="id" value="{{.ID}}">
+          <input type="hidden" form="prov-del-{{.ID}}" name="id" value="{{.ID}}">
+          <input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="name" value="{{.Name}}" placeholder="label">
+        </td>
+        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="host" value="{{.Host}}" style="min-width:11rem" required></td>
+        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="port" value="{{.Port}}"></td>
+        <td class="text-center"><input form="prov-{{.ID}}" type="checkbox" name="tls" {{if .TLS}}checked{{end}}></td>
+        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="username" value="{{.Username}}"></td>
+        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="password" name="password" value="" placeholder="unchanged"></td>
+        <td><select class="form-select form-select-sm" form="prov-{{.ID}}" name="role">
               <option value="active" {{if ne .Role "backup"}}selected{{end}}>active</option>
               <option value="backup" {{if eq .Role "backup"}}selected{{end}}>backup</option>
-            </select>
-            <input class="form-control form-control-sm" type="text" name="priority" value="{{.Priority}}" title="lower runs first" style="width:4.5rem">
-            <input class="form-control form-control-sm" type="text" name="connections" value="{{.Connections}}" title="per-worker pool size; 0 = use the default ({{$.DefaultConns}})" style="width:4.5rem">
-            <input class="form-control form-control-sm" type="text" name="account_cap" value="{{.AccountCap}}" placeholder="cap" title="fleet cap: total connections this account allows to this endpoint across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
-            <input class="form-control form-control-sm" type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" title="blank = detected from the host, or its own" style="width:9rem">
-            <label style="white-space:nowrap"><input type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> enabled</label>
-            <button type="submit">Save</button>
-          </form>
+            </select></td>
+        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="priority" value="{{.Priority}}"></td>
+        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="connections" value="{{.Connections}}"></td>
+        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="account_cap" value="{{.AccountCap}}"></td>
+        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" style="min-width:7rem"></td>
+        <td style="white-space:nowrap">
+          <label class="me-1" title="unchecked providers keep their credentials but are not crawled"><input form="prov-{{.ID}}" type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> on</label>
+          <button class="btn btn-sm btn-primary py-0" form="prov-{{.ID}}" type="submit">Save</button>
+          <button class="btn btn-sm btn-outline-secondary py-0" form="prov-{{.ID}}" type="submit" formaction="/admin/p/usenet/provider-test">Test</button>
+          <button class="btn btn-sm btn-outline-danger py-0" form="prov-del-{{.ID}}" type="submit" title="remove — crawl history kept">&times;</button>
         </td>
       </tr>
-      <tr><td colspan="7" style="padding-bottom:.6rem;border-bottom:1px solid rgba(128,128,128,.25)">
-          <form method="post" action="/admin/p/usenet/provider-del" style="display:inline"
-                onsubmit="return confirm('Remove this provider? Its crawl history is kept.')">
-            <input type="hidden" name="id" value="{{.ID}}">
-            <button type="submit">Remove</button>
-          </form>
-          <span style="opacity:.6;font-size:.8rem;margin-left:.5rem">
-            {{if .Enabled}}in the fleet{{else}}disabled — not crawled{{end}}
-          </span>
-      </td></tr>
       {{else}}
-      <tr><td colspan="7" style="opacity:.7">No providers configured yet — add one below.</td></tr>
+      <tr><td colspan="12" style="opacity:.7">No providers configured yet — fill in the row below.</td></tr>
       {{end}}
+      <tr>
+        <td>
+          <input type="hidden" form="prov-new" name="id" value="0">
+          <input class="form-control form-control-sm" form="prov-new" type="text" name="name" placeholder="label (optional)">
+        </td>
+        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="host" placeholder="news.example.com" style="min-width:11rem" required></td>
+        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="port" value="119"></td>
+        <td class="text-center"><input form="prov-new" type="checkbox" name="tls"></td>
+        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="username" placeholder="user"></td>
+        <td><input class="form-control form-control-sm" form="prov-new" type="password" name="password" placeholder="password"></td>
+        <td><select class="form-select form-select-sm" form="prov-new" name="role">
+              <option value="active">active</option>
+              <option value="backup">backup</option>
+            </select></td>
+        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="priority" value="100"></td>
+        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="connections" value="0"></td>
+        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="account_cap" value="0"></td>
+        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="backbone" placeholder="auto"></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-primary py-0" form="prov-new" type="submit">Add</button>
+          <button class="btn btn-sm btn-outline-secondary py-0" form="prov-new" type="submit" formaction="/admin/p/usenet/provider-test">Test</button>
+        </td>
+      </tr>
       </tbody>
     </table>
+    </div>
 
-    <h5 style="margin:1rem 0 .4rem">Add a provider</h5>
-    <form method="post" action="/admin/p/usenet/provider" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
-      <input type="hidden" name="id" value="0">
-      <input class="form-control form-control-sm" type="text" name="name" placeholder="label (optional)" style="width:9rem">
-      <input class="form-control form-control-sm" type="text" name="host" placeholder="news.example.com" style="width:14rem" required>
-      <input class="form-control form-control-sm" type="text" name="port" value="119" style="width:4.5rem">
-      <label style="white-space:nowrap"><input type="checkbox" name="tls"> TLS</label>
-      <input class="form-control form-control-sm" type="text" name="username" placeholder="user" style="width:8rem">
-      <input class="form-control form-control-sm" type="password" name="password" placeholder="password" style="width:11rem">
-      <select class="form-select form-select-sm" name="role" style="width:7rem">
-        <option value="active">active</option>
-        <option value="backup">backup</option>
-      </select>
-      <input class="form-control form-control-sm" type="text" name="priority" value="100" title="lower runs first" style="width:4.5rem">
-      <input class="form-control form-control-sm" type="text" name="connections" value="0" title="per-worker pool size; 0 = use the default" style="width:4.5rem">
-      <input class="form-control form-control-sm" type="text" name="account_cap" value="0" placeholder="cap" title="fleet cap across ALL workers; 0 = no cap. Each worker opens min(conns, cap/live-workers)." style="width:4.5rem">
-      <input class="form-control form-control-sm" type="text" name="backbone" placeholder="auto-detected" style="width:9rem">
-      <button type="submit">Add provider</button>
-    </form>
+    <p class="text-muted small mb-0">
+      Hover a column header for what it controls. <strong>Backbone</strong> is
+      the upstream network the account resells — article numbers are handed out
+      by the backbone, so providers naming the same one share crawl progress
+      (a second account there adds <em>connections</em>, not content), while
+      different backbones add content. Leave it blank (auto) unless you are
+      sure; wrongly sharing one makes each provider skip what the other
+      fetched. A new provider is enabled on add and joins the fleet on the next
+      crawl. See <code>PROVIDERS.md</code>.
+    </p>
     </div>
 </div>
 </div>
@@ -296,7 +273,7 @@
     {{else}}
     <div class="empty">
         {{if .GroupQuery}}No groups match &ldquo;{{.GroupQuery}}&rdquo;.
-        {{else}}No groups yet. Save a server in the NNTP tab, then <strong>Fetch group list</strong> to pull the server's newsgroups.{{end}}
+        {{else}}No groups yet. Add a provider in the Providers tab, then <strong>Fetch group list</strong> to pull the server's newsgroups.{{end}}
     </div>
     {{end}}
     </div>
