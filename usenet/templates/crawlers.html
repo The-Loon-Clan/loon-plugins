@@ -15,13 +15,13 @@
     {{if .Fleet}}
     <div class="d-flex flex-column" style="gap:.35rem">
       {{range .Fleet}}
-      <div class="d-flex align-items-center" style="gap:.6rem;font-size:.9rem">
+      <div class="d-flex align-items-center" style="gap:.6rem;font-size:.9rem" data-provider="{{.ID}}">
         <strong>{{.Name}}</strong>
-        {{if not .Enabled}}<span class="badge bg-secondary">off</span>
-        {{else if .Down}}<span class="badge bg-warning text-dark">benched</span>
-        {{else if .Dialled}}<span class="badge bg-success">connected</span>
-        {{else}}<span class="badge bg-secondary">idle</span>{{end}}
-        <span class="text-muted small">{{if .Dialled}}{{.Open}} / {{.Target}} connections{{else}}not dialled yet{{end}}</span>
+        {{if not .Enabled}}<span data-role="pbadge" class="badge bg-secondary">off</span>
+        {{else if .Down}}<span data-role="pbadge" class="badge bg-warning text-dark">benched</span>
+        {{else if .Dialled}}<span data-role="pbadge" class="badge bg-success">connected</span>
+        {{else}}<span data-role="pbadge" class="badge bg-secondary">idle</span>{{end}}
+        <span data-role="pconns" class="text-muted small">{{if .Dialled}}{{.Open}} / {{.Target}} connections{{else}}not dialled yet{{end}}</span>
         <a class="ms-auto text-muted text-decoration-none" href="/admin/p/usenet#providers" title="edit providers">&#9998;</a>
       </div>
       {{end}}
@@ -301,6 +301,21 @@
   function apply(st) {
     set('stat-nzbs', st.total_nzbs); set('stat-staged', st.staged_articles);
     set('stat-backlog', st.backfill_remaining);
+    // Provider strip: dial state changes when a pass starts, which is exactly
+    // when nobody wants to reload the page to see it.
+    (st.providers || []).forEach(function (pv) {
+      var row = document.querySelector('[data-provider="' + pv.id + '"]');
+      if (!row) return;
+      var label = !pv.enabled ? 'off' : pv.down ? 'benched' : pv.dialled ? 'connected' : 'idle';
+      var b = row.querySelector('[data-role=pbadge]');
+      if (b) {
+        b.textContent = label;
+        b.className = 'badge ' + (label === 'connected' ? 'bg-success'
+          : label === 'benched' ? 'bg-warning text-dark' : 'bg-secondary');
+      }
+      var c = row.querySelector('[data-role=pconns]');
+      if (c) c.textContent = pv.dialled ? (pv.open + ' / ' + pv.target + ' connections') : 'not dialled yet';
+    });
     var p = st.crawl || {};
     var any = p.running || p.batches > 0 || p.articles > 0;
     var body = document.getElementById('pass-body');

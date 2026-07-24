@@ -86,11 +86,19 @@ type PassReport struct {
 }
 
 type ProviderReport struct {
+	ID       int    `json:"id"`
 	Name     string `json:"name"`
 	Host     string `json:"host"`
 	Backbone string `json:"backbone"`
 	Role     string `json:"role"`
 	Enabled  bool   `json:"enabled"`
+	// Live dial state, merged from the worker-published fleet stats so the
+	// dashboard's provider strip can tick without a page reload. Dialled is
+	// false when the fleet has no entry for the provider yet.
+	Dialled bool `json:"dialled"`
+	Down    bool `json:"down"`
+	Open    int  `json:"open"`
+	Target  int  `json:"target"`
 }
 
 type WorkerReport struct {
@@ -161,10 +169,15 @@ func (p *Plugin) status(ctx context.Context) StatusReport {
 	}
 	if provs, err := p.st.listServers(ctx); err == nil {
 		for _, pr := range provs {
-			rep.Providers = append(rep.Providers, ProviderReport{
-				Name: pr.Name, Host: pr.Host, Backbone: pr.backboneKey(),
+			r := ProviderReport{
+				ID: pr.ID, Name: pr.Name, Host: pr.Host, Backbone: pr.backboneKey(),
 				Role: pr.Role, Enabled: pr.Enabled,
-			})
+			}
+			if st, ok := tv.Fleet[pr.ID]; ok {
+				r.Dialled = true
+				r.Down, r.Open, r.Target = st.Down, st.Open, st.Target
+			}
+			rep.Providers = append(rep.Providers, r)
 		}
 	}
 	for _, w := range p.workerVMs(ctx) {
