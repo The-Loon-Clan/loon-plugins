@@ -54,6 +54,13 @@ func (s *PGStore) stats(ctx context.Context) (pluginapi.IndexStats, error) {
 		// NZB and staged counts are group-wide, not per backbone — an article is
 		// indexed once no matter which backbone fetched it — so those repeat across
 		// a group's backbone rows.
+		//
+		// The counts are LEFT JOINed single-pass aggregates, NOT per-group
+		// correlated subqueries: this renders on the dashboard and feeds the 5s
+		// status poll, and with pg staging holding tens of millions of rows the
+		// correlated form ran 2 counts x N groups per render — the page took
+		// minutes and timed out (2026-07-24, prod, 33M staged rows). One scan
+		// per table is the ceiling here.
 		type row struct {
 			Backbone   string       `db:"backbone"`
 			Name       string       `db:"name"`
@@ -79,10 +86,14 @@ func (s *PGStore) stats(ctx context.Context) (pluginapi.IndexStats, error) {
 			        COALESCE(s.server_high, 0) AS server_high,
 			        s.last_crawl,
 			        COALESCE(s.backfill_done, FALSE) AS backfill_done,
-			        (SELECT COUNT(*) FROM nzbs n WHERE n.group_name = g.name) AS nzbs,
-			        (SELECT COUNT(*) FROM articles a WHERE a.group_name = g.name) AS staged
+			        COALESCE(nc.n, 0) AS nzbs,
+			        COALESCE(ac.n, 0) AS staged
 			 FROM newsgroups g
 			 LEFT JOIN newsgroup_state s ON s.group_name = g.name
+			 LEFT JOIN (SELECT group_name, COUNT(*) AS n FROM nzbs
+			            GROUP BY group_name) nc ON nc.group_name = g.name
+			 LEFT JOIN (SELECT group_name, COUNT(*) AS n FROM articles
+			            GROUP BY group_name) ac ON ac.group_name = g.name
 			 WHERE g.active = TRUE
 			 ORDER BY COALESCE(s.backbone, ''), g.name`); err != nil {
 			return err
