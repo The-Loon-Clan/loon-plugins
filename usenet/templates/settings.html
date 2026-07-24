@@ -26,6 +26,11 @@
 .cov-cells .cc2 { background:color-mix(in srgb, var(--bs-success) 60%, transparent); }
 .cov-cells .cc3 { background:var(--bs-success); }
 .empty { opacity:.7; padding:2rem; text-align:center; border:1px dashed rgba(128,128,128,.35); border-radius:8px; }
+/* Provider pills: the host theme colors .nav-link blue, which lands blue-on-
+   blue once Bootstrap's active pill paints its primary background. Pin the
+   pill text explicitly in both states. */
+.nav-pills .nav-link { color: var(--bs-secondary-color); }
+.nav-pills .nav-link.active { color: #fff; }
 </style>
 {{/* Bootstrap alert classes, not var(--success)/var(--danger): those tokens
      are demo-only — the host theme never defines them, which rendered the
@@ -176,7 +181,11 @@
             {{range .Knobs}}
             <div>
                 <label title="{{.Help}}">{{.Label}}</label>
-                <input class="form-control" type="number" min="1" name="{{.Key}}" value="{{.Value}}">
+                {{/* min=0, not 1: several knobs use 0 as a meaningful value
+                     ("keep forever", "no cap") — and a saved 0 reads as "use
+                     the built-in default" for the rest (withOverrides only
+                     applies values > 0). */}}
+                <input class="form-control" type="number" min="0" name="{{.Key}}" value="{{.Value}}">
                 <div class="text-muted" style="font-size:.75rem;margin-top:.2rem">{{.Help}}</div>
             </div>
             {{end}}
@@ -221,13 +230,17 @@
     <div class="table-responsive">
         <table class="table table-dark table-sm align-middle">
             <thead><tr>
-                <th>Group</th><th class="text-end">NZBs</th>
+                <th>Group</th><th>Enabled</th><th class="text-end">NZBs</th>
                 <th>Depth (d)</th><th>Throttle (ms)</th><th>Low pri</th><th>Order</th><th></th>
             </tr></thead>
             <tbody>
             {{range .Groups}}
                 <tr{{if not .Active}} class="text-muted"{{end}}>
                     <td><code>{{.Name}}</code></td>
+                    {{/* Explicit state badge — the toggle button alone read as
+                         ambiguous ("active" a state or an action?). Badge =
+                         state, button = the action that changes it. */}}
+                    <td>{{if .Active}}<span class="badge bg-success">enabled</span>{{else}}<span class="badge bg-secondary">disabled</span>{{end}}</td>
                     <td class="text-end">{{.NZBs}}</td>
                     <form method="post" action="/admin/p/usenet/group-tune" id="tune-{{.Name}}"></form>
                     <td><input class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="retention_days" value="{{if .RetentionDays}}{{.RetentionDays}}{{end}}"
@@ -253,7 +266,7 @@
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="active" value="{{if .Active}}false{{else}}true{{end}}">
                             <input type="hidden" name="gq" value="{{$.GroupQuery}}">
-                            <button class="btn btn-sm py-0 {{if .Active}}btn-primary{{else}}btn-outline-secondary{{end}}" type="submit">{{if .Active}}active{{else}}enable{{end}}</button>
+                            <button class="btn btn-sm py-0 {{if .Active}}btn-outline-warning{{else}}btn-success{{end}}" type="submit">{{if .Active}}disable{{else}}enable{{end}}</button>
                         </form>
                         <form method="post" action="/admin/p/usenet/group-del" style="display:inline"
                               onsubmit="return confirm('Remove {{.Name}} from the catalogue? Its crawl history is kept.')">

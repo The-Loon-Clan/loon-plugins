@@ -236,9 +236,12 @@ func (p *Plugin) actionSaveKnobs(gc *gin.Context) (template.HTML, error) {
 		if raw == "" {
 			continue
 		}
+		// 0 is allowed: it means "keep forever" / "no cap" where the knob
+		// defines that, and "use the built-in default" everywhere else —
+		// withOverrides only applies stored values > 0.
 		n, err := strconv.Atoi(raw)
-		if err != nil || n <= 0 {
-			return settingsRedirect(gc, "err", key+" must be a positive number")
+		if err != nil || n < 0 {
+			return settingsRedirect(gc, "err", key+" must be a number ≥ 0")
 		}
 		if err := p.st.setSetting(ctx, key, raw); err != nil {
 			return settingsRedirect(gc, "err", err.Error())
