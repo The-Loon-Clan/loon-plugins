@@ -142,6 +142,16 @@ func (p *Plugin) Provision(c *core.Core) error {
 		}
 	}
 
+	// The ADMIN capability registers in the worker too — not just where the
+	// wizard renders: a host's stats-cache job (worker-side) reads Stats()
+	// through it to publish newsgroup progression on its public stats page.
+	// The admin VIEWS below stay web/all.
+	if c.Process == "worker" {
+		if err := c.Register(pluginapi.UsenetAdminName, p.svc); err != nil {
+			return err
+		}
+	}
+
 	// web/all only: the admin capability + the plugin-owned admin views (setup
 	// wizard + crawl status) the host wraps in its own chrome. The api process
 	// has no view system or admin surface, so these stay out of it.
