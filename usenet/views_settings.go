@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -268,7 +269,23 @@ func (p *Plugin) actionFetchGroups(gc *gin.Context) (template.HTML, error) {
 }
 
 func (p *Plugin) actionToggleGroup(gc *gin.Context) (template.HTML, error) {
-	_ = p.st.setGroupActive(gc.Request.Context(), gc.PostForm("name"), gc.PostForm("active") == "true")
+	err := p.st.setGroupActive(gc.Request.Context(), gc.PostForm("name"), gc.PostForm("active") == "true")
+	// The page toggles groups in place (fetch + DOM flip): a full
+	// redirect-and-re-render per click re-runs every dashboard query and
+	// jumps the scroll position — painful when enabling twenty groups in a
+	// row. The fetch path answers with a bare status; the form still works
+	// without JS via the redirect below.
+	if gc.GetHeader("X-Requested-With") == "fetch" {
+		if err != nil {
+			gc.String(http.StatusInternalServerError, "toggle failed")
+		} else {
+			gc.Status(http.StatusNoContent)
+		}
+		return "", nil
+	}
+	if err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
 	dest := usenetURL + "#newsgroups"
 	if gq := gc.PostForm("gq"); gq != "" {
 		dest = usenetURL + "?gq=" + url.QueryEscape(gq) + "#newsgroups" // keep the current group search

@@ -262,7 +262,7 @@
                     <td style="white-space:nowrap">
                         <input form="tune-{{.Name}}" type="hidden" name="name" value="{{.Name}}">
                         <button form="tune-{{.Name}}" class="btn btn-sm py-0 btn-outline-primary" type="submit">Save</button>
-                        <form method="post" action="/admin/p/usenet/group" style="display:inline">
+                        <form method="post" action="/admin/p/usenet/group" style="display:inline" class="js-group-toggle">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="active" value="{{if .Active}}false{{else}}true{{end}}">
                             <input type="hidden" name="gq" value="{{$.GroupQuery}}">
@@ -332,6 +332,40 @@ document.addEventListener('DOMContentLoaded', function () {
     el.addEventListener('shown.bs.tab', function (e) {
       history.replaceState(null, '', e.target.getAttribute('href'));
     });
+  });
+});
+
+// In-place newsgroup enable/disable: the classic submit re-rendered the whole
+// page (every dashboard query) and jumped the scroll per click — miserable
+// when curating twenty groups. POST via fetch, flip the row's badge/button in
+// the DOM; any failure falls back to the classic full-page submit.
+document.addEventListener('submit', function (e) {
+  var form = e.target;
+  if (!form.classList || !form.classList.contains('js-group-toggle')) return;
+  e.preventDefault();
+  var btn = form.querySelector('button');
+  var activeInput = form.querySelector('input[name="active"]');
+  var enabling = activeInput.value === 'true';
+  btn.disabled = true;
+  var tok = (document.cookie.match(/(?:^|;\s*)csrf_tok=([^;]+)/) || [])[1] || '';
+  fetch(form.action, {
+    method: 'POST', body: new FormData(form),
+    headers: { 'X-Requested-With': 'fetch', 'X-CSRF-Token': decodeURIComponent(tok) }
+  }).then(function (r) {
+    if (!r.ok && r.status !== 204) throw new Error(r.status);
+    var row = form.closest('tr');
+    var badge = row && row.querySelector('td .badge');
+    if (badge) {
+      badge.textContent = enabling ? 'enabled' : 'disabled';
+      badge.className = 'badge ' + (enabling ? 'bg-success' : 'bg-secondary');
+    }
+    if (row) row.classList.toggle('text-muted', !enabling);
+    activeInput.value = enabling ? 'false' : 'true';
+    btn.textContent = enabling ? 'disable' : 'enable';
+    btn.className = 'btn btn-sm py-0 ' + (enabling ? 'btn-outline-warning' : 'btn-success');
+    btn.disabled = false;
+  }).catch(function () {
+    form.submit(); // never leave the operator stuck — degrade to the old path
   });
 });
 </script>
