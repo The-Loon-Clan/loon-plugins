@@ -34,6 +34,7 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	// on their own tab.
 	if err := c.RegisterView(core.View{
 		Slug: "usenet", Title: "Usenet", Slot: core.SlotAdminPage,
+		Description: "Providers, indexing, newsgroups, crawlers + filters.",
 		Render: func(gc *gin.Context) (template.HTML, error) {
 			srv, _, _ := p.st.getServer(gc.Request.Context())
 			return p.renderSettings(gc.Request.Context(), srv, gc.Query("gq"), gc.Query("msg"), gc.Query("err"))
