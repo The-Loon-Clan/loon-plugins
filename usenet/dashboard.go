@@ -146,9 +146,15 @@ func (p *Plugin) status(ctx context.Context) StatusReport {
 			rep.BackfillETASeconds = int64(d.Seconds())
 		}
 	}
-	if bi, err := p.st.builderInfo(ctx, 1); err == nil {
-		rep.PendingReleases = bi.Releases
-		rep.ReadyReleases = bi.Ready
+	// PG staging only: builderInfo is a GROUP BY over the pg staging table —
+	// meaningless zeros under redis staging, and at real volume (33M rows,
+	// prod 2026-07-24) a 30s+ disk-spilling aggregation that this endpoint
+	// would re-run EVERY 5s poll. Redis installs read ready_groups instead.
+	if p.cfg.Staging != StagingRedis {
+		if bi, err := p.st.builderInfo(ctx, 1); err == nil {
+			rep.PendingReleases = bi.Releases
+			rep.ReadyReleases = bi.Ready
+		}
 	}
 	if provs, err := p.st.listServers(ctx); err == nil {
 		for _, pr := range provs {
