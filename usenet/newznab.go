@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"text/template"
@@ -23,13 +24,15 @@ var newznabFuncs = template.FuncMap{"xmlesc": xmlEscaper.Replace}
 
 var capsTmpl = template.Must(template.New("caps").Funcs(newznabFuncs).Parse(
 	`<?xml version="1.0" encoding="UTF-8"?><caps>
-  <server appversion="1.0" version="0.1" title="{{xmlesc .Title}}" strapline="loon demo indexer" email="" url="{{.BaseURL}}" image=""/>
+  <server appversion="1.0" version="0.1" title="{{xmlesc .Title}}" strapline="loon demo indexer" email="" url="{{xmlesc .BaseURL}}" image=""/>
   <limits max="100" default="50"/>
   <retention days="{{.Retention}}"/>
   <registration available="no" open="no"/>
   <searching>
     <search available="yes" supportedParams="q,cat,limit,offset"/>
-    <tv-search available="yes" supportedParams="q,cat,limit,offset,season,ep"/>
+    {{/* no season/ep: NewznabRequest doesn't carry them, so advertising
+         them would promise filtering that silently doesn't happen */ -}}
+    <tv-search available="yes" supportedParams="q,cat,limit,offset"/>
     <movie-search available="yes" supportedParams="q,cat,limit,offset"/>
     <audio-search available="no" supportedParams=""/>
     <book-search available="no" supportedParams=""/>
@@ -56,7 +59,7 @@ var feedTmpl = template.Must(template.New("feed").Funcs(newznabFuncs).Parse(
   <channel>
     <title>{{xmlesc .Title}}</title>
     <description>{{xmlesc .Title}} NZB Search</description>
-    <link>{{.BaseURL}}</link>
+    <link>{{xmlesc .BaseURL}}</link>
     <newznab:response offset="{{.Offset}}" total="{{.Total}}"/>
     {{- range .Items}}
     <item>
@@ -156,11 +159,21 @@ func (s *service) newznabGet(ctx context.Context, req pluginapi.NewznabRequest) 
 }
 
 func (s *service) newznabFeed(ctx context.Context, req pluginapi.NewznabRequest) (pluginapi.NewznabResult, error) {
+	// Clamp the client-supplied paging BEFORE it reaches SQL: caps advertises
+	// <limits max="100"> and this is where that promise is enforced (hosts
+	// differ in what they clamp), and a negative offset is a Postgres error.
 	limit := req.Limit
 	if limit <= 0 {
 		limit = 50
 	}
-	releases, total, err := s.store.feedReleases(ctx, strings.TrimSpace(req.Query), req.Categories, limit, req.Offset)
+	if limit > 100 {
+		limit = 100
+	}
+	offset := req.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	releases, total, err := s.store.feedReleases(ctx, strings.TrimSpace(req.Query), req.Categories, limit, offset)
 	if err != nil {
 		return pluginapi.NewznabResult{}, err
 	}
@@ -168,7 +181,9 @@ func (s *service) newznabFeed(ctx context.Context, req pluginapi.NewznabRequest)
 	for i, r := range releases {
 		dl := fmt.Sprintf("%s/api?t=get&id=%d", req.BaseURL, r.ID)
 		if req.APIKey != "" {
-			dl += "&apikey=" + req.APIKey
+			// QueryEscape, not raw: the apikey is a client-supplied query param
+			// and metacharacters would corrupt every download link we emit.
+			dl += "&apikey=" + url.QueryEscape(req.APIKey)
 		}
 		pub := ""
 		if !r.Posted.IsZero() {
@@ -185,7 +200,7 @@ func (s *service) newznabFeed(ctx context.Context, req pluginapi.NewznabRequest)
 	var buf bytes.Buffer
 	if err := feedTmpl.Execute(&buf, map[string]any{
 		"Title": title(req), "BaseURL": req.BaseURL,
-		"Offset": req.Offset, "Total": total, "Items": items,
+		"Offset": offset, "Total": total, "Items": items,
 	}); err != nil {
 		return pluginapi.NewznabResult{}, err
 	}
