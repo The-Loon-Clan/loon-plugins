@@ -11,21 +11,21 @@ import (
 // admin doesn't edit the tree, only which top-level categories are enabled.
 var taxonomy = []pluginapi.Category{
 	{ID: 1000, Name: "Console", Subcats: []pluginapi.Subcategory{
-		{1010, "NDS"}, {1020, "PSP"}, {1030, "Wii"}, {1040, "Xbox"}, {1050, "Xbox 360"}, {1080, "PS3"}, {1180, "Other"}}},
+		{ID: 1010, Name: "NDS"}, {ID: 1020, Name: "PSP"}, {ID: 1030, Name: "Wii"}, {ID: 1040, Name: "Xbox"}, {ID: 1050, Name: "Xbox 360"}, {ID: 1080, Name: "PS3"}, {ID: 1180, Name: "Other"}}},
 	{ID: 2000, Name: "Movies", Subcats: []pluginapi.Subcategory{
-		{2010, "Foreign"}, {2030, "SD"}, {2040, "HD"}, {2045, "UHD"}, {2050, "BluRay"}, {2060, "3D"}}},
+		{ID: 2010, Name: "Foreign"}, {ID: 2030, Name: "SD"}, {ID: 2040, Name: "HD"}, {ID: 2045, Name: "UHD"}, {ID: 2050, Name: "BluRay"}, {ID: 2060, Name: "3D"}}},
 	{ID: 3000, Name: "Audio", Subcats: []pluginapi.Subcategory{
-		{3010, "MP3"}, {3030, "Audiobook"}, {3040, "Lossless"}, {3050, "Other"}}},
+		{ID: 3010, Name: "MP3"}, {ID: 3030, Name: "Audiobook"}, {ID: 3040, Name: "Lossless"}, {ID: 3050, Name: "Other"}}},
 	{ID: 4000, Name: "PC", Subcats: []pluginapi.Subcategory{
-		{4010, "0day"}, {4020, "ISO"}, {4030, "Mac"}, {4050, "Games"}, {4060, "Mobile-iOS"}, {4070, "Mobile-Android"}}},
+		{ID: 4010, Name: "0day"}, {ID: 4020, Name: "ISO"}, {ID: 4030, Name: "Mac"}, {ID: 4050, Name: "Games"}, {ID: 4060, Name: "Mobile-iOS"}, {ID: 4070, Name: "Mobile-Android"}}},
 	{ID: 5000, Name: "TV", Subcats: []pluginapi.Subcategory{
-		{5020, "Foreign"}, {5030, "SD"}, {5040, "HD"}, {5045, "UHD"}, {5060, "Sport"}, {5070, "Anime"}, {5080, "Documentary"}}},
+		{ID: 5020, Name: "Foreign"}, {ID: 5030, Name: "SD"}, {ID: 5040, Name: "HD"}, {ID: 5045, Name: "UHD"}, {ID: 5060, Name: "Sport"}, {ID: 5070, Name: "Anime"}, {ID: 5080, Name: "Documentary"}}},
 	{ID: 6000, Name: "XXX", Subcats: []pluginapi.Subcategory{
-		{6010, "DVD"}, {6040, "x264"}, {6045, "UHD"}, {6050, "Pack"}, {6060, "ImgSet"}, {6070, "Other"}}},
+		{ID: 6010, Name: "DVD"}, {ID: 6040, Name: "x264"}, {ID: 6045, Name: "UHD"}, {ID: 6050, Name: "Pack"}, {ID: 6060, Name: "ImgSet"}, {ID: 6070, Name: "Other"}}},
 	{ID: 7000, Name: "Books", Subcats: []pluginapi.Subcategory{
-		{7010, "Mags"}, {7020, "Ebook"}, {7030, "Comics"}, {7040, "Technical"}}},
+		{ID: 7010, Name: "Mags"}, {ID: 7020, Name: "Ebook"}, {ID: 7030, Name: "Comics"}, {ID: 7040, Name: "Technical"}}},
 	{ID: 8000, Name: "Other", Subcats: []pluginapi.Subcategory{
-		{8010, "Misc"}, {8020, "Hashed"}}},
+		{ID: 8010, Name: "Misc"}, {ID: 8020, Name: "Hashed"}}},
 }
 
 // topLevelOf returns the thousands bucket a category id belongs to (5070 → 5000).

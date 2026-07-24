@@ -57,12 +57,12 @@ var dbMethods = map[string]bool{
 }
 
 type finding struct {
-	file    string
-	line    int
+	file     string
+	line     int
 	funcName string
-	method  string
-	reason  string
-	snippet string
+	method   string
+	reason   string
+	snippet  string
 }
 
 func main() {
