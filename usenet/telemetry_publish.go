@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/the-loon-clan/loon/core"
 )
 
 // Cross-process telemetry.
@@ -64,8 +66,30 @@ func (p *Plugin) fireTriggerRequest(req string) {
 		return
 	}
 	if p.fireTrigger(kind) {
-		p.crawlJob.Log("%s trigger relayed from the web process", kind)
+		if j := p.jobFor(kind); j != nil {
+			j.Log("%s trigger relayed from the web process", kind)
+		}
 	}
+}
+
+// jobFor maps a trigger kind to its job, so relay logs land in the pane the
+// operator is actually watching.
+func (p *Plugin) jobFor(kind string) core.Job {
+	switch kind {
+	case "crawl":
+		return p.crawlJob
+	case "backfill":
+		return p.backfillJob
+	case "build":
+		return p.buildJob
+	case "tagfill":
+		return p.tagJob
+	case "prune":
+		return p.pruneJob
+	case "health":
+		return p.healthJob
+	}
+	return nil
 }
 
 // workerTelemetry is the process-local half of the crawler's status —
@@ -155,6 +179,7 @@ func (p *Plugin) telemetryView(ctx context.Context) workerTelemetry {
 // mid-flight.
 func (p *Plugin) publishTelemetry(ctx context.Context) {
 	var last, lastTrig string
+	var readFailed bool
 	tick := time.NewTicker(5 * time.Second)
 	defer tick.Stop()
 	for {
@@ -163,12 +188,18 @@ func (p *Plugin) publishTelemetry(ctx context.Context) {
 			return
 		case <-tick.C:
 			// Consume any relayed trigger request first, so a click on the web
-			// dashboard starts the pass within one tick.
+			// dashboard starts the pass within one tick. A read failure is
+			// reported ONCE per streak — the web flash promises "starts within
+			// ~5s", so silently never consuming the request breaks a promise.
 			if s, err := p.st.getSettings(ctx); err == nil {
+				readFailed = false
 				if req := s[triggerRequestKey]; req != "" && req != lastTrig {
 					lastTrig = req
 					p.fireTriggerRequest(req)
 				}
+			} else if !readFailed {
+				readFailed = true
+				p.reportErr(ctx, "usenet/trigger-relay-read", err)
 			}
 			tv := p.localTelemetry()
 			tv.UpdatedAt = time.Time{} // stamp excluded from the change check

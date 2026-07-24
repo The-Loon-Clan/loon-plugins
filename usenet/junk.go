@@ -8,9 +8,11 @@ import (
 	"sync/atomic"
 )
 
-// Junk-title detection — a FULL port of prod's whichJunkPattern /
-// whichJunkPatternSized (indexer-site/pkg/services/nzb_assembler.go), which is
-// the source of truth. Obfuscated Usenet posts use random-token subjects
+// Junk-title detection — THE canonical engine (ported from prod's
+// whichJunkPattern/whichJunkPatternSized before the legacy crawler's deletion;
+// the host now keeps MIRRORS of these rules: pkg/services/junk_title.go and
+// the SQL sweep, per its CLAUDE.md "Junk-title rules"). Obfuscated Usenet
+// posts use random-token subjects
 // ("0N70ZyFoz8n50", "Pzz8CzBPoBNsCu8oRPpDYwESRkpq5UU3jGlz…") that would
 // otherwise assemble into garbage "releases". We drop them at ingest (before
 // staging) and again at build (with the release size in hand), and sweep

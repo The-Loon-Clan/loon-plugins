@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 )
 
-// Regex blacklist, lifted from the prod site's isBlacklisted
-// (indexer-site/pkg/services/nzb_assembler.go).
+// Regex blacklist, lifted from the prod site's isBlacklisted (the legacy
+// assembler — deleted since; this is the canonical copy now).
 //
 // Where junk rules are shipped defaults for machine-generated garbage, the
 // blacklist is the operator's own policy: a poster they don't want, a group they

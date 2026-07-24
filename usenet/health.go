@@ -374,7 +374,12 @@ func (p *Plugin) runHealthCheck(ctx context.Context) {
 func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 	p.healthJob.SetRunning()
 
-	pool, err := p.ensurePool(ctx, cfg)
+	// The sweep borrows the FLEET's primary pool. A private ensurePool here
+	// broke both halves of the design: its TryDo tested an otherwise-unused
+	// pool (always "idle", never sensing crawler pressure) and its dials were
+	// invisible to the account-cap machinery — the provider saw fleet-size
+	// PLUS a whole second pool.
+	runs, err := p.activeFleet(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, errNoServer) {
 			p.healthJob.Log("no server configured — add one in the admin wizard")
@@ -385,6 +390,7 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 		p.reportErr(ctx, "usenet/health-pool", err)
 		return
 	}
+	pool := runs[0].pool
 
 	backend, err := p.resolveHealthBackend()
 	if err != nil {

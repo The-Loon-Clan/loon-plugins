@@ -45,12 +45,21 @@ func (p *Plugin) knobs(ctx context.Context) []knob {
 		{"health_stat_chunk", "Health STATs per lease", cfg.HealthStatChunk, "segments checked per borrowed connection; smaller returns connections to the crawler more often (default 200)"},
 		{"backfill_pressure_high_pct", "Backfill pause at (% pressure)", cfg.BackfillPressureHighPct, "backfill pauses when staging pressure reaches this percent (default 85); forward crawl never pauses"},
 		{"backfill_pressure_low_pct", "Backfill resume below (% pressure)", cfg.BackfillPressureLowPct, "paused backfill resumes once pressure drops below this percent (default 70)"},
+		{"build_drain_per_pass", "Builder sets per pass", cfg.BuildDrainPerPass, "completed sets assembled per build pass (default 500) — raise during backlog recovery"},
+		{"tagfill_interval_min", "Tag fill interval (min)", cfg.TagFillIntervalMin, "tag-fill + recategorize cadence (default 360)"},
+		{"prune_interval_min", "Prune interval (min)", cfg.PruneIntervalMin, "prune cadence (default 1440)"},
 	}
 }
 
 func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string) (template.HTML, error) {
-	groups, _ := p.st.allGroups(ctx, gq, 300)
-	total, _ := p.st.groupCount(ctx)
+	groups, err := p.st.allGroups(ctx, gq, 300)
+	if err != nil {
+		return "", err
+	}
+	total, err := p.st.groupCount(ctx)
+	if err != nil {
+		return "", err
+	}
 	servers, err := p.st.listServers(ctx)
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/list-servers", err)
@@ -177,17 +186,6 @@ func (p *Plugin) actionDeleteProvider(gc *gin.Context) (template.HTML, error) {
 	// Crawl state survives on purpose: it is keyed by backbone, so it may belong
 	// to another account, and discarding it would re-crawl that history.
 	return settingsRedirect(gc, "msg", "provider removed (its crawl history is kept)")
-}
-
-func (p *Plugin) actionToggleProvider(gc *gin.Context) (template.HTML, error) {
-	id, _ := strconv.Atoi(gc.PostForm("id"))
-	if id <= 0 {
-		return settingsRedirect(gc, "err", "no provider selected")
-	}
-	if err := p.st.toggleServer(gc.Request.Context(), id); err != nil {
-		return settingsRedirect(gc, "err", err.Error())
-	}
-	return settingsRedirect(gc, "msg", "provider updated")
 }
 
 func (p *Plugin) actionTuneGroup(gc *gin.Context) (template.HTML, error) {

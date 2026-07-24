@@ -180,9 +180,16 @@ func (p *Plugin) startHeartbeat(ctx context.Context, cfg Config) {
 		stale = 90 * time.Second
 	}
 	// Beat well inside the staleness window so one missed tick is survivable.
+	// Capped at 30s regardless of worker_stale_sec: lease takeover declares an
+	// owner dead after leaseOwnerDeadAfter (2 min) without a beat, so beats
+	// must stay comfortably inside that window even when an operator raises
+	// the presence knob — or a HEALTHY worker's leases become stealable.
 	every := stale / 3
 	if every < 5*time.Second {
 		every = 5 * time.Second
+	}
+	if every > 30*time.Second {
+		every = 30 * time.Second
 	}
 
 	go func() {

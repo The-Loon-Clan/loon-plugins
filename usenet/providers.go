@@ -283,8 +283,19 @@ func (f *providerFleet) get(ctx context.Context, pr provider, size int) (*nntp.P
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if pp == nil {
+		pp = f.pools[pr.ID]
+	}
+	if pp == nil {
 		pp = &providerPool{prov: pr}
 		f.pools[pr.ID] = pp
+	}
+	if pp.pool != nil && pp.key == key {
+		// A concurrent caller (crawl vs backfill both fleeting the same
+		// provider) won the dial race while we were connecting. Keep theirs;
+		// closing ours promptly is what stops the account seeing two full
+		// pools and the loser's sockets leaking until process exit.
+		_ = pool.Close()
+		return pp.pool, nil
 	}
 	pp.prov, pp.pool, pp.key = pr, pool, key
 	pp.downUntil = time.Time{}

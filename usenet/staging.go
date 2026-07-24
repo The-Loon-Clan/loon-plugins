@@ -25,10 +25,10 @@ type stagingStore interface {
 	deleteStaged(ctx context.Context, group, base string) error
 	deleteJunkStaged(ctx context.Context) (int64, error)
 	// prune drops stale staging. pg: DELETE WHERE added_at < now()-horizon;
-	// redis (Phase B): no-op — the key TTL + inline hopeless-eviction handle it.
+	// redis: no-op — the key TTL + inline hopeless-eviction handle it.
 	prune(ctx context.Context) (int64, error)
-	// pressure reports staging fullness 0.0-1.0 for back-pressure. Phase B wires
-	// it into the backfill loop. pg: staged rows / maxRows; redis: used/maxmemory.
+	// pressure reports staging fullness 0.0-1.0 for the backfill loop's
+	// back-pressure. pg: staged rows / maxRows; redis: used/maxmemory.
 	pressure(ctx context.Context) (float64, error)
 	// stagingInfo is the dashboard's staging readout. Each mode fills what it
 	// answers CHEAPLY and leaves the rest zero; nothing here may cost a scan.

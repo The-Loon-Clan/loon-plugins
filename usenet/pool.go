@@ -12,9 +12,10 @@ import (
 // rebuilding it if the server or the connection count changed.
 //
 // The pool is opened lazily rather than in Start because a fresh install has no
-// server row yet (and Provision must not do I/O at all). Crawl and backfill
-// share ONE pool on purpose: the provider caps concurrent connections per
-// account, so a second pool would just push the account over its limit.
+// server row yet (and Provision must not do I/O at all). Crawl, backfill and
+// health all moved to the per-provider FLEET pools (providers.go) — the only
+// remaining caller is the wizard's group-list fetch, which wants exactly this:
+// one lazily-opened pool against the primary server row.
 func (p *Plugin) ensurePool(ctx context.Context, cfg Config) (*nntp.Pool, error) {
 	srv, ok, err := p.st.getServer(ctx)
 	if err != nil {

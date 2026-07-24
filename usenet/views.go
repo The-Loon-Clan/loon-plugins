@@ -35,7 +35,7 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	// their own tab.
 	if err := c.RegisterView(core.View{
 		Slug: "usenet", Title: "Usenet", Slot: core.SlotAdminPage,
-		Description: "Providers, indexing, newsgroups, crawlers + filters.",
+		Description: "Providers, indexing, newsgroups, crawlers, jobs + filters.",
 		Render: func(gc *gin.Context) (template.HTML, error) {
 			return p.renderSettings(gc.Request.Context(), gc.Query("gq"), gc.Query("msg"), gc.Query("err"))
 		},
@@ -82,9 +82,8 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		return err
 	}
 
-	// Jobs widget: a richer card for the "Usenet" job group (crawler +
-	// backfill) on the host jobs page. The "NZB" group keeps the host default —
-	// the two side by side demonstrate default vs override.
+	// Jobs widget: a richer card for the "Usenet" job group (all six pipeline
+	// jobs) on the host jobs page.
 	return c.RegisterView(core.View{
 		Slug: "usenet-jobs", Title: "Usenet jobs", Slot: core.SlotJobsWidget, Anchor: "Usenet",
 		Render: func(gc *gin.Context) (template.HTML, error) {
@@ -109,7 +108,9 @@ func (p *Plugin) frag(name string, data any) (template.HTML, error) {
 func (p *Plugin) actionTrigger(kind, label string) func(*gin.Context) (template.HTML, error) {
 	return func(gc *gin.Context) (template.HTML, error) {
 		if p.runsJobs {
-			p.fireTrigger(kind)
+			if !p.fireTrigger(kind) {
+				return settingsRedirect(gc, "err", "unknown job trigger: "+kind)
+			}
 			return settingsRedirect(gc, "msg", label+" started")
 		}
 		req := kind + ":" + strconv.FormatInt(time.Now().Unix(), 10)

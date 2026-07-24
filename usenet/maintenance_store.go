@@ -2,6 +2,7 @@ package usenet
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -17,6 +18,7 @@ func (s *PGStore) retagUntagged(ctx context.Context, limit int) (int, error) {
 	}
 	updated := 0
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		cursor := sweepCursor(ctx, tx, "tagfill_cursor")
 		var rows []struct {
 			ID    int64  `db:"id"`
 			Title string `db:"title"`
@@ -24,9 +26,16 @@ func (s *PGStore) retagUntagged(ctx context.Context, limit int) (int, error) {
 		if err := tx.SelectContext(ctx, &rows,
 			`SELECT id, title FROM nzbs
 			 WHERE resolution = '' AND source = '' AND video_codec = '' AND audio = '' AND language = ''
-			 LIMIT $1`, limit); err != nil {
+			   AND id > $2
+			 ORDER BY id
+			 LIMIT $1`, limit, cursor); err != nil {
 			return err
 		}
+		next := int64(0) // short page = sweep wrapped; restart from the top next run
+		if len(rows) == limit {
+			next = rows[len(rows)-1].ID
+		}
+		saveSweepCursor(ctx, tx, "tagfill_cursor", next)
 		for _, r := range rows {
 			t := parseTags(r.Title)
 			if t.Empty() {
@@ -53,15 +62,24 @@ func (s *PGStore) recategorizeDefaults(ctx context.Context, fn func(group, title
 	}
 	updated := 0
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		cursor := sweepCursor(ctx, tx, "recategorize_cursor")
 		var rows []struct {
 			ID    int64  `db:"id"`
 			Group string `db:"group_name"`
 			Title string `db:"title"`
 		}
 		if err := tx.SelectContext(ctx, &rows,
-			`SELECT id, group_name, title FROM nzbs WHERE category_id = 8010 LIMIT $1`, limit); err != nil {
+			`SELECT id, group_name, title FROM nzbs
+			  WHERE category_id = 8010 AND id > $2
+			  ORDER BY id
+			  LIMIT $1`, limit, cursor); err != nil {
 			return err
 		}
+		next := int64(0)
+		if len(rows) == limit {
+			next = rows[len(rows)-1].ID
+		}
+		saveSweepCursor(ctx, tx, "recategorize_cursor", next)
 		for _, r := range rows {
 			cat := fn(r.Group, r.Title)
 			if cat == 8010 {
@@ -185,12 +203,46 @@ func (s *PGStore) pruneStagedOlderThan(ctx context.Context, hours int) (int64, e
 	return n, err
 }
 
-// stagedCount is the total staged-article row count — pgStaging's pressure
-// numerator (staged rows / staging_max_rows).
+// stagedCount is the staged-article row count — pgStaging's pressure
+// numerator (staged rows / staging_max_rows). It uses the planner's estimate,
+// not COUNT(*): pressure is consulted every backfill pass and on dashboard
+// renders, and an exact count of a 33M-row table is seconds of I/O for a
+// ratio that only needs to be roughly right. Falls back to the exact count
+// while the table has never been analyzed (reltuples = -1).
 func (s *PGStore) stagedCount(ctx context.Context) (int, error) {
-	var n int
+	var n int64
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		return tx.GetContext(ctx, &n, `SELECT COUNT(*) FROM articles`)
+		if err := tx.GetContext(ctx, &n,
+			`SELECT reltuples::bigint FROM pg_class WHERE oid = to_regclass('articles')`); err != nil {
+			return err
+		}
+		if n < 0 {
+			return tx.GetContext(ctx, &n, `SELECT COUNT(*) FROM articles`)
+		}
+		return nil
 	})
-	return n, err
+	return int(n), err
+}
+
+// sweepCursor reads a persisted keyset cursor from the settings table; absent
+// or unreadable degrades to 0 (restart the sweep from the top — safe, just
+// slower). Both maintenance sweeps below need one because their WHERE clauses
+// keep matching rows the sweep decides not to change: a plain LIMIT re-reads
+// the same first page forever and the sweep silently stops progressing.
+func sweepCursor(ctx context.Context, tx *sqlx.Tx, key string) int64 {
+	var raw string
+	if err := tx.GetContext(ctx, &raw,
+		`SELECT value FROM settings WHERE key = $1`, key); err != nil {
+		return 0
+	}
+	n, _ := strconv.ParseInt(raw, 10, 64)
+	return n
+}
+
+func saveSweepCursor(ctx context.Context, tx *sqlx.Tx, key string, cur int64) {
+	// Best-effort: a lost cursor restarts the sweep from id 0.
+	_, _ = tx.ExecContext(ctx,
+		`INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, now())
+		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+		key, strconv.FormatInt(cur, 10))
 }

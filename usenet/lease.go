@@ -175,8 +175,14 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 			case <-t.C:
 				// A failed renewal is not fatal on its own — the lease may still
 				// be valid — but if it keeps failing the TTL will lapse and
-				// another worker takes over, which is the correct outcome.
+				// another worker takes over, which is the correct outcome. The
+				// LOSS must not be silent though: the protected work keeps
+				// running, so overlap becomes possible from this moment.
 				if ok, err := p.st.claimLease(renewCtx, scope, key, me, ttl); err != nil || !ok {
+					if renewCtx.Err() == nil {
+						p.core.Errors.Report(renewCtx, "usenet/lease-renew-lost",
+							fmt.Errorf("%s/%s: renewal lost mid-work (err=%v ok=%v)", scope, key, err, ok))
+					}
 					return
 				}
 			}
@@ -246,6 +252,13 @@ func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups [
 			case <-t.C:
 				for _, k := range keys {
 					if ok, err := p.st.claimLease(renewCtx, leaseScopeGroup, k, me, ttl); err != nil || !ok {
+						// One key's loss abandons renewal for the whole set —
+						// report it, because the pass keeps crawling and a
+						// sibling may now legitimately claim these groups.
+						if renewCtx.Err() == nil {
+							p.core.Errors.Report(renewCtx, "usenet/lease-renew-lost",
+								fmt.Errorf("group lease %s: renewal lost mid-pass (err=%v ok=%v)", k, err, ok))
+						}
 						return
 					}
 				}

@@ -10,10 +10,12 @@ machine-generated junk at ingest.
 Users see it two ways. **Operators** get one admin page at `/admin/p/usenet`
 (loon `SlotAdminPage`), tabbed: the provider fleet (with per-row connection
 test), indexing knobs, newsgroup curation, a live Crawlers dashboard
-(newsgroup coverage bars, live crawl progress, index stats, NZB health,
-per-provider panels with live connection state, recently built releases, an
-aggregate backfill ETA, worker panels), and Filters — the operator blacklist
-plus per-rule hit counters.
+(a slim provider strip with live dial state, newsgroup coverage bars, live
+crawl progress with the group-by-group bar, index stats, recently built
+releases, an aggregate backfill ETA, worker panels), a **Jobs** tab (one pane
+per pipeline job: status, next run, Run-now, a live log tail, plus the
+Builder and NZB-health panels), and Filters — the operator blacklist plus
+per-rule hit counters.
 **End users** get whatever the host builds on the published index capability —
 search results, group browse, and a Newznab/Torznab `/api` + `/rss` endpoint.
 
@@ -39,12 +41,13 @@ Routes:
 - **admin views** (registered via `Core.RegisterView`, mounted by the host):
   - `SlotAdminPage` slug `usenet` — the single tabbed admin page
     (`/admin/p/usenet`): the provider fleet (per-row save/test/remove),
-    indexing knobs, newsgroups, the Crawlers dashboard and the Filters
-    blacklist. Actions: `knobs`, `fetch-groups`, `group`, `provider`,
+    indexing knobs, newsgroups, the Crawlers dashboard, the Jobs tab and the
+    Filters blacklist. Actions: `knobs`, `fetch-groups`, `group`, `provider`,
     `provider-del`, `provider-test`, `group-tune`, `group-move`, `group-del`,
-    `groups-purge`, `crawl`, `backfill`, `reset-backfill`, `filter-add`,
-    `filter-toggle`, `filter-del`, `filter-reset`. Each action redirects back
-    to its own tab.
+    `groups-purge`, `crawl`, `backfill`, `run-crawl`, `run-backfill`,
+    `run-build`, `run-tagfill`, `run-prune`, `run-health`, `reset-backfill`,
+    `filter-add`, `filter-toggle`, `filter-del`, `filter-reset`. Each action
+    redirects back to its own tab.
   - `SlotJobsWidget` anchor `Usenet` — a richer card for the Usenet job group
     on the host's `/admin/jobs`.
 - **public / api**: the plugin publishes read capabilities rather than mounting
@@ -55,14 +58,18 @@ Routes:
 
 Process kinds (`Metadata.Processes`): `web`, `worker`, `api`.
 
-- **web / all**: registers the index + admin capabilities and the admin views.
+- **web / all**: registers the index + newznab + admin capabilities and the
+  admin views.
 - **worker / all**: registers and runs the six jobs (below); no view system.
-- **api**: registers the read capability only — no jobs, no admin surface.
+  The worker ALSO registers the admin capability — a host's worker-side
+  stats-cache job reads `Stats()` through it for its public stats page.
+- **api**: registers the index + newznab capabilities — no jobs, no admin
+  surface.
 
 ## Data
 
 Owns the **`usenet` Postgres schema** (loon scopes `search_path` to it;
-unqualified names in migrations resolve there). Migrations `001`–`016`, embedded
+unqualified names in migrations resolve there). Migrations `001`–`017`, embedded
 via `//go:embed migrations/*.sql`, run under loon's plugin-migration path on
 boot. Every statement is `IF NOT EXISTS` / idempotent.
 
@@ -127,7 +134,11 @@ Extensions PUBLISHED (`Core.Register`):
   group listing, NZB fetch, Newznab query. The host's public pages + API
   consume this.
 - `pluginapi.UsenetAdminName` (`usenet.admin`) — the admin/service surface
-  (manual job triggers, wizard operations).
+  (manual job triggers, wizard operations, crawl-progress stats). Registered
+  in web/all AND worker (see process kinds above).
+- `pluginapi.UsenetNewznabName` (`usenet.newznab`) — the whole Newznab/Torznab
+  XML contract (caps / search / rss / get); the host mounts `/api` + `/rss`
+  and delegates the parsed request here.
 - `pluginapi.RegisterStats` — contributes indexer totals to the host's stats
   snapshot.
 
@@ -154,10 +165,12 @@ event bus means no-op.
 ## Lifecycle
 
 **Provision** (all processes): builds the `*PGStore`, reads config + applies
-defaults, constructs the staging backend behind the `stagingStore` seam,
-registers stats, and — on web/all — registers the index + admin capabilities
-and the admin views; on all/api, looks up the optional catalog. Registers the
-admin `status.json` route when a Router is present.
+defaults, validates the sink mode (an unknown value fails boot rather than
+silently splitting the catalogue), constructs the staging backend behind the
+`stagingStore` seam, and registers the per-process capabilities (see process
+kinds). The admin `status.json` route registers on web/all only. The optional
+catalog plugin is looked up in **Start** (provision order isn't guaranteed),
+in every process.
 
 **Start** (worker/all only): seeds a provider from config if the table is empty;
 runs **host adoption** (`adopt.go`) once in host-sink mode — carrying a legacy
@@ -178,7 +191,8 @@ junk sweep; NZB retention is opt-in, default keep-forever), **Usenet Health
 Check** (STAT segments, record healthy/broken/dead).
 
 **Stop**: no-op — the jobs derive from the root context and unwind on
-`SIGTERM`; leases expire on their own.
+`SIGTERM`; leases expire (or are taken over by a replacement worker once the
+heartbeat goes stale).
 
 ## Architecture notes
 
@@ -202,7 +216,12 @@ Coordination across hosts is two layers: **leases** (a row with an expiry per
 (backbone, group) or per job) guarantee no two workers crawl the same thing;
 **term-based assignment** (heartbeat presence + hash partitioning within a fixed
 time term) divides the groups so workers don't merely race for the leases. A
-worker that joins mid-term waits for the next boundary.
+worker that joins mid-term waits for the next boundary. Exclusivity is
+heartbeat-backed: a lease whose owner has written no heartbeat for two
+minutes is claimable IMMEDIATELY, regardless of expiry — a deploy renames the
+worker (container hostname), so without takeover every deploy idled the
+crawler until the TTL lapsed. The catch-up loop retries an all-blocked pass
+every 45s to ride out the takeover window.
 
 The **junk engine** is a full, data-driven port of the production filter: 24
 rules (regex + named heuristics for shapes regexes can't express) in the
@@ -236,7 +255,7 @@ known (the build path); the per-article ingest path runs the unsized subset.
 
 ## Testing
 
-Unit-tested (no DB): the junk engine (a 44-vector parity suite differentially
+Unit-tested (no DB): the junk engine (a 47-vector parity suite differentially
 verified against the production filter, plus rule-order/attribution and the
 size-band contract), the blacklist matcher (per-field matching, fail-closed on
 unknown field, one-bad-pattern isolation), coverage-cell math, backfill gap

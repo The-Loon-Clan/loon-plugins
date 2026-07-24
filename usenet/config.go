@@ -38,6 +38,9 @@ type Config struct {
 	NZBRetentionDays int `json:"nzb_retention_days"` // default 0 = never delete
 
 	CrawlIntervalMin    int `json:"crawl_interval_min"`     // crawl cadence (default 15)
+	TagFillIntervalMin  int `json:"tagfill_interval_min"`   // tag-fill + recategorize cadence (default 360)
+	PruneIntervalMin    int `json:"prune_interval_min"`     // prune cadence (default 1440)
+	BuildDrainPerPass   int `json:"build_drain_per_pass"`   // completed sets assembled per build pass (default 500)
 	Batch               int `json:"batch"`                  // article-number span per OVER request (default 3000)
 	MaxGroups           int `json:"max_groups"`             // cap active groups crawled per run (default 20)
 	MaxArticlesPerGroup int `json:"max_articles_per_group"` // cap the first-pass volume so a busy group can't pull millions (default 20000)
@@ -111,6 +114,15 @@ func (c *Config) applyDefaults() {
 	}
 	if c.CrawlIntervalMin <= 0 {
 		c.CrawlIntervalMin = 15
+	}
+	if c.TagFillIntervalMin <= 0 {
+		c.TagFillIntervalMin = 360
+	}
+	if c.PruneIntervalMin <= 0 {
+		c.PruneIntervalMin = 1440
+	}
+	if c.BuildDrainPerPass <= 0 {
+		c.BuildDrainPerPass = 500
 	}
 	if c.Batch <= 0 {
 		c.Batch = 3000
@@ -186,6 +198,9 @@ func (c *Config) knobFields() map[string]*int {
 		"retention_days":             &c.RetentionDays,
 		"nzb_retention_days":         &c.NZBRetentionDays,
 		"crawl_interval_min":         &c.CrawlIntervalMin,
+		"tagfill_interval_min":       &c.TagFillIntervalMin,
+		"prune_interval_min":         &c.PruneIntervalMin,
+		"build_drain_per_pass":       &c.BuildDrainPerPass,
 		"batch":                      &c.Batch,
 		"max_groups":                 &c.MaxGroups,
 		"max_articles_per_group":     &c.MaxArticlesPerGroup,
@@ -222,8 +237,14 @@ func (c Config) withOverrides(s map[string]string) Config {
 	out := c
 	for key, dst := range out.knobFields() {
 		if raw, ok := s[key]; ok {
-			if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-				*dst = n
+			if n, err := strconv.Atoi(raw); err == nil {
+				// nzb_retention_days: 0 is a MEANINGFUL value ("keep forever" —
+				// the UI's own help text promises it), so a stored 0 must
+				// override a non-zero config.yml default. Everywhere else 0
+				// still means "use the built-in default".
+				if n > 0 || (n == 0 && key == "nzb_retention_days") {
+					*dst = n
+				}
 			}
 		}
 	}

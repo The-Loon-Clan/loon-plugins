@@ -123,6 +123,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return fmt.Errorf("usenet: staging: %w", err)
 	}
 	p.staging = staging
+	// Fail fast on an unknown sink: SinkMode exists because a mistyped literal
+	// would silently fall through to internal mode and SPLIT THE CATALOGUE —
+	// but typing alone doesn't validate; this does (newStaging already does
+	// the same for staging modes).
+	if p.cfg.Sink != SinkInternal && p.cfg.Sink != SinkHost {
+		return fmt.Errorf("usenet: unknown sink %q (want %q or %q)", p.cfg.Sink, SinkInternal, SinkHost)
+	}
 	p.svc = &service{store: p.st, retentionDays: p.cfg.RetentionDays}
 
 	// Contribute indexer totals to the stats snapshot (collected in the worker
@@ -172,8 +179,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 		}
 	}
 
-	// worker/all: register the three grouped jobs. The NZB Builder is a distinct
-	// job because "creating the files" is the point of an indexer.
+	// worker/all: register the six pipeline jobs (all "Usenet "-prefixed so
+	// they never collide with a host's own job names in the shared registry).
 	if c.Process == "worker" || c.Process == "all" {
 		p.crawlJob = c.Scheduler.RegisterJob("Usenet Crawler",
 			"Fetches recent article overviews from active newsgroups").MarkOffPeak()
@@ -182,9 +189,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 		p.buildJob = c.Scheduler.RegisterJob("Usenet Builder",
 			"Assembles complete article sets into downloadable NZB files").MarkOffPeak()
 		p.tagJob = c.Scheduler.RegisterJob("Usenet Tag Fill",
-			"Re-parses resolution/source/codec/audio/language tags for untagged NZBs")
+			"Re-parses quality tags for untagged NZBs and recategorizes default-category releases")
 		p.pruneJob = c.Scheduler.RegisterJob("Usenet Prune",
-			"Deletes NZBs older than the retention window")
+			"Sweeps stale staging + junk; deletes old NZBs only when nzb_retention_days is set")
 		p.healthJob = c.Scheduler.RegisterJob("Usenet Health Check",
 			"STATs stored NZBs to find releases whose articles have expired").MarkOffPeak()
 		p.crawlJob.SetTrigger(func() { go p.runCrawl(p.ctx) })
@@ -223,6 +230,10 @@ func (p *Plugin) Start(ctx context.Context) error {
 			return time.Duration(p.effective(ctx).BackfillIntervalMin) * time.Minute
 		case "Usenet Health Check":
 			return time.Duration(p.effective(ctx).HealthIntervalMin) * time.Minute
+		case "Usenet Tag Fill":
+			return time.Duration(p.effective(ctx).TagFillIntervalMin) * time.Minute
+		case "Usenet Prune":
+			return time.Duration(p.effective(ctx).PruneIntervalMin) * time.Minute
 		}
 		if prevInterval != nil {
 			return prevInterval(ctx, jobName, def)
@@ -259,8 +270,10 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// Boot backfill after the forward crawl has had a pass to seed watermarks.
 	p.core.Scheduler.RunLoop(ctx, p.backfillJob, 3*time.Minute, backfillInterval, p.runBackfill)
 	p.core.Scheduler.RunLoop(ctx, p.buildJob, 90*time.Second, interval, p.runBuild)
-	p.core.Scheduler.RunLoop(ctx, p.tagJob, 5*time.Minute, 6*time.Hour, p.runTagFill)
-	p.core.Scheduler.RunLoop(ctx, p.pruneJob, 10*time.Minute, 24*time.Hour, p.runPrune)
+	p.core.Scheduler.RunLoop(ctx, p.tagJob, 5*time.Minute,
+		time.Duration(p.cfg.TagFillIntervalMin)*time.Minute, p.runTagFill)
+	p.core.Scheduler.RunLoop(ctx, p.pruneJob, 10*time.Minute,
+		time.Duration(p.cfg.PruneIntervalMin)*time.Minute, p.runPrune)
 	// Health checking runs on idle connections (TryDo), so a long boot delay just
 	// keeps it out of the way while the crawler seeds watermarks.
 	p.core.Scheduler.RunLoop(ctx, p.healthJob, 15*time.Minute,
@@ -287,7 +300,7 @@ func (p *Plugin) runTagFillLocked(ctx context.Context) {
 	n, err := p.st.retagUntagged(ctx, 500)
 	if err != nil {
 		p.tagJob.SetError(err.Error())
-		p.core.Errors.Report(ctx, "usenet/tag-fill", err)
+		p.reportErr(ctx, "usenet/tag-fill", err)
 		return
 	}
 	p.tagJob.Log("re-tagged %d NZB(s)", n)
@@ -295,7 +308,7 @@ func (p *Plugin) runTagFillLocked(ctx context.Context) {
 	// before a catalog-rule change).
 	if p.catalog != nil {
 		if rc, err := p.st.recategorizeDefaults(ctx, p.catalog.Categorize, 2000); err != nil {
-			p.core.Errors.Report(ctx, "usenet/recategorize", err)
+			p.reportErr(ctx, "usenet/recategorize", err)
 		} else if rc > 0 {
 			p.tagJob.Log("recategorized %d release(s)", rc)
 		}
@@ -326,7 +339,12 @@ func (p *Plugin) seedServer(ctx context.Context) {
 	if p.cfg.Server.Host == "" {
 		return
 	}
-	if _, ok, _ := p.st.getServer(ctx); ok {
+	if _, ok, err := p.st.getServer(ctx); err != nil {
+		// A transient read error must NOT read as "table empty": proceeding
+		// would saveServer the config seed over an operator-edited row.
+		p.core.Errors.Report(ctx, "usenet/seed-server", err)
+		return
+	} else if ok {
 		return
 	}
 	err := p.st.saveServer(ctx, pluginapi.Server{

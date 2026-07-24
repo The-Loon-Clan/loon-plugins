@@ -157,16 +157,12 @@ func (p *Plugin) status(ctx context.Context) StatusReport {
 			rep.BackfillETASeconds = int64(d.Seconds())
 		}
 	}
-	// PG staging only: builderInfo is a GROUP BY over the pg staging table —
-	// meaningless zeros under redis staging, and at real volume (33M rows,
-	// prod 2026-07-24) a 30s+ disk-spilling aggregation that this endpoint
-	// would re-run EVERY 5s poll. Redis installs read ready_groups instead.
-	if p.cfg.Staging != StagingRedis {
-		if bi, err := p.st.builderInfo(ctx, 1); err == nil {
-			rep.PendingReleases = bi.Releases
-			rep.ReadyReleases = bi.Ready
-		}
-	}
+	// builderInfo NEVER runs here, in any mode: it is a GROUP BY over the
+	// whole pg staging table (a 30s+ disk-spilling aggregation at the 33M-row
+	// scale prod actually hit), and this endpoint is polled every 5s — slow
+	// polls pile up until the DB saturates. The Jobs tab's Builder pane runs
+	// it per RENDER (operator-initiated); the poll makes do with the
+	// telemetry sample (pending_count) and redis's O(1) ready_groups.
 	if provs, err := p.st.listServers(ctx); err == nil {
 		for _, pr := range provs {
 			r := ProviderReport{

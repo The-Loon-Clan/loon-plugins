@@ -105,7 +105,7 @@ func capitalize(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// ── prod-ported title/category helpers (source of truth: indexer-site) ──
+// ── title/category helpers (ported from prod; canonical here since the legacy crawler was deleted) ──
 
 // extractTitle pulls the quoted filename out of a base subject when one is
 // present — the Usenet convention is `Release Name "file.ext" yEnc (n/m)`.
