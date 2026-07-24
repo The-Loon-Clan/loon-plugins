@@ -129,6 +129,11 @@ type HealthStore interface {
 	updateNzbHealth(ctx context.Context, id int64, status string, total, missing, par2 int) error
 	touchHealthChecked(ctx context.Context, id int64) error
 	healthBreakdown(ctx context.Context) (map[string]int, error)
+	// catalogTotals is the internal-sink Index Stats read: count + size of the
+	// plugin's own catalogue. That table is small by construction (internal
+	// mode is the standalone/demo path), so the SUM is fine — host mode reads
+	// the host's CACHED stats through the CatalogStats capability instead.
+	catalogTotals(ctx context.Context) (count, size int64, err error)
 }
 
 // WorkerStore is crawler presence, used to split groups between hosts (assign.go).

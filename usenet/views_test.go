@@ -130,8 +130,16 @@ func TestCrawlersRendersFleetAndWorkers(t *testing.T) {
 		"Pass": passVM{Any: true, Running: true, Groups: 5, Batches: 40, Failed: 2,
 			Articles: 120000, Staged: 9000, Wire: "42.0 MB", Duration: "1m30s",
 			Rate: "1333 art/s", Through: "0.47 MB/s", Providers: 2},
-		"Errors":      []errorVM{{When: "10:04:11", Op: "usenet/crawl-fetch", Msg: "430 no such article"}},
-		"Health":      healthVM{Healthy: 80, Broken: 15, Dead: 5, Unknown: 100, Total: 200, HealthyPct: 40, BrokenPct: 7, DeadPct: 2},
+		"Errors": []errorVM{{When: "10:04:11", Op: "usenet/crawl-fetch", Msg: "430 no such article"}},
+		"Health": healthVM{Healthy: 80, Broken: 15, Dead: 5, Unknown: 100, Total: 200, HealthyPct: 40, BrokenPct: 7, DeadPct: 2},
+		"IndexStats": indexStatsVM{
+			GroupsActive: 28, GroupsTotal: 30,
+			HaveCatalog: true, CatalogCached: true,
+			Releases: 851454, TotalSize: "23.0 GB",
+			Staging: stagingInfo{Mode: "redis", Keys: 1200, ReadyGroups: 4, MemUsedBytes: 1 << 30, MemMaxBytes: 8 << 30},
+			MemUsed: "1.0 GB", MemMax: "8.0 GB",
+		},
+		"HostSink":    true,
 		"AutoRefresh": false,
 		"Msg":         "",
 		"Err":         "",
@@ -141,10 +149,15 @@ func TestCrawlersRendersFleetAndWorkers(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"news.eweka.nl:563", "omicron", "18 / 20", "benched",
+		// provider pills + per-provider panel (dial state from telemetry)
+		"news.eweka.nl:563", "omicron", "18 open / 20 target", "2 resets",
+		"benched", `data-bs-toggle="pill"`, "provider-test",
 		"hostA/1/abcd", "(this host)", "healthy", "Crawler hosts",
 		"Crawl in progress", "1333 art/s", "0.47 MB/s", "2 failed",
 		"Recent errors", "430 no such article",
+		// Index stats card: host-cached catalog + redis staging rows
+		"Index stats", "851454", "host cache, refreshed hourly",
+		"4 sets ready to assemble", "1.0 GB",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("crawlers page missing %q", want)

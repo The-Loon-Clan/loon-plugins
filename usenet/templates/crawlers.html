@@ -39,6 +39,37 @@
     </div>
 </div>
 
+{{with .IndexStats}}
+<div class="card mt-3">
+    <div class="card-header">Index stats</div>
+    <div class="card-body">
+    <dl class="row mb-0" style="font-size:.9rem">
+        <dt class="col-sm-4">Newsgroups (active / total)</dt>
+        <dd class="col-sm-8">{{.GroupsActive}} / {{.GroupsTotal}}</dd>
+        {{if .HaveCatalog}}
+        <dt class="col-sm-4">Releases</dt>
+        <dd class="col-sm-8">{{.Releases}}{{if .CatalogCached}} <span class="text-muted small">(host cache, refreshed hourly)</span>{{end}}</dd>
+        <dt class="col-sm-4">Total size</dt>
+        <dd class="col-sm-8">{{.TotalSize}}</dd>
+        {{end}}
+        {{if eq .Staging.Mode "redis"}}
+        <dt class="col-sm-4">Staging (Redis)</dt>
+        <dd class="col-sm-8">{{.Staging.Keys}} keys · {{.Staging.ReadyGroups}} sets ready to assemble</dd>
+        <dt class="col-sm-4">Staging memory</dt>
+        <dd class="col-sm-8">{{.MemUsed}}{{if gt .Staging.MemMaxBytes 0}} / {{.MemMax}}{{else}} <span class="text-muted small">(no maxmemory — back-pressure disabled)</span>{{end}}</dd>
+        {{else}}
+        <dt class="col-sm-4">Staged articles</dt>
+        <dd class="col-sm-8">{{.Staging.StagedArticles}}</dd>
+        {{end}}
+        {{if $.BackfillETA}}
+        <dt class="col-sm-4">Backfill ETA</dt>
+        <dd class="col-sm-8">{{$.BackfillETA}} <span class="text-muted small">at {{$.Backfill.Rate}}</span></dd>
+        {{end}}
+    </dl>
+    </div>
+</div>
+{{end}}
+
 {{/* PG-staging only: these numbers are a GROUP BY over the articles table,
      which redis-staging installs keep in Redis — the card would show zeros
      while the crawler works flat out. */}}
@@ -102,7 +133,7 @@
 </div>
 
 <div class="card mt-3">
-    <div class="card-header">Coverage</div>
+    <div class="card-header">Newsgroups</div>
     <div class="card-body">
     <div class="cov-legend">
         <span><span class="dot" style="background:var(--bs-warning)"></span>pending backfill</span>
@@ -120,7 +151,9 @@
             <thead><tr>
                 <th>Group</th><th style="min-width:160px">Coverage</th>
                 <th>Forward</th><th>Backfill</th>
-                <th class="text-end">NZBs</th><th class="text-end">Staged</th>
+                {{/* Per-group release counts read the plugin's own table, which
+                     host-sink mode leaves empty — hide rather than show 0s. */}}
+                {{if not $.HostSink}}<th class="text-end">NZBs</th>{{end}}<th class="text-end">Staged</th>
                 <th>Last crawl</th><th></th>
             </tr></thead>
             <tbody>
@@ -153,7 +186,7 @@
                             {{if .Remaining}}<div class="text-muted" style="font-size:.75rem">{{.Remaining}} left{{if gt .Fragments 1}} · {{.Fragments}} runs{{end}}</div>{{end}}
                         {{end}}
                     </td>
-                    <td class="text-end">{{.NZBs}}</td>
+                    {{if not $.HostSink}}<td class="text-end">{{.NZBs}}</td>{{end}}
                     <td class="text-end">{{.Staged}}</td>
                     <td class="small text-muted">{{.LastCrawl}}</td>
                     <td>
@@ -223,32 +256,58 @@
 <div class="card mt-3">
   <div class="card-header">Providers</div>
   <div class="card-body">
-    <table class="table" style="font-size:.88rem;margin:0">
-      <thead><tr><th>Provider</th><th>Backbone</th><th>Role</th><th>Connections</th><th>State</th></tr></thead>
-      <tbody>
-      {{range .Fleet}}
-        <tr{{if not .Enabled}} style="opacity:.5"{{end}}>
-          <td>{{.Name}}<div style="opacity:.6;font-size:.8rem">{{.Host}}</div></td>
-          <td><code>{{.Backbone}}</code></td>
-          <td>{{.Role}}</td>
-          <td>{{if .Dialled}}{{.Open}} / {{.Target}}{{if gt .Resets 0}}
-                <span style="opacity:.6" title="connections discarded after an error">· {{.Resets}} reset</span>{{end}}
-              {{else}}<span style="opacity:.6">not dialled yet</span>{{end}}</td>
-          <td>
-            {{if not .Enabled}}<span style="opacity:.7">disabled</span>
-            {{else if .Down}}<span style="color:#e0a030">benched — failing, backup may cover it</span>
-            {{else if .Dialled}}<span style="color:#4caf50">connected</span>
-            {{else}}<span style="opacity:.7">idle</span>{{end}}
-          </td>
-        </tr>
-      {{else}}
-        <tr><td colspan="5" style="opacity:.7">No providers configured — add one in Settings.</td></tr>
+    {{if .Fleet}}
+    {{/* One pill per provider, panel below — the "tab each / list to select"
+         layout. Dial state comes from the worker-published telemetry, so it is
+         live on the web process too. */}}
+    <ul class="nav nav-pills mb-3" role="tablist" style="gap:.35rem">
+      {{range $i, $p := .Fleet}}
+      <li class="nav-item">
+        <button class="nav-link py-1{{if eq $i 0}} active{{end}}" data-bs-toggle="pill" data-bs-target="#prov-pane-{{$p.ID}}" type="button">
+          {{$p.Name}}
+          {{if not $p.Enabled}}<span class="badge bg-secondary ms-1">off</span>
+          {{else if $p.Down}}<span class="badge bg-warning text-dark ms-1">benched</span>
+          {{else if $p.Dialled}}<span class="badge bg-success ms-1">connected</span>{{end}}
+        </button>
+      </li>
       {{end}}
-      </tbody>
-    </table>
-    <p style="opacity:.6;font-size:.8rem;margin:.5rem 0 0">
+    </ul>
+    <div class="tab-content">
+      {{range $i, $p := .Fleet}}
+      <div class="tab-pane{{if eq $i 0}} active{{end}}" id="prov-pane-{{$p.ID}}">
+        <dl class="row mb-0" style="font-size:.9rem">
+          <dt class="col-sm-3">Server</dt><dd class="col-sm-9">{{$p.Host}}</dd>
+          <dt class="col-sm-3">Backbone</dt><dd class="col-sm-9"><code>{{$p.Backbone}}</code></dd>
+          <dt class="col-sm-3">Role</dt><dd class="col-sm-9">{{$p.Role}}{{if not $p.Enabled}} · <span class="text-muted">disabled — not crawled</span>{{end}}</dd>
+          <dt class="col-sm-3">Connections</dt>
+          <dd class="col-sm-9">
+            {{if $p.Dialled}}{{$p.Open}} open / {{$p.Target}} target{{if gt $p.Busy 0}} · {{$p.Busy}} busy{{end}}{{if gt $p.Resets 0}} · <span title="connections discarded after an error">{{$p.Resets}} resets</span>{{end}}
+            {{else}}<span class="text-muted">not dialled yet</span>{{end}}
+          </dd>
+          <dt class="col-sm-3">State</dt>
+          <dd class="col-sm-9">
+            {{if not $p.Enabled}}<span class="text-muted">disabled</span>
+            {{else if $p.Down}}<span style="color:#e0a030">benched — failing, a backup may cover it</span>
+            {{else if $p.Dialled}}<span style="color:#4caf50">connected</span>
+            {{else}}<span class="text-muted">idle</span>{{end}}
+          </dd>
+        </dl>
+        <div class="mt-2 d-flex gap-2">
+          <form method="post" action="/admin/p/usenet/provider-test" style="display:inline">
+            <input type="hidden" name="id" value="{{$p.ID}}">
+            <button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="dial the stored credentials — nothing is saved">Test connection</button>
+          </form>
+          <a class="btn btn-sm btn-outline-secondary py-0" href="/admin/p/usenet#providers">Edit in Providers tab</a>
+        </div>
+      </div>
+      {{end}}
+    </div>
+    <p style="opacity:.6;font-size:.8rem;margin:.75rem 0 0">
       Providers on the same backbone share crawl progress; different backbones add content.
     </p>
+    {{else}}
+    <div class="empty">No providers configured — add one in the Providers tab.</div>
+    {{end}}
   </div>
 </div>
 

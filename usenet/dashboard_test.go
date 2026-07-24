@@ -93,6 +93,7 @@ func TestWorkerTelemetryRoundTrip(t *testing.T) {
 		CrawlCur:  cur, CrawlLast: last,
 		BackfillRate: 123.5,
 		Errors:       []crawlError{{At: time.Now().Truncate(time.Second), Op: "usenet/crawl", Msg: "boom"}},
+		Fleet:        map[int]providerStat{7: {Open: 18, Target: 20, Busy: 3, Resets: 2, Down: true}},
 	}
 	b, err := json.Marshal(in)
 	if err != nil {
@@ -113,6 +114,10 @@ func TestWorkerTelemetryRoundTrip(t *testing.T) {
 	}
 	if pickPass(out.CrawlCur, out.CrawlLast).Articles != 500 {
 		t.Error("published pass not selectable via pickPass")
+	}
+	fs, ok := out.Fleet[7]
+	if !ok || fs.Open != 18 || fs.Target != 20 || fs.Busy != 3 || fs.Resets != 2 || !fs.Down {
+		t.Errorf("fleet dial stats lost in transit: %+v", out.Fleet)
 	}
 }
 

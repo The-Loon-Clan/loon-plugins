@@ -9,10 +9,11 @@ machine-generated junk at ingest.
 
 Users see it two ways. **Operators** get one admin page at `/admin/p/usenet`
 (loon `SlotAdminPage`), tabbed: the provider fleet (with per-row connection
-test), indexing knobs, newsgroup curation, a live Crawlers dashboard (coverage
-bars, per-backbone progress, recently built releases, an aggregate backfill ETA,
-worker/fleet panels), and Filters — the operator blacklist plus per-rule hit
-counters.
+test), indexing knobs, newsgroup curation, a live Crawlers dashboard
+(newsgroup coverage bars, live crawl progress, index stats, NZB health,
+per-provider panels with live connection state, recently built releases, an
+aggregate backfill ETA, worker panels), and Filters — the operator blacklist
+plus per-rule hit counters.
 **End users** get whatever the host builds on the published index capability —
 search results, group browse, and a Newznab/Torznab `/api` + `/rss` endpoint.
 
@@ -140,6 +141,11 @@ Extensions CONSUMED (`Core.Lookup`):
   implementations**: assembled releases go out through the sink, health
   candidates/verdicts flow through the health store. Host mode without them is a
   loud refusal.
+- `pluginapi.UsenetCatalogStatsName` — optional, `sink: host` only: catalog
+  totals + the health breakdown for the dashboard's Index Stats and NZB Health
+  cards (in host mode the releases and verdicts live in the host's domain,
+  invisible to the plugin's tables). A host should serve it from CACHED
+  numbers; absent, those cards degrade to empty.
 
 Events: emits `pluginapi.EventIngested` after a build pass creates releases, so
 a host subscriber (e.g. a cache invalidator) can react. Best-effort — no host

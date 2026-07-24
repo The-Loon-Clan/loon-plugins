@@ -495,6 +495,27 @@ func (r *redisStaging) pressure(ctx context.Context) (float64, error) {
 	return ratio, nil
 }
 
+// stagingInfo answers the dashboard's staging readout with the numbers redis
+// can give in O(1): DBSIZE (≈2 keys per staged set), the ready-queue depth,
+// and the memory ceiling driving back-pressure. A per-article count would mean
+// summing HLENs across every set — a scan — so it stays zero in this mode.
+func (r *redisStaging) stagingInfo(ctx context.Context) (stagingInfo, error) {
+	out := stagingInfo{Mode: "redis"}
+	if n, err := r.rdb.DBSize(ctx).Result(); err == nil {
+		out.Keys = n
+	}
+	if n, err := r.rdb.LLen(ctx, readyKey).Result(); err == nil {
+		out.ReadyGroups = n
+	}
+	info, err := r.rdb.Info(ctx, "memory").Result()
+	if err != nil {
+		return out, err
+	}
+	out.MemUsedBytes = parseInfoInt(info, "used_memory:")
+	out.MemMaxBytes = parseInfoInt(info, "maxmemory:")
+	return out, nil
+}
+
 // parseInfoInt pulls an integer field out of a Redis INFO section (CRLF lines
 // like "used_memory:12345").
 func parseInfoInt(info, prefix string) int64 {

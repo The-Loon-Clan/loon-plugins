@@ -85,6 +85,16 @@ func (s *PGStore) touchHealthChecked(ctx context.Context, id int64) error {
 }
 
 // healthBreakdown counts releases by verdict, for the stats surface.
+// catalogTotals counts the plugin's own catalogue (internal sink mode).
+func (s *PGStore) catalogTotals(ctx context.Context) (count, size int64, err error) {
+	err = s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.QueryRowContext(ctx,
+			`SELECT COUNT(*), COALESCE(SUM(size_bytes), 0)
+			   FROM nzbs WHERE status = 'completed'`).Scan(&count, &size)
+	})
+	return count, size, err
+}
+
 func (s *PGStore) healthBreakdown(ctx context.Context) (map[string]int, error) {
 	type row struct {
 		Status string `db:"health_status"`

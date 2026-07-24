@@ -30,6 +30,20 @@ type stagingStore interface {
 	// pressure reports staging fullness 0.0-1.0 for back-pressure. Phase B wires
 	// it into the backfill loop. pg: staged rows / maxRows; redis: used/maxmemory.
 	pressure(ctx context.Context) (float64, error)
+	// stagingInfo is the dashboard's staging readout. Each mode fills what it
+	// answers CHEAPLY and leaves the rest zero; nothing here may cost a scan.
+	stagingInfo(ctx context.Context) (stagingInfo, error)
+}
+
+// stagingInfo is the Index Stats card's staging section. Mode discriminates
+// which fields are meaningful (redis: key/queue/memory; pg: row count).
+type stagingInfo struct {
+	Mode           string // "pg" | "redis"
+	StagedArticles int64  // pg only: rows in the articles table
+	Keys           int64  // redis only: DBSIZE (≈2 keys per staged release set)
+	ReadyGroups    int64  // redis only: LLEN nzb:ready — sets awaiting assembly
+	MemUsedBytes   int64  // redis only
+	MemMaxBytes    int64  // redis only; 0 = unbounded
 }
 
 // pgStaging is the durable, never-lost backend: every staged article is a
@@ -49,6 +63,11 @@ func newPGStaging(pg *PGStore, limits func(context.Context) (int, int)) *pgStagi
 func (s *pgStaging) prune(ctx context.Context) (int64, error) {
 	_, hours := s.limits(ctx)
 	return s.PGStore.pruneStagedOlderThan(ctx, hours)
+}
+
+func (s *pgStaging) stagingInfo(ctx context.Context) (stagingInfo, error) {
+	n, err := s.PGStore.stagedCount(ctx)
+	return stagingInfo{Mode: "pg", StagedArticles: int64(n)}, err
 }
 
 func (s *pgStaging) pressure(ctx context.Context) (float64, error) {

@@ -29,6 +29,11 @@ type workerTelemetry struct {
 	BackfillRate float64        `json:"backfill_rate"`
 	Errors       []crawlError   `json:"errors"`
 	Built        []builtRelease `json:"built"`
+	// Fleet is the per-provider connection-pool state (keyed by provider id).
+	// Dial health lives in the worker's in-memory providerFleet; publishing it
+	// is what lets the web page show open/target/resets instead of an eternal
+	// "not dialled yet".
+	Fleet map[int]providerStat `json:"fleet,omitempty"`
 }
 
 // pickPass prefers the running pass, falling back to the last completed one,
@@ -51,6 +56,11 @@ func (p *Plugin) localTelemetry() workerTelemetry {
 	tv.BackfillRate = p.tel.backfill.rate()
 	tv.Errors = p.tel.recentErrors()
 	tv.Built = p.tel.recentBuilt()
+	if p.fleet != nil {
+		if stats := p.fleet.snapshotStats(time.Now()); len(stats) > 0 {
+			tv.Fleet = stats
+		}
+	}
 	return tv
 }
 

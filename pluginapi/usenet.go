@@ -379,3 +379,46 @@ func LookupReleaseHealthStore(c *core.Core) (ReleaseHealthStore, bool) {
 	s, ok := v.(ReleaseHealthStore)
 	return s, ok
 }
+
+// UsenetCatalogStatsName is an OPTIONAL capability a host registers so the
+// plugin's dashboard can show catalog totals and the health breakdown in
+// sink=host mode — where the releases (and the verdicts the health job writes
+// through ReleaseHealthStore) live in the host's domain, invisible to the
+// plugin's own tables. A host should serve this from CACHED numbers: the
+// dashboard renders per page view and must never trigger a catalog scan.
+// Absent (internal-sink installs, hosts that skip it), the plugin falls back
+// to its own tables.
+const UsenetCatalogStatsName = "usenet.catalog-stats"
+
+// HealthBreakdown is the catalog's health census. Counts, not percentages —
+// the consumer derives shares so rounding stays in one place.
+type HealthBreakdown struct {
+	Untested int64 `json:"untested"`
+	Healthy  int64 `json:"healthy"`
+	Broken   int64 `json:"broken"`
+	Dead     int64 `json:"dead"`
+}
+
+// CatalogStats is a point-in-time summary of the release catalog the sink
+// writes into. Staleness is the host's choice (document it in the UI); an
+// hourly cache is expected and fine.
+type CatalogStats struct {
+	Releases       int64           `json:"releases"`
+	TotalSizeBytes int64           `json:"total_size_bytes"`
+	Health         HealthBreakdown `json:"health"`
+}
+
+// CatalogStatsProvider is what the host registers under UsenetCatalogStatsName.
+type CatalogStatsProvider interface {
+	CatalogStats(ctx context.Context) (CatalogStats, error)
+}
+
+// LookupCatalogStats resolves the host-registered catalog stats, if any.
+func LookupCatalogStats(c *core.Core) (CatalogStatsProvider, bool) {
+	v, ok := c.Lookup(UsenetCatalogStatsName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(CatalogStatsProvider)
+	return s, ok
+}

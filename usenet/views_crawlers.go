@@ -83,31 +83,40 @@ func errorVMs(errs []crawlError) []errorVM {
 // its connections are actually working. Prod has no equivalent — it only ever
 // had a fixed primary/secondary pair.
 type providerVM struct {
+	ID                         int
 	Name, Host, Backbone, Role string
 	Enabled, Down, Dialled     bool
-	Open, Target               int
+	Open, Target, Busy         int
 	Resets                     int64
 }
 
-func (p *Plugin) fleetVMs(ctx context.Context) []providerVM {
+// fleetVMs renders the provider fleet. Dial stats come from the local fleet on
+// the process that runs the jobs, and from the worker-PUBLISHED telemetry
+// everywhere else — without the merge the web page showed every provider as
+// "not dialled yet" forever on a split deployment.
+func (p *Plugin) fleetVMs(ctx context.Context, published map[int]providerStat) []providerVM {
 	servers, err := p.st.listServers(ctx)
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/fleet-view", err)
 		return nil
 	}
 	stats := map[int]providerStat{}
-	if p.fleet != nil {
+	if p.runsJobs && p.fleet != nil {
 		stats = p.fleet.snapshotStats(time.Now())
+	} else if published != nil {
+		stats = published
 	}
 	out := make([]providerVM, len(servers))
 	for i, sv := range servers {
 		vm := providerVM{
+			ID:   sv.ID,
 			Name: sv.label(), Host: sv.addr(), Backbone: sv.backboneKey(),
 			Role: sv.Role, Enabled: sv.Enabled,
 		}
 		if st, ok := stats[sv.ID]; ok {
 			vm.Dialled = true
-			vm.Open, vm.Target, vm.Resets, vm.Down = st.Open, st.Target, st.Resets, st.Down
+			vm.Open, vm.Target, vm.Busy = st.Open, st.Target, st.Busy
+			vm.Resets, vm.Down = st.Resets, st.Down
 		}
 		out[i] = vm
 	}
@@ -159,21 +168,72 @@ type healthVM struct {
 	HealthyPct, BrokenPct, DeadPct        int
 }
 
-func (p *Plugin) healthVM(ctx context.Context) healthVM {
-	counts, err := p.st.healthBreakdown(ctx)
-	if err != nil {
-		p.core.Errors.Report(ctx, "usenet/health-view", err)
-		return healthVM{}
-	}
-	vm := healthVM{
-		Healthy: counts[healthHealthy], Broken: counts[healthBroken],
-		Dead: counts[healthDead], Unknown: counts[healthUnknown],
+// healthVM builds the health census. cs is the host's cached catalog stats
+// when sink=host (the verdicts the health job writes live in the HOST's
+// domain, so the plugin's own table would answer zeros there); nil means
+// internal mode — count our own table — or a host that skipped the optional
+// capability, which degrades to an absent card.
+func (p *Plugin) healthVM(ctx context.Context, cs *pluginapi.CatalogStats) healthVM {
+	var vm healthVM
+	if p.cfg.Sink == SinkHost {
+		if cs != nil {
+			vm = healthVM{
+				Healthy: int(cs.Health.Healthy), Broken: int(cs.Health.Broken),
+				Dead: int(cs.Health.Dead), Unknown: int(cs.Health.Untested),
+			}
+		}
+	} else {
+		counts, err := p.st.healthBreakdown(ctx)
+		if err != nil {
+			p.core.Errors.Report(ctx, "usenet/health-view", err)
+			return healthVM{}
+		}
+		vm = healthVM{
+			Healthy: counts[healthHealthy], Broken: counts[healthBroken],
+			Dead: counts[healthDead], Unknown: counts[healthUnknown],
+		}
 	}
 	vm.Total = vm.Healthy + vm.Broken + vm.Dead + vm.Unknown
 	if vm.Total > 0 {
 		vm.HealthyPct = vm.Healthy * 100 / vm.Total
 		vm.BrokenPct = vm.Broken * 100 / vm.Total
 		vm.DeadPct = vm.Dead * 100 / vm.Total
+	}
+	return vm
+}
+
+// indexStatsVM is the Index Stats card: the catalogue and staging at a glance.
+type indexStatsVM struct {
+	GroupsActive, GroupsTotal int
+	Releases                  int64
+	TotalSize                 string
+	HaveCatalog               bool // capability present (host) or own table (internal)
+	CatalogCached             bool // host mode: numbers are the host's hourly cache
+	Staging                   stagingInfo
+	MemUsed, MemMax           string
+}
+
+func (p *Plugin) indexStatsVM(ctx context.Context, activeGroups int, cs *pluginapi.CatalogStats) indexStatsVM {
+	vm := indexStatsVM{GroupsActive: activeGroups}
+	if total, err := p.st.groupCount(ctx); err == nil {
+		vm.GroupsTotal = total
+	}
+	if p.cfg.Sink == SinkHost {
+		if cs != nil {
+			vm.HaveCatalog, vm.CatalogCached = true, true
+			vm.Releases, vm.TotalSize = cs.Releases, fmtBytes(cs.TotalSizeBytes)
+		}
+	} else if count, size, err := p.st.catalogTotals(ctx); err == nil {
+		vm.HaveCatalog = true
+		vm.Releases, vm.TotalSize = count, fmtBytes(size)
+	} else {
+		p.core.Errors.Report(ctx, "usenet/catalog-totals", err)
+	}
+	if si, err := p.staging.stagingInfo(ctx); err == nil {
+		vm.Staging = si
+		vm.MemUsed, vm.MemMax = fmtBytes(si.MemUsedBytes), fmtBytes(si.MemMaxBytes)
+	} else {
+		p.reportErr(ctx, "usenet/staging-info", err)
 	}
 	return vm
 }
@@ -273,6 +333,18 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 			Size: fmtBytes(b.Size), Created: fmtTime(b.At),
 		}
 	}
+	// One catalog-stats fetch feeds both the health card and Index Stats (host
+	// mode; internal mode reads the plugin's own tables inside each VM).
+	var cs *pluginapi.CatalogStats
+	if p.cfg.Sink == SinkHost {
+		if prov, ok := pluginapi.LookupCatalogStats(p.core); ok {
+			if v, err := prov.CatalogStats(ctx); err == nil {
+				cs = &v
+			} else {
+				p.core.Errors.Report(ctx, "usenet/catalog-stats", err)
+			}
+		}
+	}
 	return p.frag("crawlers.html", map[string]any{
 		"Stats": stats, "Groups": groups, "Backbones": backbones,
 		"Pass":        statsVM(pickPass(tv.CrawlCur, tv.CrawlLast)),
@@ -280,8 +352,10 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		"Errors":      errorVMs(tv.Errors),
 		"BackfillETA": eta, "Jobs": jobs,
 		"Builder": builder, "PGStaging": pgStaging,
-		"Fleet": p.fleetVMs(ctx), "Workers": p.workerVMs(ctx),
-		"Health":      p.healthVM(ctx),
+		"Fleet": p.fleetVMs(ctx, tv.Fleet), "Workers": p.workerVMs(ctx),
+		"Health":      p.healthVM(ctx, cs),
+		"IndexStats":  p.indexStatsVM(ctx, len(stats.Groups), cs),
+		"HostSink":    p.cfg.Sink == SinkHost,
 		"RecentNzbs":  recentNzbs,
 		"AutoRefresh": running, "Msg": msg, "Err": errMsg,
 	})

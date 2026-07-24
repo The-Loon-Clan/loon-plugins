@@ -81,6 +81,18 @@ func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string) (te
 // always fail auth since the list never sends passwords to the browser.
 func (p *Plugin) actionTestProvider(gc *gin.Context) (template.HTML, error) {
 	pr := formProvider(gc)
+	// An id-only POST (the crawlers-tab provider panel) means "test the row as
+	// stored" — load the full config, not just the password.
+	if pr.Host == "" && pr.ID > 0 {
+		if servers, err := p.st.listServers(gc.Request.Context()); err == nil {
+			for _, sv := range servers {
+				if sv.ID == pr.ID {
+					pr.Host, pr.Port, pr.TLS, pr.Username = sv.Host, sv.Port, sv.TLS, sv.Username
+					break
+				}
+			}
+		}
+	}
 	if pr.Password == "" && pr.ID > 0 {
 		if pw, err := p.st.serverPassword(gc.Request.Context(), pr.ID); err == nil {
 			pr.Password = pw
