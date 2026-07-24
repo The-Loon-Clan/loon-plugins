@@ -198,7 +198,21 @@ func (p *Plugin) actionTuneGroup(gc *gin.Context) (template.HTML, error) {
 	ret, _ := strconv.Atoi(gc.PostForm("retention_days"))
 	thr, _ := strconv.Atoi(gc.PostForm("throttle_ms"))
 	low := gc.PostForm("low_priority") != ""
-	if err := p.st.setGroupTuning(gc.Request.Context(), name, ret, thr, low); err != nil {
+	err := p.st.setGroupTuning(gc.Request.Context(), name, ret, thr, low)
+	// Same in-place contract as actionToggleGroup: the tuning inputs (the
+	// Low-pri checkbox especially) auto-save via fetch, so a bare status is
+	// the whole answer — a redirect-and-re-render per checkbox would re-run
+	// every dashboard query and jump the scroll. No-JS still gets the
+	// redirect below.
+	if gc.GetHeader("X-Requested-With") == "fetch" {
+		if err != nil {
+			gc.String(http.StatusInternalServerError, "save failed")
+		} else {
+			gc.Status(http.StatusNoContent)
+		}
+		return "", nil
+	}
+	if err != nil {
 		return settingsRedirect(gc, "err", err.Error())
 	}
 	return settingsRedirect(gc, "msg", name+" updated")
