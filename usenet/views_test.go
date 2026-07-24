@@ -130,6 +130,11 @@ func TestCrawlersRendersFleetAndWorkers(t *testing.T) {
 		"Pass": passVM{Any: true, Running: true, Groups: 5, Batches: 40, Failed: 2,
 			Articles: 120000, Staged: 9000, Wire: "42.0 MB", Duration: "1m30s",
 			Rate: "1333 art/s", Through: "0.47 MB/s", Providers: 2},
+		"Backfill": passVM{Any: true, Articles: 777, Staged: 700, Batches: 9,
+			Duration: "44s", Rate: "17 art/s"},
+		"Pending": []pendingSet{
+			{Base: "Some.Forming.Release", Group: "alt.binaries.anime", Have: 10, Need: 14, Segments: 10},
+		},
 		"Errors": []errorVM{{When: "10:04:11", Op: "usenet/crawl-fetch", Msg: "430 no such article"}},
 		"Health": healthVM{Healthy: 80, Broken: 15, Dead: 5, Unknown: 100, Total: 200, HealthyPct: 40, BrokenPct: 7, DeadPct: 2},
 		"IndexStats": indexStatsVM{
@@ -158,6 +163,9 @@ func TestCrawlersRendersFleetAndWorkers(t *testing.T) {
 		// Index stats card: host-cached catalog + redis staging rows
 		"Index stats", "851454", "host cache, refreshed hourly",
 		"4 sets ready to assemble", "1.0 GB",
+		// backfill line + the telemetry-sampled incomplete sets (redis mode)
+		"Last backfill", "777", "Forming releases", "Some.Forming.Release",
+		"10 / 14", // have/need
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("crawlers page missing %q", want)

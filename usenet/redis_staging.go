@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -514,6 +515,76 @@ func (r *redisStaging) stagingInfo(ctx context.Context) (stagingInfo, error) {
 	out.MemUsedBytes = parseInfoInt(info, "used_memory:")
 	out.MemMaxBytes = parseInfoInt(info, "maxmemory:")
 	return out, nil
+}
+
+// incompleteSets walks every active set and returns the largest incomplete
+// ones. SCAN over the per-group active sets + one pipelined HGetAll/HLen pair
+// per staged set — bounded by what is actually in flight (sets expire after
+// 2h), fine once per build pass, NOT for the render path.
+func (r *redisStaging) incompleteSets(ctx context.Context, limit int) ([]pendingSet, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 15
+	}
+	// Collect (group, hash) pairs from the active_groups:* sets.
+	type ref struct{ group, hash string }
+	var refs []ref
+	iter := r.rdb.Scan(ctx, 0, activeKey("*"), 200).Iterator()
+	for iter.Next(ctx) {
+		group := strings.TrimPrefix(iter.Val(), "active_groups:")
+		hashes, err := r.rdb.SMembers(ctx, iter.Val()).Result()
+		if err != nil {
+			continue
+		}
+		for _, h := range hashes {
+			refs = append(refs, ref{group: group, hash: h})
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
+	if len(refs) == 0 {
+		return nil, nil
+	}
+
+	pipe := r.rdb.Pipeline()
+	metas := make([]*redis.MapStringStringCmd, len(refs))
+	lens := make([]*redis.IntCmd, len(refs))
+	for i, rf := range refs {
+		metas[i] = pipe.HGetAll(ctx, grpKey(rf.group, rf.hash))
+		lens[i] = pipe.HLen(ctx, artKey(rf.group, rf.hash))
+	}
+	_, _ = pipe.Exec(ctx) // per-cmd errors surface below; expired keys just read empty
+
+	var out []pendingSet
+	for i, rf := range refs {
+		meta, err := metas[i].Result()
+		if err != nil || len(meta) == 0 {
+			continue // set expired between SCAN and read
+		}
+		have := int(lens[i].Val())
+		need := atoiField(meta["seg_total"])
+		if need <= 0 {
+			need = atoiField(meta["total_parts"])
+		}
+		if need <= 0 || have >= need {
+			continue // complete (or unknowable) — the builder will take it
+		}
+		out = append(out, pendingSet{
+			Base: meta["base_subject"], Group: rf.group,
+			Have: have, Need: need, Segments: have,
+			Multi: meta["file_parts"] == "true",
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Need-out[i].Have > out[j].Need-out[j].Have })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func atoiField(s string) int {
+	n, _ := strconv.Atoi(s)
+	return n
 }
 
 // parseInfoInt pulls an integer field out of a Redis INFO section (CRLF lines

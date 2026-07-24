@@ -34,6 +34,13 @@ type workerTelemetry struct {
 	// is what lets the web page show open/target/resets instead of an eternal
 	// "not dialled yet".
 	Fleet map[int]providerStat `json:"fleet,omitempty"`
+	// Jobs is the worker's own job snapshots (status + last activity). The
+	// jobs register only in the worker process, so without this the web
+	// page's Activity table cannot say whether anything is running.
+	Jobs []crawlerJobVM `json:"jobs,omitempty"`
+	// Pending is the incomplete-sets sample the build pass takes — the
+	// "which releases are still missing articles" readout.
+	Pending []pendingSet `json:"pending,omitempty"`
 }
 
 // pickPass prefers the running pass, falling back to the last completed one,
@@ -61,6 +68,8 @@ func (p *Plugin) localTelemetry() workerTelemetry {
 			tv.Fleet = stats
 		}
 	}
+	tv.Jobs, _ = p.jobVMs()
+	tv.Pending = p.tel.pendingSets()
 	return tv
 }
 

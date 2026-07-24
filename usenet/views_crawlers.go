@@ -87,7 +87,12 @@ type providerVM struct {
 	Name, Host, Backbone, Role string
 	Enabled, Down, Dialled     bool
 	Open, Target, Busy         int
-	Resets                     int64
+	// Configured is the per-worker pool size saved on the row (0 = default).
+	// Shown next to the LIVE target when they differ: a pool only re-dials at
+	// the next pass, and "I changed it but it still says 10" is exactly the
+	// confusion that caused.
+	Configured int
+	Resets     int64
 }
 
 // fleetVMs renders the provider fleet. Dial stats come from the local fleet on
@@ -111,7 +116,7 @@ func (p *Plugin) fleetVMs(ctx context.Context, published map[int]providerStat) [
 		vm := providerVM{
 			ID:   sv.ID,
 			Name: sv.label(), Host: sv.addr(), Backbone: sv.backboneKey(),
-			Role: sv.Role, Enabled: sv.Enabled,
+			Role: sv.Role, Enabled: sv.Enabled, Configured: sv.Connections,
 		}
 		if st, ok := stats[sv.ID]; ok {
 			vm.Dialled = true
@@ -306,11 +311,27 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 	for _, b := range backbones {
 		groups = append(groups, b.Groups...)
 	}
+	// The merged telemetry (local on the worker, worker-published on web) feeds
+	// the pass card, the error tail, the recently-built list, the job table,
+	// the incomplete-sets sample and the backfill rate — the numbers no shared
+	// table can answer in every mode.
+	tv := p.telemetryView(ctx)
 	jobs, running := p.jobVMs()
+	if len(jobs) == 0 && len(tv.Jobs) > 0 {
+		// Jobs register only in the worker process; on web the local registry
+		// is empty, so render the worker-published snapshots — without this
+		// the page cannot say whether anything is running.
+		jobs = tv.Jobs
+		for _, j := range jobs {
+			if j.Running {
+				running = true
+			}
+		}
+	}
 	// The Builder card reads the PG staging table (a GROUP BY over articles),
 	// so it only renders on pg-staging installs — with staging=redis those
 	// queries answer zero for a crawler working flat out, which is worse than
-	// no card.
+	// no card. Redis installs get the telemetry-sampled Pending list instead.
 	var builder BuilderInfo
 	pgStaging := p.cfg.Staging != StagingRedis
 	if pgStaging {
@@ -318,10 +339,6 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 			return "", err
 		}
 	}
-	// The merged telemetry (local on the worker, worker-published on web) feeds
-	// the pass card, the error tail, the recently-built list and the backfill
-	// rate — the numbers no shared table can answer in every mode.
-	tv := p.telemetryView(ctx)
 	eta := ""
 	if d, ok := backfillETA(stats.TotalBackfillRemaining, tv.BackfillRate); ok {
 		eta = fmtETA(d)
@@ -351,7 +368,7 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		"Backfill":    statsVM(pickPass(tv.BackfillCur, tv.BackfillLast)),
 		"Errors":      errorVMs(tv.Errors),
 		"BackfillETA": eta, "Jobs": jobs,
-		"Builder": builder, "PGStaging": pgStaging,
+		"Builder": builder, "PGStaging": pgStaging, "Pending": tv.Pending,
 		"Fleet": p.fleetVMs(ctx, tv.Fleet), "Workers": p.workerVMs(ctx),
 		"Health":      p.healthVM(ctx, cs),
 		"IndexStats":  p.indexStatsVM(ctx, len(stats.Groups), cs),

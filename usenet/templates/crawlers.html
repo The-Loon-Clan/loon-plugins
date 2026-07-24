@@ -34,6 +34,7 @@
           <dt class="col-sm-3">Connections</dt>
           <dd class="col-sm-9">
             {{if $p.Dialled}}{{$p.Open}} open / {{$p.Target}} target{{if gt $p.Busy 0}} · {{$p.Busy}} busy{{end}}{{if gt $p.Resets 0}} · <span title="connections discarded after an error">{{$p.Resets}} resets</span>{{end}}
+              {{if and (gt $p.Configured 0) (ne $p.Configured $p.Target)}}<span class="text-muted small">(configured {{$p.Configured}} — the pool re-dials at the next pass)</span>{{end}}
             {{else}}<span class="text-muted">not dialled yet</span>{{end}}
           </dd>
           <dt class="col-sm-3">State</dt>
@@ -170,12 +171,50 @@
       <span><strong id="pass-rate">{{.Pass.Rate}}</strong></span>
       <span><strong id="pass-through">{{.Pass.Through}}</strong></span>
     </div>
+    <div id="bf-line" style="display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.9rem;margin-top:.4rem{{if not .Backfill.Any}};display:none{{end}}">
+      <span style="opacity:.6"><span id="bf-title">{{if .Backfill.Running}}Backfill in progress{{else}}Last backfill{{end}}</span>:</span>
+      <span><strong id="bf-articles">{{.Backfill.Articles}}</strong> <span style="opacity:.6">fetched</span></span>
+      <span><strong id="bf-staged">{{.Backfill.Staged}}</strong> <span style="opacity:.6">staged</span></span>
+      <span><strong id="bf-batches">{{.Backfill.Batches}}</strong> <span style="opacity:.6">batches</span></span>
+      <span><strong id="bf-duration">{{.Backfill.Duration}}</strong></span>
+      <span><strong id="bf-rate">{{.Backfill.Rate}}</strong></span>
+    </div>
     <p style="opacity:.6;font-size:.8rem;margin:.5rem 0 0">
       Fetched counts overview lines pulled; staged counts what survived junk
       filtering and dedup, so a large gap between them is the filter working.
     </p>
   </div>
 </div>
+
+{{/* Redis staging: the incomplete-sets sample the build pass publishes with
+     the worker telemetry — which releases are still missing articles, and how
+     many. PG installs get the same readout from the Builder card below. */}}
+{{if and (not .PGStaging) .Pending}}
+<div class="card mt-3">
+    <div class="card-header">Forming releases ({{len .Pending}} incomplete)</div>
+    <div class="card-body">
+    <p class="text-muted small mb-2">
+        Staged releases still missing articles — later passes complete them, and
+        stale ones expire out of staging. Sampled each build pass.
+    </p>
+    <div class="table-responsive">
+        <table class="table table-dark table-sm align-middle">
+            <thead><tr><th>Release</th><th>Group</th><th class="text-end">Have / need</th><th class="text-end">Missing</th></tr></thead>
+            <tbody>
+            {{range .Pending}}
+                <tr>
+                    <td class="small" style="max-width:30rem;overflow-wrap:anywhere"><code>{{.Base}}</code></td>
+                    <td class="small text-muted">{{.Group}}</td>
+                    <td class="text-end small">{{.Have}} / {{.Need}} {{if .Multi}}files{{else}}segments{{end}}</td>
+                    <td class="text-end small" style="color:#e0a030">{{.Missing}}</td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+    </div>
+</div>
+{{end}}
 
 {{if .Errors}}
 <div class="card mt-3">
@@ -392,6 +431,16 @@
     set('pass-through', mbps.toFixed(2) + ' MB/s');
     var f = document.getElementById('pass-failed');
     if (f) { f.hidden = !p.failed_batches; f.textContent = '· ' + p.failed_batches + ' failed'; }
+    var b = st.backfill || {};
+    var bfAny = b.running || b.batches > 0 || b.articles > 0;
+    var line = document.getElementById('bf-line');
+    if (line && bfAny) {
+      line.style.display = 'flex';
+      set('bf-title', b.running ? 'Backfill in progress' : 'Last backfill');
+      set('bf-articles', b.articles); set('bf-staged', b.staged);
+      set('bf-batches', b.batches); set('bf-duration', fmtDur(b.duration_seconds));
+      set('bf-rate', Math.round(b.articles_per_second) + ' art/s');
+    }
   }
   setInterval(function () {
     var pane = document.getElementById('crawlers');

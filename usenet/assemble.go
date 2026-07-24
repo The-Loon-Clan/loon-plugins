@@ -146,6 +146,15 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 	}
 	p.buildJob.Log("built %d NZB file(s) from %d candidate group(s) (skipped %d blocked-ext, %d blacklisted)",
 		built, len(keys), skippedExt, skippedBL)
+	// Sample the incomplete sets into telemetry — the dashboard's "which
+	// releases are still missing articles" card. Done here, once per pass,
+	// because listing them (redis: SCAN + a pipelined read per set) is too
+	// heavy for the render path.
+	if sets, err := p.staging.incompleteSets(ctx, 15); err == nil {
+		p.tel.setPending(sets)
+	} else {
+		p.reportErr(ctx, "usenet/incomplete-sample", err)
+	}
 	if built > 0 {
 		// New releases changed the search surface — publish so a subscriber
 		// (e.g. a cache invalidator in the worker) can react. Best-effort: no

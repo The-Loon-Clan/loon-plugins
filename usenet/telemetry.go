@@ -159,6 +159,8 @@ type telemetry struct {
 	// history.
 	built     []builtRelease
 	builtNext int
+	// pending is the latest incomplete-sets sample (see pendingSet).
+	pending []pendingSet
 }
 
 // builtRelease is one crawler-assembled release, exported for the telemetry
@@ -185,6 +187,41 @@ func (t *telemetry) noteBuilt(title, group string, size int64) {
 	}
 	t.built[t.builtNext] = b
 	t.builtNext = (t.builtNext + 1) % builtRingSize
+}
+
+// pendingSet is one staged-but-incomplete release — the "missing articles"
+// readout. Sampled by the build pass (not per page render: listing redis sets
+// means SCAN + a pipelined read per set) and published with the telemetry.
+type pendingSet struct {
+	Base     string `json:"base"`
+	Group    string `json:"group"`
+	Have     int    `json:"have"`
+	Need     int    `json:"need"`
+	Segments int    `json:"segments"`
+	Multi    bool   `json:"multi"`
+}
+
+// Missing is the article shortfall — what the dashboard's "Forming releases"
+// card prints per row.
+func (p pendingSet) Missing() int {
+	if p.Need <= p.Have {
+		return 0
+	}
+	return p.Need - p.Have
+}
+
+// setPending replaces the incomplete-sets sample wholesale (one build pass =
+// one fresh sample).
+func (t *telemetry) setPending(sets []pendingSet) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.pending = sets
+}
+
+func (t *telemetry) pendingSets() []pendingSet {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.pending
 }
 
 // recentBuilt returns the built tail NEWEST FIRST.

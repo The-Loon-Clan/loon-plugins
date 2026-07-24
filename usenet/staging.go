@@ -33,6 +33,12 @@ type stagingStore interface {
 	// stagingInfo is the dashboard's staging readout. Each mode fills what it
 	// answers CHEAPLY and leaves the rest zero; nothing here may cost a scan.
 	stagingInfo(ctx context.Context) (stagingInfo, error)
+	// incompleteSets lists the largest staged-but-incomplete releases — the
+	// "which releases are still missing articles" readout. NOT render-path:
+	// the build pass samples it into telemetry (redis mode walks the active
+	// sets with pipelined reads, which is fine once per pass and unacceptable
+	// per page view).
+	incompleteSets(ctx context.Context, limit int) ([]pendingSet, error)
 }
 
 // stagingInfo is the Index Stats card's staging section. Mode discriminates
@@ -68,6 +74,21 @@ func (s *pgStaging) prune(ctx context.Context) (int64, error) {
 func (s *pgStaging) stagingInfo(ctx context.Context) (stagingInfo, error) {
 	n, err := s.PGStore.stagedCount(ctx)
 	return stagingInfo{Mode: "pg", StagedArticles: int64(n)}, err
+}
+
+func (s *pgStaging) incompleteSets(ctx context.Context, limit int) ([]pendingSet, error) {
+	bi, err := s.PGStore.builderInfo(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]pendingSet, len(bi.Pending))
+	for i, pr := range bi.Pending {
+		out[i] = pendingSet{
+			Base: pr.Base, Have: pr.Have, Need: pr.Need,
+			Segments: pr.Segments, Multi: pr.Multi,
+		}
+	}
+	return out, nil
 }
 
 func (s *pgStaging) pressure(ctx context.Context) (float64, error) {
