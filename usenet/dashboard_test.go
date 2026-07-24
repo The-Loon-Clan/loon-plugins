@@ -53,26 +53,66 @@ func TestPassReportFromStats(t *testing.T) {
 	}
 }
 
-// TestCurrentOrLastPrefersRunning: a poll during a pass must describe THAT pass;
+// TestPickPassPrefersRunning: a poll during a pass must describe THAT pass;
 // a poll between passes must still describe the last one rather than zeros.
-func TestCurrentOrLastPrefersRunning(t *testing.T) {
+func TestPickPassPrefersRunning(t *testing.T) {
+	pick := func(tr *passTracker) passStats { return pickPass(tr.snapshot()) }
+
 	var tr passTracker
-	if got := currentOrLast(&tr); got.Articles != 0 {
+	if got := pick(&tr); got.Articles != 0 {
 		t.Errorf("fresh tracker reported %+v", got)
 	}
 
 	tr.passStart(1)
 	tr.noteBatch(100, 90, 1000, true)
 	tr.passEnd()
-	if got := currentOrLast(&tr); got.Articles != 100 || got.InProgress {
+	if got := pick(&tr); got.Articles != 100 || got.InProgress {
 		t.Errorf("between passes = %+v, want the last completed pass", got)
 	}
 
 	tr.passStart(1)
 	tr.noteBatch(7, 7, 70, true)
-	got := currentOrLast(&tr)
+	got := pick(&tr)
 	if !got.InProgress || got.Articles != 7 {
 		t.Errorf("during a pass = %+v, want the running one", got)
+	}
+}
+
+// TestWorkerTelemetryRoundTrip pins the publish format: what the worker
+// marshals into the settings table must come back identical on the web side —
+// the whole cross-process telemetry contract is this round trip.
+func TestWorkerTelemetryRoundTrip(t *testing.T) {
+	var tr passTracker
+	tr.passStart(2)
+	tr.noteBatch(500, 450, 9000, true)
+	tr.passEnd()
+	cur, last := tr.snapshot()
+
+	in := workerTelemetry{
+		UpdatedAt: time.Now().Truncate(time.Second),
+		CrawlCur:  cur, CrawlLast: last,
+		BackfillRate: 123.5,
+		Errors:       []crawlError{{At: time.Now().Truncate(time.Second), Op: "usenet/crawl", Msg: "boom"}},
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out workerTelemetry
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.CrawlLast.Articles != 500 || out.CrawlLast.Staged != 450 || out.CrawlLast.WireBytes != 9000 {
+		t.Errorf("pass counters lost in transit: %+v", out.CrawlLast)
+	}
+	if out.BackfillRate != 123.5 {
+		t.Errorf("rate lost: %v", out.BackfillRate)
+	}
+	if len(out.Errors) != 1 || out.Errors[0].Msg != "boom" {
+		t.Errorf("errors lost: %+v", out.Errors)
+	}
+	if pickPass(out.CrawlCur, out.CrawlLast).Articles != 500 {
+		t.Error("published pass not selectable via pickPass")
 	}
 }
 

@@ -31,7 +31,10 @@ Routes:
   host): `GET /admin/plugin/usenet/status.json` — machine-readable crawl status
   (both passes, fleet, workers, staging/build depth, recent errors) for
   monitors and scripts. Carries provider hostnames and error text, so it is
-  admin-gated, not public.
+  admin-gated, not public. Accurate from ANY process: the worker publishes its
+  in-memory pass trackers + error ring to the shared settings table every few
+  seconds (`worker_telemetry`), so a split web/worker deployment serves live
+  numbers too — the Crawlers tab polls this endpoint to tick in place.
 - **admin views** (registered via `Core.RegisterView`, mounted by the host):
   - `SlotAdminPage` slug `usenet` — the single tabbed admin page
     (`/admin/p/usenet`): the provider fleet (per-row save/test/remove),

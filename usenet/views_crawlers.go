@@ -27,13 +27,6 @@ type passVM struct {
 	Providers                     int
 }
 
-func (p *Plugin) passVM() passVM {
-	if p.tel == nil {
-		return passVM{}
-	}
-	return trackerVM(&p.tel.crawl)
-}
-
 // cellLevels quantises fill fractions into four steps so the bar renders with
 // CSS classes instead of a per-cell inline style (which a strict CSP blocks).
 // Any coverage at all shows as at least level 1: a slice holding one fetched
@@ -55,20 +48,15 @@ func cellLevels(cells []float64) []int {
 	return out
 }
 
-func trackerVM(t *passTracker) passVM {
-	if t == nil {
-		return passVM{}
-	}
-	cur, last := t.snapshot()
-	st, running := last, false
-	if cur.InProgress {
-		st, running = cur, true
-	}
+// statsVM formats one pass snapshot for the template. Works on the VALUE, not
+// the tracker, so the web process can render the worker-published copy
+// (telemetry_publish.go) through the same code path.
+func statsVM(st passStats) passVM {
 	if st.Started.IsZero() {
 		return passVM{}
 	}
 	return passVM{
-		Running: running, Any: true,
+		Running: st.InProgress, Any: true,
 		Groups: st.Groups, Batches: st.Batches, Failed: st.Failed,
 		Articles: st.Articles, Staged: st.Staged, Providers: st.Providers,
 		Wire:     fmtBytes(st.WireBytes),
@@ -83,11 +71,7 @@ type errorVM struct {
 	When, Op, Msg string
 }
 
-func (p *Plugin) errorVMs() []errorVM {
-	if p.tel == nil {
-		return nil
-	}
-	errs := p.tel.recentErrors()
+func errorVMs(errs []crawlError) []errorVM {
 	out := make([]errorVM, len(errs))
 	for i, e := range errs {
 		out[i] = errorVM{When: e.At.Format("15:04:05"), Op: e.Op, Msg: e.Msg}
@@ -267,8 +251,12 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 	if err != nil {
 		return "", err
 	}
+	// The merged telemetry (local on the worker, worker-published on web) feeds
+	// the pass card, the error tail and the backfill rate — the numbers the
+	// store cannot answer.
+	tv := p.telemetryView(ctx)
 	eta := ""
-	if d, ok := backfillETA(stats.TotalBackfillRemaining, p.tel.backfill.rate()); ok {
+	if d, ok := backfillETA(stats.TotalBackfillRemaining, tv.BackfillRate); ok {
 		eta = fmtETA(d)
 	}
 	// Best-effort: recent activity is a liveness readout, and a failed query
@@ -297,7 +285,10 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 	}
 	return p.frag("crawlers.html", map[string]any{
 		"Stats": stats, "Groups": groups, "Backbones": backbones,
-		"Backfill": trackerVM(&p.tel.backfill), "BackfillETA": eta, "Jobs": jobs, "Builder": builder,
+		"Pass":        statsVM(pickPass(tv.CrawlCur, tv.CrawlLast)),
+		"Backfill":    statsVM(pickPass(tv.BackfillCur, tv.BackfillLast)),
+		"Errors":      errorVMs(tv.Errors),
+		"BackfillETA": eta, "Jobs": jobs, "Builder": builder,
 		"Fleet": p.fleetVMs(ctx), "Workers": p.workerVMs(ctx),
 		"Health":         p.healthVM(ctx),
 		"RecentArticles": recentArts, "RecentNzbs": recentNzbs,

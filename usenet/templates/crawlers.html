@@ -16,8 +16,9 @@
         </div>
     </div>
     <p class="text-muted small mt-3 mb-2">
-        {{with .Stats}}{{.TotalNZBs}} NZBs · {{.TotalStaged}} articles staged ·
-        {{.TotalBackfillRemaining}} articles left to backfill{{end}}
+        {{with .Stats}}<span id="stat-nzbs">{{.TotalNZBs}}</span> NZBs ·
+        <span id="stat-staged">{{.TotalStaged}}</span> articles staged ·
+        <span id="stat-backlog">{{.TotalBackfillRemaining}}</span> articles left to backfill{{end}}
     </p>
     {{if .Jobs}}
     <div class="table-responsive">
@@ -194,20 +195,20 @@
     </div>
 </div>
 
-{{if .Pass.Any}}
-<div class="card mt-3">
-  <div class="card-header">{{if .Pass.Running}}Crawl in progress{{else}}Last crawl pass{{end}}</div>
+{{/* Always in the DOM (hidden until data exists) so the status poller below
+     can reveal it the moment a pass starts, without a page reload. */}}
+<div class="card mt-3" id="pass-card"{{if not .Pass.Any}} style="display:none"{{end}}>
+  <div class="card-header" id="pass-title">{{if .Pass.Running}}Crawl in progress{{else}}Last crawl pass{{end}}</div>
   <div class="card-body">
     <div style="display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.9rem">
-      <span><strong>{{.Pass.Articles}}</strong> <span style="opacity:.6">fetched</span></span>
-      <span><strong>{{.Pass.Staged}}</strong> <span style="opacity:.6">staged</span></span>
-      <span><strong>{{.Pass.Groups}}</strong> <span style="opacity:.6">groups</span></span>
-      <span><strong>{{.Pass.Batches}}</strong> <span style="opacity:.6">batches</span>
-        {{if gt .Pass.Failed 0}}<span style="color:#e0a030">· {{.Pass.Failed}} failed</span>{{end}}</span>
-      <span><strong>{{.Pass.Duration}}</strong></span>
-      <span><strong>{{.Pass.Rate}}</strong></span>
-      <span><strong>{{.Pass.Through}}</strong> <span style="opacity:.6">({{.Pass.Wire}})</span></span>
-      <span style="opacity:.6">{{.Pass.Providers}} provider(s)</span>
+      <span><strong id="pass-articles">{{.Pass.Articles}}</strong> <span style="opacity:.6">fetched</span></span>
+      <span><strong id="pass-staged">{{.Pass.Staged}}</strong> <span style="opacity:.6">staged</span></span>
+      <span><strong id="pass-groups">{{.Pass.Groups}}</strong> <span style="opacity:.6">groups</span></span>
+      <span><strong id="pass-batches">{{.Pass.Batches}}</strong> <span style="opacity:.6">batches</span>
+        <span id="pass-failed" style="color:#e0a030"{{if not (gt .Pass.Failed 0)}} hidden{{end}}>· {{.Pass.Failed}} failed</span></span>
+      <span><strong id="pass-duration">{{.Pass.Duration}}</strong></span>
+      <span><strong id="pass-rate">{{.Pass.Rate}}</strong></span>
+      <span><strong id="pass-through">{{.Pass.Through}}</strong></span>
     </div>
     <p style="opacity:.6;font-size:.8rem;margin:.5rem 0 0">
       Fetched counts overview lines pulled; staged counts what survived junk
@@ -215,7 +216,6 @@
     </p>
   </div>
 </div>
-{{end}}
 
 {{if .Errors}}
 <div class="card mt-3">
@@ -316,8 +316,46 @@
 </div>
 {{end}}
 
-{{/* Embedded as the #crawlers tab of /admin/p/usenet: only refresh while that
-     tab is the one on screen, or the reload would wipe form input being typed
-     on the config tabs. setInterval (not setTimeout) so leaving and returning
-     to the tab resumes refreshing without a manual reload. */}}
-{{if .AutoRefresh}}<script>setInterval(function(){if(location.hash==='#crawlers')location.reload()},6000)</script>{{end}}
+{{/* Live status: poll the plugin's machine-readable endpoint and update the
+     numbers in place — no page reload, so typing on other tabs is never lost
+     and a running pass visibly ticks. The worker publishes its telemetry
+     cross-process (telemetry_publish.go), so this works on a split web/worker
+     deployment too. Tables (recent activity, coverage) stay render-time;
+     refresh the page for those. */}}
+<script>
+(function () {
+  function set(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
+  function fmtDur(s) {
+    s = Math.round(s);
+    if (s >= 3600) return Math.floor(s / 3600) + "h" + Math.floor((s % 3600) / 60) + "m";
+    if (s >= 60) return Math.floor(s / 60) + "m" + (s % 60) + "s";
+    return s + "s";
+  }
+  function apply(st) {
+    set('stat-nzbs', st.total_nzbs); set('stat-staged', st.staged_articles);
+    set('stat-backlog', st.backfill_remaining);
+    var p = st.crawl || {};
+    var any = p.running || p.batches > 0 || p.articles > 0;
+    var card = document.getElementById('pass-card');
+    if (!card || !any) return;
+    card.style.display = '';
+    set('pass-title', p.running ? 'Crawl in progress' : 'Last crawl pass');
+    set('pass-articles', p.articles); set('pass-staged', p.staged);
+    set('pass-groups', p.groups); set('pass-batches', p.batches);
+    set('pass-duration', fmtDur(p.duration_seconds));
+    set('pass-rate', Math.round(p.articles_per_second) + ' art/s');
+    var mbps = p.duration_seconds > 0 ? (p.wire_bytes / 1048576 / p.duration_seconds) : 0;
+    set('pass-through', mbps.toFixed(2) + ' MB/s');
+    var f = document.getElementById('pass-failed');
+    if (f) { f.hidden = !p.failed_batches; f.textContent = '· ' + p.failed_batches + ' failed'; }
+  }
+  setInterval(function () {
+    var pane = document.getElementById('crawlers');
+    if (pane && !pane.classList.contains('active')) return; // only poll the visible tab
+    fetch('/admin/plugin/usenet/status.json')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (st) { if (st) apply(st); })
+      .catch(function () {});
+  }, 5000);
+})();
+</script>

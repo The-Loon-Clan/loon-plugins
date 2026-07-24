@@ -144,15 +144,19 @@ func passReport(st passStats) PassReport {
 func (p *Plugin) status(ctx context.Context) StatusReport {
 	rep := StatusReport{GeneratedAt: time.Now()}
 
-	rep.Crawl = passReport(currentOrLast(&p.tel.crawl))
-	rep.Backfill = passReport(currentOrLast(&p.tel.backfill))
+	// telemetryView, not p.tel directly: on a split deployment this endpoint is
+	// served by the web process, whose own trackers never move — the worker's
+	// published snapshot is the real story there.
+	tv := p.telemetryView(ctx)
+	rep.Crawl = passReport(pickPass(tv.CrawlCur, tv.CrawlLast))
+	rep.Backfill = passReport(pickPass(tv.BackfillCur, tv.BackfillLast))
 
 	if st, err := p.st.stats(ctx); err == nil {
 		rep.Groups = len(st.Groups)
 		rep.TotalNZBs = st.TotalNZBs
 		rep.StagedArticles = st.TotalStaged
 		rep.BackfillLeft = st.TotalBackfillRemaining
-		if d, ok := backfillETA(st.TotalBackfillRemaining, p.tel.backfill.rate()); ok {
+		if d, ok := backfillETA(st.TotalBackfillRemaining, tv.BackfillRate); ok {
 			rep.BackfillETASeconds = int64(d.Seconds())
 		}
 	}
@@ -171,18 +175,8 @@ func (p *Plugin) status(ctx context.Context) StatusReport {
 	for _, w := range p.workerVMs(ctx) {
 		rep.Workers = append(rep.Workers, WorkerReport{ID: w.ID, Groups: w.Groups})
 	}
-	for _, e := range p.tel.recentErrors() {
+	for _, e := range tv.Errors {
 		rep.RecentErrors = append(rep.RecentErrors, ErrorReport{At: e.At, Op: e.Op, Msg: e.Msg})
 	}
 	return rep
-}
-
-// currentOrLast prefers the running pass, falling back to the last completed
-// one, so a status poll between passes still reports what happened.
-func currentOrLast(t *passTracker) passStats {
-	cur, last := t.snapshot()
-	if cur.InProgress {
-		return cur
-	}
-	return last
 }

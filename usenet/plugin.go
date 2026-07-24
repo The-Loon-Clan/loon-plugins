@@ -43,6 +43,10 @@ type Plugin struct {
 	svc     *service
 	tmpl    *template.Template // admin-view fragments (views.go)
 	catalog pluginapi.Catalog  // optional — the content-taxonomy plugin (looked up in Start)
+	// runsJobs marks the process that owns the pass trackers (worker/all).
+	// Processes without it render the worker-PUBLISHED telemetry instead of
+	// their own empty trackers — see telemetry_publish.go.
+	runsJobs bool
 
 	crawlJob    core.Job
 	backfillJob core.Job
@@ -225,6 +229,10 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// several crawlers run.
 	p.core.Logger.Info("usenet worker starting",
 		"worker", workerID(), "sink", p.cfg.Sink, "staging", p.cfg.Staging)
+	// This process owns the pass trackers; render local telemetry and publish
+	// it for the web process (telemetry_publish.go).
+	p.runsJobs = true
+	go p.publishTelemetry(ctx)
 	p.seedServer(ctx)
 	// Carry a legacy host crawler's state (watermarks, groups, blacklist) so a
 	// sink=host flip RESUMES rather than restarts. One-time; no-op elsewhere.
