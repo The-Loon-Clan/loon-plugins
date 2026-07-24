@@ -54,11 +54,23 @@ func (p *Plugin) renderSettings(ctx context.Context, srv pluginapi.Server, gq, m
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/list-servers", err)
 	}
+	// The Crawlers dashboard and Filters blacklist render as embedded tab
+	// fragments — one page per plugin. Their msg/err slots stay empty because
+	// the flash renders once at the top of this page.
+	crawlersTab, err := p.renderCrawlers(ctx, "", "")
+	if err != nil {
+		return "", err
+	}
+	filtersTab, err := p.renderFilters(ctx, "", "")
+	if err != nil {
+		return "", err
+	}
 	return p.frag("settings.html", map[string]any{
 		"Servers": servers, "DefaultConns": p.effective(ctx).Connections,
 		"Server": srv, "Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,
 		"Groups": groups, "GroupQuery": gq,
 		"GroupTotal": total, "Shown": len(groups),
+		"CrawlersTab": crawlersTab, "FiltersTab": filtersTab,
 		"Msg": msg, "Err": errMsg,
 	})
 }

@@ -17,11 +17,7 @@ import (
 //go:embed templates/*.html
 var viewFS embed.FS
 
-const (
-	usenetURL   = "/admin/p/usenet"
-	crawlersURL = "/admin/p/crawlers"
-	filtersURL  = "/admin/p/filters"
-)
+const usenetURL = "/admin/p/usenet"
 
 func (p *Plugin) registerViews(c *core.Core) error {
 	t, err := template.ParseFS(viewFS, "templates/*.html")
@@ -30,6 +26,12 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	}
 	p.tmpl = t
 
+	// One view = one page = one card on the host's admin hub. Everything the
+	// plugin can configure or show lives on /admin/p/usenet as a tab: config
+	// (NNTP / Providers / Indexing / Newsgroups) plus the Crawlers dashboard and
+	// the Filters blacklist, which render as embedded fragments. Their actions
+	// are registered here so their forms post under the same page and land back
+	// on their own tab.
 	if err := c.RegisterView(core.View{
 		Slug: "usenet", Title: "Usenet", Slot: core.SlotAdminPage,
 		Render: func(gc *gin.Context) (template.HTML, error) {
@@ -48,49 +50,27 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			"group-move":   p.actionMoveGroup,
 			"group-del":    p.actionDeleteGroup,
 			"groups-purge": p.actionPurgeInactive,
-		},
-	}); err != nil {
-		return err
-	}
-
-	if err := c.RegisterView(core.View{
-		Slug: "crawlers", Title: "Crawlers", Slot: core.SlotAdminPage,
-		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.renderCrawlers(gc.Request.Context(), gc.Query("msg"), gc.Query("err"))
-		},
-		Actions: map[string]func(*gin.Context) (template.HTML, error){
+			// Crawlers tab
 			"crawl": func(gc *gin.Context) (template.HTML, error) {
 				p.svc.TriggerCrawl()
-				return redirect(gc, crawlersURL+"?msg="+url.QueryEscape("crawl triggered"))
+				return settingsRedirect(gc, "msg", "crawl triggered")
 			},
 			"backfill": func(gc *gin.Context) (template.HTML, error) {
 				p.svc.TriggerBackfill()
-				return redirect(gc, crawlersURL+"?msg="+url.QueryEscape("backfill triggered"))
+				return settingsRedirect(gc, "msg", "backfill triggered")
 			},
 			"reset-backfill": func(gc *gin.Context) (template.HTML, error) {
 				name := gc.PostForm("name")
 				if err := p.st.resetBackfillForGroup(gc.Request.Context(), name); err != nil {
-					return redirect(gc, crawlersURL+"?err="+url.QueryEscape(err.Error()))
+					return settingsRedirect(gc, "err", err.Error())
 				}
-				return redirect(gc, crawlersURL+"?msg="+url.QueryEscape("backfill re-armed for "+name))
+				return settingsRedirect(gc, "msg", "backfill re-armed for "+name)
 			},
-		},
-	}); err != nil {
-		return err
-	}
-
-	// Filters: the blacklist an operator authors, and the hit counters that say
-	// whether any of it — theirs or the shipped junk rules — is doing anything.
-	if err := c.RegisterView(core.View{
-		Slug: "filters", Title: "Filters", Slot: core.SlotAdminPage,
-		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.renderFilters(gc.Request.Context(), gc.Query("msg"), gc.Query("err"))
-		},
-		Actions: map[string]func(*gin.Context) (template.HTML, error){
-			"add":    p.actionAddBlacklist,
-			"toggle": p.actionToggleBlacklist,
-			"delete": p.actionDeleteBlacklist,
-			"reset":  p.actionResetHits,
+			// Filters tab
+			"filter-add":    p.actionAddBlacklist,
+			"filter-toggle": p.actionToggleBlacklist,
+			"filter-del":    p.actionDeleteBlacklist,
+			"filter-reset":  p.actionResetHits,
 		},
 	}); err != nil {
 		return err
@@ -147,6 +127,12 @@ func tabForAction(path string) string {
 		strings.HasSuffix(path, "/group-del"), strings.HasSuffix(path, "/groups-purge"),
 		strings.HasSuffix(path, "/fetch-groups"), strings.HasSuffix(path, "/group"):
 		return "newsgroups"
+	case strings.HasSuffix(path, "/crawl"), strings.HasSuffix(path, "/backfill"),
+		strings.HasSuffix(path, "/reset-backfill"):
+		return "crawlers"
+	case strings.HasSuffix(path, "/filter-add"), strings.HasSuffix(path, "/filter-toggle"),
+		strings.HasSuffix(path, "/filter-del"), strings.HasSuffix(path, "/filter-reset"):
+		return "filters"
 	}
 	return ""
 }

@@ -1,7 +1,10 @@
+{{/* The width tiers are compound selectors (.container.page-wide), so the
+     container class is required alongside the tier — a bare tier class renders
+     full-bleed. page-wide because the coverage and provider tables are batch
+     screens. */}}
+<div class="container page-wide" style="padding-top:1.25rem">
 {{if .Msg}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Err}}</div>{{end}}
-
-<div class="page" style="padding-top:1.25rem">
 <h1 class="h3 mb-3">Usenet</h1>
 
 <ul class="nav tabs" role="tablist">
@@ -9,6 +12,8 @@
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#providers">Providers <span class="tab-count">{{len .Servers}}</span></a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#indexing">Indexing</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#newsgroups">Newsgroups <span class="tab-count">{{.GroupTotal}}</span></a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#crawlers">Crawlers</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#filters">Filters</a></li>
 </ul>
 
 <div class="tab-content">
@@ -249,13 +254,23 @@
 </div>
 </div>
 
+<div class="tab-pane" id="crawlers">
+{{.CrawlersTab}}
+</div>
+
+<div class="tab-pane" id="filters">
+{{.FiltersTab}}
+</div>
+
 </div>
 </div>
 
 <script>
 // Reopen the tab an action redirected back to (/admin/p/usenet?...#providers),
 // and default to Newsgroups after a group search. Runs on DOMContentLoaded, by
-// which point plugin_page.html has loaded the Bootstrap bundle.
+// which point plugin_page.html has loaded the Bootstrap bundle. Switching tabs
+// writes the hash back (no scroll jump) so a reload — including the Crawlers
+// tab's auto-refresh — lands on the same tab.
 document.addEventListener('DOMContentLoaded', function () {
   var hash = location.hash;
   if (!hash && /[?&]gq=/.test(location.search)) hash = '#newsgroups';
@@ -263,5 +278,10 @@ document.addEventListener('DOMContentLoaded', function () {
     var t = document.querySelector('.nav.tabs .nav-link[href="' + hash + '"]');
     if (t) bootstrap.Tab.getOrCreateInstance(t).show();
   }
+  document.querySelectorAll('.nav.tabs [data-bs-toggle="tab"]').forEach(function (el) {
+    el.addEventListener('shown.bs.tab', function (e) {
+      history.replaceState(null, '', e.target.getAttribute('href'));
+    });
+  });
 });
 </script>

@@ -7,11 +7,12 @@ through capabilities the host's pages consume. It also health-checks the
 catalogue over time (are the articles still on the server?) and filters
 machine-generated junk at ingest.
 
-Users see it two ways. **Operators** get an admin surface: a setup wizard
-(providers, newsgroups, tuning knobs) under `/admin/settings`, a live crawl
-status page at `/admin/p/crawlers` (coverage bars, per-backbone progress,
-recent activity, an aggregate backfill ETA, worker/fleet panels), and a
-`/admin/p/filters` page for the operator blacklist plus per-rule hit counters.
+Users see it two ways. **Operators** get one admin page at `/admin/p/usenet`
+(loon `SlotAdminPage`), tabbed: NNTP setup + connection test, the provider
+fleet, indexing knobs, newsgroup curation, a live Crawlers dashboard (coverage
+bars, per-backbone progress, recent activity, an aggregate backfill ETA,
+worker/fleet panels), and Filters — the operator blacklist plus per-rule hit
+counters.
 **End users** get whatever the host builds on the published index capability —
 search results, group browse, and a Newznab/Torznab `/api` + `/rss` endpoint.
 
@@ -32,12 +33,13 @@ Routes:
   monitors and scripts. Carries provider hostnames and error text, so it is
   admin-gated, not public.
 - **admin views** (registered via `Core.RegisterView`, mounted by the host):
-  - `SlotAdminSettings` slug `usenet` — the setup wizard. Actions: `server`,
-    `test`, `knobs`, `fetch-groups`, `group`.
-  - `SlotAdminPage` slug `crawlers` — crawl status. Actions: `crawl`,
-    `backfill`, `reset-backfill`.
-  - `SlotAdminPage` slug `filters` — blacklist + filter-hit counters. Actions:
-    `add`, `toggle`, `delete`, `reset`.
+  - `SlotAdminPage` slug `usenet` — the single tabbed admin page
+    (`/admin/p/usenet`): NNTP wizard, provider fleet, indexing knobs,
+    newsgroups, the Crawlers dashboard and the Filters blacklist. Actions:
+    `server`, `test`, `knobs`, `fetch-groups`, `group`, `provider`,
+    `provider-del`, `group-tune`, `group-move`, `group-del`, `groups-purge`,
+    `crawl`, `backfill`, `reset-backfill`, `filter-add`, `filter-toggle`,
+    `filter-del`, `filter-reset`. Each action redirects back to its own tab.
   - `SlotJobsWidget` anchor `Usenet` — a richer card for the Usenet job group
     on the host's `/admin/jobs`.
 - **public / api**: the plugin publishes read capabilities rather than mounting

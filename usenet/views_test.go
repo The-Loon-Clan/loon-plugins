@@ -42,11 +42,13 @@ func TestSettingsRendersProviders(t *testing.T) {
 			{Name: "alt.binaries.hdtv", Active: true, NZBs: 900, RetentionDays: 30, ThrottleMs: 250, LowPriority: true},
 			{Name: "alt.binaries.misc", Active: false},
 		},
-		"GroupQuery": "",
-		"GroupTotal": 3,
-		"Shown":      3,
-		"Msg":        "",
-		"Err":        "",
+		"GroupQuery":  "",
+		"GroupTotal":  3,
+		"Shown":       3,
+		"CrawlersTab": template.HTML("<div>crawlers-frag</div>"),
+		"FiltersTab":  template.HTML("<div>filters-frag</div>"),
+		"Msg":         "",
+		"Err":         "",
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "settings.html", data); err != nil {
@@ -61,6 +63,10 @@ func TestSettingsRendersProviders(t *testing.T) {
 		// tabbed layout on its own admin page (SlotAdminPage), forms post to /admin/p/usenet
 		`class="nav tabs"`, `data-bs-toggle="tab"`, `id="providers"`, `id="newsgroups"`,
 		"/admin/p/usenet/provider", "/admin/p/usenet/group-tune",
+		// one page per plugin: crawlers + filters embed as tabs, width is a
+		// container tier (compound .container.page-wide selector)
+		`id="crawlers"`, `id="filters"`, "crawlers-frag", "filters-frag",
+		`class="container page-wide"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered settings page is missing %q", want)
@@ -83,6 +89,7 @@ func TestSettingsRendersWithNoProviders(t *testing.T) {
 		"Servers": []provider{}, "DefaultConns": 10, "Server": pluginapi.Server{},
 		"Knobs": []knob{}, "SkipBackfill": false, "Groups": nil,
 		"GroupQuery": "", "GroupTotal": 0, "Shown": 0, "Msg": "", "Err": "",
+		"CrawlersTab": template.HTML(""), "FiltersTab": template.HTML(""),
 	})
 	if err != nil {
 		t.Fatalf("render with no providers: %v", err)
@@ -253,7 +260,8 @@ func TestFiltersRenders(t *testing.T) {
 	out := buf.String()
 	for _, want := range []string{
 		"(?i)spam", "poster", "bare-token", "this rule is inert",
-		"filters/add", "filters/toggle", "filters/delete", "filters/reset",
+		// forms post under the unified /admin/p/usenet page (filters tab)
+		"usenet/filter-add", "usenet/filter-toggle", "usenet/filter-del", "usenet/filter-reset",
 		"90.0%", "1000 release(s) dropped",
 	} {
 		if !strings.Contains(out, want) {

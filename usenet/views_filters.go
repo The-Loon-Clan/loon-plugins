@@ -72,7 +72,7 @@ func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg string) (templat
 }
 
 func filtersRedirect(gc *gin.Context, key, val string) (template.HTML, error) {
-	return redirect(gc, filtersURL+"?"+key+"="+url.QueryEscape(val))
+	return redirect(gc, usenetURL+"?"+key+"="+url.QueryEscape(val)+"#filters")
 }
 
 func (p *Plugin) actionAddBlacklist(gc *gin.Context) (template.HTML, error) {

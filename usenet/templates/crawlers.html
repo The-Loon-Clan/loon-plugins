@@ -6,10 +6,10 @@
         <h2 style="margin:0">Activity</h2>
         {{if .AutoRefresh}}<span class="badge bg-secondary">● live — auto-refreshing</span>{{end}}
         <div style="margin-left:auto;display:flex;gap:.5rem">
-            <form method="post" action="/admin/p/crawlers/crawl" style="display:inline">
+            <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
                 <button class="btn btn-sm btn-outline-primary" type="submit">Crawl now</button>
             </form>
-            <form method="post" action="/admin/p/crawlers/backfill" style="display:inline">
+            <form method="post" action="/admin/p/usenet/backfill" style="display:inline">
                 <button class="btn btn-sm btn-outline-primary" type="submit">Backfill now</button>
             </form>
         </div>
@@ -169,7 +169,7 @@
                     <td class="text-end">{{.Staged}}</td>
                     <td class="small text-muted">{{.LastCrawl}}</td>
                     <td>
-                        <form method="post" action="/admin/p/crawlers/reset-backfill" style="display:inline"
+                        <form method="post" action="/admin/p/usenet/reset-backfill" style="display:inline"
                               onsubmit="return confirm('Re-arm backfill for {{.Name}}? It will re-scan history from the forward watermark down.')">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <button class="btn btn-sm btn-outline-secondary py-0" type="submit">reset backfill</button>
@@ -311,4 +311,8 @@
 {{end}}
 </div>
 
-{{if .AutoRefresh}}<script>setTimeout(function(){location.reload()},6000)</script>{{end}}
+{{/* Embedded as the #crawlers tab of /admin/p/usenet: only refresh while that
+     tab is the one on screen, or the reload would wipe form input being typed
+     on the config tabs. setInterval (not setTimeout) so leaving and returning
+     to the tab resumes refreshing without a manual reload. */}}
+{{if .AutoRefresh}}<script>setInterval(function(){if(location.hash==='#crawlers')location.reload()},6000)</script>{{end}}

@@ -20,12 +20,12 @@
         {{with .Stats}}{{.TotalNZBs}} NZBs · {{.TotalStaged}} staged · {{.TotalBackfillRemaining}} to backfill{{end}}
     </span>
     <div style="margin-left:auto;display:flex;gap:.5rem">
-        <form method="post" action="/admin/p/crawlers/crawl" style="display:inline">
+        <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
             <button class="btn btn-sm btn-outline-primary py-0" type="submit">Run crawl</button>
         </form>
-        <form method="post" action="/admin/p/crawlers/backfill" style="display:inline">
+        <form method="post" action="/admin/p/usenet/backfill" style="display:inline">
             <button class="btn btn-sm btn-outline-primary py-0" type="submit">Run backfill</button>
         </form>
-        <a class="btn btn-sm btn-outline-secondary py-0" href="/admin/p/crawlers">details →</a>
+        <a class="btn btn-sm btn-outline-secondary py-0" href="/admin/p/usenet#crawlers">details →</a>
     </div>
 </div>
