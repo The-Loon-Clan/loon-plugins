@@ -71,6 +71,12 @@ func TestLeaseClaimIsExclusive(t *testing.T) {
 	ctx := context.Background()
 	const key = "omicron|alt.binaries.anime"
 
+	// Exclusivity is heartbeat-backed: a claim by a worker that never
+	// heartbeats is treated as a dead worker's (see leaseOwnerDeadAfter).
+	// Real workers heartbeat before their first pass.
+	if err := s.heartbeat(ctx, "worker-a"); err != nil {
+		t.Fatal(err)
+	}
 	got, err := s.claimLease(ctx, leaseScopeGroup, key, "worker-a", time.Minute)
 	if err != nil || !got {
 		t.Fatalf("first claim: got=%v err=%v", got, err)
@@ -97,6 +103,9 @@ func TestLeaseExpiryHandsOver(t *testing.T) {
 	ctx := context.Background()
 	const key = "omicron|alt.binaries.hdtv"
 
+	if err := s.heartbeat(ctx, "dead-worker"); err != nil {
+		t.Fatal(err)
+	}
 	if got, err := s.claimLease(ctx, leaseScopeGroup, key, "dead-worker", time.Second); err != nil || !got {
 		t.Fatalf("claim: got=%v err=%v", got, err)
 	}
@@ -114,6 +123,33 @@ func TestLeaseExpiryHandsOver(t *testing.T) {
 	}
 }
 
+// TestLeaseDeadOwnerTakeover: a worker that stopped heartbeating must lose
+// its leases to a replacement IMMEDIATELY, not at TTL expiry — container
+// recreation renames the worker, and a deploy that kills a mid-pass crawl
+// otherwise idles every held group for lease_ttl_min (observed on prod:
+// "every group already claimed by another worker" for 15 minutes per deploy).
+func TestLeaseDeadOwnerTakeover(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	const key = "omicron|alt.binaries.orphaned"
+
+	// The old worker claims with a long TTL and then "dies": it has no
+	// heartbeat row at all (its replacement can never refresh it).
+	if got, err := s.claimLease(ctx, leaseScopeGroup, key, "old-container", time.Hour); err != nil || !got {
+		t.Fatalf("claim: got=%v err=%v", got, err)
+	}
+	if err := s.heartbeat(ctx, "new-container"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.claimLease(ctx, leaseScopeGroup, key, "new-container", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got {
+		t.Fatal("replacement could not take a dead worker's unexpired lease — every deploy idles the crawler until the TTL lapses")
+	}
+}
+
 // TestLeaseReleaseIsOwnerOnly: releasing must not let a worker drop someone
 // else's lease out from under them.
 func TestLeaseReleaseIsOwnerOnly(t *testing.T) {
@@ -121,6 +157,9 @@ func TestLeaseReleaseIsOwnerOnly(t *testing.T) {
 	ctx := context.Background()
 	const key = "omicron|alt.binaries.movies"
 
+	if err := s.heartbeat(ctx, "owner"); err != nil {
+		t.Fatal(err)
+	}
 	if got, _ := s.claimLease(ctx, leaseScopeGroup, key, "owner", time.Minute); !got {
 		t.Fatal("claim failed")
 	}
@@ -145,6 +184,14 @@ func TestLeaseConcurrentClaimRace(t *testing.T) {
 	ctx := context.Background()
 	const key = "omicron|alt.binaries.contested"
 	const racers = 12
+
+	// All racers heartbeat first — takeover semantics only free a lease whose
+	// owner is NOT alive, and here every racer is.
+	for i := 0; i < racers; i++ {
+		if err := s.heartbeat(ctx, fmt.Sprintf("w%02d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex

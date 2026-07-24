@@ -56,9 +56,24 @@ func workerID() string {
 	return workerIDVal
 }
 
+// leaseOwnerDeadAfter is how long a lease owner may go without a heartbeat
+// before its leases become claimable regardless of expiry. Workers heartbeat
+// every 30s (startHeartbeat), so two minutes is four missed beats — dead, not
+// slow. Deliberately independent of worker_stale_sec: presence reaping tunes
+// term membership; this guards correctness of takeover.
+const leaseOwnerDeadAfter = 2 * time.Minute
+
 // claimLease takes or renews a lease. It succeeds when the key is unheld, has
-// expired, or is already ours — all in one atomic upsert, so two workers racing
-// for the same key cannot both win.
+// expired, is already ours, OR its owner has stopped heartbeating — all in one
+// atomic upsert, so two workers racing for the same key cannot both win.
+//
+// The dead-owner clause is what makes a deploy seamless: container recreation
+// changes the hostname, so the replacement worker is "another worker" to the
+// lease table, and a worker killed mid-pass never runs its release. Without
+// the clause every deploy idled the crawler until the TTL lapsed (observed on
+// prod 2026-07-24: "every group already claimed by another worker" for 15
+// minutes after each restart). Liveness comes from crawler_workers heartbeats,
+// which every worker writes before its first pass.
 func (s *PGStore) claimLease(ctx context.Context, scope, key, worker string, ttl time.Duration) (bool, error) {
 	if ttl <= 0 {
 		ttl = time.Minute
@@ -74,8 +89,11 @@ func (s *PGStore) claimLease(ctx context.Context, scope, key, worker string, ttl
 			                          THEN leases.claimed_at ELSE now() END,
 			        expires_at = EXCLUDED.expires_at
 			  WHERE leases.worker_id = EXCLUDED.worker_id
-			     OR leases.expires_at < now()`,
-			scope, key, worker, ttl.Seconds())
+			     OR leases.expires_at < now()
+			     OR NOT EXISTS (SELECT 1 FROM crawler_workers w
+			                     WHERE w.worker_id = leases.worker_id
+			                       AND w.last_seen > now() - make_interval(secs => $5))`,
+			scope, key, worker, ttl.Seconds(), leaseOwnerDeadAfter.Seconds())
 		if err != nil {
 			return err
 		}
