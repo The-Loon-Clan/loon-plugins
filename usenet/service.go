@@ -139,6 +139,11 @@ func (s *service) ReleaseByID(ctx context.Context, id int64) (pluginapi.ReleaseD
 
 func (s *service) Server(ctx context.Context) (pluginapi.Server, error) {
 	srv, _, err := s.store.getServer(ctx)
+	// The password is write-only through this capability: a host wizard that
+	// round-trips Server() into a form would otherwise ship the secret to the
+	// browser (the plugin's own settings page never does). SetServer with a
+	// blank password keeps the stored one, so the round-trip still works.
+	srv.Password = ""
 	return srv, err
 }
 

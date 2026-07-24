@@ -72,7 +72,11 @@ func groupHashKey(group, base string) string {
 	d.Write([]byte(base))
 	var sum [sha256.Size]byte
 	d.Sum(sum[:0])
-	return hex.EncodeToString(sum[:8])
+	// 128 bits, not 64: posters control base subjects, and a 64-bit key is
+	// within reach of an offline birthday attack — two subjects colliding
+	// here would interleave their articles into one staged set. Sets under
+	// the old width simply age out (staging is transient).
+	return hex.EncodeToString(sum[:16])
 }
 
 func formatFieldKey(fileNum, partNum int) string {
@@ -249,6 +253,11 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 		pipe.SAdd(ctx, activeKey(gu.groupName), gu.hash)
 		pipe.Expire(ctx, ak, 2*time.Hour)
 		pipe.Expire(ctx, gk, 2*time.Hour)
+		// The active set MUST expire too (refreshed on every touch): art:/grp:
+		// keys that TTL out incomplete otherwise leave their hash in
+		// active_groups:{group} forever, and incompleteSets walks every
+		// accumulated ref once per build pass — an unbounded leak.
+		pipe.Expire(ctx, activeKey(gu.groupName), 4*time.Hour)
 	}
 
 	// Cheap HLen + meta per touched group; HKeys (which ships every field name)
@@ -316,8 +325,10 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 		for _, em := range evictMembers {
 			evPipe.SRem(ctx, activeKey(em.group), em.hash)
 		}
-		_, _ = evPipe.Exec(ctx)
-		if r.onEvict != nil {
+		// Count evictions only when the pipeline actually ran: this counter
+		// exists to prove eviction is WORKING, so over-reporting on the exact
+		// failure it should reveal would defeat it.
+		if _, err := evPipe.Exec(ctx); err == nil && r.onEvict != nil {
 			r.onEvict(len(evictMembers))
 		}
 	}
@@ -476,7 +487,7 @@ func (r *redisStaging) deleteStaged(ctx context.Context, group, base string) err
 }
 
 // deleteJunkStaged is a no-op in redis mode: junk base_subjects are dropped at
-// ingest (parseOverviews) and again at build (isJunkTitle in runBuild), and
+// ingest (parseOverviews) and again at build (classifyRelease), and
 // there is no cheap way to scan every staged set — so nothing to sweep here.
 func (r *redisStaging) deleteJunkStaged(ctx context.Context) (int64, error) { return 0, nil }
 
@@ -563,13 +574,36 @@ func (r *redisStaging) incompleteSets(ctx context.Context, limit int) ([]pending
 	_, _ = pipe.Exec(ctx) // per-cmd errors surface below; expired keys just read empty
 
 	var out []pendingSet
+	dead := map[string][]interface{}{}
 	for i, rf := range refs {
 		meta, err := metas[i].Result()
-		if err != nil || len(meta) == 0 {
-			continue // set expired between SCAN and read
+		if err != nil {
+			continue
+		}
+		if len(meta) == 0 {
+			// Expired set: also drop its ref so the active set stops growing
+			// (belt to the Expire-braces above for refs from before that fix).
+			dead[rf.group] = append(dead[rf.group], rf.hash)
+			continue
 		}
 		have := int(lens[i].Val())
-		need := atoiField(meta["seg_total"])
+		// The writer stores file_parts as "1"/"0" (boolStr) — matching every
+		// other reader; == "true" was never true, which hid multi-file sets.
+		multi := meta["file_parts"] == "1" || meta["file_parts"] == "true"
+		need := 0
+		if multi {
+			// A multi-file set needs totalFiles*segTotal parts, same as the
+			// builder's groupNeededParts — seg_total alone undercounts and made
+			// exactly the big multi-file sets this card exists to explain
+			// read as "complete" and vanish.
+			tf, st := atoiField(meta["total_files"]), atoiField(meta["seg_total"])
+			if tf > 0 && st > 0 {
+				need = tf * st
+			}
+		}
+		if need <= 0 {
+			need = atoiField(meta["seg_total"])
+		}
 		if need <= 0 {
 			need = atoiField(meta["total_parts"])
 		}
@@ -579,8 +613,11 @@ func (r *redisStaging) incompleteSets(ctx context.Context, limit int) ([]pending
 		out = append(out, pendingSet{
 			Base: meta["base_subject"], Group: rf.group,
 			Have: have, Need: need, Segments: have,
-			Multi: meta["file_parts"] == "true",
+			Multi: multi,
 		})
+	}
+	for group, hashes := range dead {
+		_ = r.rdb.SRem(ctx, activeKey(group), hashes...).Err() // best-effort cleanup
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Need-out[i].Have > out[j].Need-out[j].Have })
 	if len(out) > limit {

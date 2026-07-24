@@ -195,13 +195,15 @@ func TestCompactArticleRoundTrip(t *testing.T) {
 	}
 }
 
-// TestGroupHashKey pins the key-suffix contract: 16 hex chars, deterministic, and
-// distinct per (group, base) — including that the group:base separator can't be
-// spoofed by a base that contains a colon.
+// TestGroupHashKey pins the key-suffix contract: 32 hex chars (128 bits — a
+// 64-bit truncation was within reach of an offline birthday attack by posters
+// who control base subjects), deterministic, and distinct per (group, base) —
+// including that the group:base separator can't be spoofed by a base that
+// contains a colon.
 func TestGroupHashKey(t *testing.T) {
 	h := groupHashKey("alt.binaries.x", "Some.Release")
-	if len(h) != 16 {
-		t.Errorf("hash length = %d, want 16 (sha256[:8] hex)", len(h))
+	if len(h) != 32 {
+		t.Errorf("hash length = %d, want 32 (sha256[:16] hex)", len(h))
 	}
 	for _, c := range h {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {

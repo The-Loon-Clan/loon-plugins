@@ -224,7 +224,9 @@ func (s *PGStore) saveServer(ctx context.Context, srv pluginapi.Server) error {
 		}
 		_, err = tx.ExecContext(ctx,
 			`UPDATE servers
-			    SET host=$2, port=$3, tls=$4, username=$5, password=$6, enabled=$7, backbone=$8
+			    SET host=$2, port=$3, tls=$4, username=$5,
+			        password = CASE WHEN $6 = '' THEN password ELSE $6 END,
+			        enabled=$7, backbone=$8
 			  WHERE id=$1`,
 			id, srv.Host, srv.Port, srv.TLS, srv.Username, srv.Password, srv.Enabled, srv.Backbone)
 		return err

@@ -57,7 +57,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		return
 	}
 
-	keys, err := p.staging.candidateGroups(ctx, 500)
+	keys, err := p.staging.candidateGroups(ctx, p.effective(ctx).BuildDrainPerPass)
 	if err != nil {
 		p.buildJob.SetError(err.Error())
 		p.reportErr(ctx, "usenet/build-scan", err)
@@ -85,7 +85,9 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			// a per-set SKIP line would evict the pass summary from the 100-line
 			// job ring. The count folds into that summary instead.
 			skippedExt++
-			_ = p.staging.deleteStaged(ctx, k.Group, k.Base)
+			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
+				p.reportErr(ctx, "usenet/build-delete-staged", err)
+			}
 			continue
 		}
 		// Operator policy, checked at build like prod does. Deliberately NOT at
@@ -100,12 +102,16 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			// per-release log line is redundant with that and floods the ring.
 			p.hits.note("blacklist", pat, k.Base)
 			skippedBL++
-			_ = p.staging.deleteStaged(ctx, k.Group, k.Base)
+			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
+				p.reportErr(ctx, "usenet/build-delete-staged", err)
+			}
 			continue
 		}
 		if junkRule != "" {
 			p.hits.note("junk", junkRule, k.Base)
-			_ = p.staging.deleteStaged(ctx, k.Group, k.Base) // drop, don't build
+			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil { // drop, don't build
+				p.reportErr(ctx, "usenet/build-delete-staged", err)
+			}
 			continue
 		}
 		xmlBytes, err := buildNZB(arts)
@@ -135,7 +141,11 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			p.reportErr(ctx, "usenet/build-store", fmt.Errorf("%s: %w", title, err))
 			continue
 		}
-		_ = p.staging.deleteStaged(ctx, k.Group, k.Base)
+		// In redis mode this delete is the ONLY way an entry leaves nzb:ready —
+		// a persistent failure re-builds the same set every pass forever.
+		if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
+			p.reportErr(ctx, "usenet/build-delete-staged", err)
+		}
 		if created {
 			built++
 			// Feed the "recently built" telemetry ring: with sink=host no
@@ -319,6 +329,12 @@ func gzipBytes(b []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// maxNZBBytes bounds NZB decompression. NZBs are text; even a 4000-file
+// release's XML stays far under this — but in sink=host mode the health sweep
+// gunzips the HOST catalogue's blobs, which include agent uploads, and an
+// unbounded ReadAll turns one crafted tiny gzip into an OOM'd worker.
+const maxNZBBytes = 128 << 20
+
 func gunzipBytes(b []byte) ([]byte, error) {
 	if len(b) == 0 {
 		return nil, nil
@@ -328,7 +344,14 @@ func gunzipBytes(b []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer r.Close()
-	return io.ReadAll(r)
+	out, err := io.ReadAll(io.LimitReader(r, maxNZBBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) > maxNZBBytes {
+		return nil, fmt.Errorf("nzb decompresses past %d bytes — refusing", maxNZBBytes)
+	}
+	return out, nil
 }
 
 func summarize(arts []stagedArticle) (size int64, posted time.Time) {
