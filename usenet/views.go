@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -49,15 +50,13 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			"group-move":    p.actionMoveGroup,
 			"group-del":     p.actionDeleteGroup,
 			"groups-purge":  p.actionPurgeInactive,
-			// Crawlers tab
-			"crawl": func(gc *gin.Context) (template.HTML, error) {
-				p.svc.TriggerCrawl()
-				return settingsRedirect(gc, "msg", "crawl triggered")
-			},
-			"backfill": func(gc *gin.Context) (template.HTML, error) {
-				p.svc.TriggerBackfill()
-				return settingsRedirect(gc, "msg", "backfill triggered")
-			},
+			// Crawlers tab. On a split deployment these buttons run in the WEB
+			// process, whose trigger func-vars are nil (the jobs live in the
+			// worker) — TriggerCrawl() here used to be a silent no-op. Relay
+			// through the shared settings table instead; the worker's telemetry
+			// tick consumes it within ~5s (telemetry_publish.go).
+			"crawl":    p.actionTrigger("crawl", "crawl"),
+			"backfill": p.actionTrigger("backfill", "backfill"),
 			"reset-backfill": func(gc *gin.Context) (template.HTML, error) {
 				name := gc.PostForm("name")
 				if err := p.st.resetBackfillForGroup(gc.Request.Context(), name); err != nil {
@@ -92,6 +91,30 @@ func (p *Plugin) frag(name string, data any) (template.HTML, error) {
 		return "", err
 	}
 	return template.HTML(buf.String()), nil
+}
+
+// actionTrigger builds the Crawl-now / Backfill-now handler. In the process
+// that runs the jobs the trigger fires directly; anywhere else it is written
+// to the settings table for the worker's telemetry tick to pick up — with a
+// flash that says so, because "clicked and nothing visibly happened" is
+// exactly the confusion the relay exists to fix.
+func (p *Plugin) actionTrigger(kind, label string) func(*gin.Context) (template.HTML, error) {
+	return func(gc *gin.Context) (template.HTML, error) {
+		if p.runsJobs {
+			switch kind {
+			case "crawl":
+				p.svc.TriggerCrawl()
+			case "backfill":
+				p.svc.TriggerBackfill()
+			}
+			return settingsRedirect(gc, "msg", label+" started")
+		}
+		req := kind + ":" + strconv.FormatInt(time.Now().Unix(), 10)
+		if err := p.st.setSetting(gc.Request.Context(), triggerRequestKey, req); err != nil {
+			return settingsRedirect(gc, "err", err.Error())
+		}
+		return settingsRedirect(gc, "msg", label+" requested — the worker starts it within ~5s; watch the Activity card")
+	}
 }
 
 // redirect answers the action with a 303; the empty fragment tells the host

@@ -3,6 +3,8 @@ package usenet
 import (
 	"context"
 	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -16,6 +18,36 @@ import (
 // wherever it would have read local telemetry.
 
 const telemetrySettingKey = "worker_telemetry"
+
+// triggerRequestKey relays the dashboard's Crawl/Backfill-now buttons across
+// the process split: the buttons post to the WEB process, whose trigger
+// func-vars are nil (jobs live in the worker), so the click was a silent
+// no-op. The web action writes "kind:unix" here; the worker's telemetry tick
+// consumes it below.
+const triggerRequestKey = "trigger_request"
+
+// fireTriggerRequest runs one relayed trigger. The freshness window guards a
+// worker that restarts with a stale request still in the table — an operator's
+// click should either happen promptly or not at all, never surprise-fire an
+// hour later.
+func (p *Plugin) fireTriggerRequest(req string) {
+	kind, tsStr, ok := strings.Cut(req, ":")
+	if !ok {
+		return
+	}
+	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	if err != nil || time.Since(time.Unix(ts, 0)) > 2*time.Minute {
+		return
+	}
+	switch kind {
+	case "crawl":
+		p.crawlJob.Log("crawl trigger relayed from the web process")
+		p.svc.TriggerCrawl()
+	case "backfill":
+		p.backfillJob.Log("backfill trigger relayed from the web process")
+		p.svc.TriggerBackfill()
+	}
+}
 
 // workerTelemetry is the process-local half of the crawler's status —
 // everything the store cannot answer. Store-backed numbers (group stats,
@@ -99,7 +131,7 @@ func (p *Plugin) telemetryView(ctx context.Context) workerTelemetry {
 // UPDATE — which is what lets the web page's status poll show a crawl
 // mid-flight.
 func (p *Plugin) publishTelemetry(ctx context.Context) {
-	var last string
+	var last, lastTrig string
 	tick := time.NewTicker(5 * time.Second)
 	defer tick.Stop()
 	for {
@@ -107,6 +139,14 @@ func (p *Plugin) publishTelemetry(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
+			// Consume any relayed trigger request first, so a click on the web
+			// dashboard starts the pass within one tick.
+			if s, err := p.st.getSettings(ctx); err == nil {
+				if req := s[triggerRequestKey]; req != "" && req != lastTrig {
+					lastTrig = req
+					p.fireTriggerRequest(req)
+				}
+			}
 			tv := p.localTelemetry()
 			tv.UpdatedAt = time.Time{} // stamp excluded from the change check
 			b, err := json.Marshal(tv)
