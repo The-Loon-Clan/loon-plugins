@@ -1,8 +1,9 @@
 {{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
 
-<div class="mb-4">
-    <h5>Blacklist</h5>
+<div class="card mt-3">
+    <div class="card-header">Blacklist</div>
+    <div class="card-body">
     <p class="text-muted small">
         Your own rules, checked when a release is assembled. A match drops the release
         and its staged articles — it is never indexed. Separate from the shipped junk
@@ -65,10 +66,12 @@
     {{else}}
     <div class="empty">No blacklist rules. An empty blacklist indexes everything the junk rules let through.</div>
     {{end}}
+    </div>
 </div>
 
-<div class="mb-4">
-    <h5>Filter hits</h5>
+<div class="card mt-3">
+    <div class="card-header">Filter hits</div>
+    <div class="card-body">
     <p class="text-muted small">
         What each rule has actually dropped, accumulated across restarts. Read it two ways:
         a rule near zero is probably not earning its cost, and a rule at the top with a
@@ -107,4 +110,5 @@
     {{else}}
     <div class="empty">Nothing dropped yet. Counters are written at the end of each crawl and build pass.</div>
     {{end}}
+    </div>
 </div>

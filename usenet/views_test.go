@@ -64,9 +64,10 @@ func TestSettingsRendersProviders(t *testing.T) {
 		`class="nav tabs"`, `data-bs-toggle="tab"`, `id="providers"`, `id="newsgroups"`,
 		"/admin/p/usenet/provider", "/admin/p/usenet/group-tune",
 		// one page per plugin: crawlers + filters embed as tabs, width is a
-		// container tier (compound .container.page-wide selector)
+		// container tier (compound .container.page selector), sections are
+		// host-native card-header boxes
 		`id="crawlers"`, `id="filters"`, "crawlers-frag", "filters-frag",
-		`class="container page-wide"`,
+		`class="container page"`, `class="card-header"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered settings page is missing %q", want)

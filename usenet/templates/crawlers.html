@@ -1,9 +1,10 @@
 {{if .Msg}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Err}}</div>{{end}}
 
-<div class="mb-4">
+<div class="card mt-3">
+    <div class="card-header">Activity</div>
+    <div class="card-body">
     <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-        <h5 style="margin:0">Activity</h5>
         {{if .AutoRefresh}}<span class="badge bg-secondary">● live — auto-refreshing</span>{{end}}
         <div style="margin-left:auto;display:flex;gap:.5rem">
             <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
@@ -34,11 +35,13 @@
         </table>
     </div>
     {{else}}<div class="text-muted small">No usenet jobs registered in this process.</div>{{end}}
+    </div>
 </div>
 
 {{with .Builder}}
-<div class="mb-4">
-    <h5>Builder</h5>
+<div class="card mt-3">
+    <div class="card-header">Builder</div>
+    <div class="card-body">
     <p class="text-muted small mb-2">
         {{.StagedArticles}} articles staged · {{.Releases}} release(s) forming ·
         <strong>{{.Ready}}</strong> ready to assemble
@@ -61,11 +64,13 @@
         </table>
     </div>
     {{else if .Releases}}<div class="text-muted small">All staged releases are complete.</div>{{end}}
+    </div>
 </div>
 {{end}}
 
-<div class="mb-4">
-    <h5>Recent activity</h5>
+<div class="card mt-3">
+    <div class="card-header">Recent activity</div>
+    <div class="card-body">
     <p class="text-muted small">
         The newest staged articles and assembled releases. Watermarks barely move over a
         single pass, so this is the readout that shows the crawler is actually alive.
@@ -112,10 +117,12 @@
             {{else}}<div class="empty">No releases assembled yet.</div>{{end}}
         </div>
     </div>
+    </div>
 </div>
 
-<div class="mb-4">
-    <h5>Coverage</h5>
+<div class="card mt-3">
+    <div class="card-header">Coverage</div>
+    <div class="card-body">
     <div class="cov-legend">
         <span><span class="dot" style="background:var(--warning)"></span>pending backfill</span>
         <span><span class="dot" style="background:var(--success)"></span>indexed</span>
@@ -184,14 +191,13 @@
     {{else}}
     <div class="empty">No active groups. Enable some in <a href="/admin/p/usenet">Usenet setup</a>, then crawl.</div>
     {{end}}
-
+    </div>
+</div>
 
 {{if .Pass.Any}}
-<div class="mb-4">
+<div class="card mt-3">
+  <div class="card-header">{{if .Pass.Running}}Crawl in progress{{else}}Last crawl pass{{end}}</div>
   <div class="card-body">
-    <h5 style="margin:0 0 .5rem">
-      {{if .Pass.Running}}Crawl in progress{{else}}Last crawl pass{{end}}
-    </h5>
     <div style="display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.9rem">
       <span><strong>{{.Pass.Articles}}</strong> <span style="opacity:.6">fetched</span></span>
       <span><strong>{{.Pass.Staged}}</strong> <span style="opacity:.6">staged</span></span>
@@ -212,9 +218,9 @@
 {{end}}
 
 {{if .Errors}}
-<div class="mb-4">
+<div class="card mt-3">
+  <div class="card-header">Recent errors ({{len .Errors}})</div>
   <div class="card-body">
-    <h5 style="margin:0 0 .5rem">Recent errors <span style="opacity:.6;font-weight:400">({{len .Errors}})</span></h5>
     <div style="max-height:14rem;overflow:auto;font-size:.85rem">
       <table class="table" style="margin:0">
         <tbody>
@@ -234,9 +240,9 @@
   </div>
 </div>
 {{end}}
-<div class="mb-4">
+<div class="card mt-3">
+  <div class="card-header">Providers</div>
   <div class="card-body">
-    <h5 style="margin:0 0 .5rem">Providers</h5>
     <table class="table" style="font-size:.88rem;margin:0">
       <thead><tr><th>Provider</th><th>Backbone</th><th>Role</th><th>Connections</th><th>State</th></tr></thead>
       <tbody>
@@ -267,9 +273,9 @@
 </div>
 
 {{if .Workers}}
-<div class="mb-4">
+<div class="card mt-3">
+  <div class="card-header">Crawler hosts</div>
   <div class="card-body">
-    <h5 style="margin:0 0 .5rem">Crawler hosts</h5>
     <table class="table" style="font-size:.88rem;margin:0">
       <thead><tr><th>Worker</th><th>Groups held</th></tr></thead>
       <tbody>
@@ -288,9 +294,9 @@
 {{end}}
 
 {{if gt .Health.Total 0}}
-<div class="mb-4">
+<div class="card mt-3">
+  <div class="card-header">Release health</div>
   <div class="card-body">
-    <h5 style="margin:0 0 .5rem">Release health</h5>
     <div style="display:flex;height:14px;border-radius:3px;overflow:hidden;background:rgba(128,128,128,.2)">
       <div style="width:{{.Health.HealthyPct}}%;background:#4caf50" title="healthy"></div>
       <div style="width:{{.Health.BrokenPct}}%;background:#e0a030" title="broken but repairable"></div>
@@ -309,7 +315,6 @@
   </div>
 </div>
 {{end}}
-</div>
 
 {{/* Embedded as the #crawlers tab of /admin/p/usenet: only refresh while that
      tab is the one on screen, or the reload would wipe form input being typed

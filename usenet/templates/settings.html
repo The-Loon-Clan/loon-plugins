@@ -1,8 +1,10 @@
-{{/* The width tiers are compound selectors (.container.page-wide), so the
-     container class is required alongside the tier — a bare tier class renders
-     full-bleed. page-wide because the coverage and provider tables are batch
-     screens. */}}
-<div class="container page-wide" style="padding-top:1.25rem">
+{{/* The width tiers are compound selectors (.container.page), so the container
+     class is required alongside the tier — a bare tier class renders
+     full-bleed. .page (~1200px) matches the rest of the admin; wide tables
+     scroll inside .table-responsive. Sections use the host's card-header /
+     card-body pattern — the same box the settings page's Registration card
+     uses — so the page reads as native. */}}
+<div class="container page" style="padding-top:1.25rem">
 {{if .Msg}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Err}}</div>{{end}}
 {{/* Native admin-page header: h4 title + muted one-liner + Back, then flat
@@ -32,8 +34,9 @@
 <div class="tab-content">
 
 <div class="tab-pane active" id="nntp">
-<div class="mb-4">
-    <h5>NNTP server</h5>
+<div class="card mt-3">
+    <div class="card-header">NNTP server</div>
+    <div class="card-body">
     <h6 style="margin:0 0 .3rem">Connection test</h6>
     <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
       Checks credentials against a server before you commit to them, and seeds the
@@ -77,12 +80,14 @@
             </p>
         </div>
     </form>
+    </div>
 </div>
 </div>
 
 <div class="tab-pane" id="providers">
-<div class="mb-4">
-    <h5>Providers</h5>
+<div class="card mt-3">
+    <div class="card-header">Providers</div>
+    <div class="card-body">
     <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
       Active providers are crawled every pass. Backups stay idle and are promoted only
       to cover an active provider that is failing. Newsgroups are split across
@@ -155,12 +160,14 @@
       <input class="form-control form-control-sm" type="text" name="backbone" placeholder="auto-detected" style="width:9rem">
       <button type="submit">Add provider</button>
     </form>
+    </div>
 </div>
 </div>
 
 <div class="tab-pane" id="indexing">
-<div class="mb-4">
-    <h5>Indexing</h5>
+<div class="card mt-3">
+    <div class="card-header">Indexing</div>
+    <div class="card-body">
     <form method="post" action="/admin/p/usenet/knobs">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem">
             {{range .Knobs}}
@@ -179,12 +186,14 @@
             <span class="text-muted small">applied on each job's next run (intervals take effect next cycle)</span>
         </div>
     </form>
+    </div>
 </div>
 </div>
 
 <div class="tab-pane" id="newsgroups">
-<div class="mb-4">
-    <h5>Newsgroups</h5>
+<div class="card mt-3">
+    <div class="card-header">Newsgroups</div>
+    <div class="card-body">
     <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
         <form method="post" action="/admin/p/usenet/fetch-groups" style="display:inline">
             <button class="btn btn-outline-primary btn-sm" type="submit">Fetch group list</button>
@@ -264,6 +273,7 @@
         {{else}}No groups yet. Save a server in the NNTP tab, then <strong>Fetch group list</strong> to pull the server's newsgroups.{{end}}
     </div>
     {{end}}
+    </div>
 </div>
 </div>
 
