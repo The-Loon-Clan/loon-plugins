@@ -2,7 +2,7 @@
 // the last few days of a set of newsgroups, assembles complete article sets into
 // downloadable NZB files, and serves search / group-list / download through a
 // capability the host's pages consume. It owns the "usenet" Postgres schema and
-// groups its jobs — Crawler, Backfill, NZB Builder, Tag Fill, Prune — in one place.
+// groups its jobs — Crawler, Backfill, Builder, Tag Fill, Prune, Health — under one "Usenet" family.
 //
 // Staging (the transient article-assembly buffer) is pluggable behind the
 // stagingStore seam: durable Postgres by default (never-lost, the base site's
@@ -169,13 +169,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 			"Fetches recent article overviews from active newsgroups").MarkOffPeak()
 		p.backfillJob = c.Scheduler.RegisterJob("Usenet Backfill",
 			"Walks each group's history backward to fill the retention window").MarkOffPeak()
-		p.buildJob = c.Scheduler.RegisterJob("NZB Builder",
+		p.buildJob = c.Scheduler.RegisterJob("Usenet Builder",
 			"Assembles complete article sets into downloadable NZB files").MarkOffPeak()
-		p.tagJob = c.Scheduler.RegisterJob("NZB Tag Fill",
+		p.tagJob = c.Scheduler.RegisterJob("Usenet Tag Fill",
 			"Re-parses resolution/source/codec/audio/language tags for untagged NZBs")
-		p.pruneJob = c.Scheduler.RegisterJob("NZB Prune",
+		p.pruneJob = c.Scheduler.RegisterJob("Usenet Prune",
 			"Deletes NZBs older than the retention window")
-		p.healthJob = c.Scheduler.RegisterJob("NZB Health Check",
+		p.healthJob = c.Scheduler.RegisterJob("Usenet Health Check",
 			"STATs stored NZBs to find releases whose articles have expired").MarkOffPeak()
 		p.crawlJob.SetTrigger(func() { go p.runCrawl(p.ctx) })
 		p.backfillJob.SetTrigger(func() { go p.runBackfill(p.ctx) })
@@ -207,11 +207,11 @@ func (p *Plugin) Start(ctx context.Context) error {
 	prevInterval := schedule.IntervalOverride
 	schedule.IntervalOverride = func(ctx context.Context, jobName string, def time.Duration) time.Duration {
 		switch jobName {
-		case "Usenet Crawler", "NZB Builder":
+		case "Usenet Crawler", "Usenet Builder":
 			return time.Duration(p.effective(ctx).CrawlIntervalMin) * time.Minute
 		case "Usenet Backfill":
 			return time.Duration(p.effective(ctx).BackfillIntervalMin) * time.Minute
-		case "NZB Health Check":
+		case "Usenet Health Check":
 			return time.Duration(p.effective(ctx).HealthIntervalMin) * time.Minute
 		}
 		if prevInterval != nil {
@@ -264,7 +264,7 @@ func (p *Plugin) runTagFill(ctx context.Context) {
 	if ctx == nil {
 		return
 	}
-	if !p.withLease(ctx, leaseScopeJob, "NZB Tag Fill", p.leaseTTL(p.effective(ctx)), func() {
+	if !p.withLease(ctx, leaseScopeJob, "Usenet Tag Fill", p.leaseTTL(p.effective(ctx)), func() {
 		p.runTagFillLocked(ctx)
 	}) {
 		p.tagJob.Log("tag fill skipped — another worker holds this job")
@@ -347,7 +347,7 @@ func (p *Plugin) runPrune(ctx context.Context) {
 	}
 	// Not group-scoped, so it must run once across the cluster or two workers
 	// duplicate the sweep.
-	if !p.withLease(ctx, leaseScopeJob, "NZB Prune", p.leaseTTL(p.effective(ctx)), func() {
+	if !p.withLease(ctx, leaseScopeJob, "Usenet Prune", p.leaseTTL(p.effective(ctx)), func() {
 		p.runPruneLocked(ctx)
 	}) {
 		p.pruneJob.Log("prune skipped — another worker holds this job")

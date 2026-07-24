@@ -278,6 +278,7 @@ type crawlerJobVM struct {
 	Name     string
 	Status   string
 	Activity string
+	Next     string // next scheduled run (HH:MM:SS) — answers "when will it run"
 	Running  bool
 }
 
@@ -405,15 +406,23 @@ type recentNZBVM struct {
 
 // jobVMs snapshots this plugin's own jobs so the page shows what each is doing.
 func (p *Plugin) jobVMs() (jobs []crawlerJobVM, anyRunning bool) {
+	// All plugin jobs carry the "Usenet " name prefix ON PURPOSE: the host
+	// registers its own jobs in the same registry, and matching generic names
+	// ("NZB Tag Fill") once picked up the HOST's job — the dashboard showed a
+	// paused legacy job and a running host job as if they were ours.
 	mine := map[string]bool{
 		"Usenet Crawler": true, "Usenet Backfill": true,
-		"NZB Builder": true, "NZB Tag Fill": true, "NZB Prune": true,
+		"Usenet Builder": true, "Usenet Tag Fill": true,
+		"Usenet Prune": true, "Usenet Health Check": true,
 	}
 	for _, s := range schedule.GetAllSnapshots() {
 		if !mine[s.Name] {
 			continue
 		}
 		j := crawlerJobVM{Name: s.Name, Status: s.Status}
+		if !s.NextRun.IsZero() {
+			j.Next = s.NextRun.Format("15:04:05")
+		}
 		if s.LastError != "" {
 			j.Activity = s.LastError
 		} else if len(s.Logs) > 0 {

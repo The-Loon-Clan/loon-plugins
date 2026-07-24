@@ -140,13 +140,14 @@
     {{if .Jobs}}
     <div class="table-responsive">
         <table class="table table-dark table-sm align-middle">
-            <thead><tr><th>Job</th><th>Status</th><th>Last activity</th></tr></thead>
+            <thead><tr><th>Job</th><th>Status</th><th>Next run</th><th>Last activity</th></tr></thead>
             <tbody>
             {{range .Jobs}}
-                <tr>
+                <tr data-job="{{.Name}}">
                     <td><code>{{.Name}}</code></td>
-                    <td>{{if .Running}}<span class="badge bg-success">running</span>{{else}}<span class="badge bg-secondary">{{.Status}}</span>{{end}}</td>
-                    <td class="small text-muted">{{if .Activity}}{{.Activity}}{{else}}—{{end}}</td>
+                    <td>{{if .Running}}<span data-role="status" class="badge bg-success">running</span>{{else}}<span data-role="status" class="badge bg-secondary">{{.Status}}</span>{{end}}</td>
+                    <td class="small text-muted" data-role="next">{{if .Next}}{{.Next}}{{else}}—{{end}}</td>
+                    <td class="small text-muted" data-role="activity">{{if .Activity}}{{.Activity}}{{else}}—{{end}}</td>
                 </tr>
             {{end}}
             </tbody>
@@ -203,9 +204,9 @@
     {{end}}
     {{else}}
     <p class="text-muted small mb-2">
-        <strong>{{.IndexStats.Staging.ReadyGroups}}</strong> complete set(s) queued for assembly ·
-        {{len .Pending}} incomplete in the latest sample{{if .IndexStats.Evicted}} ·
-        {{.IndexStats.Evicted}} hopeless set(s) evicted since worker start{{end}}
+        <strong id="bld-ready">{{.IndexStats.Staging.ReadyGroups}}</strong> complete set(s) queued for assembly ·
+        <span id="bld-pending">{{len .Pending}}</span> incomplete in the latest sample ·
+        <span id="bld-evicted">{{.IndexStats.Evicted}}</span> hopeless set(s) evicted since worker start
     </p>
     <p class="text-muted small mb-2">
         The build job drains the ready queue every pass and writes each release
@@ -409,6 +410,23 @@
   function apply(st) {
     set('stat-nzbs', st.total_nzbs); set('stat-staged', st.staged_articles);
     set('stat-backlog', st.backfill_remaining);
+    (st.jobs || []).forEach(function (j) {
+      var row = document.querySelector('tr[data-job="' + j.name + '"]');
+      if (!row) return;
+      var s = row.querySelector('[data-role=status]');
+      if (s) {
+        s.textContent = j.running ? 'running' : j.status;
+        s.className = 'badge ' + (j.running ? 'bg-success' : 'bg-secondary');
+      }
+      var n = row.querySelector('[data-role=next]');
+      if (n) n.textContent = j.next_run || '—';
+      var a = row.querySelector('[data-role=activity]');
+      if (a) a.textContent = j.activity || '—';
+    });
+    // Builder (redis body only — the ids don't exist in pg mode, set() no-ops).
+    set('bld-ready', st.ready_groups);
+    set('bld-pending', st.pending_count);
+    set('bld-evicted', st.evicted);
     var p = st.crawl || {};
     var any = p.running || p.batches > 0 || p.articles > 0;
     var card = document.getElementById('pass-card');

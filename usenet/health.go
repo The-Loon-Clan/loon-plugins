@@ -348,7 +348,7 @@ func (p *Plugin) runHealthCheck(ctx context.Context) {
 	cfg := p.effective(ctx)
 	// Health competes for the same idle connections the crawler wants; running
 	// it on two workers at once doubles that pressure for no extra coverage.
-	if !p.withLease(ctx, leaseScopeJob, "NZB Health Check", p.leaseTTL(cfg), func() {
+	if !p.withLease(ctx, leaseScopeJob, "Usenet Health Check", p.leaseTTL(cfg), func() {
 		p.healthLocked(ctx, cfg)
 	}) {
 		p.healthJob.Log("health check skipped — another worker holds this job")

@@ -48,6 +48,7 @@ type Config struct {
 	Connections int `json:"connections"` // default 10
 
 	SkipBackfill          bool `json:"skip_backfill"`            // "new articles only" — disable the backfill job
+	CrawlNoCatchup        bool `json:"crawl_no_catchup"`         // disable the catch-up loop (default off = catch-up ON)
 	BackfillBatchesPerRun int  `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 25)
 	BackfillIntervalMin   int  `json:"backfill_interval_min"`    // backfill cadence (default 5)
 
@@ -209,6 +210,9 @@ func (c *Config) knobFields() map[string]*int {
 func (c *Config) boolFields() map[string]*bool {
 	return map[string]*bool{
 		"skip_backfill": &c.SkipBackfill,
+		// Inverted flag so the zero value = catch-up enabled: a crawler that
+		// KNOWS it is behind should not sleep out the interval by default.
+		"crawl_no_catchup": &c.CrawlNoCatchup,
 	}
 }
 

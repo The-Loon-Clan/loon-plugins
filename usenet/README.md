@@ -167,12 +167,15 @@ blacklist so a production flip *resumes* rather than restarts; starts the
 heartbeat (multi-host presence); seeds junk rules + the curated newsgroup pack;
 and launches the six job loops.
 
-The six jobs (registered on the worker): **Usenet Crawler** (forward-fetch
-recent overviews), **Usenet Backfill** (walk history downward, filling coverage
-gaps), **NZB Builder** (assemble complete staged sets, filter, store through the
-sink), **NZB Tag Fill**, **NZB Prune** (stale-staging + junk sweep; NZB
-retention is opt-in, default keep-forever), **NZB Health Check** (STAT segments,
-record healthy/broken/dead).
+The six jobs (registered on the worker, all carrying the "Usenet" prefix so
+they never collide with a host's own job names in the shared registry):
+**Usenet Crawler** (forward-fetch recent overviews; keeps going without waiting
+for the interval while the servers still hold a backlog, unless
+`crawl_no_catchup` is set), **Usenet Backfill** (walk history downward, filling
+coverage gaps), **Usenet Builder** (assemble complete staged sets, filter,
+store through the sink), **Usenet Tag Fill**, **Usenet Prune** (stale-staging +
+junk sweep; NZB retention is opt-in, default keep-forever), **Usenet Health
+Check** (STAT segments, record healthy/broken/dead).
 
 **Stop**: no-op — the jobs derive from the root context and unwind on
 `SIGTERM`; leases expire on their own.

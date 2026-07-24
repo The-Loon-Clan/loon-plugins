@@ -39,6 +39,9 @@ type ReleaseReader interface {
 	releaseByID(ctx context.Context, id int64) (*detailRow, error)
 	nzbData(ctx context.Context, id int64) ([]byte, string, error)
 	stats(ctx context.Context) (pluginapi.IndexStats, error)
+	// forwardBacklog is the total articles the servers hold past our forward
+	// watermarks across active groups — the crawl catch-up loop's signal.
+	forwardBacklog(ctx context.Context) (int64, error)
 }
 
 // GroupStore manages the newsgroup catalog.

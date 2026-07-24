@@ -47,8 +47,8 @@ var capsTmpl = template.Must(template.New("caps").Funcs(newznabFuncs).Parse(
 
 // fallbackCats is the caps taxonomy when the catalog plugin isn't installed.
 var fallbackCats = []pluginapi.Category{
-	{ID: 5000, Name: "TV", Subcats: []pluginapi.Subcategory{{5070, "Anime"}}},
-	{ID: 8000, Name: "Other", Subcats: []pluginapi.Subcategory{{8010, "Misc"}}},
+	{ID: 5000, Name: "TV", Subcats: []pluginapi.Subcategory{{ID: 5070, Name: "Anime"}}},
+	{ID: 8000, Name: "Other", Subcats: []pluginapi.Subcategory{{ID: 8010, Name: "Misc"}}},
 }
 
 var feedTmpl = template.Must(template.New("feed").Funcs(newznabFuncs).Parse(

@@ -22,6 +22,7 @@ func TestStatusReportJSONContract(t *testing.T) {
 		"generated_at", "crawl", "backfill", "providers", "workers",
 		"active_groups", "staged_articles", "pending_releases", "ready_releases",
 		"total_nzbs", "backfill_remaining", "backfill_eta_seconds", "recent_errors",
+		"jobs", "ready_groups", "evicted", "pending_count",
 	} {
 		if _, ok := got[field]; !ok {
 			t.Errorf("status JSON missing field %q", field)
@@ -94,6 +95,10 @@ func TestWorkerTelemetryRoundTrip(t *testing.T) {
 		BackfillRate: 123.5,
 		Errors:       []crawlError{{At: time.Now().Truncate(time.Second), Op: "usenet/crawl", Msg: "boom"}},
 		Fleet:        map[int]providerStat{7: {Open: 18, Target: 20, Busy: 3, Resets: 2, Down: true}},
+		Jobs: []crawlerJobVM{{Name: "Usenet Crawler", Status: "running",
+			Activity: "batch 12/40", Next: "14:30:00", Running: true}},
+		Pending: []pendingSet{{Base: "Some.Release", Group: "a.b.anime", Have: 40, Need: 100}},
+		Evicted: 17,
 	}
 	b, err := json.Marshal(in)
 	if err != nil {
@@ -118,6 +123,16 @@ func TestWorkerTelemetryRoundTrip(t *testing.T) {
 	fs, ok := out.Fleet[7]
 	if !ok || fs.Open != 18 || fs.Target != 20 || fs.Busy != 3 || fs.Resets != 2 || !fs.Down {
 		t.Errorf("fleet dial stats lost in transit: %+v", out.Fleet)
+	}
+	if len(out.Jobs) != 1 || out.Jobs[0].Name != "Usenet Crawler" ||
+		out.Jobs[0].Next != "14:30:00" || !out.Jobs[0].Running {
+		t.Errorf("job snapshots lost in transit: %+v", out.Jobs)
+	}
+	if len(out.Pending) != 1 || out.Pending[0].Missing() != 60 {
+		t.Errorf("pending sample lost in transit: %+v", out.Pending)
+	}
+	if out.Evicted != 17 {
+		t.Errorf("evicted counter lost in transit: %d", out.Evicted)
 	}
 }
 

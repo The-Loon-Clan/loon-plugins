@@ -390,7 +390,7 @@ func (r *redisStaging) candidateGroups(ctx context.Context, limit int) ([]groupK
 	// transient sink error or on shutdown. Popping here would break that: every
 	// entry returned but not built would be gone, losing a COMPLETED release on
 	// the exact transient failure assemble.go promises to survive. Only one
-	// builder runs at a time (the "NZB Builder" job lease), so a peek cannot
+	// builder runs at a time (the "Usenet Builder" job lease), so a peek cannot
 	// double-dispatch. Entries leave nzb:ready only via deleteStaged.
 	entries, err := r.rdb.LRange(ctx, readyKey, 0, int64(limit-1)).Result()
 	if err != nil && err != redis.Nil {

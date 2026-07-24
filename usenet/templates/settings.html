@@ -193,6 +193,9 @@
         <label style="margin-top:.75rem;display:block">
             <input type="checkbox" name="skip_backfill" {{if .SkipBackfill}}checked{{end}}> Skip backfill (new articles only — don't pull history)
         </label>
+        <label style="margin-top:.35rem;display:block">
+            <input type="checkbox" name="crawl_no_catchup" {{if .CrawlNoCatchup}}checked{{end}}> Disable crawl catch-up (sleep the full interval even when the servers hold more new articles)
+        </label>
         <div style="margin-top:.5rem">
             <button class="btn btn-primary" type="submit">Save settings</button>
             <span class="text-muted small">applied on each job's next run (intervals take effect next cycle)</span>

@@ -50,6 +50,19 @@ type StatusReport struct {
 	// A zero here means "unknown", never "done" — check backfill_remaining.
 	BackfillETASeconds int64 `json:"backfill_eta_seconds"`
 
+	// Jobs is the scheduler's view of the plugin's own jobs — status, last
+	// activity line, and next scheduled run. On a split deployment these come
+	// from the worker's published telemetry, so the web poll shows the truth.
+	Jobs []JobReport `json:"jobs"`
+	// ReadyGroups is redis staging's assembly queue depth (LLEN — O(1)).
+	// Always 0 in pg mode: the equivalent there is a COUNT scan, which this
+	// endpoint is forbidden from running per poll.
+	ReadyGroups int64 `json:"ready_groups"`
+	// Evicted counts hopeless sets shed by redis staging since worker start.
+	Evicted int64 `json:"evicted"`
+	// PendingCount is the size of the last incomplete-sets sample.
+	PendingCount int `json:"pending_count"`
+
 	RecentErrors []ErrorReport `json:"recent_errors"`
 }
 
@@ -83,6 +96,15 @@ type ErrorReport struct {
 	At  time.Time `json:"at"`
 	Op  string    `json:"op"`
 	Msg string    `json:"message"`
+}
+
+// JobReport is one scheduler job's live state (mirrors crawlerJobVM).
+type JobReport struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Activity string `json:"activity"`
+	Next     string `json:"next_run"`
+	Running  bool   `json:"running"`
 }
 
 func passReport(st passStats) PassReport {
@@ -134,6 +156,21 @@ func (p *Plugin) status(ctx context.Context) StatusReport {
 	}
 	for _, e := range tv.Errors {
 		rep.RecentErrors = append(rep.RecentErrors, ErrorReport{At: e.At, Op: e.Op, Msg: e.Msg})
+	}
+	for _, j := range tv.Jobs {
+		rep.Jobs = append(rep.Jobs, JobReport{
+			Name: j.Name, Status: j.Status, Activity: j.Activity,
+			Next: j.Next, Running: j.Running,
+		})
+	}
+	rep.Evicted = tv.Evicted
+	rep.PendingCount = len(tv.Pending)
+	// Redis only: LLEN is O(1); the pg equivalent is a COUNT scan, and nothing
+	// on a poll endpoint may scan a table.
+	if p.cfg.Staging == StagingRedis {
+		if si, err := p.staging.stagingInfo(ctx); err == nil {
+			rep.ReadyGroups = si.ReadyGroups
+		}
 	}
 	return rep
 }

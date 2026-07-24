@@ -23,6 +23,20 @@ var _ Store = (*PGStore)(nil)
 
 // stats returns crawl progress: total NZBs, total staged articles, and per
 // active-group status (NZBs, staged, last crawl, watermark vs server high).
+// forwardBacklog sums server_high - high_watermark across active groups: how
+// many articles the servers hold that we have not crawled forward to yet.
+// A handful of indexed rows — safe to consult once per catch-up iteration.
+func (s *PGStore) forwardBacklog(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.GetContext(ctx, &n,
+			`SELECT COALESCE(SUM(GREATEST(s.server_high - s.high_watermark, 0)), 0)
+			   FROM newsgroup_state s
+			   JOIN newsgroups g ON g.name = s.group_name AND g.active`)
+	})
+	return n, err
+}
+
 func (s *PGStore) stats(ctx context.Context) (pluginapi.IndexStats, error) {
 	var st pluginapi.IndexStats
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {

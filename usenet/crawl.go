@@ -12,6 +12,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/the-loon-clan/loon/nntp"
+	"github.com/the-loon-clan/loon/schedule"
 )
 
 // stagedArticle is one parsed overview line awaiting assembly.
@@ -101,11 +102,39 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	p.tel.crawl.passStart(len(runs))
 	defer p.tel.crawl.passEnd()
 	totalStaged := 0
-	for _, run := range runs {
-		if ctx.Err() != nil {
-			return
+	// Catch-up loop: when the servers still hold a meaningful forward backlog
+	// after a pass, go again immediately instead of sleeping out the interval —
+	// "missing a lot of articles while sitting idle" is exactly wrong. Guarded
+	// three ways: progress must be made each round (or a stalled provider would
+	// spin), the off-peak gate is honored between rounds, and the operator can
+	// disable it (crawl_no_catchup).
+	prevBehind := int64(-1)
+	for {
+		staged := 0
+		for _, run := range runs {
+			if ctx.Err() != nil {
+				return
+			}
+			staged += p.crawlProvider(ctx, run, cfg)
 		}
-		totalStaged += p.crawlProvider(ctx, run, cfg)
+		totalStaged += staged
+		if cfg.CrawlNoCatchup || ctx.Err() != nil {
+			break
+		}
+		behind, err := p.st.forwardBacklog(ctx)
+		if err != nil || behind <= int64(cfg.Batch) {
+			break // caught up (within one batch) — the interval takes over
+		}
+		if prevBehind >= 0 && behind >= prevBehind {
+			p.crawlJob.Log("catch-up stalled at %s article(s) behind — waiting for the next interval", fmtComma(behind))
+			break
+		}
+		prevBehind = behind
+		if !schedule.OffPeakGate() {
+			p.crawlJob.Log("catch-up paused: site is busy (off-peak gate); %s article(s) behind", fmtComma(behind))
+			break
+		}
+		p.crawlJob.Log("catch-up: %s article(s) still behind — continuing without waiting for the interval", fmtComma(behind))
 	}
 	p.crawlJob.Log("crawl complete across %d provider(s): %d article(s) staged", len(runs), totalStaged)
 	p.crawlJob.SetIdle(p.nextCrawl())
