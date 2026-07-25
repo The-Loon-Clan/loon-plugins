@@ -43,7 +43,9 @@ Routes:
     (`/admin/p/usenet`): the provider fleet (per-row save/test/remove),
     indexing knobs, newsgroups, the Crawlers dashboard, the Jobs tab and the
     Filters blacklist. Actions: `knobs`, `fetch-groups`, `group`, `provider`,
-    `provider-del`, `provider-test`, `group-tune`, `group-move`, `group-del`,
+    `provider-del`, `provider-test`, `provider-probe` (backbone fingerprint:
+    compares article numbering against the reference provider via STAT),
+    `group-tune`, `group-move`, `group-del`,
     `groups-purge`, `crawl`, `backfill`, `run-crawl`, `run-backfill`,
     `run-build`, `run-tagfill`, `run-prune`, `run-health`, `reset-backfill`,
     `filter-add`, `filter-toggle`, `filter-del`, `filter-reset`. Each action
