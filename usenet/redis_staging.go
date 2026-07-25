@@ -23,28 +23,88 @@ import (
 // Unlike pgStaging, completeness is detected inline at Stage time (a set that
 // just completed is pushed to nzb:ready) and hopeless sets are evicted on the
 // same insert pipeline; the builder's candidateGroups() just drains the ready
-// list. Staged data lives only in Redis with a 2h TTL, so it is best-effort:
+// list. Staged data lives only in Redis with a short TTL (staging_ttl_hours,
+// default 2h), so it is best-effort:
 // under memory pressure incomplete stale sets are shed, but complete sets have
 // already been queued. Durable NZBs still write through PGStore.
 //
 // Key model (lifted verbatim):
 //
-//	art:{group}:{hash}     Hash  per-article JSON, field "fileNum:partNum"   TTL 2h
-//	grp:{group}:{hash}     Hash  set metadata (base_subject, totals, created_at) TTL 2h
-//	nzb:ready              List  "{group}:{hash}" of complete sets
+//	art:{group}:{hash}     Hash  per-article JSON, field "fileNum:partNum"   TTL staging_ttl_hours
+//	grp:{group}:{hash}     Hash  set metadata (base_subject, totals, created_at) TTL staging_ttl_hours
+//	nzb:ready              Set   "{group}:{hash}" of complete sets
 //	active_groups:{group}  Set   in-progress hashes
 //
 // hash = hex(sha256(group + ":" + base)[:8]).
 type redisStaging struct {
 	rdb redis.UniversalClient
+	// ttlHours is read per stage call so the admin knob applies live (same
+	// convention as pgStaging.limits). Values <= 0 fall back to 2h.
+	ttlHours func(context.Context) int
 	// onEvict reports hopeless-set evictions to the caller (telemetry) — the
 	// eviction is silent by design, and "is it failing or filtering?" is a
 	// question the dashboard must be able to answer.
 	onEvict func(n int)
+
+	// convMu/convDone gate the one-time nzb:ready LIST→SET migration (see
+	// convertReadyKey). Done stays false on a transient failure so the next
+	// caller retries instead of erroring WRONGTYPE forever.
+	convMu   sync.Mutex
+	convDone bool
 }
 
-func newRedisStaging(rdb redis.UniversalClient, onEvict func(int)) *redisStaging {
-	return &redisStaging{rdb: rdb, onEvict: onEvict}
+func newRedisStaging(rdb redis.UniversalClient, ttlHours func(context.Context) int, onEvict func(int)) *redisStaging {
+	return &redisStaging{rdb: rdb, ttlHours: ttlHours, onEvict: onEvict}
+}
+
+// ensureReadySet migrates nzb:ready from the pre-2026-07 LIST encoding to a
+// SET, once per process. LRem on a deep list made every deleteStaged O(len)
+// — a set makes queue/remove O(1) and deduplicates re-queued sets for free.
+// Random drain order replaces FIFO, which the builder never relied on.
+// The fleet shares one Redis, so a worker still running the old image would
+// race its LPush against the rename; workers already ship on one image, so
+// deploy them together.
+func (r *redisStaging) ensureReadySet(ctx context.Context) {
+	r.convMu.Lock()
+	defer r.convMu.Unlock()
+	if r.convDone {
+		return
+	}
+	t, err := r.rdb.Type(ctx, readyKey).Result()
+	if err != nil {
+		return
+	}
+	if t != "list" {
+		r.convDone = true // none / already a set
+		return
+	}
+	entries, err := r.rdb.LRange(ctx, readyKey, 0, -1).Result()
+	if err != nil {
+		return
+	}
+	if len(entries) == 0 {
+		r.convDone = r.rdb.Del(ctx, readyKey).Err() == nil
+		return
+	}
+	members := make([]interface{}, len(entries))
+	for i, e := range entries {
+		members[i] = e
+	}
+	tmp := readyKey + ":setconv"
+	if err := r.rdb.SAdd(ctx, tmp, members...).Err(); err != nil {
+		return
+	}
+	r.convDone = r.rdb.Rename(ctx, tmp, readyKey).Err() == nil
+}
+
+// stagingTTL resolves the live TTL knob with the historical 2h floor-default.
+func (r *redisStaging) stagingTTL(ctx context.Context) time.Duration {
+	if r.ttlHours != nil {
+		if h := r.ttlHours(ctx); h > 0 {
+			return time.Duration(h) * time.Hour
+		}
+	}
+	return 2 * time.Hour
 }
 
 var _ stagingStore = (*redisStaging)(nil)
@@ -184,6 +244,8 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 	if len(arts) == 0 {
 		return 0, nil
 	}
+	r.ensureReadySet(ctx)
+	ttl := r.stagingTTL(ctx)
 	type groupUpdate struct {
 		hash, groupName, baseSub string
 		articles                 []stagedArticle
@@ -251,13 +313,14 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 		)
 		pipe.HSetNX(ctx, gk, "created_at", now)
 		pipe.SAdd(ctx, activeKey(gu.groupName), gu.hash)
-		pipe.Expire(ctx, ak, 2*time.Hour)
-		pipe.Expire(ctx, gk, 2*time.Hour)
+		pipe.Expire(ctx, ak, ttl)
+		pipe.Expire(ctx, gk, ttl)
 		// The active set MUST expire too (refreshed on every touch): art:/grp:
 		// keys that TTL out incomplete otherwise leave their hash in
 		// active_groups:{group} forever, and incompleteSets walks every
-		// accumulated ref once per build pass — an unbounded leak.
-		pipe.Expire(ctx, activeKey(gu.groupName), 4*time.Hour)
+		// accumulated ref once per build pass — an unbounded leak. Double the
+		// data TTL so the ref always outlives the data it points at.
+		pipe.Expire(ctx, activeKey(gu.groupName), 2*ttl)
 	}
 
 	// Cheap HLen + meta per touched group; HKeys (which ships every field name)
@@ -310,12 +373,12 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 	}
 
 	if len(readyGroups) > 0 {
-		// Checked: a dropped LPush here loses a COMPLETED release — it never
+		// Checked: a dropped SAdd here loses a COMPLETED release — it never
 		// reaches the builder and completeness won't re-fire (the set has all
 		// its articles now). Returning the error leaves the batch's watermark
 		// un-advanced (crawl.go treats a staging error as ok=false), so the
 		// same articles re-crawl and re-queue.
-		if err := r.rdb.LPush(ctx, readyKey, readyGroups...).Err(); err != nil {
+		if err := r.rdb.SAdd(ctx, readyKey, readyGroups...).Err(); err != nil {
 			return len(arts), fmt.Errorf("queue ready sets: %w", err)
 		}
 	}
@@ -403,7 +466,10 @@ func (r *redisStaging) candidateGroups(ctx context.Context, limit int) ([]groupK
 	// the exact transient failure assemble.go promises to survive. Only one
 	// builder runs at a time (the "Usenet Builder" job lease), so a peek cannot
 	// double-dispatch. Entries leave nzb:ready only via deleteStaged.
-	entries, err := r.rdb.LRange(ctx, readyKey, 0, int64(limit-1)).Result()
+	// SRandMemberN samples without removing; order across passes is random,
+	// which is fine — every entry stays queued until deleteStaged takes it.
+	r.ensureReadySet(ctx)
+	entries, err := r.rdb.SRandMemberN(ctx, readyKey, int64(limit)).Result()
 	if err != nil && err != redis.Nil {
 		return nil, err
 	}
@@ -441,11 +507,7 @@ func (r *redisStaging) candidateGroups(ctx context.Context, limit int) ([]groupK
 		out = append(out, groupKey{Group: gh[i][0], Base: base})
 	}
 	if len(stale) > 0 {
-		rem := r.rdb.Pipeline()
-		for _, e := range stale {
-			rem.LRem(ctx, readyKey, 0, e)
-		}
-		_, _ = rem.Exec(ctx) // best-effort: a leftover dead entry is retried harmlessly
+		_ = r.rdb.SRem(ctx, readyKey, stale...).Err() // best-effort: a leftover dead entry is retried harmlessly
 	}
 	return out, nil
 }
@@ -479,9 +541,9 @@ func (r *redisStaging) deleteStaged(ctx context.Context, group, base string) err
 	pipe.Del(ctx, artKey(group, hash))
 	pipe.Del(ctx, grpKey(group, hash))
 	pipe.SRem(ctx, activeKey(group), hash)
-	// Remove it from the work queue too — candidateGroups now PEEKS (LRange)
-	// instead of popping, so this is the one place an entry leaves nzb:ready.
-	pipe.LRem(ctx, readyKey, 0, group+":"+hash)
+	// Remove it from the work queue too — candidateGroups PEEKS instead of
+	// popping, so this is the one place an entry leaves nzb:ready.
+	pipe.SRem(ctx, readyKey, group+":"+hash)
 	_, err := pipe.Exec(ctx)
 	return err
 }
@@ -491,7 +553,7 @@ func (r *redisStaging) deleteStaged(ctx context.Context, group, base string) err
 // there is no cheap way to scan every staged set — so nothing to sweep here.
 func (r *redisStaging) deleteJunkStaged(ctx context.Context) (int64, error) { return 0, nil }
 
-// prune is a no-op in redis mode: the 2h key TTL + the inline hopeless-eviction
+// prune is a no-op in redis mode: the key TTL + the inline hopeless-eviction
 // in stageArticles are the drain (there is no added_at horizon to sweep).
 func (r *redisStaging) prune(ctx context.Context) (int64, error) { return 0, nil }
 
@@ -523,7 +585,7 @@ func (r *redisStaging) stagingInfo(ctx context.Context) (stagingInfo, error) {
 	if n, err := r.rdb.DBSize(ctx).Result(); err == nil {
 		out.Keys = n
 	}
-	if n, err := r.rdb.LLen(ctx, readyKey).Result(); err == nil {
+	if n, err := r.rdb.SCard(ctx, readyKey).Result(); err == nil {
 		out.ReadyGroups = n
 	}
 	info, err := r.rdb.Info(ctx, "memory").Result()
@@ -537,8 +599,8 @@ func (r *redisStaging) stagingInfo(ctx context.Context) (stagingInfo, error) {
 
 // incompleteSets walks every active set and returns the largest incomplete
 // ones. SCAN over the per-group active sets + one pipelined HGetAll/HLen pair
-// per staged set — bounded by what is actually in flight (sets expire after
-// 2h), fine once per build pass, NOT for the render path.
+// per staged set — bounded by what is actually in flight (sets expire on the
+// staging TTL), fine once per build pass, NOT for the render path.
 func (r *redisStaging) incompleteSets(ctx context.Context, limit int) ([]pendingSet, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 15

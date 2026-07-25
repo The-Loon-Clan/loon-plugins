@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 
 	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
@@ -36,18 +37,27 @@ func (s *PGStore) groups(ctx context.Context) ([]pluginapi.GroupInfo, error) {
 }
 
 // upsertGroups inserts each name as an inactive group, ignoring duplicates.
-// Returns how many were newly added.
+// Returns how many were newly added. Batched via unnest — an NNTP LIST from a
+// full-feed server is 100k+ names, and one INSERT per name was 100k+ round
+// trips inside one transaction.
 func (s *PGStore) upsertGroups(ctx context.Context, names []string) (int, error) {
+	const chunk = 5000
 	added := 0
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		for _, name := range names {
+		for i := 0; i < len(names); i += chunk {
+			end := i + chunk
+			if end > len(names) {
+				end = len(names)
+			}
 			res, err := tx.ExecContext(ctx,
-				`INSERT INTO newsgroups (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, name)
+				`INSERT INTO newsgroups (name)
+				 SELECT DISTINCT unnest($1::text[])
+				 ON CONFLICT (name) DO NOTHING`, pq.Array(names[i:end]))
 			if err != nil {
 				return err
 			}
 			if n, _ := res.RowsAffected(); n > 0 {
-				added++
+				added += int(n)
 			}
 		}
 		return nil

@@ -114,6 +114,12 @@ values; these are defaults):
 
 - `server.*` — seed a provider on first boot if the table is empty.
 - `staging` — `pg` (durable, default) | `redis` (prod's pipeline, needs Redis).
+  Redis is the tuned path (inline completeness, hopeless-set eviction, O(1)
+  ready queue, `staging_ttl_hours` knob). The pg backend is CORRECT but not yet
+  perf-complete: `stageArticles` inserts row-at-a-time (no batch INSERT) and
+  `deleteJunkStaged` scans staged titles per sweep — fine at hobby scale,
+  known-slow on a full-feed crawl. Prefer `redis` for production volume until
+  those land.
 - `sink` — `internal` (own `nzbs` table, default) | `host` (hand releases to the
   host's `ReleaseSink`; requires the host to register the sink + health
   capabilities). A production host pins this to `host`.
