@@ -42,7 +42,7 @@ type Config struct {
 	PruneIntervalMin    int `json:"prune_interval_min"`     // prune cadence (default 1440)
 	BuildDrainPerPass   int `json:"build_drain_per_pass"`   // completed sets assembled per build pass (default 500)
 	Batch               int `json:"batch"`                  // article-number span per OVER request (default 3000)
-	MaxGroups           int `json:"max_groups"`             // cap active groups crawled per run (default 20)
+	MaxGroups           int `json:"max_groups"`             // cap active groups crawled per run (default 20; 0 = all, no cap)
 	CrawlMaxBatches     int `json:"crawl_max_batches"`      // forward-pass batch budget (default 20000) — the catch-up loop rolls the remainder into the next round
 	MaxArticlesPerGroup int `json:"max_articles_per_group"` // cap the first-pass volume so a busy group can't pull millions (default 20000)
 
@@ -248,11 +248,12 @@ func (c Config) withOverrides(s map[string]string) Config {
 	for key, dst := range out.knobFields() {
 		if raw, ok := s[key]; ok {
 			if n, err := strconv.Atoi(raw); err == nil {
-				// nzb_retention_days: 0 is a MEANINGFUL value ("keep forever" —
-				// the UI's own help text promises it), so a stored 0 must
-				// override a non-zero config.yml default. Everywhere else 0
-				// still means "use the built-in default".
-				if n > 0 || (n == 0 && key == "nzb_retention_days") {
+				// A stored 0 is IGNORED (keep the built-in default) for most
+				// knobs, but is MEANINGFUL for a few where 0 is a real setting:
+				// nzb_retention_days (0 = "keep forever", promised in the UI)
+				// and max_groups (0 = "crawl every active group, no cap"). For
+				// those a stored 0 must override a non-zero config.yml default.
+				if n > 0 || (n == 0 && (key == "nzb_retention_days" || key == "max_groups")) {
 					*dst = n
 				}
 			}
