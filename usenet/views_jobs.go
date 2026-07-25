@@ -27,12 +27,12 @@ type jobPaneVM struct {
 // jobPaneOrder fixes the pill order to the pipeline's flow, not registration
 // order: crawl → backfill → build → tag → prune → health.
 var jobPaneOrder = []struct{ name, slug, action string }{
-	{"Usenet Crawler", "crawler", "run-crawl"},
-	{"Usenet Backfill", "backfill", "run-backfill"},
-	{"Usenet Builder", "builder", "run-build"},
-	{"Usenet Tag Fill", "tagfill", "run-tagfill"},
-	{"Usenet Prune", "prune", "run-prune"},
-	{"Usenet Health Check", "health", "run-health"},
+	{jobNameCrawl, "crawler", "run-crawl"},
+	{jobNameBackfill, "backfill", "run-backfill"},
+	{jobNameBuild, "builder", "run-build"},
+	{jobNameTagFill, "tagfill", "run-tagfill"},
+	{jobNamePrune, "prune", "run-prune"},
+	{jobNameHealth, "health", "run-health"},
 }
 
 func (p *Plugin) renderJobs(ctx context.Context) (template.HTML, error) {

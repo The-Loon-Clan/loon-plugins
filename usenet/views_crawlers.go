@@ -417,9 +417,9 @@ func (p *Plugin) jobVMs() (jobs []crawlerJobVM, anyRunning bool) {
 	// ("NZB Tag Fill") once picked up the HOST's job — the dashboard showed a
 	// paused legacy job and a running host job as if they were ours.
 	mine := map[string]bool{
-		"Usenet Crawler": true, "Usenet Backfill": true,
-		"Usenet Builder": true, "Usenet Tag Fill": true,
-		"Usenet Prune": true, "Usenet Health Check": true,
+		jobNameCrawl: true, jobNameBackfill: true,
+		jobNameBuild: true, jobNameTagFill: true,
+		jobNamePrune: true, jobNameHealth: true,
 	}
 	for _, s := range schedule.GetAllSnapshots() {
 		if !mine[s.Name] {

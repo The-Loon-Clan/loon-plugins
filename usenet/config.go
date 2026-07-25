@@ -43,6 +43,7 @@ type Config struct {
 	BuildDrainPerPass   int `json:"build_drain_per_pass"`   // completed sets assembled per build pass (default 500)
 	Batch               int `json:"batch"`                  // article-number span per OVER request (default 3000)
 	MaxGroups           int `json:"max_groups"`             // cap active groups crawled per run (default 20)
+	CrawlMaxBatches     int `json:"crawl_max_batches"`      // forward-pass batch budget (default 20000) — the catch-up loop rolls the remainder into the next round
 	MaxArticlesPerGroup int `json:"max_articles_per_group"` // cap the first-pass volume so a busy group can't pull millions (default 20000)
 
 	// Connections is the NNTP pool size — how many articles can be fetched in
@@ -131,6 +132,9 @@ func (c *Config) applyDefaults() {
 	if c.MaxGroups <= 0 {
 		c.MaxGroups = 20
 	}
+	if c.CrawlMaxBatches <= 0 {
+		c.CrawlMaxBatches = 20000
+	}
 	if c.MaxArticlesPerGroup <= 0 {
 		c.MaxArticlesPerGroup = 20000
 	}
@@ -207,6 +211,7 @@ func (c *Config) knobFields() map[string]*int {
 		"build_drain_per_pass":       &c.BuildDrainPerPass,
 		"batch":                      &c.Batch,
 		"max_groups":                 &c.MaxGroups,
+		"crawl_max_batches":          &c.CrawlMaxBatches,
 		"max_articles_per_group":     &c.MaxArticlesPerGroup,
 		"backfill_interval_min":      &c.BackfillIntervalMin,
 		"backfill_batches_per_run":   &c.BackfillBatchesPerRun,

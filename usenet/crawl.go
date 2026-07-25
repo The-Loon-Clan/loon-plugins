@@ -199,7 +199,12 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	if len(groups) == 0 {
 		return 0, 0
 	}
-	groups, release := p.claimGroupLeases(ctx, bb, groups, p.leaseTTL(cfg))
+	// From here the pass runs on the lease context: losing the lease mid-pass
+	// cancels it, because a sibling may own these groups from that moment.
+	// jobCtx keeps the job's own context so lease loss and shutdown are
+	// distinguishable at the final sweep.
+	jobCtx := ctx
+	groups, ctx, release := p.claimGroupLeases(ctx, bb, groups, p.leaseTTL(cfg))
 	defer release()
 	p.tel.crawl.noteGroups(len(groups))
 	if len(groups) == 0 {
@@ -208,12 +213,24 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	}
 	claimed := len(groups)
 
-	// 1. Resolve each group's window and enqueue its batches.
+	// 1. Resolve each group's window and enqueue its batches, bounded by the
+	// pass budget: a deep backlog runs as bounded rounds (the catch-up loop
+	// rolls the remainder into the next round) instead of one hours-long
+	// pass. Backfill has had this since day one (backfill_batches_per_run);
+	// the forward crawl was unbounded — 192k batches were observed planned in
+	// a single pass. Truncating mid-group is safe: the watermark advances
+	// through the contiguous prefix of fetched batches, so the unplanned tail
+	// is simply next round's window.
 	plans := make(map[string]*crawlPlan, len(groups))
 	var jobs []batchJob
+	budgetHit := false
 	for _, g := range groups {
 		if ctx.Err() != nil {
 			return 0, claimed
+		}
+		if len(jobs) >= cfg.CrawlMaxBatches {
+			budgetHit = true
+			break
 		}
 		plan, err := p.planGroup(ctx, pool, g, cfg)
 		if err != nil {
@@ -234,6 +251,10 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 		}
 		before := len(jobs)
 		for i := plan.start; i <= plan.high; i += cfg.Batch {
+			if len(jobs) >= cfg.CrawlMaxBatches {
+				budgetHit = true
+				break
+			}
 			end := i + cfg.Batch - 1
 			if end > plan.high {
 				end = plan.high
@@ -245,6 +266,10 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 			})
 		}
 		p.tel.crawl.notePlanned(plan.group, len(jobs)-before)
+	}
+	if budgetHit {
+		p.crawlJob.Log("%s: pass budget reached (%d batches) — remaining work rolls into the next round",
+			run.prov.label(), len(jobs))
 	}
 	if len(jobs) == 0 {
 		p.crawlJob.Log("%s: %d group(s), nothing new", run.prov.label(), len(plans))
@@ -274,10 +299,16 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	})
 
 	// 3. Final sweep: partial credit for groups a cancelled pass left
-	// incomplete — their contiguous prefix still advances.
-	s2, a2 := p.advanceWatermarks(ctx, bb, plans, leftover)
-	staged += s2
-	advanced += a2
+	// incomplete — their contiguous prefix still advances. NOT on lease loss:
+	// another worker may own these groups now, and a late watermark write
+	// would clobber theirs. Completed groups already advanced via onGroup.
+	if ctx.Err() != nil && jobCtx.Err() == nil {
+		p.crawlJob.Log("%s: lease lost mid-pass — final sweep skipped; %d group(s) already advanced", run.prov.label(), advanced)
+	} else {
+		s2, a2 := p.advanceWatermarks(ctx, bb, plans, leftover)
+		staged += s2
+		advanced += a2
+	}
 
 	st := pool.Stats()
 	p.crawlJob.Log("%s: %d group(s), %d batch(es), %d article(s) staged, %d advanced (conns %d/%d, resets %d)",

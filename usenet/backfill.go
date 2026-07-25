@@ -111,7 +111,11 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	for i, g := range groups {
 		rows[i] = groupRow{Name: g.Name}
 	}
-	heldRows, release := p.claimGroupLeases(ctx, bb, rows, p.leaseTTL(cfg))
+	// From here the pass runs on the lease context: losing the lease mid-pass
+	// cancels it (a sibling may own these groups). jobCtx distinguishes lease
+	// loss from shutdown when deciding whether to record coverage below.
+	jobCtx := ctx
+	heldRows, ctx, release := p.claimGroupLeases(ctx, bb, rows, p.leaseTTL(cfg))
 	defer release()
 	if len(heldRows) == 0 {
 		return 0
@@ -181,6 +185,13 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 		p.tel.backfill.noteBatch(r.articles, r.staged, r.wire, r.ok)
 	}
 
+	// On lease loss the coverage writes are skipped, not just doomed to fail:
+	// a sibling may own these groups now, and coverage-IS-state means the
+	// unrecorded batches are simply refetched next pass.
+	if ctx.Err() != nil && jobCtx.Err() == nil {
+		p.backfillJob.Log("%s: lease lost mid-pass — coverage not recorded; batches will refetch next pass", run.prov.label())
+		return 0
+	}
 	staged := p.recordBackfill(ctx, bb, targets, results, cfg)
 
 	st := pool.Stats()

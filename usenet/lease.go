@@ -150,7 +150,12 @@ func leaseRenewInterval(ttl time.Duration) time.Duration {
 // withLease runs fn while holding a lease, renewing it in the background so a
 // long pass cannot outlive its own claim. Returns false without running fn when
 // the lease is held elsewhere.
-func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Duration, fn func()) bool {
+//
+// fn receives a context that is CANCELLED the moment renewal loses the lease:
+// from that point another worker may legitimately own the work, so continuing
+// to run — and especially to write — risks overlap. fn must treat that
+// cancellation like any other and stop promptly.
+func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Duration, fn func(context.Context)) bool {
 	me := workerID()
 	got, err := p.st.claimLease(ctx, scope, key, me, ttl)
 	if err != nil {
@@ -161,6 +166,8 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 		return false
 	}
 
+	workCtx, cancelWork := context.WithCancel(ctx)
+	defer cancelWork()
 	renewCtx, stop := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -176,12 +183,13 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 				// A failed renewal is not fatal on its own — the lease may still
 				// be valid — but if it keeps failing the TTL will lapse and
 				// another worker takes over, which is the correct outcome. The
-				// LOSS must not be silent though: the protected work keeps
-				// running, so overlap becomes possible from this moment.
+				// loss cancels workCtx so the protected work stops instead of
+				// running on and overlapping the new owner.
 				if ok, err := p.st.claimLease(renewCtx, scope, key, me, ttl); err != nil || !ok {
 					if renewCtx.Err() == nil {
 						p.core.Errors.Report(renewCtx, "usenet/lease-renew-lost",
-							fmt.Errorf("%s/%s: renewal lost mid-work (err=%v ok=%v)", scope, key, err, ok))
+							fmt.Errorf("%s/%s: renewal lost mid-work (err=%v ok=%v) — cancelling the pass", scope, key, err, ok))
+						cancelWork()
 					}
 					return
 				}
@@ -201,7 +209,7 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 		}
 	}()
 
-	fn()
+	fn(workCtx)
 	return true
 }
 
@@ -212,13 +220,16 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 func groupLeaseKey(backbone, group string) string { return backbone + "|" + group }
 
 // claimGroupLeases takes leases for as many of the given groups as are free and
-// returns those we own plus a release func. Partial acquisition is the normal
-// case, not an error — whatever another worker holds simply isn't ours this
-// pass, and it will crawl those groups instead.
+// returns those we own, a pass context, and a release func. Partial acquisition
+// is the normal case, not an error — whatever another worker holds simply isn't
+// ours this pass, and it will crawl those groups instead.
 //
 // A single renewer refreshes the whole set while work is in flight, so a slow
 // pass cannot let part of its own claim lapse and invite a second worker in.
-func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups []groupRow, ttl time.Duration) ([]groupRow, func()) {
+// The returned context is CANCELLED the moment renewal loses any of the set:
+// a sibling may legitimately own these groups from that point, so the pass
+// must stop crawling and writing. Run the pass on it, not on ctx.
+func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups []groupRow, ttl time.Duration) ([]groupRow, context.Context, func()) {
 	me := workerID()
 	var held []groupRow
 	var keys []string
@@ -235,9 +246,10 @@ func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups [
 		}
 	}
 	if len(held) == 0 {
-		return nil, func() {}
+		return nil, ctx, func() {}
 	}
 
+	passCtx, cancelPass := context.WithCancel(ctx)
 	renewCtx, stop := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -252,12 +264,13 @@ func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups [
 			case <-t.C:
 				for _, k := range keys {
 					if ok, err := p.st.claimLease(renewCtx, leaseScopeGroup, k, me, ttl); err != nil || !ok {
-						// One key's loss abandons renewal for the whole set —
-						// report it, because the pass keeps crawling and a
-						// sibling may now legitimately claim these groups.
+						// One key's loss abandons renewal for the whole set and
+						// cancels the pass — a sibling may now legitimately
+						// claim these groups, so crawling on would overlap it.
 						if renewCtx.Err() == nil {
 							p.core.Errors.Report(renewCtx, "usenet/lease-renew-lost",
-								fmt.Errorf("group lease %s: renewal lost mid-pass (err=%v ok=%v)", k, err, ok))
+								fmt.Errorf("group lease %s: renewal lost mid-pass (err=%v ok=%v) — cancelling the pass", k, err, ok))
+							cancelPass()
 						}
 						return
 					}
@@ -269,6 +282,7 @@ func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups [
 	release := func() {
 		stop()
 		wg.Wait()
+		cancelPass()
 		// Fresh context: ctx may already be cancelled by shutdown, and a lease
 		// left behind idles that group until it expires.
 		relCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -279,7 +293,7 @@ func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups [
 			}
 		}
 	}
-	return held, release
+	return held, passCtx, release
 }
 
 // leaseTTL resolves the configured lease lifetime.

@@ -30,6 +30,21 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
+// Job names. Registry identity, cluster-wide lease keys, interval overrides,
+// the dashboard's ownership filter and the Jobs tab all key off these EXACT
+// strings — a mistyped literal silently detaches one of those (a job whose
+// interval knob never applies, or a lease nobody else contends). The "Usenet "
+// prefix is deliberate: the host registers its own jobs in the same registry,
+// and a generic name once collided with a host job.
+const (
+	jobNameCrawl    = "Usenet Crawler"
+	jobNameBackfill = "Usenet Backfill"
+	jobNameBuild    = "Usenet Builder"
+	jobNameTagFill  = "Usenet Tag Fill"
+	jobNamePrune    = "Usenet Prune"
+	jobNameHealth   = "Usenet Health Check"
+)
+
 func init() {
 	core.RegisterPlugin("usenet", func() core.Plugin { return &Plugin{} })
 }
@@ -191,17 +206,17 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// worker/all: register the six pipeline jobs (all "Usenet "-prefixed so
 	// they never collide with a host's own job names in the shared registry).
 	if c.Process == "worker" || c.Process == "all" {
-		p.crawlJob = c.Scheduler.RegisterJob("Usenet Crawler",
+		p.crawlJob = c.Scheduler.RegisterJob(jobNameCrawl,
 			"Fetches recent article overviews from active newsgroups").MarkOffPeak()
-		p.backfillJob = c.Scheduler.RegisterJob("Usenet Backfill",
+		p.backfillJob = c.Scheduler.RegisterJob(jobNameBackfill,
 			"Walks each group's history backward to fill the retention window").MarkOffPeak()
-		p.buildJob = c.Scheduler.RegisterJob("Usenet Builder",
+		p.buildJob = c.Scheduler.RegisterJob(jobNameBuild,
 			"Assembles complete article sets into downloadable NZB files").MarkOffPeak()
-		p.tagJob = c.Scheduler.RegisterJob("Usenet Tag Fill",
+		p.tagJob = c.Scheduler.RegisterJob(jobNameTagFill,
 			"Re-parses quality tags for untagged NZBs and recategorizes default-category releases")
-		p.pruneJob = c.Scheduler.RegisterJob("Usenet Prune",
+		p.pruneJob = c.Scheduler.RegisterJob(jobNamePrune,
 			"Sweeps stale staging + junk; deletes old NZBs only when nzb_retention_days is set")
-		p.healthJob = c.Scheduler.RegisterJob("Usenet Health Check",
+		p.healthJob = c.Scheduler.RegisterJob(jobNameHealth,
 			"STATs stored NZBs to find releases whose articles have expired").MarkOffPeak()
 		p.crawlJob.SetTrigger(func() { go p.runCrawl(p.ctx) })
 		p.backfillJob.SetTrigger(func() { go p.runBackfill(p.ctx) })
@@ -233,15 +248,15 @@ func (p *Plugin) Start(ctx context.Context) error {
 	prevInterval := schedule.IntervalOverride
 	schedule.IntervalOverride = func(ctx context.Context, jobName string, def time.Duration) time.Duration {
 		switch jobName {
-		case "Usenet Crawler", "Usenet Builder":
+		case jobNameCrawl, jobNameBuild:
 			return time.Duration(p.effective(ctx).CrawlIntervalMin) * time.Minute
-		case "Usenet Backfill":
+		case jobNameBackfill:
 			return time.Duration(p.effective(ctx).BackfillIntervalMin) * time.Minute
-		case "Usenet Health Check":
+		case jobNameHealth:
 			return time.Duration(p.effective(ctx).HealthIntervalMin) * time.Minute
-		case "Usenet Tag Fill":
+		case jobNameTagFill:
 			return time.Duration(p.effective(ctx).TagFillIntervalMin) * time.Minute
-		case "Usenet Prune":
+		case jobNamePrune:
 			return time.Duration(p.effective(ctx).PruneIntervalMin) * time.Minute
 		}
 		if prevInterval != nil {
@@ -296,7 +311,7 @@ func (p *Plugin) runTagFill(ctx context.Context) {
 	if ctx == nil {
 		return
 	}
-	if !p.withLease(ctx, leaseScopeJob, "Usenet Tag Fill", p.leaseTTL(p.effective(ctx)), func() {
+	if !p.withLease(ctx, leaseScopeJob, jobNameTagFill, p.leaseTTL(p.effective(ctx)), func(ctx context.Context) {
 		p.runTagFillLocked(ctx)
 	}) {
 		p.tagJob.Log("tag fill skipped — another worker holds this job")
@@ -384,7 +399,7 @@ func (p *Plugin) runPrune(ctx context.Context) {
 	}
 	// Not group-scoped, so it must run once across the cluster or two workers
 	// duplicate the sweep.
-	if !p.withLease(ctx, leaseScopeJob, "Usenet Prune", p.leaseTTL(p.effective(ctx)), func() {
+	if !p.withLease(ctx, leaseScopeJob, jobNamePrune, p.leaseTTL(p.effective(ctx)), func(ctx context.Context) {
 		p.runPruneLocked(ctx)
 	}) {
 		p.pruneJob.Log("prune skipped — another worker holds this job")

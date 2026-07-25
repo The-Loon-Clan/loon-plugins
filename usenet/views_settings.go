@@ -34,6 +34,7 @@ func (p *Plugin) knobs(ctx context.Context) []knob {
 		{"crawl_interval_min", "Crawl interval (min)", cfg.CrawlIntervalMin, "how often to crawl + build (applies next cycle)"},
 		{"batch", "Overview batch size", cfg.Batch, "article-number span per NNTP OVER request"},
 		{"max_groups", "Max groups per run", cfg.MaxGroups, "cap active groups crawled per pass"},
+		{"crawl_max_batches", "Crawl pass budget (batches)", cfg.CrawlMaxBatches, "cap OVER batches planned per forward pass — a huge backlog runs as bounded rounds (catch-up rolls the rest into the next round) instead of one hours-long pass"},
 		{"max_articles_per_group", "First-pass article cap", cfg.MaxArticlesPerGroup, "cap a new group's initial volume"},
 		{"backfill_interval_min", "Backfill interval (min)", cfg.BackfillIntervalMin, "how often to pull history (applies next cycle)"},
 		{"backfill_batches_per_run", "Backfill batches per run", cfg.BackfillBatchesPerRun, "how much history each backfill pass pulls"},

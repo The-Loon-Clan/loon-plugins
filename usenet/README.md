@@ -21,7 +21,9 @@ search results, group browse, and a Newznab/Torznab `/api` + `/rss` endpoint.
 
 The plugin runs on one host or several at once. Multiple providers crawl in
 parallel and complete each other's releases through shared staging; multiple
-worker hosts divide the newsgroups between them without double-crawling. It can
+worker hosts divide the newsgroups between them without double-crawling — and a
+worker that loses a lease mid-pass (deploy takeover, expiry) cancels that pass
+immediately rather than overlapping the new owner's writes. It can
 own its own minimal catalogue (standalone / demo) or, in **host-sink mode**,
 hand every assembled release to a rich host's NZB domain — the seam by which a
 production site adopts this plugin in place of an in-tree crawler.

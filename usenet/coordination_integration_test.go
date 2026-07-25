@@ -150,6 +150,40 @@ func TestLeaseDeadOwnerTakeover(t *testing.T) {
 	}
 }
 
+// TestWithLeaseCancelsOnLoss: when a lease is stolen mid-work (dead-owner
+// takeover by a heartbeating sibling), the next renewal must CANCEL the work
+// context — from that moment the sibling legitimately owns the work, and
+// running on risks overlapping writes. Slow by nature: the renewal tick has a
+// 5s floor, so detection takes one tick.
+func TestWithLeaseCancelsOnLoss(t *testing.T) {
+	s := testStore(t)
+	p := &Plugin{st: s, core: &core.Core{Errors: core.NewErrorReporter(core.ErrorAdapter{})}}
+	ctx := context.Background()
+	const key = "steal-target"
+
+	// The holder (this process's workerID) writes no heartbeat, so a
+	// heartbeating thief takes the lease via the dead-owner clause — the
+	// same path a real deploy takes.
+	if err := s.heartbeat(ctx, "thief"); err != nil {
+		t.Fatal(err)
+	}
+	ran := p.withLease(ctx, leaseScopeJob, key, 6*time.Second, func(workCtx context.Context) {
+		if got, err := s.claimLease(ctx, leaseScopeJob, key, "thief", time.Minute); err != nil || !got {
+			t.Errorf("thief could not steal the lease: got=%v err=%v", got, err)
+			return
+		}
+		select {
+		case <-workCtx.Done():
+			// Renewal noticed the loss and cancelled the pass.
+		case <-time.After(15 * time.Second):
+			t.Error("work context not cancelled within 15s of the lease being stolen")
+		}
+	})
+	if !ran {
+		t.Fatal("withLease did not run fn despite a free lease")
+	}
+}
+
 // TestLeaseReleaseIsOwnerOnly: releasing must not let a worker drop someone
 // else's lease out from under them.
 func TestLeaseReleaseIsOwnerOnly(t *testing.T) {
