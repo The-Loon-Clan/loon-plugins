@@ -36,6 +36,10 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	if err := c.RegisterView(core.View{
 		Slug: "usenet", Title: "Usenet", Slot: core.SlotAdminPage,
 		Description: "Providers, indexing, newsgroups, crawlers, jobs + filters.",
+		// Hub-placement hint: hosts that have an "Operations" admin section
+		// file the card there (badged as plugin-provided); hosts that don't
+		// keep it in their generic Plugins section.
+		Nav: core.NavHint{Group: "Operations"},
 		Render: func(gc *gin.Context) (template.HTML, error) {
 			return p.renderSettings(gc.Request.Context(), gc.Query("gq"), gc.Query("msg"), gc.Query("err"))
 		},
