@@ -3,9 +3,17 @@
 // interfaces; the host implements them with thin adapters over its existing
 // repositories and injects them via each plugin's SetDeps before core.Boot.
 //
-// Neither side imports the other's concrete packages — the same discipline as
-// indexer-site/pkg/pluginapi. This is what lets a job that reads and writes the
-// host's own tables live in a separate module without depending on the host.
+// Neither side imports the other's concrete packages. This is what lets a job
+// that reads and writes the host's own tables live in a separate module without
+// depending on the host.
+//
+// The package holds two flavors of contract: the SetDeps-injected worker ports
+// above (anidb/catalog/scraper/usenet), and the Core.Register/Lookup
+// cross-plugin capabilities in rewards.go / notify.go / etc. (RankGranter,
+// ReleaseNotifier, ...) that one plugin publishes and another consumes. Both
+// depend only on the interface. (The host's own agent Dispatcher stays in
+// indexer-site/pkg/pluginapi because it is coupled to the site's request
+// models.)
 package pluginapi
 
 import "context"
