@@ -138,6 +138,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return err
 	}
 
+	// Liveness counts for a host's stats widget — sanitized to numbers only,
+	// so the host may expose it below admin. Every process: web serves it, a
+	// worker-side cache job may snapshot it.
+	if err := c.Register(pluginapi.UsenetActivityName, activitySurface{p: p}); err != nil {
+		return err
+	}
+
 	// web/all/api: publish the READ capabilities — the public site pages AND the
 	// standalone api process both serve search / browse / Newznab / download.
 	if c.Process == "web" || c.Process == "all" || c.Process == "api" {

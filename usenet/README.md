@@ -141,6 +141,11 @@ Extensions PUBLISHED (`Core.Register`):
 - `pluginapi.UsenetNewznabName` (`usenet.newznab`) — the whole Newznab/Torznab
   XML contract (caps / search / rss / get); the host mounts `/api` + `/rss`
   and delegates the parsed request here.
+- `pluginapi.UsenetActivityName` (`usenet.activity`) — counts-only crawler
+  liveness (current/last pass articles, staged, batches, wire bytes) sourced
+  from the published worker telemetry. Sanitized for non-admin surfaces —
+  no group names, hostnames, or error text — so a host can drive a public
+  stats-page live widget from it. Registered in every process.
 - `pluginapi.RegisterStats` — contributes indexer totals to the host's stats
   snapshot.
 

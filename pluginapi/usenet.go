@@ -202,10 +202,37 @@ type UsenetNewznab interface {
 	Newznab(ctx context.Context, req NewznabRequest) (NewznabResult, error)
 }
 
+// CrawlActivity is a sanitized snapshot of crawler liveness: counts only — no
+// group names, no hostnames, no error text — so a host may serve it on a
+// non-admin stats endpoint as-is. The JSON tags are the wire shape hosts can
+// return directly. It describes ONE pass: the running crawl if there is one,
+// else a running backfill, else the last finished crawl.
+type CrawlActivity struct {
+	InProgress bool `json:"in_progress"`
+	Backfill   bool `json:"backfill"` // the numbers describe a backfill pass
+	// UpdatedAt is the telemetry publish stamp — how fresh these numbers are.
+	UpdatedAt    time.Time `json:"updated_at"`
+	Started      time.Time `json:"started"`
+	Groups       int       `json:"groups"`
+	GroupsDone   int       `json:"groups_done"`
+	Batches      int       `json:"batches"`
+	BatchesTotal int       `json:"batches_total"`
+	Articles     int       `json:"articles"` // overview lines fetched this pass
+	Staged       int       `json:"staged"`   // kept after junk filtering + dedup
+	WireBytes    int64     `json:"wire_bytes"`
+}
+
+// UsenetActivity is the public-safe liveness surface — registered in every
+// process (web serves it; a worker-side cache job may snapshot it).
+type UsenetActivity interface {
+	Activity(ctx context.Context) (CrawlActivity, error)
+}
+
 const (
-	UsenetIndexName   = "usenet.index"
-	UsenetAdminName   = "usenet.admin"
-	UsenetNewznabName = "usenet.newznab"
+	UsenetIndexName    = "usenet.index"
+	UsenetAdminName    = "usenet.admin"
+	UsenetNewznabName  = "usenet.newznab"
+	UsenetActivityName = "usenet.activity"
 )
 
 // LookupUsenetIndex / Admin / Newznab resolve the plugin-published read
@@ -236,6 +263,15 @@ func LookupUsenetNewznab(c *core.Core) (UsenetNewznab, bool) {
 		return nil, false
 	}
 	s, ok := v.(UsenetNewznab)
+	return s, ok
+}
+
+func LookupUsenetActivity(c *core.Core) (UsenetActivity, bool) {
+	v, ok := c.Lookup(UsenetActivityName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(UsenetActivity)
 	return s, ok
 }
 
