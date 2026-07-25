@@ -57,7 +57,33 @@ type btcpayWebhookPayload struct {
 	// honour `site_user_id`, `donor_label`, and `package_id` keys.
 	// `package_id` links a settled donation back to the
 	// donation_packages row the donor claimed (migration 261).
-	Metadata map[string]string `json:"metadata"`
+	//
+	// json.RawMessage, not map[string]string: the site's own
+	// click-to-claim flow (claim.go) writes site_user_id/package_id
+	// as JSON NUMBERS, and BTCPay echoes metadata verbatim — a
+	// map[string]string decode fails outright on those, 400-ing every
+	// claim-flow settlement. metaString below coerces either shape.
+	Metadata map[string]json.RawMessage `json:"metadata"`
+}
+
+// metaString extracts a metadata value as a string whether BTCPay
+// echoed it as a JSON string ("42") or a JSON number (42). Absent key
+// or unparseable value → "".
+func metaString(m map[string]json.RawMessage, key string) string {
+	raw, ok := m[key]
+	if !ok || len(raw) == 0 {
+		return ""
+	}
+	// Quoted string → unquote via json. Bare number/other → use the
+	// raw token as-is (strconv on the caller side handles numerics).
+	if raw[0] == '"' {
+		var s string
+		if json.Unmarshal(raw, &s) == nil {
+			return s
+		}
+		return ""
+	}
+	return string(raw)
 }
 
 // BTCPayWebhook receives + verifies + records BTCPay invoice events.
@@ -105,27 +131,41 @@ func (h *Handlers) BTCPayWebhook(c *gin.Context) {
 		return
 	}
 
-	// Pull the actual amount from the BTCPay API rather than trusting
-	// the webhook body alone — the body's headline fields can lag a
-	// hop behind the canonical invoice state. Falls back to webhook
-	// body's reported value if the API call fails (still recorded,
-	// admin can correct via /admin/donate/log).
+	// Idempotency by the stable txid (btcpay-<invoiceID>), BEFORE the
+	// API fetch that can vary the asset label. BTCPay redelivers until
+	// it gets a 2xx; a redelivery whose API-fetch outcome differs from
+	// the first would otherwise land a SECOND row under a different
+	// (asset, txid) and double-credit. txid is derived from the
+	// HMAC-verified body, so this pre-check is the true dedup.
+	txid := "btcpay-" + p.InvoiceID
+	if existing, _ := h.store.GetDonationByTxid(ctx, txid); existing != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "deduped": true})
+		return
+	}
+
+	// Pull the actual amount from the BTCPay API — the webhook body
+	// carries no amount field, so this call is the only amount source.
+	// On failure it returns zeros; we record the settlement at $0
+	// rather than lose it, and the admin corrects via /admin/donate/log.
+	// (Follow-up: distinguish a transient API failure — worth a 5xx so
+	// BTCPay retries when the API is back — from absent API creds,
+	// where retrying can't help.)
 	amountUSD, asset, amountNative := fetchInvoiceTotals(ctx, h, p.InvoiceID)
 	if amountUSD <= 0 {
 		log.Printf("btcpay-webhook: invoice %s settled with $0 — recording anyway", p.InvoiceID)
 	}
 
-	donorLabel := strings.TrimSpace(p.Metadata["donor_label"])
+	donorLabel := clampDonorLabel(metaString(p.Metadata, "donor_label"))
 	d := &Donation{
 		Asset:        asset,
-		Txid:         "btcpay-" + p.InvoiceID,
+		Txid:         txid,
 		AmountNative: amountNative,
 		AmountUSD:    amountUSD,
 		DonorLabel:   donorLabel,
 		Note:         "btcpay invoice " + p.InvoiceID,
 		ReceivedAt:   time.Unix(p.Timestamp, 0).UTC(),
 	}
-	if uidStr := strings.TrimSpace(p.Metadata["site_user_id"]); uidStr != "" {
+	if uidStr := strings.TrimSpace(metaString(p.Metadata, "site_user_id")); uidStr != "" {
 		if uid, err := strconv.Atoi(uidStr); err == nil && uid > 0 {
 			d.DonorUserID = &uid
 		}
@@ -135,7 +175,7 @@ func (h *Handlers) BTCPayWebhook(c *gin.Context) {
 	// came from the tip jar or a direct address. The donations-page
 	// stock counter only counts rows where package_id matches an
 	// active package, so a stale id can't poison the public view.
-	if pidStr := strings.TrimSpace(p.Metadata["package_id"]); pidStr != "" {
+	if pidStr := strings.TrimSpace(metaString(p.Metadata, "package_id")); pidStr != "" {
 		if pid, err := strconv.ParseInt(pidStr, 10, 64); err == nil && pid > 0 {
 			d.PackageID = &pid
 		}
@@ -149,18 +189,44 @@ func (h *Handlers) BTCPayWebhook(c *gin.Context) {
 	}
 
 	if err := h.store.CreateDonation(ctx, d, donatorThreshold); err != nil {
-		// (asset, txid) UNIQUE will fire on a duplicate webhook
-		// delivery (BTCPay retries until 2xx). Log + ack so the
-		// retry loop terminates; the original record is intact.
+		// Two failure classes, and they must be told apart — the old
+		// code acked 200 for BOTH, which silently DROPPED a settled
+		// donation on any transient error (BTCPay stops retrying on
+		// 2xx). Re-check by txid: if a row now exists, this was a
+		// concurrent-redelivery race that lost the (asset,txid) UNIQUE
+		// — the donation IS recorded, so ack. Otherwise it's a real
+		// failure (transient DB, FK on a since-deleted donor) — 5xx so
+		// BTCPay retries and the donation isn't lost.
+		if existing, _ := h.store.GetDonationByTxid(ctx, txid); existing != nil {
+			c.JSON(http.StatusOK, gin.H{"ok": true, "deduped": true})
+			return
+		}
 		log.Printf("btcpay-webhook: CreateDonation invoice=%s: %v", p.InvoiceID, err)
 		h.errs.Report(ctx, "btcpay-webhook", err)
-		c.JSON(http.StatusOK, gin.H{"ok": true, "deduped": true})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "record failed"})
 		return
 	}
 
 	log.Printf("btcpay-webhook: recorded donation $%.2f (%s) invoice=%s user=%v",
 		d.AmountUSD, d.Asset, p.InvoiceID, d.DonorUserID)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "donation_id": d.ID})
+}
+
+// donorLabelMaxLen caps the public-leaderboard label. The claim POST
+// takes donor_label from the donor and it round-trips to the public
+// page via invoice metadata; without a server-side cap a hand-crafted
+// POST could store multi-KB junk (the label renders auto-escaped, so
+// this is defacement/bloat control, not XSS). Matches the admin
+// form's client-side maxlength.
+const donorLabelMaxLen = 80
+
+// clampDonorLabel trims and length-limits a donor-supplied label.
+func clampDonorLabel(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > donorLabelMaxLen {
+		s = s[:donorLabelMaxLen]
+	}
+	return s
 }
 
 // verifyBTCPaySig compares the `sha256=<hex>` header against an

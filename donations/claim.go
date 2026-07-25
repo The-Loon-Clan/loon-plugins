@@ -118,14 +118,17 @@ func (h *Handlers) ClaimPackage(c *gin.Context) {
 	}
 
 	// Build the invoice. metadata is opaque to BTCPay; the webhook
-	// reads what we put here.
+	// reads what we put here. Values are STRINGS on purpose: BTCPay
+	// echoes metadata verbatim in the settlement webhook, and the
+	// webhook's tolerant parse handles both, but strings keep the two
+	// ends aligned regardless of which parses a given invoice.
 	meta := map[string]interface{}{
-		"package_id": pkg.ID,
+		"package_id": strconv.FormatInt(pkg.ID, 10),
 	}
 	if u, ok := h.auth.CurrentUser(c); ok {
-		meta["site_user_id"] = u.ID
+		meta["site_user_id"] = strconv.FormatInt(u.ID, 10)
 	}
-	if label := strings.TrimSpace(c.PostForm("donor_label")); label != "" {
+	if label := clampDonorLabel(c.PostForm("donor_label")); label != "" {
 		meta["donor_label"] = label
 	}
 

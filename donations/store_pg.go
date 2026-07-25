@@ -143,6 +143,25 @@ func (r *PGStore) CreateDonation(ctx context.Context, d *Donation, donatorThresh
 	return tx.Commit()
 }
 
+// GetDonationByTxid returns the donation with the given txid, or
+// (nil, nil) when none exists (the absence contract the webhook's
+// idempotency pre-check relies on).
+func (r *PGStore) GetDonationByTxid(ctx context.Context, txid string) (*Donation, error) {
+	var d Donation
+	err := r.db.GetContext(ctx, &d, `
+		SELECT id, asset, txid, amount_native, amount_usd, donor_user_id,
+		       donor_label, received_at, note, overfunded, package_id
+		  FROM donations
+		 WHERE txid = $1`, txid)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
 // ListRecentDonations returns the N most-recent rows for the public
 // page. donor_label is the public-display name; rows where the donor
 // opted out (empty label) come back as 'Anonymous' on render — the

@@ -4,7 +4,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -209,5 +211,49 @@ func TestVerifyBTCPaySig(t *testing.T) {
 				t.Errorf("verifyBTCPaySig = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// ─── metaString: BTCPay echoes metadata verbatim, and the claim flow
+// writes NUMBERS while the manual/documented path writes STRINGS.
+// metaString must read both, or every click-to-claim settlement 400s.
+func TestMetaString(t *testing.T) {
+	// The exact shape claim.go's invoice produces once BTCPay echoes it.
+	var p btcpayWebhookPayload
+	if err := json.Unmarshal([]byte(
+		`{"type":"InvoiceSettled","metadata":{"site_user_id":42,"package_id":7,"donor_label":"bob"}}`),
+		&p); err != nil {
+		t.Fatalf("numeric-metadata payload must decode, got: %v", err)
+	}
+	if got := metaString(p.Metadata, "site_user_id"); got != "42" {
+		t.Errorf("numeric site_user_id = %q, want 42", got)
+	}
+	if got := metaString(p.Metadata, "package_id"); got != "7" {
+		t.Errorf("numeric package_id = %q, want 7", got)
+	}
+	if got := metaString(p.Metadata, "donor_label"); got != "bob" {
+		t.Errorf("string donor_label = %q, want bob", got)
+	}
+
+	// The manual/string form still parses.
+	var q btcpayWebhookPayload
+	_ = json.Unmarshal([]byte(`{"metadata":{"site_user_id":"99"}}`), &q)
+	if got := metaString(q.Metadata, "site_user_id"); got != "99" {
+		t.Errorf("string site_user_id = %q, want 99", got)
+	}
+
+	// Absent key → "".
+	if got := metaString(q.Metadata, "missing"); got != "" {
+		t.Errorf("absent key = %q, want empty", got)
+	}
+}
+
+func TestClampDonorLabel(t *testing.T) {
+	if got := clampDonorLabel("  spaced  "); got != "spaced" {
+		t.Errorf("trim = %q", got)
+	}
+	long := strings.Repeat("x", 200)
+	if got := clampDonorLabel(long); len(got) != donorLabelMaxLen {
+		t.Errorf("len = %d, want %d", len(got), donorLabelMaxLen)
 	}
 }

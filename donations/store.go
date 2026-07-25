@@ -18,6 +18,11 @@ type Store interface {
 	SumSiteCostsByGroupPeriod(ctx context.Context, group, period string) (float64, error)
 	DistinctActiveGoalGroups(ctx context.Context) ([]string, error)
 	CreateDonation(ctx context.Context, d *Donation, donatorThresholdUSD float64) error
+	// GetDonationByTxid returns the donation with the given txid, or
+	// (nil, nil) when none exists. The webhook uses it to make BTCPay
+	// settlement idempotent by the stable txid (btcpay-<invoiceID>),
+	// independent of the invoice's asset/currency.
+	GetDonationByTxid(ctx context.Context, txid string) (*Donation, error)
 	ListRecentDonations(ctx context.Context, limit int) ([]*Donation, error)
 	SumDonationsSince(ctx context.Context, since time.Time) (float64, error)
 

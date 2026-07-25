@@ -107,10 +107,14 @@ reached via `Core.Storage.DB()`:
 
 Gotchas: BTCPay outbound calls (invoice create, invoice fetch, health check) all go through
 `loon/httpclient.NewSafeFetch`, so the admin-configured BTCPay base URL cannot be aimed at
-internal or cloud-metadata addresses. Duplicate webhook deliveries are absorbed by the
-`(asset, txid)` UNIQUE constraint (txid = `btcpay-<invoiceID>`) and acked 200 so BTCPay stops
-retrying. The webhook fails closed when `btcpay_webhook_secret` is unset. Package stock is
-counted year-to-date, matching the yearly goal boundary, so packages auto-reopen Jan 1.
+internal or cloud-metadata addresses. Webhook settlement is idempotent by the stable txid
+(`btcpay-<invoiceID>`): a pre-check dedups redeliveries independent of the invoice's asset
+label, a settled row is acked 200 so BTCPay stops retrying, and a genuine record failure
+returns 5xx so BTCPay retries rather than silently dropping the donation. Invoice metadata is
+read tolerantly (numbers or strings) because the click-to-claim flow writes numeric ids while
+the manual/operator flow writes strings, and BTCPay echoes either verbatim. The webhook fails
+closed when `btcpay_webhook_secret` is unset. Package stock is counted year-to-date, matching
+the yearly goal boundary, so packages auto-reopen Jan 1.
 
 ## Testing
 

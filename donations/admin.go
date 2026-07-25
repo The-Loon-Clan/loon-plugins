@@ -564,7 +564,7 @@ func (h *Handlers) SaveDonateManual(c *gin.Context) {
 	d := &Donation{
 		Asset:      asset,
 		AmountUSD:  amountUSD,
-		DonorLabel: strings.TrimSpace(c.PostForm("donor_label")),
+		DonorLabel: clampDonorLabel(c.PostForm("donor_label")),
 		Note:       strings.TrimSpace(c.PostForm("note")),
 	}
 	// AmountNative — for fiat we store the USD value here so reports
