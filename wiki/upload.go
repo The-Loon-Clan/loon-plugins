@@ -50,12 +50,16 @@ func (h *Handlers) UploadImage(c *gin.Context) {
 		return
 	}
 
-	// Seek back to start (multipart.File supports Seek)
+	// Seek back to start (multipart.File supports Seek). A failed seek would
+	// store an image missing its sniffed first bytes — refuse instead.
 	type seeker interface {
 		Seek(int64, int) (int64, error)
 	}
 	if s, ok2 := file.(seeker); ok2 {
-		s.Seek(0, 0)
+		if _, err := s.Seek(0, 0); err != nil {
+			jsonError(c, http.StatusInternalServerError, "could not read file")
+			return
+		}
 	}
 
 	if err := os.MkdirAll(deps.UploadDir, 0755); err != nil {
