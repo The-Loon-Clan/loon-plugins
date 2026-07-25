@@ -105,6 +105,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 	pub.GET("/help/donate", p.handlers.DonatePage)
 	pub.POST("/donate/claim-package/:id", p.handlers.ClaimPackage)
 
+	// Mod-editable surface: the unified page, cost/points/package/
+	// tip-jar management. These shape the public page but touch no
+	// credentials and can't move money.
 	adm := engine.Group("/admin/donate")
 	adm.Use(c.Auth.RequireUser(core.RoleMod)...)
 	adm.GET("", p.handlers.AdminDonatePage)
@@ -114,12 +117,22 @@ func (p *Plugin) Provision(c *core.Core) error {
 	adm.GET("/points", p.handlers.DonatePointsPage)
 	adm.POST("/points", p.handlers.SaveDonatePoints)
 	adm.GET("/log", p.handlers.DonateLogPage)
-	adm.POST("/log", p.handlers.SaveDonateManual)
-	adm.POST("/wallet", p.handlers.SaveDonateWallet)
-	adm.POST("/btcpay-health", p.handlers.BTCPayHealthCheck)
 	adm.POST("/tipjar", p.handlers.SaveDonateTipJar)
 	adm.POST("/packages", p.handlers.SaveDonatePackage)
 	adm.POST("/packages/:id/del", p.handlers.DeleteDonatePackage)
+
+	// Admin-only writes: the three credential/money vectors. Saving a
+	// BTCPay base URL + running the health check together would
+	// exfiltrate the stored API key to an attacker-controlled host;
+	// manual log entry credits lifetime donation totals + the Donator
+	// flag. A mod must not be able to do either — the page above stays
+	// mod-viewable (secrets render presence-only), only these writes
+	// require admin.
+	admHi := engine.Group("/admin/donate")
+	admHi.Use(c.Auth.RequireUser(core.RoleAdmin)...)
+	admHi.POST("/wallet", p.handlers.SaveDonateWallet)
+	admHi.POST("/btcpay-health", p.handlers.BTCPayHealthCheck)
+	admHi.POST("/log", p.handlers.SaveDonateManual)
 
 	return nil
 }

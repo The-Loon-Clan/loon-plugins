@@ -21,15 +21,20 @@ Routes (all registered in `plugin.go` `Provision`):
     non-admins get 404; admins (mod+, via `c.Auth.CurrentUser`) can still preview.
   - `POST /donate/claim-package/:id` — click-to-claim; creates a BTCPay invoice and redirects
     to the hosted checkout.
-- **admin** (`c.Auth.RequireUser(core.RoleMod)` group on `/admin/donate`):
+- **admin — mod-editable** (`c.Auth.RequireUser(core.RoleMod)` group on `/admin/donate`): the
+  page and everything that shapes the public view but touches no credentials and can't move money.
   - `GET  ""` unified admin page; legacy `GET /costs`, `/points`, `/log` redirect to it anchored.
+    Secrets render presence-only, so the page is safe for mods to view.
   - `POST /costs`, `/costs/:id/del` — site-cost CRUD.
   - `POST /points` — points curve + locking groups + master enable toggle.
-  - `POST /log` — record a manual/fiat donation.
-  - `POST /wallet` — save BTC/ETH/XMR addresses + BTCPay credentials (secrets mask-preserving).
-  - `POST /btcpay-health` — live credential check against the BTCPay store.
   - `POST /tipjar` — save the two tip-jar goal slots.
   - `POST /packages`, `/packages/:id/del` — donation-package CRUD.
+- **admin-only** (`c.Auth.RequireUser(core.RoleAdmin)` group on `/admin/donate`): the credential
+  and money-moving writes a moderator must not reach.
+  - `POST /wallet` — save BTC/ETH/XMR addresses + BTCPay credentials (secrets mask-preserving).
+  - `POST /btcpay-health` — live credential check against the BTCPay store (sends the stored API
+    key to the configured URL; admin-gated so a mod can't repoint the URL and exfiltrate it).
+  - `POST /log` — record a manual/fiat donation (credits lifetime totals + the Donator flag).
 
 Process kinds: `Metadata.Processes` is unset (empty) → **web-only**.
 

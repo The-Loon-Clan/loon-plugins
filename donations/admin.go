@@ -28,6 +28,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/the-loon-clan/loon/core"
 	"github.com/the-loon-clan/loon/httpclient"
 )
 
@@ -148,8 +149,16 @@ func (h *Handlers) AdminDonatePage(c *gin.Context) {
 		}
 	}
 
+	// IsAdmin gates the wallet/BTCPay-health/manual-log forms in the
+	// template: those actions are admin-only routes (see Provision), so
+	// a mod viewing this page must not be shown controls that would
+	// 403 on submit.
+	viewer, _ := h.auth.CurrentUser(c)
+	isAdmin := viewer.AtLeast(core.RoleAdmin)
+
 	c.HTML(http.StatusOK, "admin_donate.html", h.deps.BaseData(c, gin.H{
 		"PageTitle":     "Donate (admin)",
+		"IsAdmin":       isAdmin,
 		"Costs":         costs,
 		"Edit":          pickCostByQueryID(costs, c.Query("edit")),
 		"Config":        cfg,
