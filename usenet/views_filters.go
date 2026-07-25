@@ -8,6 +8,8 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // Filters view: the operator blacklist and the per-rule filter-hit counters.
@@ -25,6 +27,15 @@ type filterHitVM struct {
 	Count              int64
 	Pct                float64
 	LastSeen           string
+}
+
+// sweepVM is one row of the host's stored-catalogue sweep attribution
+// (the optional UsenetJunkSweepName capability).
+type sweepVM struct {
+	Pattern, Sample     string
+	Count               int64
+	Pct                 float64
+	FirstSeen, LastSeen string
 }
 
 func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg string) (template.HTML, error) {
@@ -64,9 +75,38 @@ func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg string) (templat
 		hvms[i] = vm
 	}
 
+	// Host sweep attribution (optional capability): which junk rule tagged how
+	// many already-indexed releases. Ingest hits above answer "what are we
+	// dropping"; this answers "what got past ingest and had to be swept" —
+	// together they say whether a rule works at ingest, only in the sweep, or
+	// not at all. Absent capability (internal-sink installs) hides the card.
+	var svms []sweepVM
+	var sweepTotal int64
+	if prov, ok := pluginapi.LookupJunkSweepStats(p.core); ok {
+		rows, err := prov.JunkSweepStats(ctx)
+		if err != nil {
+			return "", err
+		}
+		for _, r := range rows {
+			sweepTotal += r.Count
+		}
+		svms = make([]sweepVM, len(rows))
+		for i, r := range rows {
+			vm := sweepVM{
+				Pattern: r.Pattern, Sample: r.LastSample, Count: r.Count,
+				FirstSeen: fmtTime(r.FirstSeen), LastSeen: fmtTime(r.LastSeen),
+			}
+			if sweepTotal > 0 {
+				vm.Pct = float64(r.Count) * 100 / float64(sweepTotal)
+			}
+			svms[i] = vm
+		}
+	}
+
 	return p.frag("filters.html", map[string]any{
 		"Rules": vms, "Fields": blacklistFields,
 		"Hits": hvms, "TotalHits": total,
+		"Sweep": svms, "SweepTotal": sweepTotal,
 		"Msg": msg, "Err": errMsg,
 	})
 }

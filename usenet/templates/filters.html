@@ -112,3 +112,43 @@
     {{end}}
     </div>
 </div>
+
+{{/* Host sweep attribution — only when the host registers the junk-sweep
+     capability (sink=host sites with their own stored-catalogue sweep).
+     Ingest hits above = "what we dropped"; this = "what got past ingest and
+     had to be swept out of the catalogue afterwards". */}}
+{{if .Sweep}}
+<div class="card mt-3">
+    <div class="card-header">Catalog sweep (host)</div>
+    <div class="card-body">
+    <p class="text-muted small">
+        The host's junk sweep tags already-indexed releases the ingest filter missed —
+        its counters attribute each removal to the rule that matched. A rule that only
+        ever fires HERE is a gap in the ingest engine worth closing; a rule near zero
+        here and busy above is working exactly where it should.
+    </p>
+    <div class="table-responsive">
+        <table class="table table-dark table-sm align-middle">
+            <thead><tr>
+                <th>Rule</th>
+                <th class="text-end">Tagged</th><th class="text-end">Share</th>
+                <th>Last sample</th><th>First seen</th><th>Last seen</th>
+            </tr></thead>
+            <tbody>
+            {{range .Sweep}}
+                <tr>
+                    <td><code>{{.Pattern}}</code></td>
+                    <td class="text-end">{{.Count}}</td>
+                    <td class="text-end small text-muted">{{printf "%.1f" .Pct}}%</td>
+                    <td class="small text-muted" style="max-width:32rem;overflow-wrap:anywhere">{{.Sample}}</td>
+                    <td class="small text-muted">{{.FirstSeen}}</td>
+                    <td class="small text-muted">{{.LastSeen}}</td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+    <span class="text-muted small">{{.SweepTotal}} release(s) tagged by the sweep in total.</span>
+    </div>
+</div>
+{{end}}

@@ -172,6 +172,10 @@ Extensions CONSUMED (`Core.Lookup`):
   cards (in host mode the releases and verdicts live in the host's domain,
   invisible to the plugin's tables). A host should serve it from CACHED
   numbers; absent, those cards degrade to empty.
+- `pluginapi.UsenetJunkSweepName` — optional: the host's stored-catalogue
+  junk-sweep attribution counters, shown as a third card on the Filters tab
+  (ingest hits say what was dropped; the sweep says what got past ingest and
+  had to be tagged afterwards). Absent, the card is hidden.
 
 Events: emits `pluginapi.EventIngested` after a build pass creates releases, so
 a host subscriber (e.g. a cache invalidator) can react. Best-effort — no host

@@ -458,3 +458,39 @@ func LookupCatalogStats(c *core.Core) (CatalogStatsProvider, bool) {
 	s, ok := v.(CatalogStatsProvider)
 	return s, ok
 }
+
+// UsenetJunkSweepName is an OPTIONAL capability a host registers so the
+// plugin's Filters tab can show the host's stored-catalogue junk-sweep
+// attribution — which junk rule tagged how many ALREADY-INDEXED releases.
+// Distinct from the plugin's own filter-hit counters (ingest-time drops):
+// the sweep is the host-side safety net that catches what ingest missed, and
+// surfacing both on one page is what tells the operator whether a rule works
+// at ingest, only in the sweep, or not at all. Hosts without a sweep simply
+// don't register it.
+const UsenetJunkSweepName = "usenet.junk-sweep"
+
+// JunkSweepStat is one junk rule's sweep attribution row.
+type JunkSweepStat struct {
+	Pattern    string    `json:"pattern"`
+	Count      int64     `json:"count"`
+	LastSample string    `json:"last_sample"`
+	FirstSeen  time.Time `json:"first_seen"`
+	LastSeen   time.Time `json:"last_seen"`
+}
+
+// JunkSweepStatsProvider is what the host registers under UsenetJunkSweepName.
+// Rows come back sorted by Count descending; the set is bounded by the host's
+// distinct sweep patterns, so no pagination.
+type JunkSweepStatsProvider interface {
+	JunkSweepStats(ctx context.Context) ([]JunkSweepStat, error)
+}
+
+// LookupJunkSweepStats resolves the host-registered sweep counters, if any.
+func LookupJunkSweepStats(c *core.Core) (JunkSweepStatsProvider, bool) {
+	v, ok := c.Lookup(UsenetJunkSweepName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(JunkSweepStatsProvider)
+	return s, ok
+}
