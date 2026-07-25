@@ -1,0 +1,118 @@
+package wiki
+
+import (
+	"context"
+	"fmt"
+	"html/template"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon/core"
+)
+
+func init() {
+	core.RegisterPlugin("wiki", func() core.Plugin { return &Plugin{} })
+}
+
+// Deps are the host seams the wiki needs beyond what core provides. The
+// plugin renders the HOST's templates (wiki.html and friends — see README
+// for the template contract), so the host supplies its page-chrome injector
+// and markdown renderer; the upload pair localises the one filesystem
+// assumption the in-tree plugin hardcoded. SetDeps must be called before
+// core.Boot; Provision fails loud otherwise.
+type Deps struct {
+	// BaseData merges the host's page chrome (user, nav, CSRF, ...) into a
+	// template data map — every page render goes through it.
+	BaseData func(c *gin.Context, extra gin.H) gin.H
+	// Markdown renders trusted-editor wiki markdown to HTML. Wiki authors
+	// are mods+, so hosts may allow richer markup here than in user-
+	// authored surfaces — wire whatever renderer the host's wiki pages
+	// already use.
+	Markdown func(src string) template.HTML
+	// UploadDir is the filesystem directory admin image uploads land in;
+	// UploadURL the public URL prefix the stored filename is appended to.
+	UploadDir string
+	UploadURL string
+}
+
+var deps Deps
+
+// SetDeps installs the host seams. Call from main() before core.Boot.
+func SetDeps(d Deps) { deps = d }
+
+// Plugin is the core.Plugin lifecycle wrapper. Provision builds
+// the store + handlers over the Core mediator and registers the
+// routes; there is no background work, so Start/Stop are no-ops.
+type Plugin struct {
+	handlers *Handlers
+}
+
+func (p *Plugin) Metadata() core.Metadata {
+	return core.Metadata{
+		Name:        "wiki",
+		Version:     "1.0.0",
+		Description: "Knowledge base — topics containing long-form markdown articles (Help, FAQ, guides).",
+		// Tables (wiki_topics, wiki_posts) still ship via the core
+		// numbered migrations in the public schema; Migrations stays
+		// empty until the PG17 baseline consolidation moves them
+		// into a dedicated `wiki` schema.
+	}
+}
+
+// Provision wires the wiki into the host. Routes keep their
+// historical top-level paths (/wiki/*, /admin/wiki/*) rather than
+// the /plugin/wiki/* default — RouterService explicitly allows
+// domain-specific paths via Engine(), and moving them would break
+// bookmarks, templates, and sitemap URLs for zero gain.
+func (p *Plugin) Provision(c *core.Core) error {
+	if deps.BaseData == nil || deps.Markdown == nil || deps.UploadDir == "" || deps.UploadURL == "" {
+		return fmt.Errorf("wiki: SetDeps not called (BaseData/Markdown/UploadDir/UploadURL required) — wire it in main() before core.Boot")
+	}
+	db := c.Storage.DB()
+	if db == nil {
+		return fmt.Errorf("wiki: Core.Storage.DB() is nil")
+	}
+	p.handlers = NewHandlers(NewPGStore(db), c.Auth)
+
+	engine := c.Router.Engine()
+	if engine == nil {
+		return fmt.Errorf("wiki: Core.Router.Engine() is nil")
+	}
+
+	// Public pages follow the site's default access policy
+	// (closed mode: login required; public mode: anonymous
+	// browsing allowed) — the same gate the routes had when they
+	// lived in main.go's `authorized` group.
+	pub := engine.Group("/wiki")
+	pub.Use(c.Auth.Authenticate()...)
+	pub.GET("", p.handlers.Index)
+	// Static-path siblings of /wiki/:topic — Gin's radix tree
+	// matches these before the wildcard, so /wiki/recent and
+	// /wiki/random don't collide with /wiki/<topic-slug>.
+	pub.GET("/recent", p.handlers.RecentChanges)
+	pub.GET("/random", p.handlers.Random)
+	pub.GET("/:topic", p.handlers.Topic)
+	pub.GET("/:topic/:post", p.handlers.Post)
+
+	// Admin CRUD — mod-or-above, matching the host /admin group's
+	// AuthRequired + AdminRequired stack.
+	adm := engine.Group("/admin/wiki")
+	adm.Use(c.Auth.RequireUser(core.RoleMod)...)
+	adm.GET("", p.handlers.AdminIndex)
+	adm.GET("/topics/new", p.handlers.NewTopic)
+	adm.POST("/topics", p.handlers.CreateTopic)
+	adm.GET("/topics/:id/edit", p.handlers.EditTopic)
+	adm.POST("/topics/:id/update", p.handlers.UpdateTopic)
+	adm.POST("/topics/:id/delete", p.handlers.DeleteTopic)
+	adm.GET("/posts/new", p.handlers.NewPost)
+	adm.POST("/posts", p.handlers.CreatePost)
+	adm.GET("/posts/:id/edit", p.handlers.EditPost)
+	adm.POST("/posts/:id/update", p.handlers.UpdatePost)
+	adm.POST("/posts/:id/delete", p.handlers.DeletePost)
+	adm.POST("/upload", p.handlers.UploadImage)
+
+	return nil
+}
+
+func (p *Plugin) Start(ctx context.Context) error { return nil }
+func (p *Plugin) Stop(ctx context.Context) error  { return nil }
