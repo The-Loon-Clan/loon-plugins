@@ -13,7 +13,7 @@ import (
 // place.
 func seedCategory(repo *MemStore, t *testing.T, name string, ordinal int) *ForumCategory {
 	t.Helper()
-	if err := repo.CreateForumCategory(context.Background(), name, "desc-"+name, ordinal); err != nil {
+	if err := repo.CreateForumCategory(context.Background(), name, "desc-"+name, ordinal, "chat-square-text", "blue"); err != nil {
 		t.Fatalf("seedCategory %q: %v", name, err)
 	}
 	// Production CreateForumCategory doesn't return the new id;
@@ -76,10 +76,10 @@ func seedPostForThread(repo *MemStore, t *testing.T, threadID int, username stri
 func TestMockForum_CreateForumCategoryRejectsDuplicateName(t *testing.T) {
 	repo := NewMemStore()
 	ctx := context.Background()
-	if err := repo.CreateForumCategory(ctx, "general", "d", 1); err != nil {
+	if err := repo.CreateForumCategory(ctx, "general", "d", 1, "chat-square-text", "blue"); err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	if err := repo.CreateForumCategory(ctx, "general", "different desc", 2); err == nil {
+	if err := repo.CreateForumCategory(ctx, "general", "different desc", 2, "chat-square-text", "blue"); err == nil {
 		t.Error("duplicate name should error")
 	}
 }
@@ -161,16 +161,19 @@ func TestMockForum_UpdateForumCategory(t *testing.T) {
 	ctx := context.Background()
 	c := seedCategory(repo, t, "old", 5)
 
-	if err := repo.UpdateForumCategory(ctx, c.ID, "new", "newer desc", 99); err != nil {
+	if err := repo.UpdateForumCategory(ctx, c.ID, "new", "newer desc", 99, "megaphone", "green"); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	after, _ := repo.GetForumCategory(ctx, c.ID)
 	if after.Name != "new" || after.Description != "newer desc" || after.Ordinal != 99 {
 		t.Errorf("update not applied: %+v", after)
 	}
+	if after.Icon != "megaphone" || after.Color != "green" {
+		t.Errorf("icon/color not applied: %+v", after)
+	}
 
 	// Missing id is a no-op.
-	if err := repo.UpdateForumCategory(ctx, 999, "x", "x", 0); err != nil {
+	if err := repo.UpdateForumCategory(ctx, 999, "x", "x", 0, "", ""); err != nil {
 		t.Errorf("missing id: %v", err)
 	}
 }

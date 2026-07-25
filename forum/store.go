@@ -47,13 +47,14 @@ type Store interface {
 	// CreateForumCategory inserts a new category. name has a
 	// UNIQUE index (migration 196) so a duplicate insert
 	// errors at the DB layer; the handler surfaces that to the
-	// admin as a flash message.
-	CreateForumCategory(ctx context.Context, name, description string, ordinal int) error
+	// admin as a flash message. icon is a Bootstrap Icons name
+	// (rendered as bi-<icon>), color a host palette name — the
+	// handler validates/defaults both before they get here.
+	CreateForumCategory(ctx context.Context, name, description string, ordinal int, icon, color string) error
 
 	// UpdateForumCategory overwrites name + description +
-	// ordinal on the category row. Color + icon are managed
-	// elsewhere and intentionally untouched here.
-	UpdateForumCategory(ctx context.Context, id int, name, description string, ordinal int) error
+	// ordinal + icon + color on the category row.
+	UpdateForumCategory(ctx context.Context, id int, name, description string, ordinal int, icon, color string) error
 
 	// DeleteForumCategory removes one category. Refuses if
 	// any thread points at it (the forum_threads FK is ON

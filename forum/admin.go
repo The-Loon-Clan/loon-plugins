@@ -23,9 +23,45 @@ func (h *Handlers) AdminCategories(c *gin.Context) {
 	}
 	c.HTML(http.StatusOK, "admin_forum_categories.html", deps.BaseData(c, gin.H{
 		"Categories": cats,
+		"Colors":     categoryColorList,
 		"Flash":      c.Query("msg"),
 		"Err":        c.Query("err"),
 	}))
+}
+
+// categoryColorList is the closed palette the category color must come from
+// — it becomes a CSS class suffix (forum-cat-icon-<color>), so a free-text
+// value would be a junk class at best. Ordered for the admin form's select;
+// the template receives it as "Colors" so form and validator cannot drift.
+var categoryColorList = []string{"blue", "cyan", "green", "orange", "pink", "purple", "red", "yellow"}
+
+var categoryColors = func() map[string]bool {
+	m := make(map[string]bool, len(categoryColorList))
+	for _, c := range categoryColorList {
+		m[c] = true
+	}
+	return m
+}()
+
+// categoryStyle validates the icon + color form fields. icon is a Bootstrap
+// Icons name (class suffix bi-<icon>) — restrict to the charset icon names
+// use so a crafted value can't smuggle extra classes; empty falls back to
+// the default chat icon.
+func categoryStyle(c *gin.Context) (icon, color string) {
+	icon = strings.TrimSpace(c.PostForm("icon"))
+	for _, r := range icon {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+			icon = ""
+			break
+		}
+	}
+	if icon == "" {
+		icon = "chat-square-text"
+	}
+	if color = c.PostForm("color"); !categoryColors[color] {
+		color = "blue"
+	}
+	return icon, color
 }
 
 func (h *Handlers) AdminCreateCategory(c *gin.Context) {
@@ -36,7 +72,8 @@ func (h *Handlers) AdminCreateCategory(c *gin.Context) {
 		redirectCategories(c, "", "name is required")
 		return
 	}
-	if err := h.store.CreateForumCategory(c.Request.Context(), name, desc, ordinal); err != nil {
+	icon, color := categoryStyle(c)
+	if err := h.store.CreateForumCategory(c.Request.Context(), name, desc, ordinal, icon, color); err != nil {
 		redirectCategories(c, "", err.Error())
 		return
 	}
@@ -52,7 +89,8 @@ func (h *Handlers) AdminUpdateCategory(c *gin.Context) {
 		redirectCategories(c, "", "name is required")
 		return
 	}
-	if err := h.store.UpdateForumCategory(c.Request.Context(), id, name, desc, ordinal); err != nil {
+	icon, color := categoryStyle(c)
+	if err := h.store.UpdateForumCategory(c.Request.Context(), id, name, desc, ordinal, icon, color); err != nil {
 		redirectCategories(c, "", err.Error())
 		return
 	}

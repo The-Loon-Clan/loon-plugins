@@ -71,17 +71,17 @@ func (r *PGStore) GetForumCategory(ctx context.Context, id int) (*ForumCategory,
 	return &cat, err
 }
 
-func (r *PGStore) CreateForumCategory(ctx context.Context, name, description string, ordinal int) error {
+func (r *PGStore) CreateForumCategory(ctx context.Context, name, description string, ordinal int, icon, color string) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO forum_categories (name, description, ordinal) VALUES ($1, $2, $3)`,
-		name, description, ordinal)
+		`INSERT INTO forum_categories (name, description, ordinal, icon, color) VALUES ($1, $2, $3, $4, $5)`,
+		name, description, ordinal, icon, color)
 	return err
 }
 
-func (r *PGStore) UpdateForumCategory(ctx context.Context, id int, name, description string, ordinal int) error {
+func (r *PGStore) UpdateForumCategory(ctx context.Context, id int, name, description string, ordinal int, icon, color string) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE forum_categories SET name = $2, description = $3, ordinal = $4 WHERE id = $1`,
-		id, name, description, ordinal)
+		`UPDATE forum_categories SET name = $2, description = $3, ordinal = $4, icon = $5, color = $6 WHERE id = $1`,
+		id, name, description, ordinal, icon, color)
 	return err
 }
 

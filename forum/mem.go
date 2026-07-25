@@ -267,7 +267,7 @@ func (r *MemStore) GetForumCategory(ctx context.Context, id int) (*ForumCategory
 	return r.rollupCategoryLocked(id, false), nil
 }
 
-func (r *MemStore) CreateForumCategory(ctx context.Context, name, description string, ordinal int) error {
+func (r *MemStore) CreateForumCategory(ctx context.Context, name, description string, ordinal int, icon, color string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Production has a UNIQUE index on name — mirror that here
@@ -284,12 +284,14 @@ func (r *MemStore) CreateForumCategory(ctx context.Context, name, description st
 		Name:        name,
 		Description: description,
 		Ordinal:     ordinal,
+		Icon:        icon,
+		Color:       color,
 		CreatedAt:   r.clock(),
 	}}
 	return nil
 }
 
-func (r *MemStore) UpdateForumCategory(ctx context.Context, id int, name, description string, ordinal int) error {
+func (r *MemStore) UpdateForumCategory(ctx context.Context, id int, name, description string, ordinal int, icon, color string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	c, ok := r.categories[id]
@@ -301,6 +303,8 @@ func (r *MemStore) UpdateForumCategory(ctx context.Context, id int, name, descri
 	c.cat.Name = name
 	c.cat.Description = description
 	c.cat.Ordinal = ordinal
+	c.cat.Icon = icon
+	c.cat.Color = color
 	return nil
 }
 
