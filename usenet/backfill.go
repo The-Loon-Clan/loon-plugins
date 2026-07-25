@@ -31,7 +31,7 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 
 	if cfg.SkipBackfill {
 		p.backfillJob.Log("backfill disabled (skip_backfill) — new articles only")
-		p.backfillJob.SetIdle(p.nextBackfill())
+		p.backfillJob.SetIdle(p.nextBackfill(ctx))
 		return
 	}
 
@@ -46,12 +46,12 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		switch {
 		case p.backfillPaused && pr >= low:
 			p.backfillJob.Log("backfill paused: staging pressure %.0f%% (resumes below %d%%)", pr*100, cfg.BackfillPressureLowPct)
-			p.backfillJob.SetIdle(p.nextBackfill())
+			p.backfillJob.SetIdle(p.nextBackfill(ctx))
 			return
 		case pr >= high:
 			p.backfillPaused = true
 			p.backfillJob.Log("backfill paused: staging pressure %.0f%% >= %d%% — letting the NZB builder drain", pr*100, cfg.BackfillPressureHighPct)
-			p.backfillJob.SetIdle(p.nextBackfill())
+			p.backfillJob.SetIdle(p.nextBackfill(ctx))
 			return
 		default:
 			p.backfillPaused = false
@@ -64,7 +64,7 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 	if err != nil {
 		if errors.Is(err, errNoServer) {
 			p.backfillJob.Log("no server configured")
-			p.backfillJob.SetIdle(p.nextBackfill())
+			p.backfillJob.SetIdle(p.nextBackfill(ctx))
 			return
 		}
 		p.backfillJob.SetError(err.Error())
@@ -83,7 +83,7 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		total += p.backfillProvider(ctx, run, cfg)
 	}
 	p.backfillJob.Log("backfill complete across %d provider(s): %d historical article(s) staged", len(runs), total)
-	p.backfillJob.SetIdle(p.nextBackfill())
+	p.backfillJob.SetIdle(p.nextBackfill(ctx))
 	if total > 0 {
 		go p.runBuild(ctx)
 	}
@@ -200,8 +200,12 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	return staged
 }
 
-func (p *Plugin) nextBackfill() time.Time {
-	return time.Now().Add(time.Duration(p.cfg.BackfillIntervalMin) * time.Minute)
+// nextBackfill is the displayed next-run for the backfill job. Reads the
+// live effective interval, not the boot p.cfg — same reason as nextCrawl:
+// the scheduler sleeps for the override, so a stale display disagreed with
+// reality after an admin interval change.
+func (p *Plugin) nextBackfill(ctx context.Context) time.Time {
+	return time.Now().Add(time.Duration(p.effective(ctx).BackfillIntervalMin) * time.Minute)
 }
 
 // recordBackfill persists coverage for successful batches, then re-derives each

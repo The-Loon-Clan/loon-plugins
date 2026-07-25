@@ -315,8 +315,19 @@ func (p *Plugin) runTagFill(ctx context.Context) {
 		p.runTagFillLocked(ctx)
 	}) {
 		p.tagJob.Log("tag fill skipped — another worker holds this job")
-		p.tagJob.SetIdle(time.Now().Add(6 * time.Hour))
+		p.tagJob.SetIdle(p.nextTagFill(ctx))
 	}
+}
+
+// nextTagFill / nextPrune are the displayed next-runs for their jobs —
+// live effective interval, not a hardcoded constant, so the countdown
+// tracks an admin interval change (same reason as nextCrawl).
+func (p *Plugin) nextTagFill(ctx context.Context) time.Time {
+	return time.Now().Add(time.Duration(p.effective(ctx).TagFillIntervalMin) * time.Minute)
+}
+
+func (p *Plugin) nextPrune(ctx context.Context) time.Time {
+	return time.Now().Add(time.Duration(p.effective(ctx).PruneIntervalMin) * time.Minute)
 }
 
 func (p *Plugin) runTagFillLocked(ctx context.Context) {
@@ -337,7 +348,7 @@ func (p *Plugin) runTagFillLocked(ctx context.Context) {
 			p.tagJob.Log("recategorized %d release(s)", rc)
 		}
 	}
-	p.tagJob.SetIdle(time.Now().Add(6 * time.Hour))
+	p.tagJob.SetIdle(p.nextTagFill(ctx))
 }
 
 func (p *Plugin) Stop(ctx context.Context) error {
@@ -403,7 +414,7 @@ func (p *Plugin) runPrune(ctx context.Context) {
 		p.runPruneLocked(ctx)
 	}) {
 		p.pruneJob.Log("prune skipped — another worker holds this job")
-		p.pruneJob.SetIdle(time.Now().Add(24 * time.Hour))
+		p.pruneJob.SetIdle(p.nextPrune(ctx))
 	}
 }
 
@@ -446,7 +457,7 @@ func (p *Plugin) runPruneLocked(ctx context.Context) {
 	}
 	p.pruneJob.Log("pruned %d NZB(s) (%s) + %d stale staged; swept %d junk NZBs + %d junk staged",
 		n, kept, staged, junkNzbs, junkStaged)
-	p.pruneJob.SetIdle(time.Now().Add(24 * time.Hour))
+	p.pruneJob.SetIdle(p.nextPrune(ctx))
 }
 
 // runCrawl (crawl.go) and runBuild (assemble.go) implement the crawl + assembly.

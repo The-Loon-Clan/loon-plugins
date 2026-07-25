@@ -86,7 +86,7 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	if err != nil {
 		if errors.Is(err, errNoServer) {
 			p.crawlJob.Log("no server configured — add one in the admin wizard")
-			p.crawlJob.SetIdle(p.nextCrawl())
+			p.crawlJob.SetIdle(p.nextCrawl(ctx))
 			return
 		}
 		p.crawlJob.SetError(err.Error())
@@ -169,7 +169,7 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		}
 	}
 	p.crawlJob.Log("crawl complete across %d provider(s): %d article(s) staged", len(runs), totalStaged)
-	p.crawlJob.SetIdle(p.nextCrawl())
+	p.crawlJob.SetIdle(p.nextCrawl(ctx))
 	go p.runBuild(ctx)
 	if totalStaged == 0 {
 		go p.idleHealthCheck(ctx)
@@ -332,8 +332,14 @@ func (p *Plugin) idleHealthCheck(ctx context.Context) {
 	p.runHealthCheck(ctx)
 }
 
-func (p *Plugin) nextCrawl() time.Time {
-	return time.Now().Add(time.Duration(p.cfg.CrawlIntervalMin) * time.Minute)
+// nextCrawl is the displayed next-run for the crawl/build jobs. It MUST
+// read the live effective interval, not the boot p.cfg: the scheduler
+// sleeps for schedule.IntervalOverride (→ p.effective().CrawlIntervalMin),
+// so computing the display off the frozen boot value made the countdown
+// disagree with reality after any admin interval change — the crawl
+// fired on the live interval while the UI still counted down the old one.
+func (p *Plugin) nextCrawl(ctx context.Context) time.Time {
+	return time.Now().Add(time.Duration(p.effective(ctx).CrawlIntervalMin) * time.Minute)
 }
 
 // planGroup selects the group once to learn the server's bounds and works out

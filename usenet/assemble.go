@@ -35,7 +35,7 @@ func (p *Plugin) runBuild(ctx context.Context) {
 		p.buildLocked(ctx)
 	}) {
 		p.buildJob.Log("build skipped — another worker holds this job")
-		p.buildJob.SetIdle(p.nextCrawl())
+		p.buildJob.SetIdle(p.nextCrawl(ctx))
 	}
 }
 
@@ -171,7 +171,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		// host event bus => no-op.
 		pluginapi.EmitEvent(p.core, ctx, pluginapi.EventIngested, built)
 	}
-	p.buildJob.SetIdle(p.nextCrawl())
+	p.buildJob.SetIdle(p.nextCrawl(ctx))
 }
 
 // isComplete decides whether a staged (group, base_subject) set is ready to
