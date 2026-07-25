@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/the-loon-clan/loon/blob"
 	"github.com/the-loon-clan/loon/core"
 )
 
@@ -29,10 +30,11 @@ type Deps struct {
 	// authored surfaces — wire whatever renderer the host's wiki pages
 	// already use.
 	Markdown func(src string) template.HTML
-	// UploadDir is the filesystem directory admin image uploads land in;
-	// UploadURL the public URL prefix the stored filename is appended to.
-	UploadDir string
-	UploadURL string
+	// Files is where admin image uploads are stored. The plugin saves
+	// under the "wiki-uploads/" namespace within the store; the host
+	// decides where that lives on disk (or, later, remotely) and what
+	// public URL it serves under.
+	Files blob.Store
 }
 
 var deps Deps
@@ -65,8 +67,8 @@ func (p *Plugin) Metadata() core.Metadata {
 // domain-specific paths via Engine(), and moving them would break
 // bookmarks, templates, and sitemap URLs for zero gain.
 func (p *Plugin) Provision(c *core.Core) error {
-	if deps.BaseData == nil || deps.Markdown == nil || deps.UploadDir == "" || deps.UploadURL == "" {
-		return fmt.Errorf("wiki: SetDeps not called (BaseData/Markdown/UploadDir/UploadURL required) — wire it in main() before core.Boot")
+	if deps.BaseData == nil || deps.Markdown == nil || deps.Files == nil {
+		return fmt.Errorf("wiki: SetDeps not called (BaseData/Markdown/Files required) — wire it in main() before core.Boot")
 	}
 	db := c.Storage.DB()
 	if db == nil {

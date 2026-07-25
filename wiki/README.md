@@ -40,7 +40,7 @@ Routes keep their historical top-level paths (not the `/plugin/wiki/*` default) 
 - **Store** — **self-contained**, no `SetDeps`. `Provision` builds a `PGStore` over `c.Storage.DB()`; tables are plugin-private-in-intent (currently public schema). `Store` is the plugin's own interface with two impls: `PGStore` (production) and `MemStore` (in-memory, tests). SQL is byte-identical to the pre-extraction `pkg/storage/postgres/wiki.go`.
 - **Config keys** (`plugins.wiki.*`) — none.
 - **Metadata.Requires** (peer plugins) — none.
-- **`SetDeps` (required, before `core.Boot`)** — the host seams: `BaseData` (site template chrome), `Markdown` (the renderer the host's wiki pages use — authors are mods+, so richer markup than user-authored surfaces is fine), and the `UploadDir`/`UploadURL` pair for admin image uploads (the filesystem location + public prefix the in-tree plugin used to hardcode). `Provision` fails loud when unset. JSON error envelopes are plugin-local.
+- **`SetDeps` (required, before `core.Boot`)** — the host seams: `BaseData` (site template chrome), `Markdown` (the renderer the host's wiki pages use — authors are mods+, so richer markup than user-authored surfaces is fine), and `Files` (a `loon/blob.Store`) for admin image uploads — the plugin saves under the store's `wiki-uploads/` namespace and the host decides where that lives (local static dir today, a remote file host later). `Provision` fails loud when unset. JSON error envelopes are plugin-local.
 - **Host templates (the template contract)** — the plugin renders the HOST's templates by name: `wiki.html`, `wiki_topic.html`, `wiki_post.html`, `admin_wiki.html`, `admin_wiki_topic_form.html`, `admin_wiki_post_form.html`. A host adopting this plugin supplies those six in its template set.
 
 ## Hooks & Callbacks
@@ -62,11 +62,11 @@ Routes keep their historical top-level paths (not the `/plugin/wiki/*` default) 
 - `pg.go` — `PGStore`, the production SQL implementation.
 - `mem.go` — `MemStore`, the in-memory implementation for tests.
 - `handlers.go` — public + admin Gin handlers, `makeSlug`, `postsByTopicMap`.
-- `upload.go` — `UploadImage` handler (MIME-sniffed image upload).
+- `upload.go` — `UploadImage` handler (MIME-sniffed image upload via `blob.Store`).
 - `mem_test.go` — MemStore + `makeSlug` unit tests.
 - `wiki_test.go` — handler-level pure-logic tests (`postsByTopicMap`).
 
 ## Testing
 
 - **Unit-tested** (`mem_test.go`): the full `MemStore` behavior — topic ordering + post_count join, slug/id lookups with `sql.ErrNoRows` on miss, update/delete FK cascade, server-field stamping, `updated_at` bump semantics, `AllPosts` content-blanking, RecentPosts (updated_at order + limit), PopularPosts (view-count order + tiebreak), chronological PostsByTopic, RandomPost empty/hit, and defensive cloning. Plus `makeSlug` (lowercase, punctuation strip, whitespace/dash collapse, unicode). `wiki_test.go` adds `postsByTopicMap` (flat AllPosts folded into a topic-keyed sidebar map, plus the empty-store path).
-- **Requires integration (live DB)**: `PGStore` — the SQL JOINs to `wiki_topics`/`users`, `ON DELETE CASCADE`, `ORDER BY RANDOM()`, `view_count` COALESCE, and the migration-6/250 schema itself are not exercised by MemStore (deliberately thin maps + mutex). The `UploadImage` filesystem/MIME path (uploads land on local disk at `web/static/wiki-uploads/`, MIME sniffed from the first 512 bytes, 5 MB cap) and the HTML-rendering handlers (template + BaseData chrome) also need an HTTP/integration harness rather than pure unit tests.
+- **Requires integration (live DB)**: `PGStore` — the SQL JOINs to `wiki_topics`/`users`, `ON DELETE CASCADE`, `ORDER BY RANDOM()`, `view_count` COALESCE, and the migration-6/250 schema itself are not exercised by MemStore (deliberately thin maps + mutex). The `UploadImage` storage/MIME path (bytes land wherever the host's `blob.Store` puts `wiki-uploads/*`, MIME sniffed via `blob.SniffImage`, 5 MB cap; the Store itself is unit-tested in loon) and the HTML-rendering handlers (template + BaseData chrome) also need an HTTP/integration harness rather than pure unit tests.

@@ -1,31 +1,23 @@
 package wiki
 
 import (
-	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"github.com/the-loon-clan/loon/blob"
 )
 
-// maxUploadSize bounds admin image uploads; the destination directory and
-// public URL prefix come from Deps (host filesystem layout).
+// maxUploadSize bounds admin image uploads; where the bytes land and
+// what URL they serve under is the host's blob.Store (Deps.Files).
 const maxUploadSize = 5 << 20 // 5 MB
 
-var allowedMIME = map[string]string{
-	"image/jpeg": ".jpg",
-	"image/png":  ".png",
-	"image/gif":  ".gif",
-	"image/webp": ".webp",
-}
-
-// UploadImage stores an admin-uploaded image under
-// /static/wiki-uploads/ and returns its public URL for embedding
-// in post markdown. MIME is sniffed from the first 512 bytes, not
-// trusted from the filename.
+// UploadImage stores an admin-uploaded image under the store's
+// wiki-uploads/ namespace and returns its public URL for embedding
+// in post markdown. MIME is sniffed from the payload, not trusted
+// from the filename.
 func (h *Handlers) UploadImage(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUploadSize)
 
@@ -36,49 +28,21 @@ func (h *Handlers) UploadImage(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// Read first 512 bytes to detect MIME type
-	buf := make([]byte, 512)
-	n, err := file.Read(buf)
-	if err != nil || n == 0 {
+	data, err := io.ReadAll(file)
+	if err != nil || len(data) == 0 {
 		jsonError(c, http.StatusBadRequest, "could not read file")
 		return
 	}
-	mime := http.DetectContentType(buf[:n])
-	ext, ok := allowedMIME[mime]
-	if !ok {
-		jsonError(c, http.StatusBadRequest, fmt.Sprintf("unsupported file type: %s", mime))
-		return
-	}
-
-	// Seek back to start (multipart.File supports Seek). A failed seek would
-	// store an image missing its sniffed first bytes — refuse instead.
-	type seeker interface {
-		Seek(int64, int) (int64, error)
-	}
-	if s, ok2 := file.(seeker); ok2 {
-		if _, err := s.Seek(0, 0); err != nil {
-			jsonError(c, http.StatusInternalServerError, "could not read file")
-			return
-		}
-	}
-
-	if err := os.MkdirAll(deps.UploadDir, 0755); err != nil {
-		jsonError(c, http.StatusInternalServerError, "could not create upload directory")
-		return
-	}
-
-	filename := uuid.New().String() + ext
-	destPath := filepath.Join(deps.UploadDir, filename)
-
-	data, err := io.ReadAll(file)
+	_, ext, err := blob.SniffImage(data)
 	if err != nil {
-		jsonError(c, http.StatusInternalServerError, "could not read file")
+		jsonError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := os.WriteFile(destPath, data, 0644); err != nil {
+
+	url, err := deps.Files.Save(c.Request.Context(), "wiki-uploads/"+uuid.New().String()+ext, data)
+	if err != nil {
 		jsonError(c, http.StatusInternalServerError, "could not save file")
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"url": deps.UploadURL + filename})
+	c.JSON(http.StatusOK, gin.H{"url": url})
 }
