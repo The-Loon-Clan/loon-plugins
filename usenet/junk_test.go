@@ -13,6 +13,7 @@ func TestIsJunkTitle(t *testing.T) {
 		"season pack {total} files",                                        // template token mid-string
 		"QTVxBgZmUbZnAJFWgJq6",                                             // 20-char bare mixed-case token (under 24)
 		"OF6OfeYgrXyHQjpiLstb",                                             // 20-char bare token w/ digit
+		"sigma-sun.vol024+02",                                              // orphan PAR2 recovery volume, no .par2 tail
 		"",                                                                 // empty
 	}
 	for _, s := range junk {
@@ -27,6 +28,8 @@ func TestIsJunkTitle(t *testing.T) {
 		"Kaguya-sama.Love.is.War.S03.1080p.BluRay.x265-RARBG",
 		"One Piece 1085 [720p]",
 		"My Hero Academia - 138 VOSTFR",
+		"Macross Frontier Vol.02 1080p BluRay", // Vol.NN disc numbering is not a .volNNN+NN recovery marker
+		"Neon Genesis Evangelion vol1",         // bare volN without +blocks
 	}
 	for _, s := range legit {
 		if isJunkTitle(s) {

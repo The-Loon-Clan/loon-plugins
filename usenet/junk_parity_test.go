@@ -26,6 +26,11 @@ func TestJunkParityUnsized(t *testing.T) {
 		{"QTVxBgZmUbZnAJFWgJq6", "single_token_20"},
 		{"f2c8b393559540cfb9e33471cfda340c", "long_alnum_run"},
 
+		// Orphan PAR2 recovery volume (2026-07-25): single-file-form posts
+		// name only the volume, so it never groups under its parent.
+		{"sigma-sun.vol024+02", "par2_volume"},
+		{"sigma-sun.vol000+01", "par2_volume"},
+
 		// Patterns the partial lift was missing entirely.
 		{"1715012345678", "long_digit_run"},
 		{"Microsoft Office 2024 Pre-Cracked (x64)", "software_warez"},
