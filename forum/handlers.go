@@ -88,7 +88,24 @@ func (h *Handlers) Forums(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed to load forums")
 		return
 	}
+	// See gates: unseeable categories vanish from the listing, the totals,
+	// and the activity sidebar (a title in Recent Activity would leak what
+	// the gate hides). Contributors is an all-forum aggregate of names +
+	// counts — no content, so it stays.
+	v := h.viewer(c)
+	cats = visibleCategories(cats, v)
+	seeable := make(map[int]bool, len(cats))
+	for _, cat := range cats {
+		seeable[cat.ID] = true
+	}
 	activity, _ := h.store.GetRecentForumActivity(ctx, 5)
+	filtered := activity[:0]
+	for _, a := range activity {
+		if seeable[a.CategoryID] {
+			filtered = append(filtered, a)
+		}
+	}
+	activity = filtered
 	contributors, _ := h.store.GetTopForumContributors(ctx, 5)
 
 	var totalThreads, totalPosts int
@@ -122,6 +139,22 @@ func (h *Handlers) ForumCategory(c *gin.Context) {
 	cat, err := h.store.GetForumCategory(c.Request.Context(), id)
 	if err != nil {
 		c.Redirect(http.StatusFound, "/community/forums")
+		return
+	}
+	v := h.viewer(c)
+	if !v.canSee(cat) {
+		// Unseeable = indistinguishable from nonexistent.
+		c.Redirect(http.StatusFound, "/community/forums")
+		return
+	}
+	if !v.canRead(cat) {
+		// Seeable but locked: show the category shell with an access note
+		// instead of the thread list — the viewer is allowed to know it
+		// exists, not what's inside.
+		c.HTML(http.StatusOK, "community_category.html", deps.BaseData(c, gin.H{
+			"Category": cat, "Threads": nil, "Total": 0,
+			"Page": 1, "TotalPages": 1, "AccessDenied": true,
+		}))
 		return
 	}
 	threads, total, err := h.store.GetForumThreads(c.Request.Context(), id, forumPageSize, offset)
@@ -160,6 +193,15 @@ func (h *Handlers) ForumThread(c *gin.Context) {
 	if err != nil {
 		c.Redirect(http.StatusFound, "/community/forums")
 		return
+	}
+
+	// Read gate on the thread's category: unreadable threads bounce to the
+	// forums index (same as nonexistent — a gated thread URL proves nothing).
+	if cat, ok := h.categoryFor(c.Request.Context(), thread.CategoryID); ok {
+		if !h.viewer(c).canRead(cat) {
+			c.Redirect(http.StatusFound, "/community/forums")
+			return
+		}
 	}
 
 	currentUserID, isAdmin := h.currentUser(c)
@@ -227,12 +269,20 @@ func (h *Handlers) ForumThread(c *gin.Context) {
 	}))
 }
 
-// NewThread — GET form.
+// NewThread — GET form. The category picker offers only categories the
+// viewer may write in.
 func (h *Handlers) NewThread(c *gin.Context) {
 	catID, _ := strconv.Atoi(c.Query("category"))
 	cats, _ := h.store.GetForumCategories(c.Request.Context())
+	v := h.viewer(c)
+	writable := cats[:0]
+	for _, cat := range cats {
+		if v.canSee(cat) && v.canWrite(cat) {
+			writable = append(writable, cat)
+		}
+	}
 	c.HTML(http.StatusOK, "community_new_thread.html", deps.BaseData(c, gin.H{
-		"Categories":       cats,
+		"Categories":       writable,
 		"SelectedCategory": catID,
 	}))
 }
@@ -252,6 +302,13 @@ func (h *Handlers) CreateThread(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/community/forums")
 		return
 	}
+	// Write gate on the target category — the form only offers writable
+	// categories, so a mismatch here is a crafted POST.
+	if cat, ok := h.categoryFor(c.Request.Context(), catID); !ok || !h.viewer(c).canWrite(cat) {
+		c.Redirect(http.StatusFound, "/community/forums")
+		return
+	}
+
 	// thread_type is a closed allowlist — anything outside the two
 	// known values falls back to the default. Prevents a crafted
 	// form post from injecting a value the storage layer doesn't
@@ -288,6 +345,12 @@ func (h *Handlers) ReplyThread(c *gin.Context) {
 	thread, err := h.store.GetForumThread(c.Request.Context(), threadID)
 	if err != nil || thread.Locked {
 		c.Redirect(http.StatusFound, "/community/forums/thread/"+strconv.Itoa(threadID))
+		return
+	}
+
+	// Write gate on the thread's category (see access.go).
+	if cat, ok := h.categoryFor(c.Request.Context(), thread.CategoryID); !ok || !h.viewer(c).canWrite(cat) {
+		c.Redirect(http.StatusFound, "/community/forums")
 		return
 	}
 

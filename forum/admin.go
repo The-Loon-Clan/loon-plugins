@@ -24,6 +24,7 @@ func (h *Handlers) AdminCategories(c *gin.Context) {
 	c.HTML(http.StatusOK, "admin_forum_categories.html", deps.BaseData(c, gin.H{
 		"Categories": cats,
 		"Colors":     categoryColorList,
+		"GateRoles":  gateRoleList,
 		"Flash":      c.Query("msg"),
 		"Err":        c.Query("err"),
 	}))
@@ -64,37 +65,68 @@ func categoryStyle(c *gin.Context) (icon, color string) {
 	return icon, color
 }
 
+// gateField validates one access gate's (role, tier) pair from the form.
+// Role must come from the closed gateRoleList; tier is clamped to the
+// contract's 0-3 ladder. Unknown role names fall back to the gate's default
+// rather than erroring — the form only offers valid values, so anything
+// else is a hand-crafted POST.
+func gateField(c *gin.Context, prefix, defRole string) (role string, tier int) {
+	role = c.PostForm(prefix + "_role")
+	if role != "all" {
+		if _, ok := gateRoles[role]; !ok {
+			role = defRole
+		}
+	}
+	tier, _ = strconv.Atoi(c.PostForm(prefix + "_tier"))
+	if tier < 0 {
+		tier = 0
+	}
+	if tier > 3 {
+		tier = 3
+	}
+	return role, tier
+}
+
+// categoryParams assembles + validates the full writable surface from the
+// admin form. Gate defaults reproduce the ungated behaviour (see access.go).
+func categoryParams(c *gin.Context) CategoryParams {
+	p := CategoryParams{
+		Name:        strings.TrimSpace(c.PostForm("name")),
+		Description: strings.TrimSpace(c.PostForm("description")),
+	}
+	p.Ordinal, _ = strconv.Atoi(c.PostForm("ordinal"))
+	p.Icon, p.Color = categoryStyle(c)
+	p.SeeRole, p.SeeTier = gateField(c, "see", "all")
+	p.ReadRole, p.ReadTier = gateField(c, "read", "all")
+	p.WriteRole, p.WriteTier = gateField(c, "write", "user")
+	return p
+}
+
 func (h *Handlers) AdminCreateCategory(c *gin.Context) {
-	name := strings.TrimSpace(c.PostForm("name"))
-	desc := strings.TrimSpace(c.PostForm("description"))
-	ordinal, _ := strconv.Atoi(c.PostForm("ordinal"))
-	if name == "" {
+	p := categoryParams(c)
+	if p.Name == "" {
 		redirectCategories(c, "", "name is required")
 		return
 	}
-	icon, color := categoryStyle(c)
-	if err := h.store.CreateForumCategory(c.Request.Context(), name, desc, ordinal, icon, color); err != nil {
+	if err := h.store.CreateForumCategory(c.Request.Context(), p); err != nil {
 		redirectCategories(c, "", err.Error())
 		return
 	}
-	redirectCategories(c, "created "+name, "")
+	redirectCategories(c, "created "+p.Name, "")
 }
 
 func (h *Handlers) AdminUpdateCategory(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	name := strings.TrimSpace(c.PostForm("name"))
-	desc := strings.TrimSpace(c.PostForm("description"))
-	ordinal, _ := strconv.Atoi(c.PostForm("ordinal"))
-	if name == "" {
+	p := categoryParams(c)
+	if p.Name == "" {
 		redirectCategories(c, "", "name is required")
 		return
 	}
-	icon, color := categoryStyle(c)
-	if err := h.store.UpdateForumCategory(c.Request.Context(), id, name, desc, ordinal, icon, color); err != nil {
+	if err := h.store.UpdateForumCategory(c.Request.Context(), id, p); err != nil {
 		redirectCategories(c, "", err.Error())
 		return
 	}
-	redirectCategories(c, "updated "+name, "")
+	redirectCategories(c, "updated "+p.Name, "")
 }
 
 func (h *Handlers) AdminDeleteCategory(c *gin.Context) {

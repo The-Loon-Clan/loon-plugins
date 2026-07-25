@@ -2,6 +2,7 @@ package forum
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -27,6 +28,7 @@ func (r *PGStore) GetForumCategories(ctx context.Context) ([]*ForumCategory, err
 	var cats []*ForumCategory
 	err := r.db.SelectContext(ctx, &cats, `
 		SELECT fc.id, fc.name, fc.description, fc.ordinal, fc.color, fc.icon, fc.created_at,
+		       fc.see_role, fc.read_role, fc.write_role, fc.see_tier, fc.read_tier, fc.write_tier,
 		       COUNT(DISTINCT ft.id)   AS thread_count,
 		       COUNT(DISTINCT fp.id)   AS post_count,
 		       MAX(ft.last_post_at)    AS last_post_at,
@@ -60,6 +62,7 @@ func (r *PGStore) GetForumCategory(ctx context.Context, id int) (*ForumCategory,
 	var cat ForumCategory
 	err := r.db.GetContext(ctx, &cat, `
 		SELECT fc.id, fc.name, fc.description, fc.ordinal, fc.color, fc.icon, fc.created_at,
+		       fc.see_role, fc.read_role, fc.write_role, fc.see_tier, fc.read_tier, fc.write_tier,
 		       COUNT(DISTINCT ft.id) AS thread_count,
 		       COUNT(DISTINCT fp.id) AS post_count,
 		       MAX(ft.last_post_at)  AS last_post_at
@@ -71,18 +74,39 @@ func (r *PGStore) GetForumCategory(ctx context.Context, id int) (*ForumCategory,
 	return &cat, err
 }
 
-func (r *PGStore) CreateForumCategory(ctx context.Context, name, description string, ordinal int, icon, color string) error {
+func (r *PGStore) CreateForumCategory(ctx context.Context, p CategoryParams) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO forum_categories (name, description, ordinal, icon, color) VALUES ($1, $2, $3, $4, $5)`,
-		name, description, ordinal, icon, color)
+		`INSERT INTO forum_categories
+		    (name, description, ordinal, icon, color,
+		     see_role, read_role, write_role, see_tier, read_tier, write_tier)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		p.Name, p.Description, p.Ordinal, p.Icon, p.Color,
+		p.SeeRole, p.ReadRole, p.WriteRole, p.SeeTier, p.ReadTier, p.WriteTier)
 	return err
 }
 
-func (r *PGStore) UpdateForumCategory(ctx context.Context, id int, name, description string, ordinal int, icon, color string) error {
+func (r *PGStore) UpdateForumCategory(ctx context.Context, id int, p CategoryParams) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE forum_categories SET name = $2, description = $3, ordinal = $4, icon = $5, color = $6 WHERE id = $1`,
-		id, name, description, ordinal, icon, color)
+		`UPDATE forum_categories
+		    SET name = $2, description = $3, ordinal = $4, icon = $5, color = $6,
+		        see_role = $7, read_role = $8, write_role = $9,
+		        see_tier = $10, read_tier = $11, write_tier = $12
+		  WHERE id = $1`,
+		id, p.Name, p.Description, p.Ordinal, p.Icon, p.Color,
+		p.SeeRole, p.ReadRole, p.WriteRole, p.SeeTier, p.ReadTier, p.WriteTier)
 	return err
+}
+
+// ViewerTier reads the requester's rank tier off the user_display contract.
+// Missing row (or any error surfaced to the caller) reads as tier 0.
+func (r *PGStore) ViewerTier(ctx context.Context, userID int64) (int, error) {
+	var t int
+	err := r.db.GetContext(ctx, &t,
+		`SELECT reputation_tier FROM user_display WHERE id = $1`, userID)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return t, err
 }
 
 func (r *PGStore) DeleteForumCategory(ctx context.Context, id int) error {
@@ -161,7 +185,9 @@ func (r *PGStore) GetForumThreads(ctx context.Context, categoryID, limit, offset
 // threads across every category. Backs the home-page Community
 // Spotlight card. Cheaper than GetForumThreads (no LATERAL last-
 // reply lookup) — the spotlight only needs the OP + reply count
-// + category name to render a row.
+// + category name to render a row. Restricted to categories whose
+// See gate admits everyone: the home-page card renders without a
+// viewer context, so it must not leak titles from gated categories.
 func (r *PGStore) GetRecentForumThreads(ctx context.Context, limit int) ([]*ForumThread, error) {
 	if limit <= 0 {
 		limit = 5
@@ -178,6 +204,7 @@ func (r *PGStore) GetRecentForumThreads(ctx context.Context, limit int) ([]*Foru
 		JOIN user_display u ON u.id = ft.user_id
 		JOIN forum_categories fc ON fc.id = ft.category_id
 		WHERE ft.hidden_at IS NULL
+		  AND fc.see_role = 'all'
 		ORDER BY ft.last_post_at DESC
 		LIMIT $1`, limit)
 	return threads, err

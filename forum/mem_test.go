@@ -13,7 +13,7 @@ import (
 // place.
 func seedCategory(repo *MemStore, t *testing.T, name string, ordinal int) *ForumCategory {
 	t.Helper()
-	if err := repo.CreateForumCategory(context.Background(), name, "desc-"+name, ordinal, "chat-square-text", "blue"); err != nil {
+	if err := repo.CreateForumCategory(context.Background(), CategoryParams{Name: name, Description: "desc-" + name, Ordinal: ordinal, Icon: "chat-square-text", Color: "blue", SeeRole: "all", ReadRole: "all", WriteRole: "user"}); err != nil {
 		t.Fatalf("seedCategory %q: %v", name, err)
 	}
 	// Production CreateForumCategory doesn't return the new id;
@@ -76,10 +76,10 @@ func seedPostForThread(repo *MemStore, t *testing.T, threadID int, username stri
 func TestMockForum_CreateForumCategoryRejectsDuplicateName(t *testing.T) {
 	repo := NewMemStore()
 	ctx := context.Background()
-	if err := repo.CreateForumCategory(ctx, "general", "d", 1, "chat-square-text", "blue"); err != nil {
+	if err := repo.CreateForumCategory(ctx, CategoryParams{Name: "general", Description: "d", Ordinal: 1}); err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	if err := repo.CreateForumCategory(ctx, "general", "different desc", 2, "chat-square-text", "blue"); err == nil {
+	if err := repo.CreateForumCategory(ctx, CategoryParams{Name: "general", Description: "different desc", Ordinal: 2}); err == nil {
 		t.Error("duplicate name should error")
 	}
 }
@@ -161,7 +161,7 @@ func TestMockForum_UpdateForumCategory(t *testing.T) {
 	ctx := context.Background()
 	c := seedCategory(repo, t, "old", 5)
 
-	if err := repo.UpdateForumCategory(ctx, c.ID, "new", "newer desc", 99, "megaphone", "green"); err != nil {
+	if err := repo.UpdateForumCategory(ctx, c.ID, CategoryParams{Name: "new", Description: "newer desc", Ordinal: 99, Icon: "megaphone", Color: "green", SeeRole: "mod", SeeTier: 2}); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	after, _ := repo.GetForumCategory(ctx, c.ID)
@@ -173,7 +173,7 @@ func TestMockForum_UpdateForumCategory(t *testing.T) {
 	}
 
 	// Missing id is a no-op.
-	if err := repo.UpdateForumCategory(ctx, 999, "x", "x", 0, "", ""); err != nil {
+	if err := repo.UpdateForumCategory(ctx, 999, CategoryParams{Name: "x"}); err != nil {
 		t.Errorf("missing id: %v", err)
 	}
 }

@@ -39,7 +39,9 @@ Tables live in the **public schema** (pre-PG17-consolidation, same as the wiki p
 - `forum_posts` — mig **18**; `quoted_post_id` (FK `ON DELETE SET NULL`) added mig **123**; `hidden_at` via mig **203**.
 - `forum_post_reactions` — mig **123**, composite PK `(post_id, user_id, emoji)`.
 
-Reads the **`user_display` view** (id/username/role/avatar_path — the host-provided identity display contract; prod maps it onto its users columns, the loon-baseline maps its INT role enum + facet tables) via JOIN throughout. All list/detail queries filter `hidden_at IS NULL`.
+Reads the **`user_display` view** (id/username/role/avatar_path/reputation_tier — the host-provided identity display contract; prod maps it onto its users columns, the loon-baseline maps its INT role enum + facet tables) via JOIN throughout. All list/detail queries filter `hidden_at IS NULL`.
+
+**Access gates (access.go):** each category carries see/read/write gates, each a (min role, min rank tier) pair composed with OR — the host permission idiom "staff-role OR earned-tier". `all` admits anonymous; tier 0 disables the tier axis; defaults (`all`/`all`/`user`, tiers 0) reproduce ungated behaviour. Enforced in the handlers (listing filter, category/thread read checks, thread-create/reply write checks, write-filtered new-thread picker) and in SQL for the viewerless home-page spotlight (public-see categories only). Host schema: prod migration 278 / the demo's forumMigrate ALTERs. Edited per row on `/admin/forum-categories`.
 
 **Gotchas:** `forum_posts.id` is `INT` (SERIAL), not BIGINT (mig 18/123). Recruitment visibility is enforced in SQL (`GetForumPosts`) so other applicants' rows never cross the wire — the OP is the lowest-id post.
 

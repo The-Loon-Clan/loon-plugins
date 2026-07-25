@@ -3,12 +3,19 @@ package forum
 import "time"
 
 type ForumCategory struct {
-	ID          int        `db:"id"`
-	Name        string     `db:"name"`
-	Description string     `db:"description"`
-	Ordinal     int        `db:"ordinal"`
-	Color       string     `db:"color"`
-	Icon        string     `db:"icon"`
+	ID          int    `db:"id"`
+	Name        string `db:"name"`
+	Description string `db:"description"`
+	Ordinal     int    `db:"ordinal"`
+	Color       string `db:"color"`
+	Icon        string `db:"icon"`
+	// Access gates — see access.go for the model (role OR tier per gate).
+	SeeRole     string     `db:"see_role"`
+	ReadRole    string     `db:"read_role"`
+	WriteRole   string     `db:"write_role"`
+	SeeTier     int        `db:"see_tier"`
+	ReadTier    int        `db:"read_tier"`
+	WriteTier   int        `db:"write_tier"`
 	ThreadCount int        `db:"thread_count"`
 	PostCount   int        `db:"post_count"`
 	LastPostAt  *time.Time `db:"last_post_at"`

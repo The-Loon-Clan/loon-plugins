@@ -20,6 +20,23 @@ package forum
 
 import "context"
 
+// CategoryParams is the writable surface of a category row — grew past
+// positional args when icon/color and the six access-gate fields landed.
+// The admin handler validates/defaults every field before store calls.
+type CategoryParams struct {
+	Name        string
+	Description string
+	Ordinal     int
+	Icon        string
+	Color       string
+	SeeRole     string
+	ReadRole    string
+	WriteRole   string
+	SeeTier     int
+	ReadTier    int
+	WriteTier   int
+}
+
 // Store is the plugin's storage seam — the full former
 // storage.ForumRepository surface plus PostContext (which
 // previously lived on the notification repository because the
@@ -47,14 +64,18 @@ type Store interface {
 	// CreateForumCategory inserts a new category. name has a
 	// UNIQUE index (migration 196) so a duplicate insert
 	// errors at the DB layer; the handler surfaces that to the
-	// admin as a flash message. icon is a Bootstrap Icons name
-	// (rendered as bi-<icon>), color a host palette name — the
-	// handler validates/defaults both before they get here.
-	CreateForumCategory(ctx context.Context, name, description string, ordinal int, icon, color string) error
+	// admin as a flash message. The handler validates/defaults
+	// every CategoryParams field before it gets here.
+	CreateForumCategory(ctx context.Context, p CategoryParams) error
 
-	// UpdateForumCategory overwrites name + description +
-	// ordinal + icon + color on the category row.
-	UpdateForumCategory(ctx context.Context, id int, name, description string, ordinal int, icon, color string) error
+	// UpdateForumCategory overwrites every CategoryParams field
+	// on the category row.
+	UpdateForumCategory(ctx context.Context, id int, p CategoryParams) error
+
+	// ViewerTier is the requester's rank tier from the
+	// user_display contract (reputation_tier), 0 when the row is
+	// missing — feeds the access gates' tier axis (access.go).
+	ViewerTier(ctx context.Context, userID int64) (int, error)
 
 	// DeleteForumCategory removes one category. Refuses if
 	// any thread points at it (the forum_threads FK is ON

@@ -43,6 +43,10 @@ type MemStore struct {
 	nextThread int
 	nextPost   int64
 
+	// tiers backs ViewerTier (the user_display reputation_tier
+	// lookup in production); seeded via SetViewerTier.
+	tiers map[int64]int
+
 	// users stages the per-user info every Forum JOIN reads
 	// (username / role / avatar_path). Production fetches via
 	// JOIN users; the mock reads from this map at SELECT
@@ -267,31 +271,37 @@ func (r *MemStore) GetForumCategory(ctx context.Context, id int) (*ForumCategory
 	return r.rollupCategoryLocked(id, false), nil
 }
 
-func (r *MemStore) CreateForumCategory(ctx context.Context, name, description string, ordinal int, icon, color string) error {
+func (r *MemStore) CreateForumCategory(ctx context.Context, p CategoryParams) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Production has a UNIQUE index on name — mirror that here
 	// so duplicate inserts return the same shape the handler
 	// expects.
 	for _, c := range r.categories {
-		if c.cat.Name == name {
+		if c.cat.Name == p.Name {
 			return errors.New("duplicate category name")
 		}
 	}
 	r.nextCat++
 	r.categories[r.nextCat] = &forumCategoryRow{cat: &ForumCategory{
 		ID:          r.nextCat,
-		Name:        name,
-		Description: description,
-		Ordinal:     ordinal,
-		Icon:        icon,
-		Color:       color,
+		Name:        p.Name,
+		Description: p.Description,
+		Ordinal:     p.Ordinal,
+		Icon:        p.Icon,
+		Color:       p.Color,
+		SeeRole:     p.SeeRole,
+		ReadRole:    p.ReadRole,
+		WriteRole:   p.WriteRole,
+		SeeTier:     p.SeeTier,
+		ReadTier:    p.ReadTier,
+		WriteTier:   p.WriteTier,
 		CreatedAt:   r.clock(),
 	}}
 	return nil
 }
 
-func (r *MemStore) UpdateForumCategory(ctx context.Context, id int, name, description string, ordinal int, icon, color string) error {
+func (r *MemStore) UpdateForumCategory(ctx context.Context, id int, p CategoryParams) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	c, ok := r.categories[id]
@@ -300,12 +310,36 @@ func (r *MemStore) UpdateForumCategory(ctx context.Context, id int, name, descri
 		// — same here.
 		return nil
 	}
-	c.cat.Name = name
-	c.cat.Description = description
-	c.cat.Ordinal = ordinal
-	c.cat.Icon = icon
-	c.cat.Color = color
+	c.cat.Name = p.Name
+	c.cat.Description = p.Description
+	c.cat.Ordinal = p.Ordinal
+	c.cat.Icon = p.Icon
+	c.cat.Color = p.Color
+	c.cat.SeeRole = p.SeeRole
+	c.cat.ReadRole = p.ReadRole
+	c.cat.WriteRole = p.WriteRole
+	c.cat.SeeTier = p.SeeTier
+	c.cat.ReadTier = p.ReadTier
+	c.cat.WriteTier = p.WriteTier
 	return nil
+}
+
+// ViewerTier mirrors the PG lookup off user_display; seed tiers with
+// SetViewerTier in tests. Unknown users are tier 0, like a missing row.
+func (r *MemStore) ViewerTier(ctx context.Context, userID int64) (int, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.tiers[userID], nil
+}
+
+// SetViewerTier seeds a user's rank tier for gate tests.
+func (r *MemStore) SetViewerTier(userID int64, tier int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.tiers == nil {
+		r.tiers = map[int64]int{}
+	}
+	r.tiers[userID] = tier
 }
 
 func (r *MemStore) DeleteForumCategory(ctx context.Context, id int) error {
@@ -509,6 +543,14 @@ func (r *MemStore) GetRecentForumThreads(ctx context.Context, limit int) ([]*For
 	for _, t := range r.threads {
 		if t.hiddenAt != nil {
 			continue
+		}
+		// Mirror production: the spotlight renders without a viewer
+		// context, so only categories whose See gate admits everyone
+		// may contribute rows.
+		if c, ok := r.categories[t.thread.CategoryID]; ok {
+			if c.cat.SeeRole != "" && c.cat.SeeRole != "all" {
+				continue
+			}
 		}
 		matches = append(matches, t)
 	}
