@@ -46,7 +46,7 @@ func (r *PGStore) GetForumCategories(ctx context.Context) ([]*ForumCategory, err
 		LEFT JOIN LATERAL (
 		    SELECT u.username
 		    FROM forum_posts fp2
-		    JOIN users u ON u.id = fp2.user_id
+		    JOIN user_display u ON u.id = fp2.user_id
 		    WHERE fp2.thread_id = lt.id
 		    ORDER BY fp2.created_at DESC
 		    LIMIT 1
@@ -139,7 +139,7 @@ func (r *PGStore) GetForumThreads(ctx context.Context, categoryID, limit, offset
 		       lpu.avatar_path AS last_post_avatar_path,
 		       fc.name AS category_name
 		FROM forum_threads ft
-		JOIN users u  ON u.id  = ft.user_id
+		JOIN user_display u  ON u.id  = ft.user_id
 		JOIN forum_categories fc ON fc.id = ft.category_id
 		LEFT JOIN LATERAL (
 		    SELECT p.user_id
@@ -150,7 +150,7 @@ func (r *PGStore) GetForumThreads(ctx context.Context, categoryID, limit, offset
 		     ORDER BY p.created_at DESC
 		     LIMIT 1
 		) lp ON true
-		LEFT JOIN users lpu ON lpu.id = lp.user_id
+		LEFT JOIN user_display lpu ON lpu.id = lp.user_id
 		WHERE ft.category_id = $1 AND ft.hidden_at IS NULL
 		ORDER BY ft.pinned DESC, ft.last_post_at DESC
 		LIMIT $2 OFFSET $3`, categoryID, limit, offset)
@@ -175,7 +175,7 @@ func (r *PGStore) GetRecentForumThreads(ctx context.Context, limit int) ([]*Foru
 		       ft.last_post_at, ft.created_at,
 		       fc.name AS category_name
 		FROM forum_threads ft
-		JOIN users u ON u.id = ft.user_id
+		JOIN user_display u ON u.id = ft.user_id
 		JOIN forum_categories fc ON fc.id = ft.category_id
 		WHERE ft.hidden_at IS NULL
 		ORDER BY ft.last_post_at DESC
@@ -193,7 +193,7 @@ func (r *PGStore) GetForumThread(ctx context.Context, threadID int) (*ForumThrea
 		       ft.last_post_at, ft.created_at,
 		       fc.name AS category_name
 		FROM forum_threads ft
-		JOIN users u ON u.id = ft.user_id
+		JOIN user_display u ON u.id = ft.user_id
 		JOIN forum_categories fc ON fc.id = ft.category_id
 		WHERE ft.id = $1 AND ft.hidden_at IS NULL`, threadID)
 	return &t, err
@@ -286,9 +286,9 @@ func (r *PGStore) GetForumPosts(ctx context.Context, threadID, limit, offset, vi
 		       qu.username AS quoted_username,
 		       SUBSTRING(qp.body FROM 1 FOR 280) AS quoted_body_excerpt
 		FROM forum_posts fp
-		JOIN users u ON u.id = fp.user_id
+		JOIN user_display u ON u.id = fp.user_id
 		LEFT JOIN forum_posts qp ON qp.id = fp.quoted_post_id
-		LEFT JOIN users qu ON qu.id = qp.user_id
+		LEFT JOIN user_display qu ON qu.id = qp.user_id
 		WHERE fp.thread_id = $1 AND fp.hidden_at IS NULL`+visibilityClause+`
 		ORDER BY fp.created_at ASC, fp.id ASC
 		LIMIT $2 OFFSET $3`, args...)
@@ -441,7 +441,7 @@ func (r *PGStore) GetRecentForumActivity(ctx context.Context, limit int) ([]*For
 		       fp.created_at
 		FROM forum_posts fp
 		JOIN forum_threads ft     ON ft.id = fp.thread_id
-		JOIN users u              ON u.id  = fp.user_id
+		JOIN user_display u              ON u.id  = fp.user_id
 		JOIN forum_categories fc  ON fc.id = ft.category_id
 		WHERE fp.hidden_at IS NULL AND ft.hidden_at IS NULL
 		ORDER BY fp.created_at DESC
@@ -456,7 +456,7 @@ func (r *PGStore) GetTopForumContributors(ctx context.Context, limit int) ([]*Fo
 		       COALESCE(u.avatar_path, '') AS avatar_path,
 		       COUNT(*) AS post_count
 		FROM forum_posts fp
-		JOIN users u ON u.id = fp.user_id
+		JOIN user_display u ON u.id = fp.user_id
 		WHERE fp.hidden_at IS NULL
 		GROUP BY fp.user_id, u.username, u.role, u.avatar_path
 		ORDER BY post_count DESC
