@@ -126,6 +126,8 @@
           <label class="me-1" title="unchecked providers keep their credentials but are not crawled"><input form="prov-{{.ID}}" type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> on</label>
           <button class="btn btn-sm btn-primary py-0" form="prov-{{.ID}}" type="submit">Save</button>
           <button class="btn btn-sm btn-outline-secondary py-0" form="prov-{{.ID}}" type="submit" formaction="/admin/p/usenet/provider-test">Test</button>
+          <button class="btn btn-sm btn-outline-secondary py-0" form="prov-{{.ID}}" type="submit" formaction="/admin/p/usenet/provider-probe"
+                  title="compare this server's article numbering against your reference provider — same numbers means same backbone (share the label), different means keep its own">Detect backbone</button>
           <button class="btn btn-sm btn-outline-danger py-0" form="prov-del-{{.ID}}" type="submit" title="remove — crawl history kept">&times;</button>
         </td>
       </tr>

@@ -40,16 +40,17 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			return p.renderSettings(gc.Request.Context(), gc.Query("gq"), gc.Query("msg"), gc.Query("err"))
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
-			"knobs":         p.actionSaveKnobs,
-			"fetch-groups":  p.actionFetchGroups,
-			"group":         p.actionToggleGroup,
-			"provider":      p.actionSaveProvider,
-			"provider-del":  p.actionDeleteProvider,
-			"provider-test": p.actionTestProvider,
-			"group-tune":    p.actionTuneGroup,
-			"group-move":    p.actionMoveGroup,
-			"group-del":     p.actionDeleteGroup,
-			"groups-purge":  p.actionPurgeInactive,
+			"knobs":          p.actionSaveKnobs,
+			"fetch-groups":   p.actionFetchGroups,
+			"group":          p.actionToggleGroup,
+			"provider":       p.actionSaveProvider,
+			"provider-del":   p.actionDeleteProvider,
+			"provider-test":  p.actionTestProvider,
+			"provider-probe": p.actionProbeProvider,
+			"group-tune":     p.actionTuneGroup,
+			"group-move":     p.actionMoveGroup,
+			"group-del":      p.actionDeleteGroup,
+			"groups-purge":   p.actionPurgeInactive,
 			// Crawlers tab. On a split deployment these buttons run in the WEB
 			// process, whose trigger func-vars are nil (the jobs live in the
 			// worker) — TriggerCrawl() here used to be a silent no-op. Relay
@@ -145,7 +146,7 @@ func settingsRedirect(gc *gin.Context, key, msg string) (template.HTML, error) {
 func tabForAction(path string) string {
 	switch {
 	case strings.HasSuffix(path, "/provider"), strings.HasSuffix(path, "/provider-del"),
-		strings.HasSuffix(path, "/provider-test"):
+		strings.HasSuffix(path, "/provider-test"), strings.HasSuffix(path, "/provider-probe"):
 		return "providers"
 	case strings.HasSuffix(path, "/knobs"):
 		return "indexing"

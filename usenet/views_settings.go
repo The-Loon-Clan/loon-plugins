@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -124,6 +125,66 @@ func (p *Plugin) actionTestProvider(gc *gin.Context) (template.HTML, error) {
 		return settingsRedirect(gc, "err", "connection failed: "+err.Error())
 	}
 	return settingsRedirect(gc, "msg", "connection ok — credentials verified, nothing saved")
+}
+
+// actionProbeProvider runs the backbone fingerprint probe (probe.go): does
+// this provider assign the same article numbers as the reference provider?
+// The reference is the first OTHER enabled provider — with one provider there
+// is nothing to compare against.
+func (p *Plugin) actionProbeProvider(gc *gin.Context) (template.HTML, error) {
+	ctx, cancel := context.WithTimeout(gc.Request.Context(), 60*time.Second)
+	defer cancel()
+	cand := formProvider(gc)
+	servers, err := p.st.listServers(ctx)
+	if err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
+	var ref *provider
+	for i := range servers {
+		if servers[i].ID != cand.ID && servers[i].Enabled {
+			ref = &servers[i]
+			break
+		}
+	}
+	if ref == nil {
+		return settingsRedirect(gc, "err", "backbone probe needs a second enabled provider to compare against")
+	}
+	// Stored secrets for both sides — the form never carries them.
+	refSrv := pluginapi.Server{Host: ref.Host, Port: ref.Port, TLS: ref.TLS, Username: ref.Username}
+	if pw, err := p.st.serverPassword(ctx, ref.ID); err == nil {
+		refSrv.Password = pw
+	}
+	if cand.Password == "" && cand.ID > 0 {
+		if pw, err := p.st.serverPassword(ctx, cand.ID); err == nil {
+			cand.Password = pw
+		}
+	}
+	if cand.Host == "" && cand.ID > 0 {
+		for _, sv := range servers {
+			if sv.ID == cand.ID {
+				cand.Host, cand.Port, cand.TLS, cand.Username = sv.Host, sv.Port, sv.TLS, sv.Username
+				break
+			}
+		}
+	}
+	if cand.Port <= 0 {
+		cand.Port = 119
+	}
+	candSrv := pluginapi.Server{Host: cand.Host, Port: cand.Port, TLS: cand.TLS,
+		Username: cand.Username, Password: cand.Password}
+
+	v, err := p.probeBackbone(ctx, refSrv, candSrv)
+	if err != nil {
+		return settingsRedirect(gc, "err", "backbone probe: "+err.Error())
+	}
+	if v.Same {
+		return settingsRedirect(gc, "msg", fmt.Sprintf(
+			"same numbering as %s (%d/%d articles matched in %s) — use backbone %q on this provider",
+			ref.label(), v.Matched, v.Compared, v.Group, ref.backboneKey()))
+	}
+	return settingsRedirect(gc, "err", fmt.Sprintf(
+		"DISTINCT numbering vs %s (only %d/%d matched in %s) — keep a separate backbone label; sharing %q would corrupt its watermarks",
+		ref.label(), v.Matched, v.Compared, v.Group, ref.backboneKey()))
 }
 
 // formProvider reads a provider row from the management form. A blank password
