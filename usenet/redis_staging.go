@@ -46,27 +46,105 @@ type redisStaging struct {
 	// question the dashboard must be able to answer.
 	onEvict func(n int)
 
-	// convMu/convDone gate the one-time nzb:ready LIST→SET migration (see
-	// convertReadyKey). Done stays false on a transient failure so the next
-	// caller retries instead of erroring WRONGTYPE forever.
-	convMu   sync.Mutex
-	convDone bool
+	// report surfaces operationally significant staging events to the host
+	// error log + the crawlers ring (p.reportErr). Optional — nil in tests.
+	report func(ctx context.Context, op string, err error)
+
+	// convMu/convDone gate the nzb:ready LIST→SET migration (see
+	// ensureReadySet). Done stays false on a transient failure so the next
+	// caller retries instead of erroring WRONGTYPE forever. convScanned/convLive
+	// accumulate across the calls a large backlog takes to drain, purely so the
+	// completion note can report what the migration actually did; both reset
+	// when a run finishes.
+	convMu      sync.Mutex
+	convDone    bool
+	convScanned int
+	convLive    int
 }
 
-func newRedisStaging(rdb redis.UniversalClient, ttlHours func(context.Context) int, onEvict func(int)) *redisStaging {
-	return &redisStaging{rdb: rdb, ttlHours: ttlHours, onEvict: onEvict}
+func newRedisStaging(rdb redis.UniversalClient, ttlHours func(context.Context) int, onEvict func(int), report func(context.Context, string, error)) *redisStaging {
+	return &redisStaging{rdb: rdb, ttlHours: ttlHours, onEvict: onEvict, report: report}
 }
 
-// Conversion batch sizing. A whole-list LRange + one giant SAdd is what broke
-// in prod: on a backlog of any real size both commands blow go-redis' default
-// 3s read/write timeout, every attempt fails identically, and nzb:ready stays
-// a LIST forever while every SAdd against it errors WRONGTYPE. Small windows
-// finish well inside the timeout; the per-call batch cap keeps a large backlog
-// from eating a crawl pass, since progress is durable and resumes next call.
+// note reports a staging event when a reporter is wired. Never a silent drop:
+// the migration discarding entries is exactly the kind of bounded coverage an
+// operator must be told about rather than infer.
+func (r *redisStaging) note(ctx context.Context, op string, err error) {
+	if r.report != nil {
+		r.report(ctx, op, err)
+	}
+}
+
+// Conversion sizing. A whole-list LRange + one giant SAdd is what broke in
+// prod: the legacy key held 7.3M entries, past Redis' 1M-argument multibulk
+// limit, so the SAdd could never succeed — every attempt failed identically and
+// nzb:ready stayed a LIST while every SAdd against it errored WRONGTYPE. Small
+// windows finish well inside go-redis' default 3s timeouts; the per-call window
+// cap keeps a large backlog from eating a crawl pass, since progress is durable
+// and resumes on the next call.
+//
+// The window stays at 1000 because readyConvScript unpacks it onto the Lua
+// stack (limit ~8000).
 const (
 	readyConvWindow     = 1000
 	readyConvMaxWindows = 50
 )
+
+// readyConvScript migrates one window of the legacy LIST into the staging SET,
+// keeping only entries whose set metadata still exists.
+//
+// It is a script, not three Go calls, because nzb:ready is a single fleet-wide
+// key with no lease and convMu only serializes ONE process: N crawler workers
+// convert concurrently (crawl.go splits groups across workers). LTrim removes
+// by POSITION, so a read-then-trim pair lets a second converter trim a window
+// it never copied — measured at 12-15k entries destroyed per overlapped pass on
+// a 40k list, each one a completed release that would never reach the builder.
+// Redis runs a script atomically, so the window a converter trims is exactly
+// the window it copied.
+//
+// Liveness is decided by EXISTS on the set's grp: metadata rather than by
+// position in the list. A ready entry is "{group}:{hash}" and grpKey is
+// "grp:"+group+":"+hash, so the metadata key is just "grp:"+entry. An entry
+// whose grp: hash has TTL'd out is dead by the same definition candidateGroups
+// already uses ("Meta gone ... this ready entry is dead"), so dropping it here
+// is the established semantics, not a new policy — and unlike an
+// age-by-position guess it is checked rather than argued. That is what keeps a
+// 7.3M-entry fossil from being imported wholesale into a set the builder would
+// then sample 500-at-a-time forever, indexing nothing.
+//
+// Assumes a single keyspace: the grp: reads aren't declared in KEYS, as
+// elsewhere in this backend (SUnionStore, the art:/grp: pipelines). Redis
+// Cluster would need key-slot work across the whole staging design, not just
+// here.
+var readyConvScript = redis.NewScript(`
+local batch = redis.call('LRANGE', KEYS[1], 0, tonumber(ARGV[1]) - 1)
+local n = #batch
+if n == 0 then return {0, 0} end
+local live = {}
+for i = 1, n do
+  if redis.call('EXISTS', 'grp:' .. batch[i]) == 1 then
+    live[#live + 1] = batch[i]
+  end
+end
+if #live > 0 then
+  redis.call('SADD', KEYS[2], unpack(live))
+end
+redis.call('LTRIM', KEYS[1], n, -1)
+return {n, #live}
+`)
+
+// readyFoldScript folds the staging set into the live one. Atomic for the same
+// reason as above: between a Go-side SUnionStore and Del, a sibling converter's
+// SAdd into the staging key would be deleted unread. Returns -1 if the live key
+// is somehow still a list (caller leaves it for the next pass), 0 if there was
+// nothing staged, 1 on a fold.
+var readyFoldScript = redis.NewScript(`
+if redis.call('EXISTS', KEYS[2]) == 0 then return 0 end
+if redis.call('TYPE', KEYS[1])['ok'] == 'list' then return -1 end
+redis.call('SUNIONSTORE', KEYS[1], KEYS[1], KEYS[2])
+redis.call('DEL', KEYS[2])
+return 1
+`)
 
 // readyConvKey is the staging set the LIST is copied into before it is folded
 // into nzb:ready.
@@ -77,10 +155,9 @@ const readyConvKey = readyKey + ":setconv"
 // queue/remove O(1) and deduplicates re-queued sets for free. Random drain
 // order replaces FIFO, which the builder never relied on.
 //
-// Copy-then-trim (not pop-then-add) so an interrupted conversion replays
-// harmlessly: re-copied members dedup into the set, where a pop that failed to
-// land would have dropped a completed release. Every window is durable
-// progress, so a timeout resumes instead of restarting from zero.
+// Each window is copied and trimmed by one atomic script (see
+// readyConvScript), so an interrupted conversion resumes from durable progress
+// and a concurrent converter can never trim a window it did not copy.
 //
 // convDone latches only once the key is genuinely a set with nothing left to
 // migrate. It is NOT a promise for the life of the process: if nzb:ready turns
@@ -99,28 +176,20 @@ func (r *redisStaging) ensureReadySet(ctx context.Context) {
 	switch t {
 	case "list":
 		for i := 0; i < readyConvMaxWindows; i++ {
-			entries, err := r.rdb.LRange(ctx, readyKey, 0, readyConvWindow-1).Result()
-			if err != nil {
+			res, err := readyConvScript.Run(ctx, r.rdb, []string{readyKey, readyConvKey}, readyConvWindow).Slice()
+			if err != nil || len(res) != 2 {
 				return
 			}
-			if len(entries) == 0 {
+			scanned, live := luaInt(res[0]), luaInt(res[1])
+			if scanned == 0 {
 				break
 			}
-			members := make([]interface{}, len(entries))
-			for j, e := range entries {
-				members[j] = e
-			}
-			if err := r.rdb.SAdd(ctx, readyConvKey, members...).Err(); err != nil {
-				return
-			}
-			// Redis drops the key once the last element is trimmed, which is
-			// how the loop below detects "fully drained".
-			if err := r.rdb.LTrim(ctx, readyKey, int64(len(entries)), -1).Err(); err != nil {
-				return
-			}
+			r.convScanned += scanned
+			r.convLive += live
 		}
+		// LTrim drops the key with its last element, so "gone" means drained.
 		if n, err := r.rdb.Exists(ctx, readyKey).Result(); err != nil || n > 0 {
-			return // more to drain — resume on a later call
+			return // more to migrate — resume on a later call
 		}
 	case "none", "set":
 		// Fall through: a previous call may have left a partial conversion set
@@ -129,20 +198,26 @@ func (r *redisStaging) ensureReadySet(ctx context.Context) {
 		return // hash/zset/string: not ours to convert; let the caller's error surface
 	}
 
-	staged, err := r.rdb.Exists(ctx, readyConvKey).Result()
-	if err != nil {
+	folded, err := readyFoldScript.Run(ctx, r.rdb, []string{readyKey, readyConvKey}).Int()
+	if err != nil || folded < 0 {
 		return
 	}
-	if staged == 0 {
-		r.convDone = true
-		return
+	if dropped := r.convScanned - r.convLive; dropped > 0 {
+		// Never silent: say what was migrated and what was discarded, and be
+		// precise that these are NOT re-crawled — their batches staged fine, so
+		// the crawl watermark is already past them.
+		r.note(ctx, "usenet/staging-legacy-drop", fmt.Errorf(
+			"nzb:ready LIST→SET migration: kept %d live entries, discarded %d whose grp: metadata had already expired (their staged articles are gone; the crawl watermark is past them, so they are not re-crawled)",
+			r.convLive, dropped))
 	}
-	// Union rather than RENAME: another process may already have queued live
-	// entries into the real set, and RENAME would silently drop them.
-	if err := r.rdb.SUnionStore(ctx, readyKey, readyKey, readyConvKey).Err(); err != nil {
-		return
-	}
-	r.convDone = r.rdb.Del(ctx, readyConvKey).Err() == nil
+	r.convDone = true
+	r.convScanned, r.convLive = 0, 0
+}
+
+// luaInt reads one integer out of a script's multi-value reply.
+func luaInt(v interface{}) int {
+	n, _ := v.(int64)
+	return int(n)
 }
 
 // readyRetry runs a nzb:ready operation and, if it failed only because the key

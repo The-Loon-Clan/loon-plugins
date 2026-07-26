@@ -1,7 +1,9 @@
 package usenet
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -238,5 +240,25 @@ func TestParseInfoInt(t *testing.T) {
 	}
 	if got := parseInfoInt(info, "not_present:"); got != 0 {
 		t.Errorf("missing field = %d, want 0", got)
+	}
+}
+
+// readyRetry must retry ONLY on WRONGTYPE. Retrying on any error would double
+// every failed staging write — and this is the cheapest guard against that, so
+// it stays out of the integration file: no Redis is reached (the non-WRONGTYPE
+// path returns before ensureReadySet), and a plain `go test ./usenet/` runs it.
+func TestReadyRetry_PassesThroughNonWrongTypeErrors(t *testing.T) {
+	r := &redisStaging{}
+	sentinel := errors.New("some other failure")
+	calls := 0
+	err := r.readyRetry(context.Background(), func() error {
+		calls++
+		return sentinel
+	})
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want the original error", err)
+	}
+	if calls != 1 {
+		t.Fatalf("op ran %d times, want 1 — only WRONGTYPE should retry", calls)
 	}
 }

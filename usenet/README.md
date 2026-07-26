@@ -293,11 +293,16 @@ the coordination and adoption guarantees are the pieces that fail silently and
 expensively if wrong, so they are only trustworthy against a real database.
 
 Also needs integration (live Redis, `-tags=integration`, `USENET_TEST_REDIS`):
-the `nzb:ready` LIST→SET migration and its WRONGTYPE self-heal. Real server, not
-a fake — the cases turn on Redis' own semantics (WRONGTYPE, LTrim dropping an
-emptied key, SUnionStore), which a double would only restate as the assumptions
-under test. A stale pre-migration list stalled prod's crawl→stage→build pipeline
-for 23 hours, so these paths are worth a real server:
+the `nzb:ready` LIST→SET migration — resumption across calls, discarding
+entries whose `grp:` metadata has expired while keeping live ones, two
+concurrent converters losing nothing, and the WRONGTYPE self-heal driven
+through `stageArticles`. Real server, not a fake: the cases turn on Redis' own
+semantics (script atomicity, WRONGTYPE, LTrim dropping an emptied key,
+SUnionStore), which a double would only restate as the assumptions under test.
+A stale pre-migration list of 7.3M entries stalled prod's crawl→stage→build
+pipeline for 23 hours, and the first fix for it introduced a converter race
+that destroyed 16k of 40k entries in a differential run — both are now pinned
+here, so these paths are worth a real server:
 
 ```
 docker run -d --name usenet-test-redis -p 6399:6379 redis:7-alpine

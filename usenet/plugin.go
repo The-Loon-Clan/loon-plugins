@@ -135,7 +135,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return e.StagingMaxRows, e.StagingPruneHours
 	}, func(ctx context.Context) int {
 		return p.effective(ctx).StagingTTLHours
-	}, p.tel.noteEvicted)
+	}, p.tel.noteEvicted, p.reportErr)
 	if err != nil {
 		return fmt.Errorf("usenet: staging: %w", err)
 	}

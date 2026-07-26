@@ -6,7 +6,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -34,7 +37,44 @@ func testRedis(t *testing.T) redis.UniversalClient {
 }
 
 func newTestStaging(rdb redis.UniversalClient) *redisStaging {
-	return newRedisStaging(rdb, func(context.Context) int { return 2 }, nil)
+	return newRedisStaging(rdb, func(context.Context) int { return 2 }, nil, nil)
+}
+
+// newTestStagingReporting is newTestStaging plus a capture of everything the
+// backend reports, for the cases that must NOT drop entries silently.
+func newTestStagingReporting(rdb redis.UniversalClient) (*redisStaging, *[]error) {
+	var notes []error
+	r := newRedisStaging(rdb, func(context.Context) int { return 2 }, nil,
+		func(_ context.Context, _ string, err error) { notes = append(notes, err) })
+	return r, &notes
+}
+
+// seedLegacy pushes ready entries onto the legacy LIST and, for the live ones,
+// creates the grp: metadata hash the migration checks. Live/dead is what
+// decides whether an entry survives, so a fixture without grp: keys would be
+// asserting the wrong thing.
+func seedLegacy(t *testing.T, rdb redis.UniversalClient, entries []string, live bool) {
+	t.Helper()
+	ctx := context.Background()
+	members := make([]interface{}, 0, len(entries))
+	for _, e := range entries {
+		members = append(members, e)
+		if live {
+			if err := rdb.HSet(ctx, "grp:"+e, "base_subject", "s "+e).Err(); err != nil {
+				t.Fatalf("seed grp meta: %v", err)
+			}
+		}
+	}
+	// LPush, like the pre-2026-07 writer: newest at the head.
+	for i := 0; i < len(members); i += 5000 {
+		end := i + 5000
+		if end > len(members) {
+			end = len(members)
+		}
+		if err := rdb.LPush(ctx, readyKey, members[i:end]...).Err(); err != nil {
+			t.Fatalf("seed list: %v", err)
+		}
+	}
 }
 
 func TestEnsureReadySet_ConvertsLegacyList(t *testing.T) {
@@ -43,13 +83,13 @@ func TestEnsureReadySet_ConvertsLegacyList(t *testing.T) {
 	r := newTestStaging(rdb)
 
 	want := map[string]bool{}
+	entries := make([]string, 0, 250)
 	for i := 0; i < 250; i++ {
 		m := fmt.Sprintf("alt.binaries.test:%04x", i)
-		if err := rdb.RPush(ctx, readyKey, m).Err(); err != nil {
-			t.Fatalf("seed: %v", err)
-		}
+		entries = append(entries, m)
 		want[m] = true
 	}
+	seedLegacy(t, rdb, entries, true)
 
 	r.ensureReadySet(ctx)
 
@@ -82,21 +122,11 @@ func TestEnsureReadySet_LargeListConvertsAcrossCalls(t *testing.T) {
 	r := newTestStaging(rdb)
 
 	total := readyConvWindow*readyConvMaxWindows + 2500
-	members := make([]interface{}, 0, 5000)
+	entries := make([]string, 0, total)
 	for i := 0; i < total; i++ {
-		members = append(members, fmt.Sprintf("g:%06x", i))
-		if len(members) == 5000 {
-			if err := rdb.RPush(ctx, readyKey, members...).Err(); err != nil {
-				t.Fatalf("seed: %v", err)
-			}
-			members = members[:0]
-		}
+		entries = append(entries, fmt.Sprintf("g:%06x", i))
 	}
-	if len(members) > 0 {
-		if err := rdb.RPush(ctx, readyKey, members...).Err(); err != nil {
-			t.Fatalf("seed tail: %v", err)
-		}
-	}
+	seedLegacy(t, rdb, entries, true)
 
 	// First pass is capped and must leave the rest queued, not drop it.
 	r.ensureReadySet(ctx)
@@ -118,6 +148,92 @@ func TestEnsureReadySet_LargeListConvertsAcrossCalls(t *testing.T) {
 	}
 	if n, _ := rdb.SCard(ctx, readyKey).Result(); n != int64(total) {
 		t.Fatalf("converted %d members, want %d — a window was dropped", n, total)
+	}
+}
+
+func TestEnsureReadySet_DropsDeadEntriesKeepsLive(t *testing.T) {
+	// Prod's key held 7.3M entries — the fossil of the O(len) LRem death spiral
+	// this migration exists to end, nearly all of it pointing at staging data
+	// that had long since TTL'd out. Importing that wholesale would swap a hard
+	// stall for a soft one (the builder samples 500 a pass and HGETs each,
+	// indexing nothing), so entries whose grp: metadata is gone are discarded —
+	// by liveness, never by position, and never silently.
+	ctx := context.Background()
+	rdb := testRedis(t)
+	r, notes := newTestStagingReporting(rdb)
+
+	dead := make([]string, 0, 1500)
+	for i := 0; i < 1500; i++ {
+		dead = append(dead, fmt.Sprintf("dead.group:%05x", i))
+	}
+	live := []string{"live.group:aaaa", "live.group:bbbb", "live.group:cccc"}
+	seedLegacy(t, rdb, dead, false)
+	seedLegacy(t, rdb, live, true)
+
+	r.ensureReadySet(ctx)
+
+	if typ, _ := rdb.Type(ctx, readyKey).Result(); typ != "set" {
+		t.Fatalf("type = %q, want set", typ)
+	}
+	got, err := rdb.SMembers(ctx, readyKey).Result()
+	if err != nil {
+		t.Fatalf("SMembers: %v", err)
+	}
+	if len(got) != len(live) {
+		t.Fatalf("kept %d members, want only the %d live ones: %v", len(got), len(live), got)
+	}
+	for _, m := range got {
+		if !strings.HasPrefix(m, "live.") {
+			t.Fatalf("kept dead entry %q — liveness is what decides, not position", m)
+		}
+	}
+	if len(*notes) != 1 {
+		t.Fatalf("reported %d notes, want exactly 1 — a discarded backlog must never be silent", len(*notes))
+	}
+	if msg := (*notes)[0].Error(); !strings.Contains(msg, fmt.Sprint(len(dead))) {
+		t.Errorf("note %q does not say how many entries were discarded (%d)", msg, len(dead))
+	}
+}
+
+func TestEnsureReadySet_ConcurrentConvertersLoseNothing(t *testing.T) {
+	// nzb:ready is one fleet-wide key with no lease, and convMu only serializes
+	// ONE process — crawl.go splits groups across N crawler workers, each with
+	// its own redisStaging. A read-then-trim pair let a second converter LTrim
+	// (positional!) a window it never copied: measured at 12-15k completed
+	// releases destroyed per overlapped pass on a 40k list. The window must be
+	// atomic, so two converters racing must still lose nothing.
+	ctx := context.Background()
+	rdb := testRedis(t)
+
+	const total = 40000
+	entries := make([]string, 0, total)
+	for i := 0; i < total; i++ {
+		entries = append(entries, fmt.Sprintf("g:%06x", i))
+	}
+	seedLegacy(t, rdb, entries, true)
+
+	a, b := newTestStaging(rdb), newTestStaging(rdb)
+	for pass := 0; pass < 10; pass++ {
+		var wg sync.WaitGroup
+		for _, r := range []*redisStaging{a, b} {
+			wg.Add(1)
+			go func(r *redisStaging) { defer wg.Done(); r.ensureReadySet(ctx) }(r)
+		}
+		wg.Wait()
+		if typ, _ := rdb.Type(ctx, readyKey).Result(); typ == "set" {
+			break
+		}
+	}
+
+	if typ, _ := rdb.Type(ctx, readyKey).Result(); typ != "set" {
+		t.Fatalf("type = %q, want set", typ)
+	}
+	n, _ := rdb.SCard(ctx, readyKey).Result()
+	if n != total {
+		t.Fatalf("migrated %d of %d entries — %d completed releases destroyed by the converter race", n, total, total-n)
+	}
+	if left, _ := rdb.Exists(ctx, readyConvKey).Result(); left != 0 {
+		t.Error("conversion staging key left behind")
 	}
 }
 
@@ -147,9 +263,11 @@ func TestEnsureReadySet_PreservesConcurrentlyQueuedEntries(t *testing.T) {
 }
 
 func TestStageArticles_SelfHealsWhenReadyBecomesList(t *testing.T) {
-	// The 23h prod failure mode: convDone latches true on a healthy key, the
-	// key later turns into a LIST, and every SAdd then errors WRONGTYPE for the
-	// life of the container. Staging must recover on its own.
+	// The 23h prod failure mode, driven through the real entry point: convDone
+	// latches true on a healthy key, the key later turns into a LIST, and every
+	// SAdd then errors WRONGTYPE for the life of the container — which is why
+	// redeploying didn't fix it. Asserting on stageArticles rather than on
+	// readyRetry is the point: the wiring is what failed, not the helper.
 	ctx := context.Background()
 	rdb := testRedis(t)
 	r := newTestStaging(rdb)
@@ -162,40 +280,28 @@ func TestStageArticles_SelfHealsWhenReadyBecomesList(t *testing.T) {
 		t.Fatal("convDone should latch when the key is absent")
 	}
 
-	if err := rdb.RPush(ctx, readyKey, "stale:legacy").Err(); err != nil {
-		t.Fatalf("seed list: %v", err)
-	}
+	// A legacy list appears behind the latch. Give it live metadata so the
+	// migration keeps it and the assertion below can see both entries.
+	seedLegacy(t, rdb, []string{"stale.group:legacy"}, true)
 
-	err := r.readyRetry(ctx, func() error {
-		return rdb.SAdd(ctx, readyKey, "fresh:entry").Err()
-	})
+	// One single-part article completes its set, so stageArticles reaches the
+	// SAdd on nzb:ready — the exact call that errored for 23 hours.
+	n, err := r.stageArticles(ctx, []stagedArticle{{
+		Group: "alt.binaries.test", BaseSubject: "Fresh Release", MessageID: "<a@b>",
+		Subject: "Fresh Release (1/1)", PartNum: 1, TotalParts: 1, FileNum: 1, TotalFiles: 1,
+		Posted: time.Now(),
+	}})
 	if err != nil {
-		t.Fatalf("readyRetry did not recover from WRONGTYPE: %v", err)
+		t.Fatalf("stageArticles did not recover from WRONGTYPE: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("staged %d articles, want 1", n)
 	}
 	if typ, _ := rdb.Type(ctx, readyKey).Result(); typ != "set" {
 		t.Fatalf("type after self-heal = %q, want set", typ)
 	}
 	members, _ := rdb.SMembers(ctx, readyKey).Result()
 	if len(members) != 2 {
-		t.Fatalf("members = %v, want both the migrated legacy entry and the fresh one", members)
-	}
-}
-
-func TestReadyRetry_PassesThroughNonWrongTypeErrors(t *testing.T) {
-	ctx := context.Background()
-	rdb := testRedis(t)
-	r := newTestStaging(rdb)
-
-	sentinel := fmt.Errorf("some other failure")
-	calls := 0
-	err := r.readyRetry(ctx, func() error {
-		calls++
-		return sentinel
-	})
-	if err != sentinel {
-		t.Fatalf("err = %v, want the original error", err)
-	}
-	if calls != 1 {
-		t.Fatalf("op ran %d times, want 1 — only WRONGTYPE should retry", calls)
+		t.Fatalf("members = %v, want the migrated legacy entry plus the freshly completed set", members)
 	}
 }
