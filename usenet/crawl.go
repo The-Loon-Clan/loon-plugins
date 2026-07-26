@@ -206,7 +206,11 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	jobCtx := ctx
 	groups, ctx, release := p.claimGroupLeases(ctx, bb, groups, p.leaseTTL(cfg))
 	defer release()
-	p.tel.crawl.noteGroups(len(groups))
+	claimedNames := make([]string, 0, len(groups))
+	for _, g := range groups {
+		claimedNames = append(claimedNames, g.Name)
+	}
+	p.tel.crawl.noteGroups(claimedNames)
 	if len(groups) == 0 {
 		p.crawlJob.Log("%s: every group already claimed by another worker", run.prov.label())
 		return 0, 0

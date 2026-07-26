@@ -176,7 +176,11 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 
 	p.backfillJob.Log("%s: backfilling %d group(s), %d batch(es) over %d connection(s)…",
 		run.prov.label(), len(targets), len(jobs), run.size)
-	p.tel.backfill.noteGroups(len(targets))
+	targetNames := make([]string, 0, len(targets))
+	for name := range targets {
+		targetNames = append(targetNames, name)
+	}
+	p.tel.backfill.noteGroups(targetNames)
 	// nil onGroup: backfill passes are bounded (backfill_batches_per_run) and
 	// recordBackfill needs the complete result set — with no callback,
 	// runBatches returns every result.

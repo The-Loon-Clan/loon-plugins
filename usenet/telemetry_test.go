@@ -60,7 +60,7 @@ func TestErrorRingBeforeFull(t *testing.T) {
 func TestPassAccounting(t *testing.T) {
 	tel := newTelemetry()
 	tel.crawl.passStart(2)
-	tel.crawl.noteGroups(5)
+	tel.crawl.noteGroups([]string{"a.b.one", "a.b.two", "a.b.three", "a.b.four", "a.b.five"})
 	tel.crawl.noteBatch(3000, 120, 1<<20, true)
 	tel.crawl.noteBatch(3000, 80, 1<<20, true)
 	tel.crawl.noteBatch(0, 0, 0, false)
@@ -175,5 +175,78 @@ func TestNZBRetentionDefaultsToKeepForever(t *testing.T) {
 	c3.applyDefaults()
 	if c3.NZBRetentionDays != 0 {
 		t.Error("setting crawl depth changed the deletion horizon — they must stay separate")
+	}
+}
+
+// The group counters are the public stats widget's "N / M groups" readout, and
+// both used to be incremented rather than set-based. A long pass re-claims and
+// re-plans groups as it goes, so a 28-newsgroup site drifted to "433 / 980" —
+// a fraction with no meaning. These pin that the numbers stay bounded by the
+// groups actually being scanned, because the drift is invisible until someone
+// reads the widget and does not believe it.
+func TestPassGroupCountsAreDistinctNotCumulative(t *testing.T) {
+	tel := newTelemetry()
+	tel.crawl.passStart(2)
+
+	// Two providers claim the same three groups, then a later planning round
+	// re-claims two of them — six calls, three groups.
+	tel.crawl.noteGroups([]string{"a.b.one", "a.b.two", "a.b.three"})
+	tel.crawl.noteGroups([]string{"a.b.one", "a.b.two", "a.b.three"})
+	tel.crawl.noteGroups([]string{"a.b.one", "a.b.two"})
+
+	if cur, _ := tel.crawl.snapshot(); cur.Groups != 3 {
+		t.Errorf("groups=%d, want 3 — re-claiming a group must not inflate the total", cur.Groups)
+	}
+}
+
+func TestPassGroupsDoneNeverExceedsGroups(t *testing.T) {
+	tel := newTelemetry()
+	tel.crawl.passStart(1)
+	tel.crawl.noteGroups([]string{"a.b.one", "a.b.two"})
+
+	// one finishes its single planned batch...
+	tel.crawl.notePlanned("a.b.one", 1)
+	tel.crawl.noteBatchFor("a.b.one", 100, 10, 1<<10, true)
+	cur, _ := tel.crawl.snapshot()
+	if cur.GroupsDone != 1 {
+		t.Fatalf("groupsDone=%d, want 1", cur.GroupsDone)
+	}
+
+	// ...then gets re-planned and finishes again. It is one group, done once.
+	tel.crawl.notePlanned("a.b.one", 2)
+	if cur, _ := tel.crawl.snapshot(); cur.GroupsDone != 0 {
+		t.Errorf("groupsDone=%d after re-planning, want 0 — the group has outstanding work again",
+			cur.GroupsDone)
+	}
+	tel.crawl.noteBatchFor("a.b.one", 100, 10, 1<<10, true)
+	tel.crawl.noteBatchFor("a.b.one", 100, 10, 1<<10, false) // failure still lands the batch
+	cur, _ = tel.crawl.snapshot()
+	if cur.GroupsDone != 1 {
+		t.Errorf("groupsDone=%d, want 1 — a group finishing twice is still one group", cur.GroupsDone)
+	}
+	if cur.GroupsDone > cur.Groups {
+		t.Errorf("groupsDone=%d exceeds groups=%d, which is what the widget rendered as 433/980",
+			cur.GroupsDone, cur.Groups)
+	}
+}
+
+// passStart must clear the sets, or the next pass inherits the last one's
+// groups and starts at a non-zero denominator.
+func TestPassStartClearsTheGroupSets(t *testing.T) {
+	tel := newTelemetry()
+	tel.crawl.passStart(1)
+	tel.crawl.noteGroups([]string{"a.b.one", "a.b.two"})
+	tel.crawl.notePlanned("a.b.one", 1)
+	tel.crawl.noteBatchFor("a.b.one", 1, 1, 1, true)
+	tel.crawl.passEnd()
+
+	tel.crawl.passStart(1)
+	cur, _ := tel.crawl.snapshot()
+	if cur.Groups != 0 || cur.GroupsDone != 0 {
+		t.Errorf("new pass starts at %d/%d groups, want 0/0", cur.GroupsDone, cur.Groups)
+	}
+	tel.crawl.noteGroups([]string{"a.b.nine"})
+	if cur, _ := tel.crawl.snapshot(); cur.Groups != 1 {
+		t.Errorf("groups=%d, want 1 — the previous pass leaked in", cur.Groups)
 	}
 }

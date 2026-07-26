@@ -91,6 +91,14 @@ type passTracker struct {
 	// groupsLeft is the current pass's outstanding batch count per group,
 	// seeded by notePlanned; a group is "done" when it hits zero.
 	groupsLeft map[string]int
+	// groupsSeen / groupsDone are SETS, and that is the point. Both counters
+	// used to be incremented, so a group re-claimed or re-planned in a later
+	// round of a long-running pass counted again: a 28-newsgroup site showed
+	// "433 / 980 groups" on the public stats widget after a 12-hour pass, a
+	// fraction that could not mean anything to a viewer. Sets make the numbers
+	// what the label already claims — distinct newsgroups being scanned.
+	groupsSeen map[string]struct{}
+	groupsDone map[string]struct{}
 }
 
 func (t *passTracker) passStart(providers int) {
@@ -98,6 +106,8 @@ func (t *passTracker) passStart(providers int) {
 	defer t.mu.Unlock()
 	t.cur = passStats{Started: time.Now(), Providers: providers, InProgress: true}
 	t.groupsLeft = nil
+	t.groupsSeen = nil
+	t.groupsDone = nil
 }
 
 func (t *passTracker) passEnd() {
@@ -127,7 +137,11 @@ func (t *passTracker) noteBatchFor(group string, articles, staged int, wire int6
 	if n, tracked := t.groupsLeft[group]; tracked {
 		if n <= 1 {
 			delete(t.groupsLeft, group)
-			t.cur.GroupsDone++
+			if t.groupsDone == nil {
+				t.groupsDone = map[string]struct{}{}
+			}
+			t.groupsDone[group] = struct{}{}
+			t.cur.GroupsDone = len(t.groupsDone)
 		} else {
 			t.groupsLeft[group] = n - 1
 		}
@@ -154,6 +168,14 @@ func (t *passTracker) notePlanned(group string, batches int) {
 		t.groupsLeft = map[string]int{}
 	}
 	t.groupsLeft[group] += batches
+	// A group with new planned work is no longer done. Without this a group
+	// re-planned after finishing would stay counted as done AND be re-counted
+	// when it finished again, which is half of how GroupsDone drifted past the
+	// group total.
+	if _, done := t.groupsDone[group]; done {
+		delete(t.groupsDone, group)
+		t.cur.GroupsDone = len(t.groupsDone)
+	}
 }
 
 // noteReading marks the group a pool worker just started fetching.
@@ -163,10 +185,19 @@ func (t *passTracker) noteReading(group string) {
 	t.mu.Unlock()
 }
 
-func (t *passTracker) noteGroups(n int) {
+// noteGroups records which groups this pass is working. Takes names rather
+// than a count so re-claiming a group in a later planning round cannot inflate
+// the total — see groupsSeen.
+func (t *passTracker) noteGroups(names []string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.cur.Groups += n
+	if t.groupsSeen == nil {
+		t.groupsSeen = make(map[string]struct{}, len(names))
+	}
+	for _, n := range names {
+		t.groupsSeen[n] = struct{}{}
+	}
+	t.cur.Groups = len(t.groupsSeen)
 }
 
 // snapshot returns the in-progress pass (if any) and the last completed one.
