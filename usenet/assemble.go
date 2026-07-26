@@ -46,6 +46,9 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 	// if that pass died before its own flush.
 	p.reloadBlacklist(ctx)
 	defer p.flushFilterHits(ctx)
+	// Every branch below names its outcome, so the reasons sum to the
+	// candidates examined — see build_outcomes.go.
+	defer p.flushBuildOutcomes(ctx)
 
 	// Resolve the sink ONCE for the pass (mirrors resolveHealthBackend): a
 	// host-misconfigured pass fails here with one error instead of flooding the
@@ -70,11 +73,23 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		}
 		arts, err := p.staging.groupArticles(ctx, k.Group, k.Base)
 		if err != nil {
+			p.outcomes.note(outcomeLoadError, k.Base)
 			p.reportErr(ctx, "usenet/build-load", err)
 			continue
 		}
-		if len(arts) == 0 || !isComplete(arts) {
-			continue // not actually complete yet — leave staged for next round
+		if len(arts) == 0 {
+			// Staging says there is a set here and the articles say otherwise.
+			// Separated from "incomplete" because it is a consistency problem,
+			// not a waiting one, and conflating them hid it.
+			p.outcomes.note(outcomeEmpty, k.Base)
+			continue
+		}
+		if !isComplete(arts) {
+			// Not a drop: stays staged for the next round. Counted anyway,
+			// because on a stalled site this is the majority outcome and an
+			// unnamed majority is indistinguishable from a leak.
+			p.outcomes.note(outcomeIncomplete, k.Base)
+			continue
 		}
 		// Classification runs in PROD'S order: title extraction, blocked
 		// extensions, the operator blacklist, then the sized junk check — which
@@ -85,6 +100,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			// a per-set SKIP line would evict the pass summary from the 100-line
 			// job ring. The count folds into that summary instead.
 			skippedExt++
+			p.outcomes.note(outcomeBlockedExt, k.Base)
 			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
 				p.reportErr(ctx, "usenet/build-delete-staged", err)
 			}
@@ -101,6 +117,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			// Attribution is already recorded per-rule in filter_hits; the
 			// per-release log line is redundant with that and floods the ring.
 			p.hits.note("blacklist", pat, k.Base)
+			p.outcomes.note(outcomeBlacklist, k.Base)
 			skippedBL++
 			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
 				p.reportErr(ctx, "usenet/build-delete-staged", err)
@@ -109,6 +126,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		}
 		if junkRule != "" {
 			p.hits.note("junk", junkRule, k.Base)
+			p.outcomes.note(outcomeJunk, k.Base)
 			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil { // drop, don't build
 				p.reportErr(ctx, "usenet/build-delete-staged", err)
 			}
@@ -116,6 +134,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		}
 		xmlBytes, err := buildNZB(arts)
 		if err != nil {
+			p.outcomes.note(outcomeXMLError, k.Base)
 			// Malformed input the sanitising didn't cover. Leave the set staged:
 			// the prune horizon clears it if it never becomes buildable.
 			p.reportErr(ctx, "usenet/build-xml", fmt.Errorf("%s/%s: %w", k.Group, k.Base, err))
@@ -123,6 +142,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		}
 		gz, err := gzipBytes(xmlBytes)
 		if err != nil {
+			p.outcomes.note(outcomeGzipError, k.Base)
 			p.reportErr(ctx, "usenet/build-gzip", err)
 			continue
 		}
@@ -136,6 +156,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		}
 		created, err := sink.store(ctx, rel)
 		if err != nil {
+			p.outcomes.note(outcomeStoreError, k.Base)
 			// Storage failed — leave the set staged so a later pass retries.
 			// A transient sink outage must never lose a release.
 			p.reportErr(ctx, "usenet/build-store", fmt.Errorf("%s: %w", title, err))
@@ -146,7 +167,14 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
 			p.reportErr(ctx, "usenet/build-delete-staged", err)
 		}
+		if !created {
+			// Assembled fine, the sink already had it. Previously invisible:
+			// the pass counted creations only, so a pass that deduped every
+			// set reported "built 0" and offered no reason.
+			p.outcomes.note(outcomeDuplicate, k.Base)
+		}
 		if created {
+			p.outcomes.note(outcomeBuilt, k.Base)
 			built++
 			// Feed the "recently built" telemetry ring: with sink=host no
 			// plugin table records this, and the host table mixes in agent
@@ -154,8 +182,17 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			p.tel.noteBuilt(title, k.Group, size)
 		}
 	}
-	p.buildJob.Log("built %d NZB file(s) from %d candidate group(s) (skipped %d blocked-ext, %d blacklisted)",
-		built, len(keys), skippedExt, skippedBL)
+	// The summary now accounts for every candidate, not just the ones that
+	// produced a file: incomplete and duplicate are usually the big two, and
+	// their absence was what made a stalled pipeline look like a working one.
+	p.buildJob.Log("built %d of %d candidate set(s) — %d incomplete, %d duplicate, "+
+		"%d junk, %d blacklisted, %d blocked-ext, %d empty, %d error(s)",
+		built, len(keys),
+		p.outcomes.total(outcomeIncomplete), p.outcomes.total(outcomeDuplicate),
+		p.outcomes.total(outcomeJunk), skippedBL, skippedExt,
+		p.outcomes.total(outcomeEmpty),
+		p.outcomes.total(outcomeLoadError)+p.outcomes.total(outcomeXMLError)+
+			p.outcomes.total(outcomeGzipError)+p.outcomes.total(outcomeStoreError))
 	// Sample the incomplete sets into telemetry — the dashboard's "which
 	// releases are still missing articles" card. Done here, once per pass,
 	// because listing them (redis: SCAN + a pipelined read per set) is too

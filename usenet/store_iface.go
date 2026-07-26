@@ -102,6 +102,11 @@ type BlacklistStore interface {
 	deleteBlacklistRule(ctx context.Context, id int64) error
 	toggleBlacklistRule(ctx context.Context, id int64) error
 	recordFilterHits(ctx context.Context, hits map[filterHitKey]*filterHitVal) error
+
+	// recordBuildOutcomes folds one build pass's per-reason counts into today's
+	// rows. Same accumulate-then-upsert discipline as recordFilterHits, for the
+	// same reason: a write per candidate set would cost more than the assembly.
+	recordBuildOutcomes(ctx context.Context, out map[buildOutcome]*outcomeVal) error
 	filterHitRows(ctx context.Context) ([]filterHitRow, error)
 	resetFilterHits(ctx context.Context) error
 }

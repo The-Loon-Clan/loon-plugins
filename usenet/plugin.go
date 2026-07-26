@@ -105,6 +105,8 @@ type Plugin struct {
 	// hits accumulates filter-rule hits in memory; a pass flushes them in one
 	// batch. Never written per article — see blacklist.go.
 	hits *filterHits
+	// outcomes accounts for what each build pass did with every candidate set.
+	outcomes *buildOutcomes
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -128,6 +130,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.fleet = newProviderFleet()
 	p.tel = newTelemetry()
 	p.hits = newFilterHits()
+	p.outcomes = newBuildOutcomes()
 	// Staging backend behind the seam. Limits are read per-call (via effective)
 	// so the admin knobs apply live. nzbs writes always go through pg regardless.
 	staging, err := newStaging(p.cfg.Staging, pg, c.Redis, func(ctx context.Context) (int, int) {

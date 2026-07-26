@@ -95,6 +95,13 @@ Principal tables:
 - `junk_rules` — the junk-filter rule set, seeded from `seed/junk_rules.tsv`.
 - `blacklist_regexes` — the operator's editorial blacklist.
 - `filter_hits` — per-rule drop counters (junk + blacklist).
+- `build_outcomes` — per-day, per-reason counts of what the build pass did with
+  every candidate set (`built`, `incomplete`, `duplicate`, `junk`, `blacklist`,
+  `blocked_ext`, `empty`, and the four error reasons), plus one sample subject
+  each. Where `filter_hits` attributes a drop to a *rule*, this accounts for
+  *every* candidate — including the two outcomes the pass never used to report,
+  `incomplete` and `duplicate`, which are usually the largest. Bucketed by day
+  rather than all-time because the question is almost always "what changed".
 - `leases`, `crawler_workers` — multi-host coordination.
 
 Reads **`public.newsgroups` / `public.blacklist_regexes`** once, at host
