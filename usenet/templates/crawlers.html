@@ -21,7 +21,14 @@
         {{else if .Down}}<span data-role="pbadge" class="badge bg-warning text-dark">benched</span>
         {{else if .Dialled}}<span data-role="pbadge" class="badge bg-success">connected</span>
         {{else}}<span data-role="pbadge" class="badge bg-secondary">idle</span>{{end}}
-        <span data-role="pconns" class="text-muted small">{{if .Dialled}}{{.Open}} / {{.Target}} connections{{else}}not dialled yet{{end}}</span>
+        {{/* Resets was computed and thrown away for months. It is the one
+             number that says whether the pool is healthy-but-busy or
+             thrashing, which is the difference between "the provider is slow"
+             and the "no usable connection in pool" errors operators see.
+             Configured is shown when it differs from the live target, because
+             a pool only re-dials at the next pass and "I changed it but it
+             still says 10" was a real confusion. */}}
+        <span data-role="pconns" class="text-muted small">{{if .Dialled}}{{.Open}} / {{.Target}} connections{{if and .Configured (ne .Configured .Target)}} (cfg {{.Configured}}){{end}}{{if .Busy}} &middot; {{.Busy}} busy{{end}}{{if .Resets}} &middot; {{.Resets}} resets{{end}}{{else}}not dialled yet{{end}}</span>
         <a class="ms-auto text-muted text-decoration-none" href="/admin/p/usenet#providers" title="edit providers">&#9998;</a>
       </div>
       {{end}}
@@ -314,7 +321,15 @@
           : label === 'benched' ? 'bg-warning text-dark' : 'bg-secondary');
       }
       var c = row.querySelector('[data-role=pconns]');
-      if (c) c.textContent = pv.dialled ? (pv.open + ' / ' + pv.target + ' connections') : 'not dialled yet';
+      if (c) {
+        var txt = 'not dialled yet';
+        if (pv.dialled) {
+          txt = pv.open + ' / ' + pv.target + ' connections';
+          if (pv.busy) { txt += ' · ' + pv.busy + ' busy'; }
+          if (pv.resets) { txt += ' · ' + pv.resets + ' resets'; }
+        }
+        c.textContent = txt;
+      }
     });
     var p = st.crawl || {};
     var any = p.running || p.batches > 0 || p.articles > 0;

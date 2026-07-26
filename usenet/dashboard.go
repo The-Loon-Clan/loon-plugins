@@ -99,6 +99,13 @@ type ProviderReport struct {
 	Down    bool `json:"down"`
 	Open    int  `json:"open"`
 	Target  int  `json:"target"`
+	Busy    int  `json:"busy"`
+	// Resets counts pool rebuilds. It is the signal that separates "the
+	// provider is slow" from "the pool is thrashing": a climbing Resets with
+	// steady Open/Target means connections are being torn down and re-dialled
+	// under the crawl, which is what surfaces to operators as
+	// "nntp: no usable connection in pool".
+	Resets int64 `json:"resets"`
 }
 
 type WorkerReport struct {
@@ -172,6 +179,7 @@ func (p *Plugin) status(ctx context.Context) StatusReport {
 			if st, ok := tv.Fleet[pr.ID]; ok {
 				r.Dialled = true
 				r.Down, r.Open, r.Target = st.Down, st.Open, st.Target
+				r.Busy, r.Resets = st.Busy, st.Resets
 			}
 			rep.Providers = append(rep.Providers, r)
 		}

@@ -154,8 +154,11 @@ func TestCrawlersRendersFleetAndWorkers(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		// slim provider strip: connected state + open/target + the edit pencil
-		"Primary", "connected", "18 / 20 connections", "benched",
+		// slim provider strip: connected state + open/target + the edit pencil.
+		// "resets" is the pool-health signal — it was computed and thrown away
+		// until 2026-07-26, which is why "no usable connection in pool" had no
+		// visible counterpart on this page.
+		"Primary", "connected", "18 / 20 connections", "benched", "2 resets",
 		"#providers", "&#9998;",
 		"hostA/1/abcd", "(this host)", "Crawler hosts",
 		"Crawl in progress", "1333 art/s", "0.47 MB/s", "2 failed",
