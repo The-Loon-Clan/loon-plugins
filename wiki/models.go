@@ -23,13 +23,36 @@ import "time"
 
 // Topic is one folder in the knowledge base.
 type Topic struct {
-	ID          int       `db:"id"`
-	Name        string    `db:"name"`
-	Slug        string    `db:"slug"`
-	Description string    `db:"description"`
-	SortOrder   int       `db:"sort_order"`
-	CreatedAt   time.Time `db:"created_at"`
-	PostCount   int       `db:"post_count"` // populated by join query
+	ID          int    `db:"id"`
+	Name        string `db:"name"`
+	Slug        string `db:"slug"`
+	Description string `db:"description"`
+	SortOrder   int    `db:"sort_order"`
+	// Icon is an IconKey naming one of the built-in glyphs, or empty to
+	// keep the slug-derived default. Deliberately a key rather than markup:
+	// the icons render as inline SVG, so accepting arbitrary content from an
+	// admin form would be a stored-XSS hole for the sake of a folder picture.
+	Icon string `db:"icon"`
+	// Color is a #rrggbb accent for the icon tile, or empty for the default
+	// (the slug's colour if it has one, otherwise the theme blue). Validated
+	// on the way in — it lands in a style attribute.
+	Color     string    `db:"color"`
+	CreatedAt time.Time `db:"created_at"`
+	PostCount int       `db:"post_count"` // populated by join query
+}
+
+// TopicInput is what an admin form supplies for a create or an update. A
+// struct rather than positional arguments: the previous signature already took
+// four, and icon plus colour would have made six with four of them strings —
+// the exact shape where a swapped slug and description compiles fine and is
+// only noticed in production.
+type TopicInput struct {
+	Name        string
+	Slug        string
+	Description string
+	SortOrder   int
+	Icon        string
+	Color       string
 }
 
 // Post is one article. ViewCount is bumped best-effort on every

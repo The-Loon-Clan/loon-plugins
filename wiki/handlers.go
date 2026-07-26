@@ -202,16 +202,33 @@ func (h *Handlers) AdminIndex(c *gin.Context) {
 func (h *Handlers) NewTopic(c *gin.Context) {
 	c.HTML(http.StatusOK, "admin_wiki_topic_form.html", gin.H{
 		"Action": "Create",
+		"Icons":  TopicIcons,
 	})
 }
 
-func (h *Handlers) CreateTopic(c *gin.Context) {
+// topicInputFrom reads the shared create/edit form. Icon and colour are
+// validated here rather than trusted: an unknown icon key or a malformed
+// colour becomes empty, which the templates read as "use the default". A
+// mistyped colour should cost you the accent, not the save.
+func topicInputFrom(c *gin.Context) TopicInput {
 	name := c.PostForm("name")
-	description := c.PostForm("description")
-	sortOrderStr := c.DefaultPostForm("sort_order", "0")
-	sortOrder, _ := strconv.Atoi(sortOrderStr)
-	slug := makeSlug(name)
-	_, _ = h.store.CreateTopic(c.Request.Context(), name, slug, description, sortOrder)
+	sortOrder, _ := strconv.Atoi(c.DefaultPostForm("sort_order", "0"))
+	icon := c.PostForm("icon")
+	if !ValidIcon(icon) {
+		icon = ""
+	}
+	return TopicInput{
+		Name:        name,
+		Slug:        makeSlug(name),
+		Description: c.PostForm("description"),
+		SortOrder:   sortOrder,
+		Icon:        icon,
+		Color:       NormalizeColor(c.PostForm("color")),
+	}
+}
+
+func (h *Handlers) CreateTopic(c *gin.Context) {
+	_, _ = h.store.CreateTopic(c.Request.Context(), topicInputFrom(c))
 	c.Redirect(http.StatusFound, "/admin/wiki")
 }
 
@@ -232,6 +249,7 @@ func (h *Handlers) EditTopic(c *gin.Context) {
 			c.HTML(http.StatusOK, "admin_wiki_topic_form.html", gin.H{
 				"Action": "Edit",
 				"Topic":  t,
+				"Icons":  TopicIcons,
 			})
 			return
 		}
@@ -246,12 +264,7 @@ func (h *Handlers) UpdateTopic(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/admin/wiki")
 		return
 	}
-	name := c.PostForm("name")
-	description := c.PostForm("description")
-	sortOrderStr := c.DefaultPostForm("sort_order", "0")
-	sortOrder, _ := strconv.Atoi(sortOrderStr)
-	slug := makeSlug(name)
-	_ = h.store.UpdateTopic(c.Request.Context(), id, name, slug, description, sortOrder)
+	_ = h.store.UpdateTopic(c.Request.Context(), id, topicInputFrom(c))
 	c.Redirect(http.StatusFound, "/admin/wiki")
 }
 

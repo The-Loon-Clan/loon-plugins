@@ -25,7 +25,14 @@ Routes keep their historical top-level paths (not the `/plugin/wiki/*` default) 
 ## Data
 
 - Owns two tables, both in the **public schema** via the core **numbered** migrations (pre-PG17-consolidation), so `Metadata.Migrations` is empty:
-  - `wiki_topics` — migration **6**.
+  - `wiki_topics` — migration **6**; `icon` + `color` columns added in host
+    migration **281**. Both default to `''`, which means *use the default*:
+    the icon falls back to the slug-derived glyph and the colour to the theme
+    accent, so a topic nobody has edited looks exactly as it always did.
+    `icon` stores a KEY from `TopicIcons` (`icons.go`), never markup — topic
+    icons render as inline SVG, so a free-text field would be stored XSS for
+    the sake of a folder picture. `color` is normalized to `#rrggbb` on the
+    way in and anything else becomes empty.
   - `wiki_posts` — migration **6** (FK `topic_id → wiki_topics(id) ON DELETE CASCADE`); `view_count BIGINT` column + `idx_wiki_posts_view_count` added in migration **250**.
 - **Reads** the host `users` table (LEFT JOIN in RecentPosts / PopularPosts / RandomPost for `created_by_username`).
 - The move to a dedicated `wiki` schema (at which point `Metadata.Migrations` takes over) is deferred to the PG17 baseline consolidation.
@@ -69,4 +76,9 @@ Routes keep their historical top-level paths (not the `/plugin/wiki/*` default) 
 ## Testing
 
 - **Unit-tested** (`mem_test.go`): the full `MemStore` behavior — topic ordering + post_count join, slug/id lookups with `sql.ErrNoRows` on miss, update/delete FK cascade, server-field stamping, `updated_at` bump semantics, `AllPosts` content-blanking, RecentPosts (updated_at order + limit), PopularPosts (view-count order + tiebreak), chronological PostsByTopic, RandomPost empty/hit, and defensive cloning. Plus `makeSlug` (lowercase, punctuation strip, whitespace/dash collapse, unicode). `wiki_test.go` adds `postsByTopicMap` (flat AllPosts folded into a topic-keyed sidebar map, plus the empty-store path).
+- **Template-tested host-side**: the topic icon/colour fallback is template
+  logic in the host's `wiki.html`, so it is pinned by render tests in the
+  host's `web/handlers` (parse the real file, assert an unset icon still draws
+  the slug glyph and an explicit one overrides it). It cannot live here — the
+  template is not this repo's.
 - **Requires integration (live DB)**: `PGStore` — the SQL JOINs to `wiki_topics`/`users`, `ON DELETE CASCADE`, `ORDER BY RANDOM()`, `view_count` COALESCE, and the migration-6/250 schema itself are not exercised by MemStore (deliberately thin maps + mutex). The `UploadImage` storage/MIME path (bytes land wherever the host's `blob.Store` puts `wiki-uploads/*`, MIME sniffed via `blob.SniffImage`, 5 MB cap; the Store itself is unit-tested in loon) and the HTML-rendering handlers (template + BaseData chrome) also need an HTTP/integration harness rather than pure unit tests.

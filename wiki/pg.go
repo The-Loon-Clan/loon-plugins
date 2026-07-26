@@ -24,7 +24,7 @@ var _ Store = (*PGStore)(nil)
 func (s *PGStore) Topics(ctx context.Context) ([]*Topic, error) {
 	var topics []*Topic
 	err := s.db.SelectContext(ctx, &topics,
-		`SELECT t.id, t.name, t.slug, t.description, t.sort_order, t.created_at, COUNT(p.id) AS post_count
+		`SELECT t.id, t.name, t.slug, t.description, t.sort_order, t.icon, t.color, t.created_at, COUNT(p.id) AS post_count
 		 FROM wiki_topics t
 		 LEFT JOIN wiki_posts p ON p.topic_id = t.id
 		 GROUP BY t.id
@@ -35,7 +35,7 @@ func (s *PGStore) Topics(ctx context.Context) ([]*Topic, error) {
 func (s *PGStore) TopicBySlug(ctx context.Context, slug string) (*Topic, error) {
 	topic := &Topic{}
 	err := s.db.GetContext(ctx, topic,
-		`SELECT id, name, slug, description, sort_order, created_at FROM wiki_topics WHERE slug = $1`,
+		`SELECT id, name, slug, description, sort_order, icon, color, created_at FROM wiki_topics WHERE slug = $1`,
 		slug)
 	if err != nil {
 		return nil, err
@@ -43,11 +43,15 @@ func (s *PGStore) TopicBySlug(ctx context.Context, slug string) (*Topic, error) 
 	return topic, nil
 }
 
-func (s *PGStore) CreateTopic(ctx context.Context, name, slug, description string, sortOrder int) (*Topic, error) {
-	topic := &Topic{Name: name, Slug: slug, Description: description, SortOrder: sortOrder}
+func (s *PGStore) CreateTopic(ctx context.Context, in TopicInput) (*Topic, error) {
+	topic := &Topic{
+		Name: in.Name, Slug: in.Slug, Description: in.Description,
+		SortOrder: in.SortOrder, Icon: in.Icon, Color: in.Color,
+	}
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO wiki_topics (name, slug, description, sort_order) VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
-		name, slug, description, sortOrder,
+		`INSERT INTO wiki_topics (name, slug, description, sort_order, icon, color)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
+		in.Name, in.Slug, in.Description, in.SortOrder, in.Icon, in.Color,
 	).Scan(&topic.ID, &topic.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -55,10 +59,11 @@ func (s *PGStore) CreateTopic(ctx context.Context, name, slug, description strin
 	return topic, nil
 }
 
-func (s *PGStore) UpdateTopic(ctx context.Context, id int, name, slug, description string, sortOrder int) error {
+func (s *PGStore) UpdateTopic(ctx context.Context, id int, in TopicInput) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE wiki_topics SET name=$2, slug=$3, description=$4, sort_order=$5 WHERE id=$1`,
-		id, name, slug, description, sortOrder)
+		`UPDATE wiki_topics SET name=$2, slug=$3, description=$4, sort_order=$5, icon=$6, color=$7
+		 WHERE id=$1`,
+		id, in.Name, in.Slug, in.Description, in.SortOrder, in.Icon, in.Color)
 	return err
 }
 

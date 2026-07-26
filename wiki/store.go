@@ -23,10 +23,12 @@ type Store interface {
 
 	// CreateTopic inserts a new topic and returns the persisted
 	// row with server-stamped id + created_at.
-	CreateTopic(ctx context.Context, name, slug, description string, sortOrder int) (*Topic, error)
+	CreateTopic(ctx context.Context, in TopicInput) (*Topic, error)
 
-	// UpdateTopic overwrites name/slug/description/sort_order.
-	UpdateTopic(ctx context.Context, id int, name, slug, description string, sortOrder int) error
+	// UpdateTopic overwrites every editable field, appearance included.
+	// Icon and Color are stored as given — the handler normalizes them — so
+	// an empty value here MEANS "use the default", not "leave unchanged".
+	UpdateTopic(ctx context.Context, id int, in TopicInput) error
 
 	// DeleteTopic hard-deletes the row. FK cascades drop
 	// dependent wiki_posts.

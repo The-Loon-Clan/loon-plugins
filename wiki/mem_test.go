@@ -13,7 +13,7 @@ import (
 // the topic/post sequence stay in one place.
 func seedTopic(s *MemStore, t *testing.T, slug string, sortOrder int) *Topic {
 	t.Helper()
-	out, err := s.CreateTopic(context.Background(), slug+" topic", slug, "desc", sortOrder)
+	out, err := s.CreateTopic(context.Background(), TopicInput{Name: slug + " topic", Slug: slug, Description: "desc", SortOrder: sortOrder})
 	if err != nil {
 		t.Fatalf("seedTopic %q: %v", slug, err)
 	}
@@ -34,7 +34,7 @@ func TestMemStore_CreateTopicStampsServerFields(t *testing.T) {
 	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
 	s.SetClock(func() time.Time { return now })
 
-	out, err := s.CreateTopic(context.Background(), "Help", "help", "Help section", 5)
+	out, err := s.CreateTopic(context.Background(), TopicInput{Name: "Help", Slug: "help", Description: "Help section", SortOrder: 5})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestMemStore_UpdateAndDeleteTopicCascades(t *testing.T) {
 	tp := seedTopic(s, t, "old", 0)
 	seedPost(s, t, tp.ID, "child")
 
-	if err := s.UpdateTopic(ctx, tp.ID, "New", "new", "newdesc", 9); err != nil {
+	if err := s.UpdateTopic(ctx, tp.ID, TopicInput{Name: "New", Slug: "new", Description: "newdesc", SortOrder: 9}); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	after, _ := s.TopicBySlug(ctx, "new")
@@ -104,7 +104,7 @@ func TestMemStore_UpdateAndDeleteTopicCascades(t *testing.T) {
 	}
 
 	// Missing id is a no-op, not an error.
-	if err := s.UpdateTopic(ctx, 999, "x", "x", "x", 0); err != nil {
+	if err := s.UpdateTopic(ctx, 999, TopicInput{Name: "x", Slug: "x", Description: "x"}); err != nil {
 		t.Errorf("update unknown id: %v", err)
 	}
 

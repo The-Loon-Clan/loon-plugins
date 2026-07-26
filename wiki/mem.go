@@ -92,23 +92,25 @@ func (s *MemStore) TopicBySlug(ctx context.Context, slug string) (*Topic, error)
 	return nil, sql.ErrNoRows
 }
 
-func (s *MemStore) CreateTopic(ctx context.Context, name, slug, description string, sortOrder int) (*Topic, error) {
+func (s *MemStore) CreateTopic(ctx context.Context, in TopicInput) (*Topic, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextTopic++
 	t := &Topic{
 		ID:          s.nextTopic,
-		Name:        name,
-		Slug:        slug,
-		Description: description,
-		SortOrder:   sortOrder,
+		Name:        in.Name,
+		Slug:        in.Slug,
+		Description: in.Description,
+		SortOrder:   in.SortOrder,
+		Icon:        in.Icon,
+		Color:       in.Color,
 		CreatedAt:   s.clock(),
 	}
 	s.topics[t.ID] = t
 	return cloneTopic(t), nil
 }
 
-func (s *MemStore) UpdateTopic(ctx context.Context, id int, name, slug, description string, sortOrder int) error {
+func (s *MemStore) UpdateTopic(ctx context.Context, id int, in TopicInput) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.topics[id]
@@ -116,10 +118,15 @@ func (s *MemStore) UpdateTopic(ctx context.Context, id int, name, slug, descript
 		// Production runs an UPDATE that affects 0 rows on miss — same here.
 		return nil
 	}
-	t.Name = name
-	t.Slug = slug
-	t.Description = description
-	t.SortOrder = sortOrder
+	t.Name = in.Name
+	t.Slug = in.Slug
+	t.Description = in.Description
+	t.SortOrder = in.SortOrder
+	// Assigned unconditionally, matching the UPDATE: an empty icon or colour
+	// means "back to the default", so treating it as "leave unchanged" here
+	// would make the double disagree with production about how you clear one.
+	t.Icon = in.Icon
+	t.Color = in.Color
 	return nil
 }
 
