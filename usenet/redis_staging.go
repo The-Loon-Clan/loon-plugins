@@ -57,13 +57,35 @@ func newRedisStaging(rdb redis.UniversalClient, ttlHours func(context.Context) i
 	return &redisStaging{rdb: rdb, ttlHours: ttlHours, onEvict: onEvict}
 }
 
+// Conversion batch sizing. A whole-list LRange + one giant SAdd is what broke
+// in prod: on a backlog of any real size both commands blow go-redis' default
+// 3s read/write timeout, every attempt fails identically, and nzb:ready stays
+// a LIST forever while every SAdd against it errors WRONGTYPE. Small windows
+// finish well inside the timeout; the per-call batch cap keeps a large backlog
+// from eating a crawl pass, since progress is durable and resumes next call.
+const (
+	readyConvWindow     = 1000
+	readyConvMaxWindows = 50
+)
+
+// readyConvKey is the staging set the LIST is copied into before it is folded
+// into nzb:ready.
+const readyConvKey = readyKey + ":setconv"
+
 // ensureReadySet migrates nzb:ready from the pre-2026-07 LIST encoding to a
-// SET, once per process. LRem on a deep list made every deleteStaged O(len)
-// — a set makes queue/remove O(1) and deduplicates re-queued sets for free.
-// Random drain order replaces FIFO, which the builder never relied on.
-// The fleet shares one Redis, so a worker still running the old image would
-// race its LPush against the rename; workers already ship on one image, so
-// deploy them together.
+// SET. LRem on a deep list made every deleteStaged O(len) — a set makes
+// queue/remove O(1) and deduplicates re-queued sets for free. Random drain
+// order replaces FIFO, which the builder never relied on.
+//
+// Copy-then-trim (not pop-then-add) so an interrupted conversion replays
+// harmlessly: re-copied members dedup into the set, where a pop that failed to
+// land would have dropped a completed release. Every window is durable
+// progress, so a timeout resumes instead of restarting from zero.
+//
+// convDone latches only once the key is genuinely a set with nothing left to
+// migrate. It is NOT a promise for the life of the process: if nzb:ready turns
+// back into a list, callers reset the latch via readyRetry rather than erroring
+// WRONGTYPE until the container restarts.
 func (r *redisStaging) ensureReadySet(ctx context.Context) {
 	r.convMu.Lock()
 	defer r.convMu.Unlock()
@@ -74,27 +96,79 @@ func (r *redisStaging) ensureReadySet(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	if t != "list" {
-		r.convDone = true // none / already a set
-		return
+	switch t {
+	case "list":
+		for i := 0; i < readyConvMaxWindows; i++ {
+			entries, err := r.rdb.LRange(ctx, readyKey, 0, readyConvWindow-1).Result()
+			if err != nil {
+				return
+			}
+			if len(entries) == 0 {
+				break
+			}
+			members := make([]interface{}, len(entries))
+			for j, e := range entries {
+				members[j] = e
+			}
+			if err := r.rdb.SAdd(ctx, readyConvKey, members...).Err(); err != nil {
+				return
+			}
+			// Redis drops the key once the last element is trimmed, which is
+			// how the loop below detects "fully drained".
+			if err := r.rdb.LTrim(ctx, readyKey, int64(len(entries)), -1).Err(); err != nil {
+				return
+			}
+		}
+		if n, err := r.rdb.Exists(ctx, readyKey).Result(); err != nil || n > 0 {
+			return // more to drain — resume on a later call
+		}
+	case "none", "set":
+		// Fall through: a previous call may have left a partial conversion set
+		// behind, and folding it in here is what finishes that run.
+	default:
+		return // hash/zset/string: not ours to convert; let the caller's error surface
 	}
-	entries, err := r.rdb.LRange(ctx, readyKey, 0, -1).Result()
+
+	staged, err := r.rdb.Exists(ctx, readyConvKey).Result()
 	if err != nil {
 		return
 	}
-	if len(entries) == 0 {
-		r.convDone = r.rdb.Del(ctx, readyKey).Err() == nil
+	if staged == 0 {
+		r.convDone = true
 		return
 	}
-	members := make([]interface{}, len(entries))
-	for i, e := range entries {
-		members[i] = e
-	}
-	tmp := readyKey + ":setconv"
-	if err := r.rdb.SAdd(ctx, tmp, members...).Err(); err != nil {
+	// Union rather than RENAME: another process may already have queued live
+	// entries into the real set, and RENAME would silently drop them.
+	if err := r.rdb.SUnionStore(ctx, readyKey, readyKey, readyConvKey).Err(); err != nil {
 		return
 	}
-	r.convDone = r.rdb.Rename(ctx, tmp, readyKey).Err() == nil
+	r.convDone = r.rdb.Del(ctx, readyConvKey).Err() == nil
+}
+
+// readyRetry runs a nzb:ready operation and, if it failed only because the key
+// is the wrong type, re-runs the migration and tries once more.
+//
+// Without this, convDone is a one-way latch per process: a key that becomes a
+// LIST after the first check poisons every subsequent call for the life of the
+// container. That is exactly how a stale pre-migration list stalled prod's
+// crawl->stage->build pipeline for 23 hours — the watermark never advances on a
+// staging error, so the same articles re-crawl and re-fail forever.
+func (r *redisStaging) readyRetry(ctx context.Context, op func() error) error {
+	err := op()
+	if err == nil || !isWrongType(err) {
+		return err
+	}
+	r.convMu.Lock()
+	r.convDone = false
+	r.convMu.Unlock()
+	r.ensureReadySet(ctx)
+	return op()
+}
+
+// isWrongType reports a Redis WRONGTYPE reply (operation against a key holding
+// the wrong kind of value).
+func isWrongType(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "WRONGTYPE")
 }
 
 // stagingTTL resolves the live TTL knob with the historical 2h floor-default.
@@ -378,7 +452,10 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 		// its articles now). Returning the error leaves the batch's watermark
 		// un-advanced (crawl.go treats a staging error as ok=false), so the
 		// same articles re-crawl and re-queue.
-		if err := r.rdb.SAdd(ctx, readyKey, readyGroups...).Err(); err != nil {
+		err := r.readyRetry(ctx, func() error {
+			return r.rdb.SAdd(ctx, readyKey, readyGroups...).Err()
+		})
+		if err != nil {
 			return len(arts), fmt.Errorf("queue ready sets: %w", err)
 		}
 	}
@@ -469,8 +546,16 @@ func (r *redisStaging) candidateGroups(ctx context.Context, limit int) ([]groupK
 	// SRandMemberN samples without removing; order across passes is random,
 	// which is fine — every entry stays queued until deleteStaged takes it.
 	r.ensureReadySet(ctx)
-	entries, err := r.rdb.SRandMemberN(ctx, readyKey, int64(limit)).Result()
-	if err != nil && err != redis.Nil {
+	var entries []string
+	err := r.readyRetry(ctx, func() error {
+		var e error
+		entries, e = r.rdb.SRandMemberN(ctx, readyKey, int64(limit)).Result()
+		if e == redis.Nil {
+			return nil
+		}
+		return e
+	})
+	if err != nil {
 		return nil, err
 	}
 	if len(entries) == 0 {

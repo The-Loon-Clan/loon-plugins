@@ -291,3 +291,15 @@ is how it caught two column-shape divergences the in-memory tests could not.
 Run the full suite (unit + integration, `-race`) against a throwaway Postgres;
 the coordination and adoption guarantees are the pieces that fail silently and
 expensively if wrong, so they are only trustworthy against a real database.
+
+Also needs integration (live Redis, `-tags=integration`, `USENET_TEST_REDIS`):
+the `nzb:ready` LIST→SET migration and its WRONGTYPE self-heal. Real server, not
+a fake — the cases turn on Redis' own semantics (WRONGTYPE, LTrim dropping an
+emptied key, SUnionStore), which a double would only restate as the assumptions
+under test. A stale pre-migration list stalled prod's crawl→stage→build pipeline
+for 23 hours, so these paths are worth a real server:
+
+```
+docker run -d --name usenet-test-redis -p 6399:6379 redis:7-alpine
+USENET_TEST_REDIS=127.0.0.1:6399 go test -tags=integration -race ./usenet/
+```
