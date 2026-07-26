@@ -15,6 +15,7 @@ package pluginapi
 
 import (
 	"context"
+	"time"
 
 	"github.com/the-loon-clan/loon/core"
 )
@@ -39,6 +40,16 @@ type Badge struct {
 	TitleColor string
 	// Icon is an optional glyph identifier; empty for most groups.
 	Icon string
+	// ExpiresAt is when the membership behind this badge lapses; nil means it
+	// does not expire on its own (an assigned staff group, or a permanent
+	// grant). Present because the host renders "expires Jan 02, 2006" beside
+	// the badge on a profile, and a badge is already per-membership — a user in
+	// two groups has two badges with two expiries, so there is nothing to
+	// reconcile.
+	//
+	// Zero on a Catalog() badge: a catalog entry describes the group, not
+	// anyone's membership of it.
+	ExpiresAt *time.Time
 }
 
 // GroupDisplay resolves the badges a user should be shown.
@@ -66,6 +77,74 @@ type GroupDisplay interface {
 	// page-render path, which is precisely the regression the capability is
 	// meant to avoid when the legacy join goes away.
 	BadgesForBatch(ctx context.Context, userIDs []int64) (map[int64][]Badge, error)
+
+	// Catalog returns every VISIBLE group as a badge, with no membership
+	// attached — what badges exist, rather than who wears one. ExpiresAt is
+	// always nil here.
+	//
+	// It exists for consumers that map groups onto some external notion of a
+	// role: the host's Discord bot builds a group -> Discord-role-ID table and
+	// needs the set of groups, not one user's. Invisible groups are excluded
+	// for the same reason they are excluded everywhere else in this contract —
+	// a group with no badge is entitlement-only, and projecting it into an
+	// external role system would give it exactly the visibility it was hidden
+	// to avoid.
+	//
+	// Key persisted references off Slug, never Name: names are editable and
+	// slugs survive a rename.
+	Catalog(ctx context.Context) ([]Badge, error)
+}
+
+// GroupAuditName is the Core extension-registry key under which the
+// groups/ranks plugin publishes its GroupAudit.
+const GroupAuditName = "groups.audit"
+
+// AuditEntry is one membership-history row: what happened to a user's
+// membership of a group, and when.
+type AuditEntry struct {
+	// At is when it happened.
+	At time.Time
+	// Action is the event kind — "purchased", "extended", "expired",
+	// "admin_grant", "admin_revoke". Open-ended on purpose: a consumer that
+	// styles known actions should fall through to showing the raw string
+	// rather than dropping the row, since the owning plugin may add kinds.
+	Action string
+	// Group is the group's display name, or a placeholder when the group has
+	// since been deleted — history outlives the catalog.
+	Group string
+	// GroupSlug is the stable key, empty when the group is gone.
+	GroupSlug string
+	// Details is the human-readable note recorded with the event.
+	Details string
+}
+
+// GroupAudit exposes membership history for one user.
+//
+// Separate from GroupDisplay rather than a method on it, and the split is the
+// same one that runs through this whole model: GroupDisplay answers "what
+// badge do I draw", which every page asks, and is scoped narrowly so a badge
+// consumer cannot reach further. Reading a user's membership history is an
+// administrative concern with a different audience — it belongs behind its own
+// capability so that wanting a badge does not come with the ability to audit.
+//
+// Absence is a degraded surface, not a boot failure: a host without the owning
+// plugin simply has no history to show.
+type GroupAudit interface {
+	// HistoryFor returns the newest entries first, at most limit of them. A
+	// limit <= 0 means the implementation's own default. A user with no
+	// history is the empty slice, not an error.
+	HistoryFor(ctx context.Context, userID int64, limit int) ([]AuditEntry, error)
+}
+
+// LookupGroupAudit resolves the published capability, mirroring
+// LookupGroupDisplay.
+func LookupGroupAudit(c *core.Core) (GroupAudit, bool) {
+	v, ok := c.Lookup(GroupAuditName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(GroupAudit)
+	return s, ok
 }
 
 // LookupGroupDisplay resolves the published capability, mirroring the other
