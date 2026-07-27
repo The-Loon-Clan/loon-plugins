@@ -288,7 +288,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	p.crawlJob.Log("%s: crawling %d group(s), %d batch(es) over %d connection(s)…",
 		run.prov.label(), len(plans), len(jobs), run.size)
 	staged, advanced := 0, 0
-	leftover := p.runBatches(ctx, pool, jobs, cfg, func(name string, rs []batchResult) {
+	leftover := p.runBatches(ctx, pool, run.size, jobs, cfg, func(name string, rs []batchResult) {
 		plan := plans[name]
 		if plan == nil {
 			return
@@ -397,14 +397,35 @@ func (p *Plugin) planGroup(ctx context.Context, pool *nntp.Pool, g groupRow, cfg
 // threw away the whole pass's progress if the worker was killed. Only the
 // results of groups that did NOT complete (context cancelled mid-pass) are
 // returned, for the caller's final partial-advance sweep.
-func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, jobs []batchJob, cfg Config, onGroup func(group string, rs []batchResult)) []batchResult {
-	workers := cfg.Connections
-	if workers > len(jobs) {
-		workers = len(jobs)
+// batchWorkers is how many fetch goroutines a pass runs: one per available
+// connection, never more than there is work for, never zero.
+//
+// Extracted so the budget decision is testable without an NNTP server, because
+// getting it wrong is silent. It is capped by the pass's RESOLVED budget
+// (providerRun.size) rather than the site-wide connections setting; those
+// diverge as soon as a second crawler host joins and the account cap is split,
+// and the surplus goroutines then queue in the pool for connections that were
+// never going to exist.
+func batchWorkers(conns, jobs int) int {
+	w := conns
+	if w > jobs {
+		w = jobs
 	}
-	if workers < 1 {
-		workers = 1
+	if w < 1 {
+		w = 1
 	}
+	return w
+}
+
+func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, conns int, jobs []batchJob, cfg Config, onGroup func(group string, rs []batchResult)) []batchResult {
+	// conns is THIS pass's resolved budget (providerRun.size), not the
+	// site-wide setting. They differ the moment a second crawler host joins:
+	// the account cap is split across the fleet, so the pool opens 25 while
+	// cfg.Connections still reads 50. Spawning the larger number put every
+	// surplus goroutine into the pool's blocking fallback to contend for a
+	// connection that was never going to exist, and the pass log already
+	// printed run.size, so the log and the behaviour disagreed.
+	workers := batchWorkers(conns, len(jobs))
 	expected := make(map[string]int, 8)
 	for _, j := range jobs {
 		expected[j.group]++
