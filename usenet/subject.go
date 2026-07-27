@@ -10,9 +10,18 @@ var (
 	reFileOf = regexp.MustCompile(`\[(\d+)/(\d+)\]`) // [1/12] multi-file header
 	rePartOf = regexp.MustCompile(`\((\d+)/(\d+)\)`) // (1/45) yEnc segment marker
 	reYenc   = regexp.MustCompile(`(?i)\byenc\b`)
-	reExt    = regexp.MustCompile(`(?i)\.(mkv|mp4|avi|mov|ts|nfo|sfv|par2|rar|r\d{2,3}|nzb|zip|7z|mp3|flac|iso|img|srt|ass|jpg|png)\b`)
-	reWS     = regexp.MustCompile(`\s+`)
-	reQuoted = regexp.MustCompile(`"([^"]+)"`) // "filename.ext" inside a subject
+	// The byte count some posters emit between the yEnc keyword and the segment
+	// counter: `... yEnc  1053788 (1/2)`. It has to be removed BEFORE the
+	// keyword itself, because afterwards there is nothing to anchor on and a
+	// bare number is indistinguishable from part of a title. Left in, it lands
+	// in the base subject — and since every file of a release has a different
+	// size, every file gets a different base and the release never groups.
+	reYencSize = regexp.MustCompile(`(?i)\byenc\b\s+\d+`)
+	// A par2 recovery-volume suffix, once the .par2 extension is already off.
+	reVolSuffix = regexp.MustCompile(`(?i)\.vol\d+\+\d+$`)
+	reExt       = regexp.MustCompile(`(?i)\.(mkv|mp4|avi|mov|ts|nfo|sfv|par2|rar|r\d{2,3}|nzb|zip|7z|mp3|flac|iso|img|srt|ass|jpg|png)\b`)
+	reWS        = regexp.MustCompile(`\s+`)
+	reQuoted    = regexp.MustCompile(`"([^"]+)"`) // "filename.ext" inside a subject
 )
 
 // fileNameFromSubject pulls a display filename from an article subject: the
@@ -90,7 +99,23 @@ func parseSubject(subject string) (base string, partNum, totalParts, segTotal, f
 		if release := cleanBase(subject[:fileLoc[0]]); release != "" {
 			base = release
 		} else {
-			base = cleanBase(stripAllMarkers(subject))
+			// [i/j] sits at the very start, so there is no release name in
+			// front of it and the identity has to come from the per-file name.
+			// Strip the par2 volume suffix as well, so recovery volumes land on
+			// the same base as the media file they protect.
+			//
+			// Without that, every file of the release derives a DIFFERENT base
+			// — ".vol000+001", ".vol003+004", the .mkv — while each still
+			// claims total_files = j. Completeness needs j distinct file
+			// numbers under ONE base, so the set never completes, never
+			// assembles, and expires out of staging. It is not junked and
+			// nothing logs it; the release simply never appears. Two posters in
+			// prod's busiest anime group post exactly this way.
+			//
+			// Scoped to this branch on purpose: an ORPHAN par2 post has no
+			// [i/j], so it keeps its .volNNN+NNN and the par2_volume junk rule
+			// still catches it.
+			base = cleanBase(reVolSuffix.ReplaceAllString(cleanBase(stripAllMarkers(subject)), ""))
 		}
 	} else {
 		base = cleanBase(stripAllMarkers(subject))
@@ -106,6 +131,7 @@ func parseSubject(subject string) (base string, partNum, totalParts, segTotal, f
 func stripAllMarkers(s string) string {
 	s = reFileOf.ReplaceAllString(s, " ")
 	s = rePartOf.ReplaceAllString(s, " ")
+	s = reYencSize.ReplaceAllString(s, " ") // before reYenc — it needs the keyword
 	s = reYenc.ReplaceAllString(s, " ")
 	s = strings.ReplaceAll(s, `"`, " ")
 	s = reExt.ReplaceAllString(s, "")
