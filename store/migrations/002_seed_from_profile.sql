@@ -1,0 +1,16 @@
+-- Intentionally a no-op.
+--
+-- This carried the /profile Points card's hardcoded store into the catalog:
+-- one item per paid rank read from public.user_ranks, plus an Invite priced
+-- from public.site_settings. It RAN in production and its rows are live.
+--
+-- The SQL moved to deploy/import/store_from_profile.sql. A plugin's migrations
+-- create its own schema and nothing else — importing an existing site's data
+-- is a separate, deliberate operation (ADOPTION-MIGRATIONS.md) — and this file
+-- was additionally the last migration anywhere still reading the legacy
+-- user_ranks tables, which is what stopped them being dropped.
+--
+-- The filename stays so recorded history still resolves; the body is empty so
+-- a fresh install gets an empty catalog, which is correct for a site that
+-- never had a profile card to migrate from.
+SELECT 1;

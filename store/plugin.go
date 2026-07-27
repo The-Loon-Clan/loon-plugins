@@ -1,0 +1,155 @@
+// Package store is the points store — users spend points on catalog
+// items. The first reward type is a rank, granted through the
+// pluginapi.RankGranter capability the ranks plugin publishes, so the
+// store never imports ranks. Self-contained data layer in its own
+// `store` schema (store.items / store.purchases, migrations 001-002); no SetDeps.
+package store
+
+import (
+	"context"
+	"embed"
+	"fmt"
+	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
+	"github.com/the-loon-clan/loon/core"
+)
+
+// storeMigrations holds the plugin's own schema. loon's
+// RunPluginMigrations creates the "store" Postgres schema at boot and
+// applies these files into it (search_path scoped), tracked in
+// core.plugin_migrations. Store is the first plugin to own a schema
+// this way; the older plugins still ship host-numbered public-schema
+// migrations pending the same conversion.
+//
+//go:embed migrations/*.sql
+var storeMigrations embed.FS
+
+func init() {
+	core.RegisterPlugin("store", func() core.Plugin { return &Plugin{} })
+}
+
+// Plugin is the core.Plugin lifecycle wrapper. Web/all only (session
+// UI) — empty Metadata.Processes defaults to "web", so the bare api
+// engine and the worker never see its routes.
+// Deps are the host seams this plugin cannot get from the Core.
+//
+// It renders the HOST's templates (store.html, store_history.html,
+// admin_store.html — see README for the template contract), so the host
+// supplies its page-chrome injector and its pagination view-model builder.
+// Same shape as the forum plugin's, deliberately: this is the third plugin to
+// need exactly these, and a second dialect would be worse than the coupling.
+//
+// The session user is NOT here. It comes off core.Auth, which every plugin
+// already has — taking it as a dep would mean handing over a host type
+// (*models.User) when all three call sites want an id.
+type Deps struct {
+	// BaseData merges the host's page chrome (user, nav, CSRF, notification
+	// counts, ...) into a template data map — every page render goes through
+	// it, exactly as host-side handlers do.
+	BaseData func(c *gin.Context, extra gin.H) gin.H
+	// Paginate builds the view-model the host's pagination partial consumes.
+	// Returned as `any` so the plugin never learns the host's type — the
+	// template reads it by field name.
+	Paginate func(page, pageSize, totalItems int, baseURL string) any
+	// PageOffset is the SQL offset for a page. A separate seam from Paginate
+	// because the offset is needed BEFORE the query and the view-model after
+	// it — the host's PaginationFromTotal returns both at once, which only
+	// works when you already know the total. Taking it as a dep rather than
+	// writing (page-1)*size inline keeps the plugin on the host's one
+	// implementation, which is the rule on the host side too.
+	PageOffset func(page, pageSize int) int
+}
+
+var deps Deps
+
+// SetDeps installs the host seams. Call from main() before core.Boot.
+func SetDeps(d Deps) { deps = d }
+
+type Plugin struct {
+	handlers *Handlers
+}
+
+func (p *Plugin) Metadata() core.Metadata {
+	return core.Metadata{
+		Name:        "store",
+		Version:     "1.0.0",
+		Description: "Points store — spend points on catalog items; rank items granted via the ranks capability.",
+		// Provisioned after ranks so the RankGranter capability is on
+		// the extension registry before this plugin's Lookup runs.
+		Requires: []string{"ranks"},
+		// Owns its tables in the dedicated "store" Postgres schema.
+		Migrations: storeMigrations,
+	}
+}
+
+func (p *Plugin) Provision(c *core.Core) error {
+	db := c.Storage.DB()
+	if db == nil {
+		return fmt.Errorf("store: Core.Storage.DB() is nil")
+	}
+	engine := c.Router.Engine()
+	if engine == nil {
+		return fmt.Errorf("store: Core.Router.Engine() is nil")
+	}
+
+	// Consume the rank-granting capability published by ranks. It is
+	// declared in Metadata.Requires, so a missing or wrong-typed
+	// registration is a wiring bug — fail boot loudly rather than sell
+	// rank items that can never be granted.
+	svc, ok := c.Lookup(pluginapi.RankGranterName)
+	if !ok {
+		return fmt.Errorf("store: %q not registered — is the ranks plugin enabled?", pluginapi.RankGranterName)
+	}
+	granter, ok := svc.(pluginapi.RankGranter)
+	if !ok {
+		return fmt.Errorf("store: %q is %T, not pluginapi.RankGranter", pluginapi.RankGranterName, svc)
+	}
+
+	// The invite capability comes from the HOST, not a sibling plugin, so it
+	// cannot go in Metadata.Requires (which orders plugins) and its absence
+	// must not fail boot — a host with no invite system is a legitimate host.
+	// Look it up softly; grantReward fails the individual purchase, and only
+	// for invite items, if it is missing.
+	var invites pluginapi.InviteGranter
+	if svc, ok := c.Lookup(pluginapi.InviteGranterName); ok {
+		if g, ok := svc.(pluginapi.InviteGranter); ok {
+			invites = g
+		} else {
+			// Registered under the right name with the wrong type is a wiring
+			// bug, not a missing feature. Say so rather than silently
+			// behaving like a host that has no invites at all.
+			return fmt.Errorf("store: %q is %T, not pluginapi.InviteGranter", pluginapi.InviteGranterName, svc)
+		}
+	}
+
+	if deps.BaseData == nil || deps.Paginate == nil || deps.PageOffset == nil {
+		return fmt.Errorf("store: SetDeps not called (BaseData/Paginate/PageOffset required) — wire it in cmd/main.go before core.Boot")
+	}
+	p.handlers = &Handlers{
+		auth:    c.Auth,
+		store:   NewPGStore(db),
+		points:  c.Points,
+		granter: granter,
+		invites: invites,
+		errs:    c.Errors,
+	}
+
+	shop := engine.Group("/store")
+	shop.Use(c.Auth.Authenticate()...)
+	shop.GET("", p.handlers.StorePage)
+	shop.GET("/history", p.handlers.HistoryPage)
+	shop.POST("/buy/:id", p.handlers.BuyItem)
+
+	adm := engine.Group("/admin/store")
+	adm.Use(c.Auth.RequireUser(core.RoleMod)...)
+	adm.GET("", p.handlers.AdminStorePage)
+	adm.POST("/create", p.handlers.CreateItem)
+	adm.POST("/:id/update", p.handlers.UpdateItem)
+	adm.POST("/:id/delete", p.handlers.DeleteItem)
+
+	return nil
+}
+
+func (p *Plugin) Start(ctx context.Context) error { return nil }
+func (p *Plugin) Stop(ctx context.Context) error  { return nil }
