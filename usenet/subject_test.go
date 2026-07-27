@@ -29,6 +29,37 @@ func TestParseSubject(t *testing.T) {
 			wantTotal: 1,
 		},
 		{
+			// The form that ate four days of the forward crawl. The scope for
+			// the segment marker was everything BEFORE "yEnc", so this parsed
+			// as 1/1; every segment then collided on staging key "0:1", 44 of
+			// 45 articles were overwritten, and the survivor assembled as a
+			// ~700 KB release the size catchalls threw away.
+			name:      "single-file, segment marker AFTER yEnc",
+			subject:   `[SubsPlease] Sekai Saikyou no Kouei - 03 (1080p) [E4261D3F].mkv yEnc (1/45)`,
+			wantBase:  "[SubsPlease] Sekai Saikyou no Kouei - 03 (1080p) [E4261D3F]",
+			wantPart:  1,
+			wantTotal: 45,
+		},
+		{
+			// Same form, mid-release, and brace-wrapped: proves the fix is not
+			// keyed to part 1 and survives decoration around the name.
+			name:      "single-file, marker after yEnc, mid part",
+			subject:   `{Lioness.S02E05.Shatter.the.Moon.2160p.AMZN.WEB-DL.H.265-FLUX} yEnc (7/1200)`,
+			wantPart:  7,
+			wantTotal: 1200,
+		},
+		{
+			// Precedence, and the reason the fix is a fallback rather than a
+			// widened scope: when a counter exists BEFORE yEnc it is the
+			// segment marker and anything after is a file count. Reading the
+			// trailing pair here would report 1 of 12 segments instead of 12
+			// of 45, and the set would never look complete.
+			name:      "marker before yEnc wins over a trailing file count",
+			subject:   `The.Release.Name.S01E05.1080p.WEB.mkv (12/45) yEnc (1/12)`,
+			wantPart:  12,
+			wantTotal: 45,
+		},
+		{
 			name:      "multi-file, segment marker after yEnc",
 			subject:   `Some Release [3/8] - "data.part03.rar" yEnc (5/20)`,
 			wantPart:  5,

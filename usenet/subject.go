@@ -50,12 +50,26 @@ func parseSubject(subject string) (base string, partNum, totalParts, segTotal, f
 		fileParts = totalFiles > 0
 	}
 
-	// The segment marker is the last (a/b). For single-file it sits BEFORE yEnc
-	// (anything after is a file-count indicator); for [i/j] multi-file it
-	// legitimately follows yEnc, so scan the whole subject.
+	// The segment marker is the last (a/b). Both placements are in the wild for
+	// single-file posts:
+	//
+	//	Release.Name.mkv (1/45) yEnc     — counter BEFORE the keyword
+	//	Release.Name.mkv yEnc (1/45)     — counter AFTER it (the common form)
+	//
+	// Prefer the one before yEnc, because for the first form anything after the
+	// keyword is a file-count indicator rather than a segment counter. Fall back
+	// to scanning the whole subject when there is nothing before it: that is the
+	// second form, and reading it as 1/1 is not a cosmetic miss. Every segment
+	// then parses as part 1 of 1, they collide on one staging key
+	// (formatFieldKey(0,1) == "0:1"), 44 of 45 articles are overwritten, and the
+	// survivor assembles as a ~700 KB "release" that the size catchalls junk.
+	// That silently ate the whole forward crawl for four days.
+	//
+	// For [i/j] multi-file the counter legitimately follows yEnc, so the scope is
+	// the whole subject either way.
 	segScope := subject
 	if !fileParts {
-		if loc := reYenc.FindStringIndex(subject); loc != nil {
+		if loc := reYenc.FindStringIndex(subject); loc != nil && rePartOf.MatchString(subject[:loc[0]]) {
 			segScope = subject[:loc[0]]
 		}
 	}
