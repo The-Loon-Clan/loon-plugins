@@ -76,7 +76,7 @@ func TestAdoptFromHostCarriesEverything(t *testing.T) {
 	cleanup := seedHostTables(t, s.db.DB())
 	defer cleanup()
 
-	groups, state, blacklist, covRanges, hostFound, err := s.adoptFromHost(ctx, "omicron")
+	groups, state, blacklist, hostFound, err := s.adoptFromHost(ctx, "omicron")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,13 +87,13 @@ func TestAdoptFromHostCarriesEverything(t *testing.T) {
 		t.Fatalf("adopted groups=%d state=%d blacklist=%d, want >=3/>=2/>=1", groups, state, blacklist)
 	}
 	// The coverage map must be seeded to match the watermarks just imported.
-	// Left empty, the admin coverage strip reads ~0% for a group whose history
-	// the legacy crawler really did index, and the operator's only remaining
-	// signal says the opposite of the truth. Both active groups qualify: each
-	// has high_watermark above its floored back watermark.
-	if covRanges < 2 {
-		t.Errorf("adopted coverage ranges=%d, want >=2 (one per active group)", covRanges)
-	}
+	// Coverage is NOT carried — see TestAdoptSeedsNoCoverage. This assertion
+	// used to require the opposite, on the reasoning that an empty coverage map
+	// makes the admin strip read ~0% for a group the legacy crawler really did
+	// index. True, and the wrong trade: a seeded range leaves the group
+	// contiguously covered, backfillGapsFor finds no gaps, and the span can
+	// never be re-read. Production's monthly figures show that span missing
+	// whole months, so blocking its repair to fix a percentage was backwards.
 
 	// The million-dollar bit: backfill_done DERIVED correctly (the legacy
 	// schema encodes completion as back_watermark <= server_low), so the
@@ -165,13 +165,12 @@ func TestAdoptFromHostCarriesEverything(t *testing.T) {
 
 	// Re-run: everything conflicts away — a partial-failure retry cannot
 	// double anything.
-	g2, s2, b2, c2, _, err := s.adoptFromHost(ctx, "omicron")
+	g2, s2, b2, _, err := s.adoptFromHost(ctx, "omicron")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g2 != 0 || s2 != 0 || b2 != 0 || c2 != 0 {
-		t.Errorf("re-run duplicated rows: groups=%d state=%d blacklist=%d coverage=%d",
-			g2, s2, b2, c2)
+	if g2 != 0 || s2 != 0 || b2 != 0 {
+		t.Errorf("re-run duplicated rows: groups=%d state=%d blacklist=%d", g2, s2, b2)
 	}
 }
 
@@ -184,7 +183,7 @@ func TestAdoptFromHostResumePoint(t *testing.T) {
 	cleanup := seedHostTables(t, s.db.DB())
 	defer cleanup()
 
-	if _, _, _, _, _, err := s.adoptFromHost(ctx, "omicron"); err != nil {
+	if _, _, _, _, err := s.adoptFromHost(ctx, "omicron"); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := s.activeGroupsForBackbone(ctx, "omicron", 50)
@@ -199,5 +198,30 @@ func TestAdoptFromHostResumePoint(t *testing.T) {
 	}
 	if hw != 41000005000 {
 		t.Fatalf("crawler would start from watermark %d, want the legacy 41000005000 — anything else re-fetches or skips", hw)
+	}
+}
+
+// Adoption must NOT seed coverage. It did briefly (migrations 020/021,
+// reverted by 022) and the consequence was not cosmetic: a group left
+// contiguously covered makes backfillGapsFor return no gaps, so the backfill
+// marks itself complete and the span can never be re-read. That is precisely
+// the span a legacy crawler with a blind spot leaves behind.
+func TestAdoptSeedsNoCoverage(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	cleanup := seedHostTables(t, s.db.DB())
+	defer cleanup()
+
+	if _, _, _, _, err := s.adoptFromHost(ctx, "omicron"); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := s.db.DB().QueryRowContext(ctx,
+		`SELECT count(*) FROM newsgroup_ranges WHERE backbone = 'omicron'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("adoption recorded %d coverage range(s); it must record none — "+
+			"a seeded range leaves no gaps and permanently blocks the backfill", n)
 	}
 }

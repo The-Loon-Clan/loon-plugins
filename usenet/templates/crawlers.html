@@ -208,10 +208,17 @@
                              complete. */}}
                         {{if .Cells}}
                         <div class="cov-line">
-                            <div class="cov-cells" title="{{.Fragments}} fetched run(s) over the server's retention — grey is unfetched">
+                            <div class="cov-cells" title="{{.Fragments}} run(s) fetched BY THIS CRAWLER over the server's retention — grey is unfetched by it, which on an adopted install includes history a previous crawler indexed">
                                 {{range .Cells}}<i class="cc{{.}}"></i>{{end}}
                             </div>
-                            <span class="cov-pct" title="share of the server's retention actually fetched">{{.CoveredFmt}}</span>
+                            {{/* Scoped wording matters: this counts what THIS crawler
+                                 fetched. Adoption deliberately seeds no coverage
+                                 (migration 022 reverted an attempt to), because a
+                                 seeded range leaves no gaps and permanently blocks
+                                 the backfill. So a freshly-adopted group reads low
+                                 while its catalogue is full, and the label has to
+                                 say which of the two the number means. */}}
+                            <span class="cov-pct" title="share of the server's retention fetched by THIS crawler; excludes anything indexed before it took over">{{.CoveredFmt}} crawled</span>
                         </div>
                         {{else if .NoCoverage}}
                         <div class="small text-muted" title="no fetched ranges recorded for this group on this backbone">no coverage recorded</div>

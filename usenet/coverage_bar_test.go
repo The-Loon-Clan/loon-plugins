@@ -84,7 +84,7 @@ func TestCrawlersCoverageStripIsRangeBased(t *testing.T) {
 		Name: "alt.binaries.anime", Cells: []int{0, 0, 0, 3}, Fragments: 1,
 		CoveredFmt: "<1%", BackfillDone: true, FwdAt: "2026-07-27 07:12",
 	})
-	for _, want := range []string{"cov-cells", "cov-pct", "&lt;1%"} {
+	for _, want := range []string{"cov-cells", "cov-pct", "&lt;1% crawled", "BY THIS CRAWLER"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("coverage strip missing %q", want)
 		}
