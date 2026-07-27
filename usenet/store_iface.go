@@ -77,7 +77,7 @@ type ServerStore interface {
 type SettingStore interface {
 	getSettings(ctx context.Context) (map[string]string, error)
 	setSetting(ctx context.Context, key, value string) error
-	adoptFromHost(ctx context.Context, backbone string) (groups, state, blacklist int64, hostFound bool, err error)
+	adoptFromHost(ctx context.Context, backbone string) (groups, state, blacklist, covRanges int64, hostFound bool, err error)
 }
 
 // BackfillStore drives the backward crawl + its builder view.

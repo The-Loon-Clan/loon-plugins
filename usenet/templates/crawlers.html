@@ -198,22 +198,25 @@
                 <tr>
                     <td><code>{{.Name}}</code></td>
                     <td>
-                        <div class="cov-bar" title="pending / indexed / new">
-                            {{if .Cover.Known}}
-                                {{/* when backfill is done, the span below is past retention — show it as empty track, not orange "todo" */}}
-                                {{if .BackfillDone}}<span class="cov-skip" style="width:{{printf "%.1f" .Cover.BackPct}}%"></span>
-                                {{else}}<span class="cov-back" style="width:{{printf "%.1f" .Cover.BackPct}}%"></span>{{end}}
-                                <span class="cov-have" style="width:{{printf "%.1f" .Cover.HavePct}}%"></span>
-                                <span class="cov-new"  style="width:{{printf "%.1f" .Cover.NewPct}}%"></span>
-                            {{else}}<span class="cov-unknown"></span>{{end}}
-                        </div>
-                        {{/* Fetched ranges, bucketed. The bar above is watermark-only and
-                             reads as one solid block; parallel backfill actually leaves
-                             holes, and this is where they are. */}}
+                        {{/* ONE bar, drawn from the fetched ranges — the only record of
+                             what was actually downloaded. There used to be a second,
+                             more prominent bar derived from the two watermarks; it read
+                             solid green whenever the bookmarks met, which they do even
+                             when nothing was ingested between them, and it sat above the
+                             honest one. Two bars, and the eye-catching one lying, is how
+                             a group that had indexed nothing for four days looked
+                             complete. */}}
                         {{if .Cells}}
-                        <div class="cov-cells" title="{{.Fragments}} fetched run(s) — gaps are unfetched article ranges">
-                            {{range .Cells}}<i class="cc{{.}}"></i>{{end}}
+                        <div class="cov-line">
+                            <div class="cov-cells" title="{{.Fragments}} fetched run(s) over the server's retention — grey is unfetched">
+                                {{range .Cells}}<i class="cc{{.}}"></i>{{end}}
+                            </div>
+                            <span class="cov-pct" title="share of the server's retention actually fetched">{{.CoveredFmt}}</span>
                         </div>
+                        {{else if .NoCoverage}}
+                        <div class="small text-muted" title="no fetched ranges recorded for this group on this backbone">no coverage recorded</div>
+                        {{else}}
+                        <div class="cov-bar"><span class="cov-unknown"></span></div>
                         {{end}}
                         <div class="small" style="margin-top:2px">
                             {{if .BackAt}}

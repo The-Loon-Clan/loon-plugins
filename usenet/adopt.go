@@ -75,7 +75,7 @@ func (p *Plugin) adoptHostState(ctx context.Context) {
 		return
 	}
 
-	groups, state, blacklist, hostFound, err := p.st.adoptFromHost(ctx, backbone)
+	groups, state, blacklist, covRanges, hostFound, err := p.st.adoptFromHost(ctx, backbone)
 	if err != nil {
 		p.reportErr(ctx, "usenet/adopt", err)
 		return // retry next boot; nothing is marked done
@@ -89,15 +89,15 @@ func (p *Plugin) adoptHostState(ctx context.Context) {
 		return
 	}
 	p.core.Logger.Info(fmt.Sprintf(
-		"usenet: adopted host crawler state under backbone %q: %d group(s), %d watermark row(s), %d blacklist rule(s)",
-		backbone, groups, state, blacklist))
+		"usenet: adopted host crawler state under backbone %q: %d group(s), %d watermark row(s), %d blacklist rule(s), %d coverage range(s)",
+		backbone, groups, state, blacklist, covRanges))
 }
 
 // adoptFromHost copies the legacy host tables (public.newsgroups,
 // public.blacklist_regexes) into the plugin's schema. Returns rows copied and
 // whether the host tables existed at all. Every statement is a no-op on
 // conflict, so a partially-failed adoption is safe to re-run.
-func (s *PGStore) adoptFromHost(ctx context.Context, backbone string) (groups, state, blacklist int64, hostFound bool, err error) {
+func (s *PGStore) adoptFromHost(ctx context.Context, backbone string) (groups, state, blacklist, covRanges int64, hostFound bool, err error) {
 	err = s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		var reg *string
 		if err := tx.GetContext(ctx, &reg, `SELECT to_regclass('public.newsgroups')::text`); err != nil {
@@ -159,6 +159,38 @@ func (s *PGStore) adoptFromHost(ctx context.Context, backbone string) (groups, s
 		}
 		state, _ = res.RowsAffected()
 
+		// Seed the coverage map to match the watermarks just imported.
+		//
+		// newsgroup_ranges records what has been FETCHED. Left empty for an
+		// adopted group, the coverage strip renders ~0% for a newsgroup whose
+		// history the legacy crawler really did index — prod's
+		// alt.binaries.multimedia.anime.highspeed showed 1.05% while holding
+		// 218k releases back to 2016. The two bars on the admin page then
+		// disagree, and the honest-LOOKING one is the one that is wrong.
+		//
+		// The span is what the imported watermarks already claim: the back
+		// watermark (floored at server_low — nothing below it is fetchable)
+		// up to the forward mark. That is inherited from the old crawler
+		// exactly like backfill_done above, and wrong in the same direction
+		// if the old crawler lied. Still better than asserting nothing was
+		// ever fetched, which is wrong for every correctly-adopted group.
+		res, err = tx.ExecContext(ctx, `
+			INSERT INTO newsgroup_ranges (backbone, group_name, range_start, range_end)
+			SELECT $1, s.group_name,
+			       GREATEST(COALESCE(s.back_watermark, s.server_low), s.server_low),
+			       s.high_watermark
+			  FROM newsgroup_state s
+			 WHERE s.backbone = $1
+			   AND s.high_watermark > 0
+			   AND s.high_watermark > GREATEST(COALESCE(s.back_watermark, s.server_low), s.server_low)
+			   AND NOT EXISTS (
+			       SELECT 1 FROM newsgroup_ranges r
+			        WHERE r.backbone = s.backbone AND r.group_name = s.group_name)`, backbone)
+		if err != nil {
+			return fmt.Errorf("adopt coverage: %w", err)
+		}
+		covRanges, _ = res.RowsAffected()
+
 		// The operator blacklist, deduped by (pattern, field) since the
 		// plugin table has no natural key — adoption must not double rules
 		// on a re-run after a partial failure.
@@ -180,5 +212,5 @@ func (s *PGStore) adoptFromHost(ctx context.Context, backbone string) (groups, s
 		}
 		return nil
 	})
-	return groups, state, blacklist, hostFound, err
+	return groups, state, blacklist, covRanges, hostFound, err
 }

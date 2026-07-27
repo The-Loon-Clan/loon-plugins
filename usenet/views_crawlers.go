@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"strconv"
 	"strings"
 	"time"
 
@@ -49,6 +50,38 @@ func cellLevels(cells []float64) []int {
 		}
 	}
 	return out
+}
+
+// coveredFraction averages the per-cell fills back into one number. Averaging
+// the CELLS rather than re-summing the ranges keeps the headline and the strip
+// telling the same story: if rounding puts a sliver of coverage into a cell,
+// the percentage counts exactly what the operator can see.
+func coveredFraction(cells []float64) float64 {
+	if len(cells) == 0 {
+		return 0
+	}
+	var sum float64
+	for _, c := range cells {
+		sum += c
+	}
+	return sum / float64(len(cells))
+}
+
+// fmtPct renders a coverage percentage without pretending to precision it does
+// not have, while never rounding a real sliver away to a flat "0%" — the
+// difference between "we have fetched a little of this group" and "we have
+// fetched none of it" is the whole point of the strip.
+func fmtPct(p float64) string {
+	switch {
+	case p <= 0:
+		return "0%"
+	case p < 1:
+		return "<1%"
+	case p >= 99.5:
+		return "100%"
+	default:
+		return strconv.Itoa(int(p+0.5)) + "%"
+	}
 }
 
 // statsVM formats one pass snapshot for the template. Works on the VALUE, not
@@ -270,6 +303,15 @@ type crawlerGroupVM struct {
 	Cover        pluginapi.CoverageBar
 	Cells        []int // per-slice fill level 0..3, drawn over the coverage bar
 	Fragments    int   // contiguous fetched runs; >1 means backfill left holes
+	// CoveredFmt is the share of the server's span we have actually fetched,
+	// as a whole-number percent. This is the honest headline: the watermark
+	// bar reads solid green whenever the two bookmarks meet, which they do
+	// even when nothing was ingested between them.
+	CoveredFmt string
+	// NoCoverage marks a group with no fetched ranges recorded at all, so the
+	// strip can say so in words instead of rendering an empty track that
+	// looks identical to "fetched nothing yet" and to "never asked".
+	NoCoverage bool
 	// The legacy-format coverage line: "↩ back-at · ↑ fwd-at (+N new)".
 	FwdAt        string // forward watermark, date+time
 	BackAt       string // backfill watermark, date+time
@@ -330,8 +372,12 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 			vm.RemainingFmt = fmtComma(g.BackWatermark - g.ServerLow)
 		}
 		if runs := ranges[coverKey{g.Backbone, g.Name}]; len(runs) > 0 {
+			cells := coverageCells(runs, g.ServerLow, g.ServerHigh, coverCellCount)
 			vm.Fragments = len(runs)
-			vm.Cells = cellLevels(coverageCells(runs, g.ServerLow, g.ServerHigh, coverCellCount))
+			vm.Cells = cellLevels(cells)
+			vm.CoveredFmt = fmtPct(coveredFraction(cells) * 100)
+		} else {
+			vm.NoCoverage = true
 		}
 		idx, ok := byBackbone[g.Backbone]
 		if !ok {

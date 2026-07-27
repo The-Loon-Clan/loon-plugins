@@ -20,7 +20,9 @@
 .cov-unknown { background:rgba(128,128,128,.18); width:100%; }
 .cov-legend { display:flex; gap:1.25rem; font-size:.8rem; opacity:.75; margin:.3rem 0 .8rem; flex-wrap:wrap; }
 .cov-legend .dot { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:.3rem; vertical-align:middle; box-shadow:none; }
-.cov-cells { display:flex; gap:1px; height:6px; margin-top:3px; min-width:120px; }
+.cov-line { display:flex; align-items:center; gap:.5rem; }
+.cov-cells { display:flex; gap:1px; height:9px; min-width:120px; flex:1 1 auto; }
+.cov-pct { font-size:.75rem; color:var(--bs-secondary-color); font-variant-numeric:tabular-nums; min-width:2.6rem; text-align:right; }
 .cov-cells i { flex:1 1 0; border-radius:1px; background:rgba(128,128,128,.18); }
 .cov-cells .cc1 { background:color-mix(in srgb, var(--bs-success) 30%, transparent); }
 .cov-cells .cc2 { background:color-mix(in srgb, var(--bs-success) 60%, transparent); }
