@@ -302,12 +302,25 @@ func TestAnyBackfillPending(t *testing.T) {
 	}
 }
 
-// TestLowPriorityTierRule pins the operator's scheduling rule: normal groups
-// with known new articles own the pass; once the normal tier is caught up,
-// the low-priority backlog takes the slots (and normal groups ride along as
-// polls, so their next arrivals are noticed). The original "ORDER BY
-// low_priority LIMIT n" starved low-pri groups FOREVER once n normal groups
-// existed — observed on prod 2026-07-24.
+// TestLowPriorityTierRule pins the operator's scheduling rule THROUGH THE
+// DATABASE: normal groups always take the pass before low-priority ones, and
+// low only ever gets whatever capacity is left over.
+//
+// The ordering itself is exhaustively unit-tested in TestOrderCrawlGroups
+// (pure, no DB). What only a real Postgres shows is the plumbing around it:
+// that setGroupTuning actually persists low_priority, that the LEFT JOIN to
+// newsgroup_state surfaces it per backbone, and that the flag survives the
+// round trip. A fake would have to assume all three.
+//
+// HISTORY, because this test asserted the OPPOSITE for a while and someone
+// will be tempted to put it back: 8b58253 shipped "low-priority groups get the
+// pass once the normal tier is caught up", with a test for it. 046e33c then
+// deliberately reversed the rule -- "low never preempts normal" -- because the
+// caught-up heuristic let low-pri jump the queue whenever the normal tier
+// momentarily had nothing new, and rewrote selection as orderCrawlGroups. It
+// did not update this test, which then sat red on main asserting the removed
+// behaviour. If low-pri should ever preempt again, that is a product decision:
+// change orderCrawlGroups and this test together, and say so in the commit.
 func TestLowPriorityTierRule(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
@@ -318,7 +331,7 @@ func TestLowPriorityTierRule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Normal tier behind: n.one has 100 new articles on the server.
+	// Normal tier behind: n.one has new articles waiting on the server.
 	if err := s.updateGroupStateForBackbone(ctx, bb, "n.one", 1, 1100, 1000, 1000, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -334,11 +347,12 @@ func TestLowPriorityTierRule(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 2 || got[0].LowPriority || got[1].LowPriority {
-		t.Fatalf("normal tier behind: want the 2 normal groups first, got %+v", got)
+		t.Fatalf("normal tier behind: want the 2 normal groups, got %+v", got)
 	}
 
-	// Normal tier catches up: the low-pri backlog must now own the pass, with
-	// a normal group riding along as a poll.
+	// The case that used to expect the opposite. Even with the normal tier
+	// fully caught up -- nothing new to fetch -- low-pri must NOT take the
+	// slots ahead of them: normal groups still poll, low rides in leftovers.
 	if err := s.updateGroupStateForBackbone(ctx, bb, "n.one", 1, 1100, 1100, 1000, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -346,10 +360,26 @@ func TestLowPriorityTierRule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || !got[0].LowPriority {
-		t.Fatalf("normal tier caught up: want the low-pri group first, got %+v", got)
+	if len(got) != 2 {
+		t.Fatalf("want 2 groups under the cap, got %+v", got)
 	}
-	if got[1].LowPriority {
-		t.Fatalf("leftover slot should poll a normal group, got %+v", got[1])
+	if got[0].LowPriority || got[1].LowPriority {
+		t.Fatalf("a caught-up normal tier must still outrank low-priority, got %+v", got)
+	}
+
+	// Uncapped, the low-pri group appears -- LAST. This is what proves the
+	// flag survived the round trip rather than the tier being filtered out.
+	got, err = s.activeGroupsForBackbone(ctx, bb, 0) // 0 = no cap
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("uncapped: want all 3 groups, got %+v", got)
+	}
+	if got[0].LowPriority || got[1].LowPriority {
+		t.Fatalf("uncapped: normal groups must lead, got %+v", got)
+	}
+	if !got[2].LowPriority || got[2].Name != "l.big" {
+		t.Fatalf("uncapped: want l.big last and flagged low-pri, got %+v", got[2])
 	}
 }
