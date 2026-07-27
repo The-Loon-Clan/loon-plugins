@@ -37,10 +37,14 @@ type GroupInfo struct {
 	NZBs   int64
 
 	// Per-group tuning. RetentionDays 0 means "follow the site-wide crawl
-	// depth"; LowPriority groups are crawled only after the normal ones.
+	// depth".
 	RetentionDays int
 	ThrottleMs    int
-	LowPriority   bool
+	// Tier is the crawl priority: "critical" (always first), "normal", or
+	// "low" (only with capacity left over). A plain string rather than a
+	// typed enum because this is the cross-package contract and the
+	// authority is the plugin's own Tier type; empty reads as normal.
+	Tier string
 }
 
 // GroupStat is the crawl status of one active group.

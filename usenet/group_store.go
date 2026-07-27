@@ -78,7 +78,7 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 		NZBs      int64         `db:"nzbs"`
 		Retention sql.NullInt64 `db:"retention_days"`
 		Throttle  int           `db:"throttle_ms"`
-		LowPri    bool          `db:"low_priority"`
+		TierRaw   string        `db:"tier"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
@@ -86,11 +86,11 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 		// then normal before low-priority, then manual order.
 		return tx.SelectContext(ctx, &rows,
 			`SELECT g.name, g.active, COUNT(n.id) AS nzbs,
-			        g.retention_days, g.throttle_ms, g.low_priority
+			        g.retention_days, g.throttle_ms, g.tier
 			 FROM newsgroups g LEFT JOIN nzbs n ON n.group_name = g.name
 			 WHERE ($1 = '' OR g.name ILIKE '%' || $1 || '%')
-			 GROUP BY g.name, g.active, g.retention_days, g.throttle_ms, g.low_priority, g.sort_order
-			 ORDER BY g.active DESC, g.low_priority, g.sort_order, g.name LIMIT $2`, query, limit)
+			 GROUP BY g.name, g.active, g.retention_days, g.throttle_ms, g.tier, g.sort_order
+			 ORDER BY g.active DESC, g.tier, g.sort_order, g.name LIMIT $2`, query, limit)
 	})
 	if err != nil {
 		return nil, err
@@ -99,7 +99,8 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 	for i, r := range rows {
 		out[i] = pluginapi.GroupInfo{
 			Name: r.Name, Active: r.Active, NZBs: r.NZBs,
-			RetentionDays: int(r.Retention.Int64), ThrottleMs: r.Throttle, LowPriority: r.LowPri,
+			RetentionDays: int(r.Retention.Int64), ThrottleMs: r.Throttle,
+			Tier: string(normalizeTier(r.TierRaw)),
 		}
 	}
 	return out, nil

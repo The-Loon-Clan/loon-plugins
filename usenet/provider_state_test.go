@@ -13,8 +13,15 @@ func TestOrderCrawlGroups(t *testing.T) {
 	base := time.Date(2026, 7, 25, 8, 0, 0, 0, time.UTC)
 	nt := func(d time.Duration) sql.NullTime { return sql.NullTime{Time: base.Add(d), Valid: true} }
 	never := sql.NullTime{}
+	// Keeps the boolean shape of the original cases while the column is now a
+	// tier: these assertions are about the normal-vs-low relationship, which
+	// survived the migration unchanged. Critical-tier cases live in tier_test.go.
 	mk := func(name string, low bool, last sql.NullTime) crawlGroupSel {
-		return crawlGroupSel{Name: name, LowPri: low, LastCrawl: last}
+		tier := TierNormal
+		if low {
+			tier = TierLow
+		}
+		return crawlGroupSel{Name: name, TierRaw: string(tier), LastCrawl: last}
 	}
 	names := func(rows []crawlGroupSel) []string {
 		out := make([]string, len(rows))
@@ -35,7 +42,7 @@ func TestOrderCrawlGroups(t *testing.T) {
 		return true
 	}
 
-	// Input in SQL (low_priority, sort_order, name) order: normal tier first,
+	// Input in SQL (tier, sort_order, name) order: normal tier first,
 	// then low, with mixed last_crawl within each.
 	rows := []crawlGroupSel{
 		mk("n_fresh", false, nt(-1*time.Minute)),

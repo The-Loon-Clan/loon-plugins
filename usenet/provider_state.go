@@ -23,24 +23,24 @@ type crawlGroupSel struct {
 	LastCrawl sql.NullTime  `db:"last_crawl"`
 	Retention sql.NullInt64 `db:"retention_days"`
 	Throttle  int           `db:"throttle_ms"`
-	LowPri    bool          `db:"low_priority"`
+	TierRaw   string        `db:"tier"`
 }
 
-// orderCrawlGroups is the pure selection order for a crawl pass: NORMAL groups
-// always before LOW-PRIORITY ones, STALEST-FIRST within each tier (never-crawled
-// first, then oldest last_crawl), then capped at limit (limit <= 0 = no cap).
-// Callers pass rows in the SQL (low_priority, sort_order, name) order;
+// orderCrawlGroups is the pure selection order for a crawl pass: CRITICAL
+// groups before NORMAL before LOW, STALEST-FIRST within each tier
+// (never-crawled first, then oldest last_crawl), then capped at limit
+// (limit <= 0 = no cap).
+// Callers pass rows in the SQL (tier, sort_order, name) order;
 // SliceStable preserves it as the tiebreak among equally-stale groups, so
 // sort_order still decides ties. Extracted so the ordering is unit-testable
 // without a database.
 func orderCrawlGroups(rows []crawlGroupSel, limit int) []crawlGroupSel {
-	var normal, lowpri []crawlGroupSel
+	// One bucket per tier, indexed by tierRank so adding a tier is a change to
+	// tier.go alone.
+	buckets := make([][]crawlGroupSel, 3)
 	for _, r := range rows {
-		if r.LowPri {
-			lowpri = append(lowpri, r)
-		} else {
-			normal = append(normal, r)
-		}
+		rank := tierRank(normalizeTier(r.TierRaw))
+		buckets[rank] = append(buckets[rank], r)
 	}
 	stalestFirst := func(g []crawlGroupSel) {
 		sort.SliceStable(g, func(i, j int) bool {
@@ -54,11 +54,13 @@ func orderCrawlGroups(rows []crawlGroupSel, limit int) []crawlGroupSel {
 			return false
 		})
 	}
-	stalestFirst(normal)
-	stalestFirst(lowpri)
-	// Normal always ahead of low-priority; the cap (if any) then falls on the
-	// low-pri tail first, and the stalest-first order rotates whoever it cuts.
-	pick := append(append([]crawlGroupSel{}, normal...), lowpri...)
+	pick := make([]crawlGroupSel, 0, len(rows))
+	for i := range buckets {
+		stalestFirst(buckets[i])
+		pick = append(pick, buckets[i]...)
+	}
+	// Higher tiers always ahead of lower ones, so the cap (if any) falls on the
+	// low tail first and the stalest-first order rotates whoever it cuts.
 	if limit > 0 && len(pick) > limit {
 		pick = pick[:limit]
 	}
@@ -69,9 +71,9 @@ func orderCrawlGroups(rows []crawlGroupSel, limit int) []crawlGroupSel {
 // progress. A group with no state row yet reports watermark 0, which the crawler
 // reads as "first pass" and caps accordingly.
 //
-// Ordering (the operator's rule): NORMAL groups always come before LOW-PRIORITY
-// ones — "low" must never be crawled ahead of a normal group, only in whatever
-// capacity is left after them. Within each tier, STALEST-FIRST (never-crawled,
+// Ordering (the operator's rule): CRITICAL groups come before NORMAL, which come
+// before LOW — "low" must never be crawled ahead of a normal group, only in
+// whatever capacity is left after them, and "critical" always takes a slot. Within each tier, STALEST-FIRST (never-crawled,
 // then oldest last_crawl): the group that has waited longest takes the next
 // slot, so under a cap the slots ROTATE and no group starves. The old static
 // "ORDER BY low_priority, sort_order LIMIT n" both (a) let low-pri jump ahead of
@@ -86,12 +88,12 @@ func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, 
 		// BY only fixes its SliceStable tiebreak (sort_order then name).
 		return tx.SelectContext(ctx, &rows,
 			`SELECT g.name, COALESCE(st.high_watermark, 0) AS high_watermark,
-			        st.last_crawl, g.retention_days, g.throttle_ms, g.low_priority
+			        st.last_crawl, g.retention_days, g.throttle_ms, g.tier
 			   FROM newsgroups g
 			   LEFT JOIN newsgroup_state st
 			     ON st.group_name = g.name AND st.backbone = $1
 			  WHERE g.active = TRUE
-			  ORDER BY g.low_priority, g.sort_order, g.name`, backbone)
+			  ORDER BY g.tier, g.sort_order, g.name`, backbone)
 	})
 	if err != nil {
 		return nil, err
@@ -102,7 +104,8 @@ func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, 
 	for i, r := range pick {
 		out[i] = groupRow{
 			Name: r.Name, HighWatermark: r.HW,
-			RetentionDays: int(r.Retention.Int64), ThrottleMs: r.Throttle, LowPriority: r.LowPri,
+			RetentionDays: int(r.Retention.Int64), ThrottleMs: r.Throttle,
+			Tier: normalizeTier(r.TierRaw),
 		}
 	}
 	return out, nil
@@ -160,7 +163,7 @@ func (s *PGStore) groupsNeedingBackfillForBackbone(ctx context.Context, backbone
 			    AND st.backfill_done = FALSE
 			    AND st.back_watermark IS NOT NULL
 			    AND st.back_watermark > st.server_low
-			  ORDER BY g.low_priority, g.sort_order, g.name
+			  ORDER BY g.tier, g.sort_order, g.name
 			  LIMIT NULLIF($2, 0)`, backbone, limit)
 	})
 	if err != nil {

@@ -132,7 +132,7 @@ func (s *PGStore) toggleServer(ctx context.Context, id int) error {
 // setGroupTuning updates one group's overrides. retentionDays <= 0 stores NULL,
 // meaning "follow the plugin-wide crawl depth" — storing a copied number instead
 // would silently pin the group to whatever the default was when it was set.
-func (s *PGStore) setGroupTuning(ctx context.Context, name string, retentionDays, throttleMs int, lowPriority bool) error {
+func (s *PGStore) setGroupTuning(ctx context.Context, name string, retentionDays, throttleMs int, tier Tier) error {
 	if throttleMs < 0 {
 		throttleMs = 0
 	}
@@ -145,8 +145,8 @@ func (s *PGStore) setGroupTuning(ctx context.Context, name string, retentionDays
 			ret = retentionDays
 		}
 		_, err := tx.ExecContext(ctx,
-			`UPDATE newsgroups SET retention_days = $2, throttle_ms = $3, low_priority = $4
-			  WHERE name = $1`, name, ret, throttleMs, lowPriority)
+			`UPDATE newsgroups SET retention_days = $2, throttle_ms = $3, tier = $4
+			  WHERE name = $1`, name, ret, throttleMs, string(tier))
 		return err
 	})
 }

@@ -253,8 +253,11 @@
                                placeholder="site" title="blank = follow the site-wide crawl depth" style="width:4.5rem"></td>
                     <td><input class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="throttle_ms" value="{{.ThrottleMs}}"
                                title="pause after each batch for this group" style="width:4.5rem"></td>
-                    <td><input form="tune-{{.Name}}" type="checkbox" name="low_priority" {{if .LowPriority}}checked{{end}}
-                               title="crawled only after the normal groups have had their pass"></td>
+                    <td><select class="form-select form-select-sm" form="tune-{{.Name}}" name="tier"
+                                title="critical is crawled first every pass; low only with capacity left over"
+                                style="width:7rem">
+                            {{$t := .Tier}}{{range $.Tiers}}<option value="{{.}}" {{if eq (printf "%s" .) $t}}selected{{end}}>{{.Label}}</option>{{end}}
+                        </select></td>
                     <td style="white-space:nowrap">
                         <form method="post" action="/admin/p/usenet/group-move" style="display:inline">
                             <input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="dir" value="up">

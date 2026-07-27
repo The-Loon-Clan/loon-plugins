@@ -86,7 +86,7 @@ func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string) (te
 		"Servers": servers, "DefaultConns": p.effective(ctx).Connections,
 		"Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,
 		"CrawlNoCatchup": p.effective(ctx).CrawlNoCatchup,
-		"Groups":         groups, "GroupQuery": gq,
+		"Groups":         groups, "GroupQuery": gq, "Tiers": AllTiers,
 		"GroupTotal": total, "Shown": len(groups),
 		"CrawlersTab": crawlersTab, "JobsTab": jobsTab, "FiltersTab": filtersTab,
 		"Msg": msg, "Err": errMsg,
@@ -258,11 +258,14 @@ func (p *Plugin) actionTuneGroup(gc *gin.Context) (template.HTML, error) {
 	}
 	ret, _ := strconv.Atoi(gc.PostForm("retention_days"))
 	thr, _ := strconv.Atoi(gc.PostForm("throttle_ms"))
-	low := gc.PostForm("low_priority") != ""
-	err := p.st.setGroupTuning(gc.Request.Context(), name, ret, thr, low)
+	// normalizeTier is the gate: the form is a <select>, but a hand-rolled
+	// POST could carry anything, and the column has a CHECK constraint that
+	// would turn that into a 500 rather than a quietly-defaulted row.
+	tier := normalizeTier(gc.PostForm("tier"))
+	err := p.st.setGroupTuning(gc.Request.Context(), name, ret, thr, tier)
 	// Same in-place contract as actionToggleGroup: the tuning inputs (the
-	// Low-pri checkbox especially) auto-save via fetch, so a bare status is
-	// the whole answer — a redirect-and-re-render per checkbox would re-run
+	// tier select especially) auto-save via fetch, so a bare status is
+	// the whole answer — a redirect-and-re-render per change would re-run
 	// every dashboard query and jump the scroll. No-JS still gets the
 	// redirect below.
 	if gc.GetHeader("X-Requested-With") == "fetch" {

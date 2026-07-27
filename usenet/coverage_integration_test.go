@@ -308,7 +308,7 @@ func TestAnyBackfillPending(t *testing.T) {
 //
 // The ordering itself is exhaustively unit-tested in TestOrderCrawlGroups
 // (pure, no DB). What only a real Postgres shows is the plumbing around it:
-// that setGroupTuning actually persists low_priority, that the LEFT JOIN to
+// that setGroupTuning actually persists the tier, that the LEFT JOIN to
 // newsgroup_state surfaces it per backbone, and that the flag survives the
 // round trip. A fake would have to assume all three.
 //
@@ -327,7 +327,7 @@ func TestLowPriorityTierRule(t *testing.T) {
 	const bb = "omicron"
 
 	mustGroups(t, s, "n.one", "n.two", "l.big")
-	if err := s.setGroupTuning(ctx, "l.big", 0, 0, true); err != nil {
+	if err := s.setGroupTuning(ctx, "l.big", 0, 0, TierLow); err != nil {
 		t.Fatal(err)
 	}
 

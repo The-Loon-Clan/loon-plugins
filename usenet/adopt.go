@@ -120,9 +120,10 @@ func (s *PGStore) adoptFromHost(ctx context.Context, backbone string) (groups, s
 		// silently change nothing) — so the plugin-default depth becomes
 		// inherit and only genuinely custom values survive as overrides.
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO newsgroups (name, active, retention_days, throttle_ms, low_priority, sort_order)
+			INSERT INTO newsgroups (name, active, retention_days, throttle_ms, tier, sort_order)
 			SELECT h.name, h.active, NULLIF(h.retention_days, 6431),
-			       COALESCE(h.throttle_ms, 0), COALESCE(h.low_priority, FALSE),
+			       COALESCE(h.throttle_ms, 0),
+			       CASE WHEN COALESCE(h.low_priority, FALSE) THEN 'low' ELSE 'normal' END,
 			       COALESCE(h.sort_order, 0)
 			  FROM public.newsgroups h
 			ON CONFLICT (name) DO NOTHING`)

@@ -38,10 +38,10 @@ func TestSettingsRendersProviders(t *testing.T) {
 		"SkipBackfill": false,
 		"Groups": []pluginapi.GroupInfo{
 			{Name: "alt.binaries.anime", Active: true, NZBs: 4211, RetentionDays: 0, ThrottleMs: 0},
-			{Name: "alt.binaries.hdtv", Active: true, NZBs: 900, RetentionDays: 30, ThrottleMs: 250, LowPriority: true},
+			{Name: "alt.binaries.hdtv", Active: true, NZBs: 900, RetentionDays: 30, ThrottleMs: 250, Tier: "low"},
 			{Name: "alt.binaries.misc", Active: false},
 		},
-		"GroupQuery":  "",
+		"GroupQuery": "", "Tiers": AllTiers,
 		"GroupTotal":  3,
 		"Shown":       3,
 		"CrawlersTab": template.HTML("<div>crawlers-frag</div>"),
@@ -61,7 +61,11 @@ func TestSettingsRendersProviders(t *testing.T) {
 		"/admin/p/usenet/provider-test",
 		// per-group tuning controls
 		"alt.binaries.anime", "group-tune", "retention_days", "throttle_ms",
-		"low_priority", "group-move", "group-del", "groups-purge",
+		// the tier <select> replaced the low_priority checkbox (migration 019);
+		// assert the selected option too, so a broken {{if eq}} is caught here
+		// rather than by an operator finding every group showing "Critical".
+		`name="tier"`, `value="low" selected`,
+		"group-move", "group-del", "groups-purge",
 		// tabbed layout on its own admin page (SlotAdminPage), forms post to /admin/p/usenet
 		`class="nav tabs"`, `data-bs-toggle="tab"`, `id="providers"`, `id="newsgroups"`,
 		"/admin/p/usenet/provider", "/admin/p/usenet/group-tune",
@@ -91,7 +95,7 @@ func TestSettingsRendersWithNoProviders(t *testing.T) {
 	err = tmpl.ExecuteTemplate(&buf, "settings.html", map[string]any{
 		"Servers": []provider{}, "DefaultConns": 10,
 		"Knobs": []knob{}, "SkipBackfill": false, "Groups": nil,
-		"GroupQuery": "", "GroupTotal": 0, "Shown": 0, "Msg": "", "Err": "",
+		"GroupQuery": "", "Tiers": AllTiers, "GroupTotal": 0, "Shown": 0, "Msg": "", "Err": "",
 		"CrawlersTab": template.HTML(""), "FiltersTab": template.HTML(""),
 	})
 	if err != nil {

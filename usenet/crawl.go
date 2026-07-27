@@ -622,7 +622,7 @@ type groupRow struct {
 	// plugin-wide crawl depth".
 	RetentionDays int
 	ThrottleMs    int
-	LowPriority   bool
+	Tier          Tier
 }
 
 // cutoff resolves this group's crawl horizon, falling back to the global depth.
