@@ -80,6 +80,7 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 		Throttle  int           `db:"throttle_ms"`
 		TierRaw   string        `db:"tier"`
 		Reset     sql.NullInt64 `db:"reset_articles"`
+		ResetHist sql.NullInt64 `db:"reset_history_articles"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
@@ -98,7 +99,21 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 			           JOIN newsgroup_ranges r
 			             ON r.backbone = st.backbone AND r.group_name = st.group_name
 			          WHERE st.group_name = g.name
-			         HAVING max(r.range_start) < max(st.high_watermark)) AS reset_articles
+			         HAVING max(r.range_start) < max(st.high_watermark)) AS reset_articles,
+			        -- What reopening the backfill would queue: the window
+			        -- [server_low, high_watermark] minus everything already
+			        -- recorded as fetched. Backfill plans from exactly these
+			        -- gaps, so this is the real cost, not the window size.
+			        (SELECT GREATEST(st.high_watermark - st.server_low, 0)
+			                - COALESCE((SELECT sum(LEAST(r.range_end, st.high_watermark)
+			                                     - GREATEST(r.range_start, st.server_low) + 1)
+			                              FROM newsgroup_ranges r
+			                             WHERE r.backbone = st.backbone AND r.group_name = st.group_name
+			                               AND r.range_end >= st.server_low
+			                               AND r.range_start <= st.high_watermark), 0)
+			           FROM newsgroup_state st
+			          WHERE st.group_name = g.name
+			          LIMIT 1) AS reset_history_articles
 			 FROM newsgroups g LEFT JOIN nzbs n ON n.group_name = g.name
 			 WHERE ($1 = '' OR g.name ILIKE '%' || $1 || '%')
 			 GROUP BY g.name, g.active, g.retention_days, g.throttle_ms, g.tier, g.sort_order
@@ -112,7 +127,7 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 		out[i] = pluginapi.GroupInfo{
 			Name: r.Name, Active: r.Active, NZBs: r.NZBs,
 			RetentionDays: int(r.Retention.Int64), ThrottleMs: r.Throttle,
-			Tier: string(normalizeTier(r.TierRaw)), ResetArticles: r.Reset.Int64,
+			Tier: string(normalizeTier(r.TierRaw)), ResetArticles: r.Reset.Int64, ResetHistoryArticles: r.ResetHist.Int64,
 		}
 	}
 	return out, nil

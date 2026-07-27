@@ -293,6 +293,30 @@ Type the group name to confirm:'); if(v===null){return false;} this.confirm.valu
                              errors is worse than showing none. */}}
                         <span class="text-muted" style="opacity:.35" title="watermark reset unavailable: no fetched coverage recorded, or this group's coverage is too fragmented to pick a target automatically">&#8635;</span>
                         {{end}}
+                        {{/* Separate button, separate confirmation: this reopens the
+                             BACKFILL over everything below the forward mark that no
+                             recorded range covers. On an adopted install that is the
+                             span a previous crawler claimed, and it is two orders of
+                             magnitude larger than the forward reset. Bundling the two
+                             behind one click would hide which one is being bought. */}}
+                        {{if .ResetHistoryArticles}}
+                        <form method="post" action="/admin/p/usenet/group-reset" style="display:inline"
+                              onsubmit="var v=prompt('Re-walk HISTORY for {{.Name}}?
+
+Reopens the backfill over {{.ResetHistoryArticles}} article(s) — everything below the forward mark that this crawler has not recorded as fetched. This is much larger than the recent reset and runs for a long time, bounded per pass so the forward crawl keeps up.
+
+Use this when a PREVIOUS crawler missed content, not for a recent parsing fix.
+
+Type the group name to confirm:'); if(v===null){return false;} this.confirm.value=v; return true;">
+                            <input type="hidden" name="name" value="{{.Name}}">
+                            <input type="hidden" name="scope" value="history">
+                            <input type="hidden" name="confirm" value="">
+                            <button class="btn btn-sm py-0 btn-outline-danger" type="submit"
+                                    title="reopen the backfill over the {{.ResetHistoryArticles}} article(s) below the forward mark that are not recorded as fetched">&#8681;</button>
+                        </form>
+                        {{else}}
+                        <span class="text-muted" style="opacity:.35" title="history re-walk unavailable: every article below the forward mark is already recorded as fetched, so the backfill would find no gaps">&#8681;</span>
+                        {{end}}
                     </td>
                     <td style="white-space:nowrap">
                         <input form="tune-{{.Name}}" type="hidden" name="name" value="{{.Name}}">

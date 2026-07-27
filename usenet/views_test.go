@@ -38,7 +38,7 @@ func TestSettingsRendersProviders(t *testing.T) {
 		"SkipBackfill": false,
 		"Groups": []pluginapi.GroupInfo{
 			{Name: "alt.binaries.anime", Active: true, NZBs: 4211, RetentionDays: 0, ThrottleMs: 0},
-			{Name: "alt.binaries.hdtv", Active: true, NZBs: 900, RetentionDays: 30, ThrottleMs: 250, Tier: "low", ResetArticles: 10076933},
+			{Name: "alt.binaries.hdtv", Active: true, NZBs: 900, RetentionDays: 30, ThrottleMs: 250, Tier: "low", ResetArticles: 10076933, ResetHistoryArticles: 793770354},
 			{Name: "alt.binaries.misc", Active: false},
 		},
 		"GroupQuery": "", "Tiers": AllTiers,
@@ -77,6 +77,11 @@ func TestSettingsRendersProviders(t *testing.T) {
 		// A group with no fetched coverage (or too fragmented to target)
 		// gets a disabled marker, not a button that always errors.
 		"watermark reset unavailable",
+		// The history re-walk is a SEPARATE button with its own number, because
+		// it is two orders of magnitude larger. Bundling them behind one click
+		// would hide which one the operator is buying.
+		`value="history"`, "Reopens the backfill over 793770354 article",
+		"history re-walk unavailable",
 		// tabbed layout on its own admin page (SlotAdminPage), forms post to /admin/p/usenet
 		`class="nav tabs"`, `data-bs-toggle="tab"`, `id="providers"`, `id="newsgroups"`,
 		"/admin/p/usenet/provider", "/admin/p/usenet/group-tune",

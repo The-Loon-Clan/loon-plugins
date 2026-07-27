@@ -414,9 +414,26 @@ func (p *Plugin) actionResetWatermark(gc *gin.Context) (template.HTML, error) {
 		return settingsRedirect(gc, "err", "no enabled provider — cannot tell which backbone's state to reset")
 	}
 
-	res, err := p.st.resetWatermark(ctx, backbone, name)
+	// Two independent scopes: the plugin-era span (cheap, repairs a parser bug)
+	// and the history below it (expensive, repairs a blind spot inherited from
+	// a previous crawler). Anything unrecognised is the cheap one.
+	scope := resetForward
+	if gc.PostForm("scope") == string(resetHistory) {
+		scope = resetHistory
+	}
+
+	res, err := p.st.resetWatermark(ctx, backbone, name, scope)
 	if err != nil {
 		return settingsRedirect(gc, "err", err.Error())
+	}
+	if res.Scope == resetHistory {
+		p.crawlJob.Log("%s: backfill reopened down to %d (%s article(s) of gaps to re-walk)",
+			res.Group, res.NewMark, fmtComma(res.Articles))
+		return settingsRedirect(gc, "msg", fmt.Sprintf(
+			"%s: backfill reopened — %s article(s) of gaps below article %d will be re-walked, "+
+				"bounded per pass so the forward crawl keeps running. Already-stored releases "+
+				"dedup on content hash, so nothing duplicates.",
+			res.Group, fmtComma(res.Articles), res.OldMark))
 	}
 	p.crawlJob.Log("%s: watermark reset %d -> %d (%s article(s) queued for re-read)",
 		res.Group, res.OldMark, res.NewMark, fmtComma(res.Articles))

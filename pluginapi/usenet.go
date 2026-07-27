@@ -52,6 +52,13 @@ type GroupInfo struct {
 	// rather than saying "everything already fetched" and letting the operator
 	// guess which of the two it means. 0 = a reset is not available.
 	ResetArticles int64
+	// ResetHistoryArticles is what reopening the BACKFILL would queue: the
+	// articles between server_low and the forward mark that no recorded range
+	// covers. On an adopted install this is the span a previous crawler
+	// claimed and may not have fully indexed, and it dwarfs the other number —
+	// 793M against 10M on prod's busiest group — which is exactly why the two
+	// are separate buttons with separate confirmations. 0 = unavailable.
+	ResetHistoryArticles int64
 }
 
 // GroupStat is the crawl status of one active group.

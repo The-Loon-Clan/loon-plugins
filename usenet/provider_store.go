@@ -233,13 +233,30 @@ func (s *PGStore) saveServer(ctx context.Context, srv pluginapi.Server) error {
 	})
 }
 
-// watermarkReset describes a completed forward-watermark rewind.
+// resetScope selects which half of a group's crawl state to rewind. They are
+// independent because they repair different failures and cost different orders
+// of magnitude, and an operator should be able to buy one without the other.
+type resetScope string
+
+const (
+	// resetForward re-reads the span THIS crawler fetched. Repairs a parser
+	// bug in the plugin era. Cheap: ~10M articles on prod's busiest group.
+	resetForward resetScope = "forward"
+	// resetHistory reopens the backfill so it re-walks everything below the
+	// forward mark that is not already recorded as fetched. Repairs a blind
+	// spot inherited from a previous crawler. Expensive: ~793M articles on the
+	// same group, though bounded per pass so it trickles rather than blocks.
+	resetHistory resetScope = "history"
+)
+
+// watermarkReset describes a completed rewind.
 type watermarkReset struct {
 	Group    string
+	Scope    resetScope
 	OldMark  int64
 	NewMark  int64
 	Frags    int
-	Articles int64
+	Articles int64 // articles the crawler will re-read as a result
 }
 
 // resetWatermark rewinds a group's FORWARD watermark to the start of the span
@@ -251,29 +268,41 @@ type watermarkReset struct {
 // a release already stored collides and is skipped; only genuinely new
 // assemblies are written.
 //
-// backfill_done is deliberately untouched — this moves the forward mark only,
-// so the backfill job does not wake up and start walking backwards through
-// years of history.
+// resetForward leaves backfill_done alone: it moves the forward mark only, so
+// the backfill does not wake up and start walking through years of history
+// nobody asked for. resetHistory is the deliberate opposite.
 //
 // The target is max(range_start), NOT min. Adoption seeds a coverage range from
 // the legacy crawler's watermarks (migration 020/021), and on a real group that
 // inherited span is enormous — 793M articles on prod's busiest — but it was
 // indexed by the OLD crawler and never touched by this one. Rewinding into it
 // would re-read hundreds of millions of articles to no purpose.
-func (s *PGStore) resetWatermark(ctx context.Context, backbone, group string) (watermarkReset, error) {
+func (s *PGStore) resetWatermark(ctx context.Context, backbone, group string, scope resetScope) (watermarkReset, error) {
 	var out watermarkReset
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		var cur struct {
 			HighWatermark int64         `db:"high_watermark"`
+			ServerLow     int64         `db:"server_low"`
 			Target        sql.NullInt64 `db:"target"`
 			Frags         int           `db:"frags"`
+			GapBelow      int64         `db:"gap_below"`
 		}
 		err := tx.GetContext(ctx, &cur, `
-			SELECT s.high_watermark,
+			SELECT s.high_watermark, s.server_low,
 			       (SELECT max(range_start) FROM newsgroup_ranges r
 			         WHERE r.backbone = s.backbone AND r.group_name = s.group_name) AS target,
 			       (SELECT count(*) FROM newsgroup_ranges r
-			         WHERE r.backbone = s.backbone AND r.group_name = s.group_name) AS frags
+			         WHERE r.backbone = s.backbone AND r.group_name = s.group_name) AS frags,
+			       -- Articles inside [server_low, high_watermark] that no
+			       -- recorded range covers: exactly what reopening the backfill
+			       -- would queue, since it plans from the gaps in this table.
+			       GREATEST(s.high_watermark - s.server_low, 0)
+			         - COALESCE((SELECT sum(LEAST(r.range_end, s.high_watermark)
+			                              - GREATEST(r.range_start, s.server_low) + 1)
+			                       FROM newsgroup_ranges r
+			                      WHERE r.backbone = s.backbone AND r.group_name = s.group_name
+			                        AND r.range_end >= s.server_low
+			                        AND r.range_start <= s.high_watermark), 0) AS gap_below
 			  FROM newsgroup_state s
 			 WHERE s.backbone = $1 AND s.group_name = $2`, backbone, group)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -282,6 +311,32 @@ func (s *PGStore) resetWatermark(ctx context.Context, backbone, group string) (w
 		if err != nil {
 			return err
 		}
+
+		if scope == resetHistory {
+			if cur.GapBelow <= 0 {
+				return fmt.Errorf(
+					"%s: every article between %d and %d is already recorded as fetched — "+
+						"reopening the backfill would find no gaps and immediately mark itself done",
+					group, cur.ServerLow, cur.HighWatermark)
+			}
+			// back_watermark is the point the backfill walks DOWN from. Setting
+			// it to the forward mark reopens the whole window; the spans this
+			// crawler already fetched stay in newsgroup_ranges, so the backfill
+			// skips them and only the genuine gaps are queued.
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE newsgroup_state
+				   SET back_watermark = high_watermark, back_watermark_date = NULL,
+				       backfill_done  = FALSE
+				 WHERE backbone = $1 AND group_name = $2`, backbone, group); err != nil {
+				return err
+			}
+			out = watermarkReset{
+				Group: group, Scope: scope, OldMark: cur.HighWatermark,
+				NewMark: cur.ServerLow, Frags: cur.Frags, Articles: cur.GapBelow,
+			}
+			return nil
+		}
+
 		if !cur.Target.Valid {
 			return fmt.Errorf("%s has no recorded coverage — nothing to rewind to", group)
 		}
@@ -303,7 +358,7 @@ func (s *PGStore) resetWatermark(ctx context.Context, backbone, group string) (w
 			return err
 		}
 		out = watermarkReset{
-			Group: group, OldMark: cur.HighWatermark, NewMark: cur.Target.Int64,
+			Group: group, Scope: scope, OldMark: cur.HighWatermark, NewMark: cur.Target.Int64,
 			Frags: cur.Frags, Articles: cur.HighWatermark - cur.Target.Int64,
 		}
 		return nil
