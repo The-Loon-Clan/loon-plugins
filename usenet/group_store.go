@@ -79,6 +79,7 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 		Retention sql.NullInt64 `db:"retention_days"`
 		Throttle  int           `db:"throttle_ms"`
 		TierRaw   string        `db:"tier"`
+		Reset     sql.NullInt64 `db:"reset_articles"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
@@ -86,7 +87,18 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 		// then normal before low-priority, then manual order.
 		return tx.SelectContext(ctx, &rows,
 			`SELECT g.name, g.active, COUNT(n.id) AS nzbs,
-			        g.retention_days, g.throttle_ms, g.tier
+			        g.retention_days, g.throttle_ms, g.tier,
+			        -- What a watermark reset would cost, so the confirm prompt
+			        -- can state it. NULL (rendered 0) when a reset is not
+			        -- available: no coverage recorded, or the highest fetched
+			        -- range starts at or beyond the mark, which is the
+			        -- fragmented-backfill case resetWatermark refuses.
+			        (SELECT max(st.high_watermark) - max(r.range_start)
+			           FROM newsgroup_state st
+			           JOIN newsgroup_ranges r
+			             ON r.backbone = st.backbone AND r.group_name = st.group_name
+			          WHERE st.group_name = g.name
+			         HAVING max(r.range_start) < max(st.high_watermark)) AS reset_articles
 			 FROM newsgroups g LEFT JOIN nzbs n ON n.group_name = g.name
 			 WHERE ($1 = '' OR g.name ILIKE '%' || $1 || '%')
 			 GROUP BY g.name, g.active, g.retention_days, g.throttle_ms, g.tier, g.sort_order
@@ -100,7 +112,7 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 		out[i] = pluginapi.GroupInfo{
 			Name: r.Name, Active: r.Active, NZBs: r.NZBs,
 			RetentionDays: int(r.Retention.Int64), ThrottleMs: r.Throttle,
-			Tier: string(normalizeTier(r.TierRaw)),
+			Tier: string(normalizeTier(r.TierRaw)), ResetArticles: r.Reset.Int64,
 		}
 	}
 	return out, nil

@@ -38,7 +38,7 @@ func TestSettingsRendersProviders(t *testing.T) {
 		"SkipBackfill": false,
 		"Groups": []pluginapi.GroupInfo{
 			{Name: "alt.binaries.anime", Active: true, NZBs: 4211, RetentionDays: 0, ThrottleMs: 0},
-			{Name: "alt.binaries.hdtv", Active: true, NZBs: 900, RetentionDays: 30, ThrottleMs: 250, Tier: "low"},
+			{Name: "alt.binaries.hdtv", Active: true, NZBs: 900, RetentionDays: 30, ThrottleMs: 250, Tier: "low", ResetArticles: 10076933},
 			{Name: "alt.binaries.misc", Active: false},
 		},
 		"GroupQuery": "", "Tiers": AllTiers,
@@ -70,6 +70,13 @@ func TestSettingsRendersProviders(t *testing.T) {
 		// it fills. Without the field the handler always rejects, and the
 		// button would look functional while doing nothing.
 		"group-reset", `name="confirm"`, "Type the group name to confirm",
+		// The prompt must state the ACTUAL article count. "everything already
+		// fetched" reads as "the whole newsgroup", which is 80x larger on an
+		// adopted install and is exactly the misreading that prompted this.
+		"Re-reads 10076933 article", "not the whole newsgroup",
+		// A group with no fetched coverage (or too fragmented to target)
+		// gets a disabled marker, not a button that always errors.
+		"watermark reset unavailable",
 		// tabbed layout on its own admin page (SlotAdminPage), forms post to /admin/p/usenet
 		`class="nav tabs"`, `data-bs-toggle="tab"`, `id="providers"`, `id="newsgroups"`,
 		"/admin/p/usenet/provider", "/admin/p/usenet/group-tune",

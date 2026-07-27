@@ -45,6 +45,13 @@ type GroupInfo struct {
 	// typed enum because this is the cross-package contract and the
 	// authority is the plugin's own Tier type; empty reads as normal.
 	Tier string
+	// ResetArticles is how many articles a watermark reset would re-read for
+	// this group: the span THIS crawler fetched, not the whole newsgroup. The
+	// two differ by orders of magnitude on an adopted install — 10M against
+	// 803M on prod's busiest group — so the confirm prompt states the number
+	// rather than saying "everything already fetched" and letting the operator
+	// guess which of the two it means. 0 = a reset is not available.
+	ResetArticles int64
 }
 
 // GroupStat is the crawl status of one active group.

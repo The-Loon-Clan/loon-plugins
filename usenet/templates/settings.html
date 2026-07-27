@@ -273,17 +273,26 @@
                              everything the crawler has fetched for the group, which
                              is millions of articles against a metered provider. The
                              prompt is UX only — the handler re-checks the typed name. */}}
+                        {{if .ResetArticles}}
                         <form method="post" action="/admin/p/usenet/group-reset" style="display:inline"
                               onsubmit="var v=prompt('Reset watermarks for {{.Name}}?
 
-The crawler will RE-READ every article it has already fetched for this group. Already-stored releases dedup on content hash, so nothing duplicates — but it costs provider bandwidth.
+Re-reads {{.ResetArticles}} article(s) — the span THIS crawler fetched, not the whole newsgroup. History indexed before the crawler took over is not touched.
+
+Already-stored releases dedup on content hash, so nothing duplicates; the cost is provider bandwidth.
 
 Type the group name to confirm:'); if(v===null){return false;} this.confirm.value=v; return true;">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="confirm" value="">
                             <button class="btn btn-sm py-0 btn-outline-danger" type="submit"
-                                    title="re-read everything already fetched for this group (after a parser fix)">&#8635;</button>
+                                    title="re-read the {{.ResetArticles}} article(s) this crawler already fetched (after a parser fix)">&#8635;</button>
                         </form>
+                        {{else}}
+                        {{/* No coverage recorded, or the fragmented-backfill case
+                             resetWatermark refuses. Showing a button that always
+                             errors is worse than showing none. */}}
+                        <span class="text-muted" style="opacity:.35" title="watermark reset unavailable: no fetched coverage recorded, or this group's coverage is too fragmented to pick a target automatically">&#8635;</span>
+                        {{end}}
                     </td>
                     <td style="white-space:nowrap">
                         <input form="tune-{{.Name}}" type="hidden" name="name" value="{{.Name}}">
