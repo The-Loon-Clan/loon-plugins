@@ -29,6 +29,7 @@ func (p *Plugin) knobs(ctx context.Context) []knob {
 	cfg := p.effective(ctx)
 	return []knob{
 		{"connections", "NNTP connections", cfg.Connections, "size of the shared connection pool — how many overview batches are fetched in parallel; keep at or below your provider's per-account limit"},
+		{"keepalive_min", "Connection keepalive (min)", cfg.KeepaliveMin, "how often to probe idle pool connections with a DATE so the provider does not reap them between passes; 0 disables. Set it below your provider's idle timeout"},
 		{"retention_days", "Crawl depth (days)", cfg.RetentionDays, "how far back to fetch and backfill; raise it to pull more history. This does NOT delete anything"},
 		{"nzb_retention_days", "Delete releases older than (days)", cfg.NZBRetentionDays, "0 = keep forever (default). Any other value DELETES assembled releases past that age on the nightly prune — set it only if you actually want a rolling window"},
 		{"crawl_interval_min", "Crawl interval (min)", cfg.CrawlIntervalMin, "how often to crawl + build (applies next cycle)"},

@@ -51,6 +51,17 @@ type Config struct {
 	// whatever it can open, so overshooting is safe but pointless.
 	Connections int `json:"connections"` // default 10
 
+	// KeepaliveMin is how often idle pool connections are probed, in minutes.
+	// 0 disables keepalive.
+	//
+	// Providers reap idle connections, and a crawl pass leaves most of the pool
+	// untouched between runs — so without probing, the steady state is a pool
+	// full of connections the server already closed, discovered only when the
+	// next pass leases one. Not a hardcoded constant because the right value is
+	// the provider's idle timeout, which differs per provider and is rarely
+	// documented.
+	KeepaliveMin int `json:"keepalive_min"` // default 2
+
 	SkipBackfill          bool `json:"skip_backfill"`            // "new articles only" — disable the backfill job
 	CrawlNoCatchup        bool `json:"crawl_no_catchup"`         // disable the catch-up loop (default off = catch-up ON)
 	BackfillBatchesPerRun int  `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 25)
@@ -147,6 +158,15 @@ func (c *Config) applyDefaults() {
 	if c.Connections <= 0 {
 		c.Connections = 10
 	}
+	// Unset means "use the default"; an explicit 0 means "off" and is carried
+	// through withOverrides' zero allowlist below. Negative is nonsense, and a
+	// negative ticker interval panics, so clamp it to off.
+	if c.KeepaliveMin == 0 {
+		c.KeepaliveMin = 2
+	}
+	if c.KeepaliveMin < 0 {
+		c.KeepaliveMin = 0
+	}
 	if c.Staging == "" {
 		c.Staging = StagingPG
 	}
@@ -203,6 +223,7 @@ func (c *Config) applyDefaults() {
 func (c *Config) knobFields() map[string]*int {
 	return map[string]*int{
 		"connections":                &c.Connections,
+		"keepalive_min":              &c.KeepaliveMin,
 		"retention_days":             &c.RetentionDays,
 		"nzb_retention_days":         &c.NZBRetentionDays,
 		"crawl_interval_min":         &c.CrawlIntervalMin,
@@ -250,10 +271,11 @@ func (c Config) withOverrides(s map[string]string) Config {
 			if n, err := strconv.Atoi(raw); err == nil {
 				// A stored 0 is IGNORED (keep the built-in default) for most
 				// knobs, but is MEANINGFUL for a few where 0 is a real setting:
-				// nzb_retention_days (0 = "keep forever", promised in the UI)
-				// and max_groups (0 = "crawl every active group, no cap"). For
-				// those a stored 0 must override a non-zero config.yml default.
-				if n > 0 || (n == 0 && (key == "nzb_retention_days" || key == "max_groups")) {
+				// nzb_retention_days (0 = "keep forever", promised in the UI),
+				// max_groups (0 = "crawl every active group, no cap") and
+				// keepalive_min (0 = "no idle probing"). For those a stored 0
+				// must override a non-zero config.yml default.
+				if n > 0 || (n == 0 && (key == "nzb_retention_days" || key == "max_groups" || key == "keepalive_min")) {
 					*dst = n
 				}
 			}

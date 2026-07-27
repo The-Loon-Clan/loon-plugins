@@ -104,8 +104,11 @@ func (pr provider) effectiveConns(def, workers int) int {
 // rebuilt rather than silently kept against stale settings. `size` is the
 // resolved per-worker connection budget for this pass — it moves when the fleet
 // size changes at a term boundary, so the pool is rebuilt to the new budget.
-func (pr provider) poolKey(size int) string {
-	return fmt.Sprintf("%d|%s|%s|%t|%d", pr.ID, pr.addr(), pr.Username, pr.TLS, size)
+func (pr provider) poolKey(size int, keepalive time.Duration) string {
+	// keepalive is part of the identity: it is baked into the pool at
+	// construction, so without it here, changing the knob would leave the old
+	// pool running until some unrelated setting forced a reopen.
+	return fmt.Sprintf("%d|%s|%s|%t|%d|%s", pr.ID, pr.addr(), pr.Username, pr.TLS, size, keepalive)
 }
 
 // chooseProviders decides who crawls this pass: every healthy active provider,
@@ -251,8 +254,8 @@ func (f *providerFleet) bench(pr provider, now time.Time) {
 }
 
 // get returns an open pool for the provider, dialling or rebuilding as needed.
-func (f *providerFleet) get(ctx context.Context, pr provider, size int) (*nntp.Pool, error) {
-	key := pr.poolKey(size)
+func (f *providerFleet) get(ctx context.Context, pr provider, size int, keepalive time.Duration) (*nntp.Pool, error) {
+	key := pr.poolKey(size, keepalive)
 
 	f.mu.Lock()
 	pp := f.pools[pr.ID]
@@ -275,6 +278,11 @@ func (f *providerFleet) get(ctx context.Context, pr provider, size int) (*nntp.P
 		Size:        size,
 		DialTimeout: 30 * time.Second,
 		OpTimeout:   60 * time.Second,
+		// Probe at the configured interval, and treat a connection as idle
+		// once it has gone one full interval unused — so a pool doing real
+		// work generates no probes at all.
+		KeepaliveInterval: keepalive,
+		KeepaliveIdle:     keepalive,
 	})
 	if err := pool.Open(ctx); err != nil {
 		return nil, err
@@ -358,11 +366,12 @@ func (p *Plugin) activeFleet(ctx context.Context, cfg Config) ([]providerRun, er
 	// the same term-stable membership that splits the groups (assign.go). A lone
 	// worker owns the whole cap.
 	workers := p.liveWorkerCount(ctx, cfg)
+	keepalive := time.Duration(cfg.KeepaliveMin) * time.Minute
 
 	var runs []providerRun
 	for _, pr := range chosen {
 		size := pr.effectiveConns(cfg.Connections, workers)
-		pool, err := p.fleet.get(ctx, pr, size)
+		pool, err := p.fleet.get(ctx, pr, size, keepalive)
 		if err != nil {
 			p.fleet.bench(pr, now)
 			p.core.Errors.Report(ctx, "usenet/provider-open",

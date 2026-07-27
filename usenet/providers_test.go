@@ -165,7 +165,7 @@ func TestEffectiveConns(t *testing.T) {
 // so a settings edit rebuilds the pool instead of silently reusing a stale one.
 func TestProviderPoolKey(t *testing.T) {
 	base := provider{ID: 1, Host: "news.example.com", Port: 563, TLS: true, Username: "u", Connections: 10}
-	k := base.poolKey(20)
+	k := base.poolKey(20, 2*time.Minute)
 
 	for _, mut := range []struct {
 		name string
@@ -177,16 +177,25 @@ func TestProviderPoolKey(t *testing.T) {
 		{"user", func() provider { c := base; c.Username = "v"; return c }()},
 		{"id", func() provider { c := base; c.ID = 2; return c }()},
 	} {
-		if mut.p.poolKey(20) == k {
+		if mut.p.poolKey(20, 2*time.Minute) == k {
 			t.Errorf("changing %s did not change the pool key", mut.name)
 		}
 	}
 	// The resolved size is part of the key: when the fleet grows and each
 	// worker's budget shrinks at a term boundary, the pool must rebuild.
-	if base.poolKey(21) == k {
+	if base.poolKey(21, 2*time.Minute) == k {
 		t.Error("a different resolved size must change the pool key")
 	}
-	if base.poolKey(20) != k {
+	// Keepalive is baked into the pool at construction, so changing the knob
+	// must rebuild it — otherwise the setting appears to save and does nothing
+	// until some unrelated edit forces a reopen.
+	if base.poolKey(20, 5*time.Minute) == k {
+		t.Error("a different keepalive interval must change the pool key")
+	}
+	if base.poolKey(20, 0) == k {
+		t.Error("disabling keepalive must change the pool key")
+	}
+	if base.poolKey(20, 2*time.Minute) != k {
 		t.Error("pool key is not stable for identical settings")
 	}
 }
