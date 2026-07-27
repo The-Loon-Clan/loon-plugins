@@ -19,9 +19,33 @@ var (
 	reYencSize = regexp.MustCompile(`(?i)\byenc\b\s+\d+`)
 	// A par2 recovery-volume suffix, once the .par2 extension is already off.
 	reVolSuffix = regexp.MustCompile(`(?i)\.vol\d+\+\d+$`)
-	reExt       = regexp.MustCompile(`(?i)\.(mkv|mp4|avi|mov|ts|nfo|sfv|par2|rar|r\d{2,3}|nzb|zip|7z|mp3|flac|iso|img|srt|ass|jpg|png)\b`)
-	reWS        = regexp.MustCompile(`\s+`)
-	reQuoted    = regexp.MustCompile(`"([^"]+)"`) // "filename.ext" inside a subject
+	// Split-archive suffixes: ".part07.rar", ".7z.001". Each volume of a split
+	// archive is one file of ONE release, so the suffix must come off or every
+	// volume derives its own base, the set never satisfies completeness, and it
+	// expires from staging unlogged.
+	//
+	// The archive extension is REQUIRED, and that is the whole safety argument.
+	// Measured against 430k production titles, the bare forms are not
+	// survivable: a bare ".partNN" folds 1,166 titles onto unrelated existing
+	// ones, and of the 197 titles ending ".NNN", 120 end in "H.264" — a bare
+	// numeric rule applied to a finished title truncates every one to "...H".
+	//
+	// (The H.264 case would not bite at THIS point in the pipeline, since this
+	// runs before reExt and the codec is not yet at end-of-string. It is
+	// recorded because it is the reason never to move a bare numeric strip
+	// later, where it would.)
+	//
+	// No codec suffix is ever followed by ".rar" or ".7z", so anchoring on the
+	// extension keeps the rule to real split archives.
+	//
+	// Unanchored on purpose: one poster writes
+	// "Voltage Fighter … .part008.rar Choujin Gakuen Gowkaiser (1/40)", with the
+	// release name continuing AFTER the archive name. The extension requirement
+	// is what makes that safe to match mid-string.
+	reArchivePart = regexp.MustCompile(`(?i)\.part\d{1,3}\.(rar|7z|zip)\b|\.(7z|rar|zip|tar)\.\d{1,3}\b`)
+	reExt         = regexp.MustCompile(`(?i)\.(mkv|mp4|avi|mov|ts|nfo|sfv|par2|par3|rar|r\d{2,3}|nzb|zip|7z|mp3|flac|iso|img|srt|ass|jpg|png)\b`)
+	reWS          = regexp.MustCompile(`\s+`)
+	reQuoted      = regexp.MustCompile(`"([^"]+)"`) // "filename.ext" inside a subject
 )
 
 // fileNameFromSubject pulls a display filename from an article subject: the
@@ -131,7 +155,8 @@ func parseSubject(subject string) (base string, partNum, totalParts, segTotal, f
 func stripAllMarkers(s string) string {
 	s = reFileOf.ReplaceAllString(s, " ")
 	s = rePartOf.ReplaceAllString(s, " ")
-	s = reYencSize.ReplaceAllString(s, " ") // before reYenc — it needs the keyword
+	s = reArchivePart.ReplaceAllString(s, " ") // before reExt eats the .rar/.7z anchor
+	s = reYencSize.ReplaceAllString(s, " ")    // before reYenc — it needs the keyword
 	s = reYenc.ReplaceAllString(s, " ")
 	s = strings.ReplaceAll(s, `"`, " ")
 	s = reExt.ReplaceAllString(s, "")
