@@ -185,3 +185,32 @@ func articlesContainComicArchive(arts []stagedArticle) bool {
 	}
 	return false
 }
+
+// reRecoveryFile matches a PAR recovery file by its name: a volume
+// (".vol000+001") or a plain index (".par2" / ".par3").
+var reRecoveryFile = regexp.MustCompile(`(?i)\.vol\d+\+\d+\b|\.par[23]\b`)
+
+// allRecoveryVolumes reports whether EVERY article in the set is a PAR
+// recovery file — a post carrying repair data and no payload.
+//
+// This replaces what the par2_volume junk rule used to do by name. That rule
+// fired on a base subject ending ".volNNN+NNN", which worked only while the
+// suffix survived into the base; now that it is stripped so recovery volumes
+// group with the release they protect, the name no longer says. The set does:
+// a release has media files alongside its par2s, an orphan post does not.
+//
+// Answering it here is also strictly better than answering it by name. The old
+// rule could not tell an orphan from a recovery volume whose media sat in the
+// same set, so it dropped both — which is exactly how a 1.4 GB release lost
+// its par2 files and then failed to complete.
+func allRecoveryVolumes(arts []stagedArticle) bool {
+	if len(arts) == 0 {
+		return false
+	}
+	for _, a := range arts {
+		if !reRecoveryFile.MatchString(a.Subject) {
+			return false
+		}
+	}
+	return true
+}

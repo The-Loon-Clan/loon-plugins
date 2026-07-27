@@ -84,24 +84,62 @@ func TestBaseSubjectGroupsWholeRelease(t *testing.T) {
 	}
 }
 
-// The volume-suffix strip is scoped to the [i/j]-at-start branch. An ORPHAN
-// par2 post has no file counter, keeps its .volNNN+NNN, and must still be
-// caught by the par2_volume junk rule — otherwise stripping the suffix here
-// would quietly disarm that rule and payload-free posts would index as
-// releases.
-func TestOrphanPar2StillJunked(t *testing.T) {
-	for _, s := range []string{
-		`sigma-sun.vol024+02`,
-		`red-omega.vol031+14.par2`,
-		`some.release.name.vol000+001.par2 yEnc (1/2)`,
-	} {
-		base, _, _, _, _, _, fp := parseSubject(s)
-		if fp {
-			t.Fatalf("%q parsed as multi-file; the orphan case needs no [i/j]", s)
-		}
-		if rule := whichJunkRule(base); rule != "par2_volume" {
-			t.Errorf("orphan par2 %q -> base %q, junk rule %q, want par2_volume", s, base, rule)
-		}
+// The volume suffix is now stripped universally, so an orphan par2 post no
+// longer looks like one by NAME. The payload-free check moved to the assembled
+// set, where the question is actually answerable: a release has media files
+// alongside its par2s, an orphan post does not.
+//
+// Sizes here are deliberately LARGE. An orphan par2 set is usually small enough
+// that under_1mib/under_5mib would catch it anyway, and a test that passes for
+// that reason would not be testing allRecoveryVolumes at all.
+func TestPayloadFreeRecoverySetIsJunked(t *testing.T) {
+	recovery := []string{
+		`sigma-sun.vol024+02.par2 yEnc (1/5)`,
+		`sigma-sun.vol026+04.par2 yEnc (1/9)`,
+		`sigma-sun.vol030+08.par2 yEnc (1/17)`,
+	}
+	var arts []stagedArticle
+	for _, s := range recovery {
+		base, pn, tp, seg, fn, tf, fp := parseSubject(s)
+		arts = append(arts, stagedArticle{
+			BaseSubject: base, Subject: s, Bytes: 400 << 20, // 400 MB/file: far past every size rule
+			PartNum: pn, TotalParts: tp, SegTotal: seg, FileNum: fn, TotalFiles: tf, FileParts: fp,
+		})
+	}
+	base, _, _, _, _, _, _ := parseSubject(recovery[0])
+	_, _, rule, _ := classifyRelease(base, arts)
+	if rule != "par2_volume" {
+		t.Errorf("all-recovery set: rule = %q, want par2_volume (size cannot be what catches this)", rule)
+	}
+
+	// The case the old by-name rule got wrong: par2 volumes belonging to a real
+	// release. They must group with the media AND the set must survive.
+	full := []string{
+		`[1/4] - "Some Anime - 01 [1080p].mkv" yEnc  524288000 (1/700)`,
+		`[2/4] - "Some Anime - 01 [1080p].vol000+001.par2" yEnc  1053788 (1/2)`,
+		`[3/4] - "Some Anime - 01 [1080p].vol001+002.par2" yEnc  2102432 (1/3)`,
+		`[4/4] - "Some Anime - 01 [1080p].vol003+004.par2" yEnc  4204744 (1/6)`,
+	}
+	arts = nil
+	seen := map[string]bool{}
+	for _, s := range full {
+		b, pn, tp, seg, fn, tf, fp := parseSubject(s)
+		seen[b] = true
+		arts = append(arts, stagedArticle{
+			BaseSubject: b, Subject: s, Bytes: 200 << 20,
+			PartNum: pn, TotalParts: tp, SegTotal: seg, FileNum: fn, TotalFiles: tf, FileParts: fp,
+		})
+	}
+	if len(seen) != 1 {
+		t.Errorf("release split across %d bases, want 1", len(seen))
+	}
+	base, _, _, _, _, _, _ = parseSubject(full[0])
+	title, _, rule, _ := classifyRelease(base, arts)
+	if rule != "" {
+		t.Errorf("release WITH media junked as %q — this is the 1.4 GB failure", rule)
+	}
+	if title != "Some Anime - 01 [1080p]" {
+		t.Errorf("title = %q", title)
 	}
 }
 
@@ -148,6 +186,18 @@ func TestSplitArchiveVolumesShareOneBase(t *testing.T) {
 				`OSHI NO KO S03_E01-E11 - Dup By Gsinnicus 1080p AV1.part01.rar (1/421)`,
 				`OSHI NO KO S03_E01-E11 - Dup By Gsinnicus 1080p AV1.part02.rar (1/421)`,
 				`OSHI NO KO S03_E01-E11 - Dup By Gsinnicus 1080p AV1.part13.rar (1/421)`,
+			},
+		},
+		{
+			// A raw split of a .mp4 — the numeric suffix follows a MEDIA
+			// extension, not an archive one. Also the "bytes" spelling of the
+			// yEnc size, which otherwise lands in the title.
+			name:     "mp4 numeric split, yEnc size written with 'bytes'",
+			wantBase: "Tegami Bachi Reverse 03 Hd ,720p| ~bY AnT - [AnT]Tegami_Bachi_REVERSE_03_HD",
+			subjects: []string{
+				`Tegami Bachi Reverse 03 Hd ,720p|.mp4 ~bY AnT - "[AnT]Tegami_Bachi_REVERSE_03_HD.mp4.001" yEnc  24960000 bytes (1/100)`,
+				`Tegami Bachi Reverse 03 Hd ,720p|.mp4 ~bY AnT - "[AnT]Tegami_Bachi_REVERSE_03_HD.mp4.002" yEnc  24960000 bytes (1/100)`,
+				`Tegami Bachi Reverse 03 Hd ,720p|.mp4 ~bY AnT - "[AnT]Tegami_Bachi_REVERSE_03_HD.mp4.003" yEnc  24960000 bytes (1/100)`,
 			},
 		},
 		{
@@ -213,5 +263,33 @@ func TestCodecSuffixSurvives(t *testing.T) {
 	base, _, _, _, _, _, _ := parseSubject(`Some Release Name.part02 (1/9) yEnc`)
 	if base != "Some Release Name.part02" {
 		t.Errorf("base = %q, want the bare .part02 kept", base)
+	}
+}
+
+// template_token targets placeholders a poster's tooling failed to substitute
+// ({total}, {{count}}). Braces also appear in real release names as operator
+// tags — {REDO}, {DVD}, {RAW} — and the case-insensitive single-brace form was
+// dropping a genuine 4xDVD9 Gundam post. Placeholders are lowercase
+// identifiers; tags are upper. The {{...}} form needs no such care.
+func TestTemplateTokenSparesUppercaseTags(t *testing.T) {
+	junk := []string{
+		`Some Release {total} something`,
+		`Another Release {{count}} here`,
+		`x {part_num} y`,
+	}
+	for _, s := range junk {
+		if rule := whichJunkRule(s); rule != "template_token" {
+			t.Errorf("%q -> %q, want template_token", s, rule)
+		}
+	}
+	keep := []string{
+		`Mobile Suit Gundam 0079 TV Anime Legends Collection 1 (1979) R1 NTSC 4xDVD9 - Disc 4 {REDO}`,
+		`Some Anime - 01 {DVD}`,
+		`Another Show {RAW} 1080p`,
+	}
+	for _, s := range keep {
+		if rule := whichJunkRule(s); rule == "template_token" {
+			t.Errorf("%q dropped as template_token — that is an operator tag, not a placeholder", s)
+		}
 	}
 }

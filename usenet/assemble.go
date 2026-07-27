@@ -591,6 +591,15 @@ func classifyRelease(base string, arts []stagedArticle) (title, cat, junkRule st
 	}
 	cat = parseCategoryTag(title)
 	if cat == "" {
+		// Payload-free: every file in the set is PAR recovery data. Checked
+		// here rather than by name, because the name no longer says — the
+		// volume suffix is stripped so recovery files group with the release
+		// they protect, and only the assembled set knows whether a release is
+		// actually there. Reported under the historical rule name so existing
+		// filter_hits attribution and the operator's mental model both hold.
+		if allRecoveryVolumes(arts) {
+			return title, "", "par2_volume", false
+		}
 		if junkRule = whichJunkRuleSized(title, totalBytes(arts)); junkRule != "" {
 			return title, "", junkRule, false
 		}
