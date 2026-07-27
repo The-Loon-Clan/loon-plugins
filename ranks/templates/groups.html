@@ -1,0 +1,163 @@
+{{/*
+  The groups catalog, rendered by the plugin as an admin-page fragment (loon
+  SlotAdminPage → /admin/p/groups). The host supplies the layout, nav and
+  theme; everything below is the plugin's own markup, which is what let the
+  host's admin_ranks.html retire along with this plugin's web/handlers import.
+*/}}
+
+{{if .Error}}<div class="alert alert-danger py-2">{{.Error}}</div>{{end}}
+{{if .Ok}}<div class="alert alert-success py-2">Saved.</div>{{end}}
+
+<p class="text-muted" style="font-size:0.85rem;">
+  A group confers <strong>entitlements</strong> (what a member may do) and, when
+  visible, a <strong>badge</strong>. Paid groups are sold as store items — the
+  price lives in the store catalog; the cost here is what the tier historically
+  sold for.
+</p>
+
+<div class="card mb-4">
+  <div class="card-header">Add group</div>
+  <div class="card-body">
+    <form method="POST" action="/admin/p/groups/create" class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label mb-1">Name</label>
+        <input type="text" name="name" class="form-control form-control-sm" required>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1">Kind</label>
+        <select name="kind" class="form-select form-select-sm">
+          <option value="paid">paid</option>
+          <option value="earned">earned</option>
+          <option value="assigned">assigned</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label mb-1">Badge</label>
+        <input type="text" name="color" class="form-control form-control-sm" placeholder="secondary">
+      </div>
+      <div class="col-md-1">
+        <label class="form-label mb-1">Title</label>
+        <input type="text" name="title_color" class="form-control form-control-sm" placeholder="#fff">
+      </div>
+      <div class="col-md-1">
+        <label class="form-label mb-1">DL/day</label>
+        <input type="number" name="download_limit" class="form-control form-control-sm" min="0">
+      </div>
+      <div class="col-md-1">
+        <label class="form-label mb-1">API/day</label>
+        <input type="number" name="api_limit" class="form-control form-control-sm" min="0">
+      </div>
+      <div class="col-md-1">
+        <label class="form-label mb-1">Days</label>
+        <input type="number" name="duration_days" class="form-control form-control-sm" min="1" placeholder="30">
+      </div>
+      <div class="col-md-1">
+        <label class="form-label mb-1">Sort</label>
+        <input type="number" name="sort_order" class="form-control form-control-sm">
+      </div>
+      <div class="col-md-1">
+        <button class="btn btn-sm btn-primary w-100">Add</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-sm align-middle">
+    <thead>
+      <tr>
+        <th>Group</th><th>Kind</th><th>Parent</th><th>Entitlements</th>
+        <th>Cost</th><th>Days</th><th>Sort</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Groups}}
+      <tr>
+        <td colspan="8" class="p-2">
+          <form method="POST" action="/admin/p/groups/update" class="row g-2 align-items-end">
+            <input type="hidden" name="id" value="{{.ID}}">
+            <div class="col-md-2">
+              <label class="form-label mb-1" style="font-size:0.72rem;">
+                Name
+                {{if .Visible}}<span class="badge bg-{{.Color}} ms-1">{{.Name}}</span>
+                {{else}}<span class="badge bg-dark ms-1" title="Grants entitlements, shows no badge">hidden</span>{{end}}
+              </label>
+              <input type="text" name="name" value="{{.Name}}" class="form-control form-control-sm">
+              <div class="form-text" style="font-size:0.68rem;">{{.Slug}}{{if gt .Depth 0}} · depth {{.Depth}}{{end}}</div>
+            </div>
+            <div class="col-md-1">
+              <label class="form-label mb-1" style="font-size:0.72rem;">Kind</label>
+              <select name="kind" class="form-select form-select-sm">
+                {{$k := .Kind}}
+                {{range $.Kinds}}<option value="{{.}}"{{if eq . $k}} selected{{end}}>{{.}}</option>{{end}}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label mb-1" style="font-size:0.72rem;">Parent</label>
+              <select name="parent_id" class="form-select form-select-sm">
+                <option value="">— none —</option>
+                {{$pid := .ParentIDValue}}{{$self := .ID}}
+                {{range $.Groups}}{{if ne .ID $self}}
+                <option value="{{.ID}}"{{if eq .ID $pid}} selected{{end}}>{{.Name}}</option>
+                {{end}}{{end}}
+              </select>
+            </div>
+            <div class="col-md-1">
+              <label class="form-label mb-1" style="font-size:0.72rem;">Badge</label>
+              <input type="text" name="color" value="{{.Color}}" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-1">
+              <label class="form-label mb-1" style="font-size:0.72rem;">Title</label>
+              <input type="text" name="title_color" value="{{.TitleColor}}" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-1">
+              <label class="form-label mb-1" style="font-size:0.72rem;">DL/day</label>
+              <input type="number" name="download_limit" value="{{.DownloadDaily}}" class="form-control form-control-sm" min="0">
+            </div>
+            <div class="col-md-1">
+              <label class="form-label mb-1" style="font-size:0.72rem;">API/day</label>
+              <input type="number" name="api_limit" value="{{.APIDaily}}" class="form-control form-control-sm" min="0">
+            </div>
+            <div class="col-md-1">
+              <label class="form-label mb-1" style="font-size:0.72rem;">Days</label>
+              <input type="number" name="duration_days" value="{{.DurationDays}}" class="form-control form-control-sm" min="1">
+            </div>
+            <div class="col-md-1">
+              <label class="form-label mb-1" style="font-size:0.72rem;">Sort</label>
+              <input type="number" name="sort_order" value="{{.SortOrder}}" class="form-control form-control-sm">
+            </div>
+            {{/* The cost is round-tripped hidden: the store owns the price, but
+                 dropping the field would Atoi("") to 0 and wipe what the tier
+                 historically sold for on an unrelated edit. */}}
+            <input type="hidden" name="monthly_cost" value="{{.CostPoints}}">
+            <div class="col-md-1 d-flex gap-1">
+              <button class="btn btn-sm btn-outline-primary flex-grow-1">Save</button>
+            </div>
+            <div class="col-12">
+              <div class="d-flex gap-3 align-items-center" style="font-size:0.75rem;">
+                {{if $.CanHide}}
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" name="visible" value="1" id="vis{{.ID}}"{{if .Visible}} checked{{end}}>
+                  <label class="form-check-label" for="vis{{.ID}}">Visible (shows a badge)</label>
+                </div>
+                {{else}}
+                <span class="text-muted">Visibility: <strong>{{if .Visible}}visible{{else}}hidden{{end}}</strong> — admin only</span>
+                <input type="hidden" name="visible" value="{{if .Visible}}1{{else}}0{{end}}">
+                {{end}}
+                <span class="text-muted">Members: <strong>{{.Members}}</strong></span>
+              </div>
+            </div>
+          </form>
+          <form method="POST" action="/admin/p/groups/delete" class="mt-1"
+                onsubmit="return confirm('Delete {{.Name}}? Members lose it immediately.');">
+            <input type="hidden" name="id" value="{{.ID}}">
+            <button class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="8" class="text-muted">No groups yet.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>

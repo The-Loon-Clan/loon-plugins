@@ -1,0 +1,14 @@
+-- Intentionally a no-op.
+--
+-- This migration backfilled ranks.group_member_history from the host's
+-- public.user_rank_history, because Stage 3.4 pointed the admin page's Rank
+-- History card at a table migration 001 had never seeded. That import RAN in
+-- production on 2026-07-26 and its 16 rows are live.
+--
+-- The SQL is gone rather than guarded: importing from a host's legacy schema is
+-- not a plugin's job (ADOPTION-MIGRATIONS.md), and this file is recorded in
+-- core.plugin_migrations everywhere it mattered, so removing the body changes
+-- nothing for any existing database. The filename stays so the recorded history
+-- still resolves; a fresh install applies an empty migration and gets an empty
+-- audit table, which is correct.
+SELECT 1;
