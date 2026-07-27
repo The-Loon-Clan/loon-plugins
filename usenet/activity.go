@@ -34,6 +34,7 @@ func activityFrom(tv workerTelemetry) pluginapi.CrawlActivity {
 		Backfill:     backfill,
 		UpdatedAt:    tv.UpdatedAt,
 		Started:      ps.Started,
+		Round:        ps.Round,
 		Groups:       ps.Groups,
 		GroupsDone:   ps.GroupsDone,
 		Batches:      ps.Batches,

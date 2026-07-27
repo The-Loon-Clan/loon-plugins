@@ -33,7 +33,19 @@ type crawlError struct {
 type passStats struct {
 	Started  time.Time
 	Finished time.Time
-	Groups   int
+
+	// Round is which catch-up round is running, 1-based. A pass keeps going
+	// while the servers hold a backlog, so one "pass" is routinely dozens of
+	// rounds over many hours.
+	//
+	// The four progress counters below (Groups, GroupsDone, Batches,
+	// BatchesTotal) are scoped to the CURRENT ROUND, not the pass. They used to
+	// accumulate across rounds, which made the progress bar meaningless: prod
+	// showed 542,460 / 520,000 batches, where the denominator was just
+	// 26 rounds x the per-round budget and grew for as long as the pass ran.
+	// A denominator that only ever increases is not progress toward anything.
+	Round  int
+	Groups int
 	// GroupsDone counts groups whose LAST planned batch has completed — the
 	// legacy page's "Group N / M" readout. Batches from every group interleave
 	// on the flat queue, so this advances slower than the batch counter.
@@ -42,11 +54,14 @@ type passStats struct {
 	// BatchesTotal is the planned batch count, known up front from the plan
 	// enumeration — Batches/BatchesTotal is the pass progress bar.
 	BatchesTotal int
-	Failed       int
-	Articles     int // overview lines fetched
-	Staged       int // newly staged after junk filtering and dedup
-	WireBytes    int64
-	Providers    int
+	// These four are PASS-cumulative on purpose: "this pass has fetched 1.6B
+	// articles" is the number an operator wants, and the stats widget derives
+	// its rate from deltas between polls, which needs a monotonic counter.
+	Failed    int
+	Articles  int // overview lines fetched
+	Staged    int // newly staged after junk filtering and dedup
+	WireBytes int64
+	Providers int
 	// Reading is the group a pool worker most recently started fetching — the
 	// legacy dashboard's "what is it reading right now" label.
 	Reading    string
@@ -104,7 +119,27 @@ type passTracker struct {
 func (t *passTracker) passStart(providers int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	// Round 0 until the first roundStart, so a pass that dies before its first
+	// round reads as "no round completed" rather than "round 1 did nothing".
 	t.cur = passStats{Started: time.Now(), Providers: providers, InProgress: true}
+	t.groupsLeft = nil
+	t.groupsSeen = nil
+	t.groupsDone = nil
+}
+
+// roundStart opens a catch-up round: the progress counters reset so the bar
+// measures THIS round, while the pass totals (articles, staged, wire, failed)
+// and the pass start time carry through.
+func (t *passTracker) roundStart() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.cur.Round++
+	t.cur.Groups, t.cur.GroupsDone = 0, 0
+	t.cur.Batches, t.cur.BatchesTotal = 0, 0
+	t.cur.Reading = ""
+	// The per-group bookkeeping is round-scoped too. Carrying groupsDone over
+	// meant a group finished in round 1 stayed "done" for the rest of the pass
+	// even while later rounds re-planned and re-fetched it.
 	t.groupsLeft = nil
 	t.groupsSeen = nil
 	t.groupsDone = nil

@@ -112,6 +112,10 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	prevBehind := int64(-1)
 	blockedRetries := 0
 	for {
+		// Each iteration of the catch-up loop is a ROUND: it re-plans from the
+		// current watermarks and runs a fresh batch budget, so the progress
+		// counters restart with it.
+		p.tel.crawl.roundStart()
 		staged, claimed := 0, 0
 		for _, bbRuns := range groupByBackbone(runs) {
 			if ctx.Err() != nil {

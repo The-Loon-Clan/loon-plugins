@@ -24,6 +24,7 @@ type passVM struct {
 	Any                           bool
 	Groups, Batches, Failed       int
 	GroupsDone, BatchesTotal      int
+	Round                         int // catch-up round, 1-based; 0 = none started
 	Pct                           int // completed/planned batches, 0-100
 	Reading                       string
 	Articles, Staged              int
@@ -102,7 +103,11 @@ func statsVM(st passStats) passVM {
 		Rate:     fmt.Sprintf("%.0f art/s", st.Rate()),
 		Through:  fmt.Sprintf("%.2f MB/s", st.Throughput()),
 	}
+	vm.Round = st.Round
 	if st.BatchesTotal > 0 {
+		// Clamped: a batch can complete after its round's denominator was
+		// replaced, and a progress bar wider than its track is a rendering bug
+		// on top of a counting one.
 		vm.Pct = st.Batches * 100 / st.BatchesTotal
 		if vm.Pct > 100 {
 			vm.Pct = 100

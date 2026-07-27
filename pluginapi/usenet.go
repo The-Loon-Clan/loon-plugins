@@ -215,15 +215,25 @@ type CrawlActivity struct {
 	InProgress bool `json:"in_progress"`
 	Backfill   bool `json:"backfill"` // the numbers describe a backfill pass
 	// UpdatedAt is the telemetry publish stamp — how fresh these numbers are.
-	UpdatedAt    time.Time `json:"updated_at"`
-	Started      time.Time `json:"started"`
-	Groups       int       `json:"groups"`
-	GroupsDone   int       `json:"groups_done"`
-	Batches      int       `json:"batches"`
-	BatchesTotal int       `json:"batches_total"`
-	Articles     int       `json:"articles"` // overview lines fetched this pass
-	Staged       int       `json:"staged"`   // kept after junk filtering + dedup
-	WireBytes    int64     `json:"wire_bytes"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Started   time.Time `json:"started"`
+	// Groups/GroupsDone and Batches/BatchesTotal describe the current catch-up
+	// ROUND, not the whole pass. A pass keeps going while the servers hold a
+	// backlog — routinely dozens of rounds over many hours — and accumulating
+	// these across rounds made the ratio meaningless: prod published
+	// 542,460 / 520,000 batches, a denominator that was only ever "rounds so far
+	// x the per-round budget" and grew for as long as the crawl ran.
+	//
+	// Round says which round it is, because "48% of round 27" and "48% of round
+	// 1" say very different things about how far behind the crawler is.
+	Round        int   `json:"round"`
+	Groups       int   `json:"groups"`
+	GroupsDone   int   `json:"groups_done"`
+	Batches      int   `json:"batches"`
+	BatchesTotal int   `json:"batches_total"`
+	Articles     int   `json:"articles"` // overview lines fetched this pass
+	Staged       int   `json:"staged"`   // kept after junk filtering + dedup
+	WireBytes    int64 `json:"wire_bytes"`
 }
 
 // UsenetActivity is the public-safe liveness surface — registered in every

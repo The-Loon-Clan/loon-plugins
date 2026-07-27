@@ -100,7 +100,7 @@
     <div id="pass-live"{{if not .Pass.Running}} style="display:none"{{end}} class="mb-2">
       <div class="d-flex justify-content-between mb-1">
         <span class="small text-muted">
-          Group <span id="pass-groups-done">{{.Pass.GroupsDone}}</span> / <span id="pass-groups-total">{{.Pass.Groups}}</span><span id="pass-reading-wrap"{{if not .Pass.Reading}} hidden{{end}}> — <strong id="pass-reading">{{.Pass.Reading}}</strong></span>
+          {{if gt .Pass.Round 1}}Round <strong id="pass-round">{{.Pass.Round}}</strong> &mdash; {{end}}Group <span id="pass-groups-done">{{.Pass.GroupsDone}}</span> / <span id="pass-groups-total">{{.Pass.Groups}}</span><span id="pass-reading-wrap"{{if not .Pass.Reading}} hidden{{end}}> — <strong id="pass-reading">{{.Pass.Reading}}</strong></span>
         </span>
         <span class="small text-muted"><span id="pass-line-new">{{.Pass.Staged}}</span> new / <span id="pass-line-fetched">{{.Pass.Articles}}</span> fetched</span>
       </div>
