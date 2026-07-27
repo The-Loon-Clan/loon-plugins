@@ -54,6 +54,7 @@ type GroupStore interface {
 	groupCount(ctx context.Context) (int, error)
 	setGroupActive(ctx context.Context, name string, active bool) error
 	setGroupTuning(ctx context.Context, name string, retentionDays, throttleMs int, tier Tier) error
+	resetWatermark(ctx context.Context, backbone, group string) (watermarkReset, error)
 	moveGroup(ctx context.Context, name string, delta int) error
 	deleteGroup(ctx context.Context, name string) error
 	deleteInactiveGroups(ctx context.Context) (int64, error)

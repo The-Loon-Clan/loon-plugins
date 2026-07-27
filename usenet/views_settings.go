@@ -376,3 +376,52 @@ func (p *Plugin) actionToggleGroup(gc *gin.Context) (template.HTML, error) {
 	}
 	return redirect(gc, dest)
 }
+
+// actionResetWatermark rewinds one group's forward watermark so the crawler
+// re-reads the span it already fetched. Needed after a parsing fix: the
+// articles were read, mis-assembled, discarded, and left behind the mark where
+// nothing would look at them again.
+//
+// Type-to-confirm. The browser prompt is UX; THIS check is the control. A
+// mis-click here costs a re-crawl of millions of articles against a metered
+// provider, so the operator names the group they mean.
+func (p *Plugin) actionResetWatermark(gc *gin.Context) (template.HTML, error) {
+	ctx := gc.Request.Context()
+	name := strings.TrimSpace(gc.PostForm("name"))
+	if name == "" {
+		return settingsRedirect(gc, "err", "no group selected")
+	}
+	if strings.TrimSpace(gc.PostForm("confirm")) != name {
+		return settingsRedirect(gc, "err",
+			"reset cancelled — the typed name did not match "+name)
+	}
+
+	// State is keyed by BACKBONE, and the group's is whichever backbone its
+	// crawl state was filed under. Resolve it from the primary provider, the
+	// same way a crawl pass does.
+	servers, err := p.st.listServers(ctx)
+	if err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
+	backbone := ""
+	for _, sv := range servers {
+		if sv.Enabled {
+			backbone = sv.backboneKey()
+			break
+		}
+	}
+	if backbone == "" {
+		return settingsRedirect(gc, "err", "no enabled provider — cannot tell which backbone's state to reset")
+	}
+
+	res, err := p.st.resetWatermark(ctx, backbone, name)
+	if err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
+	p.crawlJob.Log("%s: watermark reset %d -> %d (%s article(s) queued for re-read)",
+		res.Group, res.OldMark, res.NewMark, fmtComma(res.Articles))
+	return settingsRedirect(gc, "msg", fmt.Sprintf(
+		"%s: watermark rewound to %d — %s article(s) will be re-read on the next pass. "+
+			"Already-stored releases dedup on content hash, so nothing duplicates.",
+		res.Group, res.NewMark, fmtComma(res.Articles)))
+}

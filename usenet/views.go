@@ -53,6 +53,7 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			"provider-probe": p.actionProbeProvider,
 			"group-tune":     p.actionTuneGroup,
 			"group-move":     p.actionMoveGroup,
+			"group-reset":    p.actionResetWatermark,
 			"group-del":      p.actionDeleteGroup,
 			"groups-purge":   p.actionPurgeInactive,
 			// Crawlers tab. On a split deployment these buttons run in the WEB
@@ -156,6 +157,7 @@ func tabForAction(path string) string {
 		return "indexing"
 	case strings.HasSuffix(path, "/group-tune"), strings.HasSuffix(path, "/group-move"),
 		strings.HasSuffix(path, "/group-del"), strings.HasSuffix(path, "/groups-purge"),
+		strings.HasSuffix(path, "/group-reset"),
 		strings.HasSuffix(path, "/fetch-groups"), strings.HasSuffix(path, "/group"):
 		return "newsgroups"
 	case strings.HasSuffix(path, "/run-crawl"), strings.HasSuffix(path, "/run-backfill"),

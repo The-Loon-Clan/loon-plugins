@@ -232,3 +232,81 @@ func (s *PGStore) saveServer(ctx context.Context, srv pluginapi.Server) error {
 		return err
 	})
 }
+
+// watermarkReset describes a completed forward-watermark rewind.
+type watermarkReset struct {
+	Group    string
+	OldMark  int64
+	NewMark  int64
+	Frags    int
+	Articles int64
+}
+
+// resetWatermark rewinds a group's FORWARD watermark to the start of the span
+// this crawler actually fetched, so a pass re-reads it. The use case is a
+// parsing bug: articles were read, mis-assembled, and discarded, and they sit
+// behind the mark where nothing will ever look at them again.
+//
+// Re-reading is safe. Dedup is on content_hash over the sorted message-ids, so
+// a release already stored collides and is skipped; only genuinely new
+// assemblies are written.
+//
+// backfill_done is deliberately untouched — this moves the forward mark only,
+// so the backfill job does not wake up and start walking backwards through
+// years of history.
+//
+// The target is max(range_start), NOT min. Adoption seeds a coverage range from
+// the legacy crawler's watermarks (migration 020/021), and on a real group that
+// inherited span is enormous — 793M articles on prod's busiest — but it was
+// indexed by the OLD crawler and never touched by this one. Rewinding into it
+// would re-read hundreds of millions of articles to no purpose.
+func (s *PGStore) resetWatermark(ctx context.Context, backbone, group string) (watermarkReset, error) {
+	var out watermarkReset
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		var cur struct {
+			HighWatermark int64         `db:"high_watermark"`
+			Target        sql.NullInt64 `db:"target"`
+			Frags         int           `db:"frags"`
+		}
+		err := tx.GetContext(ctx, &cur, `
+			SELECT s.high_watermark,
+			       (SELECT max(range_start) FROM newsgroup_ranges r
+			         WHERE r.backbone = s.backbone AND r.group_name = s.group_name) AS target,
+			       (SELECT count(*) FROM newsgroup_ranges r
+			         WHERE r.backbone = s.backbone AND r.group_name = s.group_name) AS frags
+			  FROM newsgroup_state s
+			 WHERE s.backbone = $1 AND s.group_name = $2`, backbone, group)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%s has no crawl state on backbone %s — nothing to reset", group, backbone)
+		}
+		if err != nil {
+			return err
+		}
+		if !cur.Target.Valid {
+			return fmt.Errorf("%s has no recorded coverage — nothing to rewind to", group)
+		}
+		// Refuses the heavily-fragmented case. A group mid-backfill has
+		// thousands of runs and its highest range_start can sit ABOVE the
+		// forward mark, which would move the watermark FORWARD and skip
+		// everything in between — the opposite of the intent, and silent.
+		if cur.Target.Int64 >= cur.HighWatermark {
+			return fmt.Errorf(
+				"%s: computed target %d is not behind the current watermark %d (%d coverage fragments) — "+
+					"this group's coverage is too fragmented for an automatic reset; pick a target by hand",
+				group, cur.Target.Int64, cur.HighWatermark, cur.Frags)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE newsgroup_state
+			   SET high_watermark = $3, high_watermark_date = NULL
+			 WHERE backbone = $1 AND group_name = $2`,
+			backbone, group, cur.Target.Int64); err != nil {
+			return err
+		}
+		out = watermarkReset{
+			Group: group, OldMark: cur.HighWatermark, NewMark: cur.Target.Int64,
+			Frags: cur.Frags, Articles: cur.HighWatermark - cur.Target.Int64,
+		}
+		return nil
+	})
+	return out, err
+}

@@ -66,6 +66,10 @@ func TestSettingsRendersProviders(t *testing.T) {
 		// rather than by an operator finding every group showing "Critical".
 		`name="tier"`, `value="low" selected`,
 		"group-move", "group-del", "groups-purge",
+		// Reset Watermarks: the type-to-confirm prompt AND the hidden field
+		// it fills. Without the field the handler always rejects, and the
+		// button would look functional while doing nothing.
+		"group-reset", `name="confirm"`, "Type the group name to confirm",
 		// tabbed layout on its own admin page (SlotAdminPage), forms post to /admin/p/usenet
 		`class="nav tabs"`, `data-bs-toggle="tab"`, `id="providers"`, `id="newsgroups"`,
 		"/admin/p/usenet/provider", "/admin/p/usenet/group-tune",
