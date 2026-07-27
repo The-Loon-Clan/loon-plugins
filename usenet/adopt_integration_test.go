@@ -76,7 +76,7 @@ func TestAdoptFromHostCarriesEverything(t *testing.T) {
 	cleanup := seedHostTables(t, s.db.DB())
 	defer cleanup()
 
-	groups, state, blacklist, hostFound, err := s.adoptFromHost(ctx, "omicron")
+	groups, state, blacklist, covRanges, hostFound, err := s.adoptFromHost(ctx, "omicron")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,6 +85,14 @@ func TestAdoptFromHostCarriesEverything(t *testing.T) {
 	}
 	if groups < 3 || state < 2 || blacklist < 1 {
 		t.Fatalf("adopted groups=%d state=%d blacklist=%d, want >=3/>=2/>=1", groups, state, blacklist)
+	}
+	// The coverage map must be seeded to match the watermarks just imported.
+	// Left empty, the admin coverage strip reads ~0% for a group whose history
+	// the legacy crawler really did index, and the operator's only remaining
+	// signal says the opposite of the truth. Both active groups qualify: each
+	// has high_watermark above its floored back watermark.
+	if covRanges < 2 {
+		t.Errorf("adopted coverage ranges=%d, want >=2 (one per active group)", covRanges)
 	}
 
 	// The million-dollar bit: backfill_done DERIVED correctly (the legacy
@@ -144,8 +152,8 @@ func TestAdoptFromHostCarriesEverything(t *testing.T) {
 			t.Errorf("anime tuning lost: %+v", g)
 		}
 		if g.Name == "adopt.test.tv" {
-			if !g.LowPriority {
-				t.Errorf("tv low-priority flag lost: %+v", g)
+			if g.Tier != TierLow {
+				t.Errorf("tv low tier lost: %+v", g)
 			}
 			// Default-depth rows become INHERIT, not a pinned override —
 			// otherwise raising the global depth would silently do nothing.
@@ -157,12 +165,13 @@ func TestAdoptFromHostCarriesEverything(t *testing.T) {
 
 	// Re-run: everything conflicts away — a partial-failure retry cannot
 	// double anything.
-	g2, s2, b2, _, err := s.adoptFromHost(ctx, "omicron")
+	g2, s2, b2, c2, _, err := s.adoptFromHost(ctx, "omicron")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g2 != 0 || s2 != 0 || b2 != 0 {
-		t.Errorf("re-run duplicated rows: groups=%d state=%d blacklist=%d", g2, s2, b2)
+	if g2 != 0 || s2 != 0 || b2 != 0 || c2 != 0 {
+		t.Errorf("re-run duplicated rows: groups=%d state=%d blacklist=%d coverage=%d",
+			g2, s2, b2, c2)
 	}
 }
 
@@ -175,7 +184,7 @@ func TestAdoptFromHostResumePoint(t *testing.T) {
 	cleanup := seedHostTables(t, s.db.DB())
 	defer cleanup()
 
-	if _, _, _, _, err := s.adoptFromHost(ctx, "omicron"); err != nil {
+	if _, _, _, _, _, err := s.adoptFromHost(ctx, "omicron"); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := s.activeGroupsForBackbone(ctx, "omicron", 50)

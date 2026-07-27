@@ -346,7 +346,7 @@ func TestLowPriorityTierRule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0].LowPriority || got[1].LowPriority {
+	if len(got) != 2 || got[0].Tier == TierLow || got[1].Tier == TierLow {
 		t.Fatalf("normal tier behind: want the 2 normal groups, got %+v", got)
 	}
 
@@ -363,7 +363,7 @@ func TestLowPriorityTierRule(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("want 2 groups under the cap, got %+v", got)
 	}
-	if got[0].LowPriority || got[1].LowPriority {
+	if got[0].Tier == TierLow || got[1].Tier == TierLow {
 		t.Fatalf("a caught-up normal tier must still outrank low-priority, got %+v", got)
 	}
 
@@ -376,10 +376,10 @@ func TestLowPriorityTierRule(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("uncapped: want all 3 groups, got %+v", got)
 	}
-	if got[0].LowPriority || got[1].LowPriority {
+	if got[0].Tier == TierLow || got[1].Tier == TierLow {
 		t.Fatalf("uncapped: normal groups must lead, got %+v", got)
 	}
-	if !got[2].LowPriority || got[2].Name != "l.big" {
+	if got[2].Tier != TierLow || got[2].Name != "l.big" {
 		t.Fatalf("uncapped: want l.big last and flagged low-pri, got %+v", got[2])
 	}
 }
