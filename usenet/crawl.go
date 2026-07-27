@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -112,11 +113,11 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	blockedRetries := 0
 	for {
 		staged, claimed := 0, 0
-		for _, run := range runs {
+		for _, bbRuns := range groupByBackbone(runs) {
 			if ctx.Err() != nil {
 				return
 			}
-			s, c := p.crawlProvider(ctx, run, cfg)
+			s, c := p.crawlBackbone(ctx, bbRuns, cfg)
 			staged += s
 			claimed += c
 		}
@@ -176,12 +177,26 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	}
 }
 
-// crawlProvider runs one provider's forward pass. Returns articles staged and
-// how many groups this worker actually CLAIMED — the catch-up loop treats an
-// all-blocked pass (claimed == 0 fleet-wide) as retry-shortly, not stalled.
-func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config) (int, int) {
-	pool, bb := run.pool, run.prov.backboneKey()
-	pool.TopUp(ctx) // refill anything the last pass discarded
+// crawlBackbone runs ONE forward pass for one backbone, across every provider
+// account on it. Returns articles staged and how many groups this worker
+// actually CLAIMED — the catch-up loop treats an all-blocked pass
+// (claimed == 0 fleet-wide) as retry-shortly, not stalled.
+//
+// Per BACKBONE rather than per provider, because article numbers and therefore
+// watermarks are backbone-scoped: two accounts on the same backbone see the
+// same articles. Running them as separate passes meant the first advanced the
+// watermarks and the second found "nothing new" every time — prod had two
+// 50-connection accounts on netnews and only ever crawled with one of them.
+// pluginapi has said "the second is extra connections, not extra coverage"
+// since the seam was written; this is the code finally agreeing.
+func (p *Plugin) crawlBackbone(ctx context.Context, runs []providerRun, cfg Config) (int, int) {
+	// planGroup only issues GROUP, so any account on the backbone can answer
+	// it; the fetch work is what spreads across all of them.
+	lead := runs[0]
+	pool, bb := lead.pool, lead.prov.backboneKey()
+	for _, r := range runs {
+		r.pool.TopUp(ctx) // refill anything the last pass discarded
+	}
 
 	groups, err := p.st.activeGroupsForBackbone(ctx, bb, cfg.MaxGroups)
 	if err != nil {
@@ -212,7 +227,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	}
 	p.tel.crawl.noteGroups(claimedNames)
 	if len(groups) == 0 {
-		p.crawlJob.Log("%s: every group already claimed by another worker", run.prov.label())
+		p.crawlJob.Log("%s: every group already claimed by another worker", bb)
 		return 0, 0
 	}
 	claimed := len(groups)
@@ -239,8 +254,8 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 		plan, err := p.planGroup(ctx, pool, g, cfg)
 		if err != nil {
 			p.reportErr(ctx, "usenet/crawl-plan",
-				fmt.Errorf("%s/%s: %w", run.prov.label(), g.Name, err))
-			p.crawlJob.Log("%s/%s: %v", run.prov.label(), g.Name, err)
+				fmt.Errorf("%s/%s: %w", lead.prov.label(), g.Name, err))
+			p.crawlJob.Log("%s/%s: %v", lead.prov.label(), g.Name, err)
 			continue
 		}
 		plans[g.Name] = plan
@@ -273,10 +288,10 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	}
 	if budgetHit {
 		p.crawlJob.Log("%s: pass budget reached (%d batches) — remaining work rolls into the next round",
-			run.prov.label(), len(jobs))
+			bb, len(jobs))
 	}
 	if len(jobs) == 0 {
-		p.crawlJob.Log("%s: %d group(s), nothing new", run.prov.label(), len(plans))
+		p.crawlJob.Log("%s: %d group(s), nothing new", bb, len(plans))
 		return 0, claimed
 	}
 
@@ -285,10 +300,10 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	// this goroutine) — a catch-up pass runs for hours, and advancing only at
 	// pass end froze the coverage/backlog readouts for the duration and lost
 	// the whole pass's progress when a deploy killed the worker.
-	p.crawlJob.Log("%s: crawling %d group(s), %d batch(es) over %d connection(s)…",
-		run.prov.label(), len(plans), len(jobs), run.size)
+	p.crawlJob.Log("%s: crawling %d group(s), %d batch(es) over %d connection(s) on %s…",
+		bb, len(plans), len(jobs), totalConns(runs), providerLabels(runs))
 	staged, advanced := 0, 0
-	leftover := p.runBatches(ctx, pool, run.size, jobs, cfg, func(name string, rs []batchResult) {
+	leftover := p.runBatches(ctx, runs, jobs, cfg, func(name string, rs []batchResult) {
 		plan := plans[name]
 		if plan == nil {
 			return
@@ -298,7 +313,7 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 		if adv {
 			advanced++
 			p.crawlJob.Log("%s/%s: group complete — watermark advanced, %d article(s) staged",
-				run.prov.label(), name, s)
+				bb, name, s)
 		}
 	})
 
@@ -307,16 +322,16 @@ func (p *Plugin) crawlProvider(ctx context.Context, run providerRun, cfg Config)
 	// another worker may own these groups now, and a late watermark write
 	// would clobber theirs. Completed groups already advanced via onGroup.
 	if ctx.Err() != nil && jobCtx.Err() == nil {
-		p.crawlJob.Log("%s: lease lost mid-pass — final sweep skipped; %d group(s) already advanced", run.prov.label(), advanced)
+		p.crawlJob.Log("%s: lease lost mid-pass — final sweep skipped; %d group(s) already advanced", bb, advanced)
 	} else {
 		s2, a2 := p.advanceWatermarks(ctx, bb, plans, leftover)
 		staged += s2
 		advanced += a2
 	}
 
-	st := pool.Stats()
+	open, target, resets := fleetStats(runs)
 	p.crawlJob.Log("%s: %d group(s), %d batch(es), %d article(s) staged, %d advanced (conns %d/%d, resets %d)",
-		run.prov.label(), len(plans), len(jobs), staged, advanced, st.Open, st.Target, st.Resets)
+		bb, len(plans), len(jobs), staged, advanced, open, target, resets)
 	return staged, claimed
 }
 
@@ -397,6 +412,97 @@ func (p *Plugin) planGroup(ctx context.Context, pool *nntp.Pool, g groupRow, cfg
 // threw away the whole pass's progress if the worker was killed. Only the
 // results of groups that did NOT complete (context cancelled mid-pass) are
 // returned, for the caller's final partial-advance sweep.
+// groupByBackbone buckets the pass's providers by backbone, preserving the
+// order activeFleet chose so the primary account still leads its own bucket.
+// Providers on one backbone share watermarks, so they must crawl as one pass.
+func groupByBackbone(runs []providerRun) [][]providerRun {
+	var order []string
+	byKey := map[string][]providerRun{}
+	for _, r := range runs {
+		k := r.prov.backboneKey()
+		if _, seen := byKey[k]; !seen {
+			order = append(order, k)
+		}
+		byKey[k] = append(byKey[k], r)
+	}
+	out := make([][]providerRun, 0, len(order))
+	for _, k := range order {
+		out = append(out, byKey[k])
+	}
+	return out
+}
+
+// fleetStats sums the live connection state across every pool the pass used.
+// Reporting only the lead account's numbers would show "50/50" on a backbone
+// running 100 connections, and would hide a second account that was resetting
+// constantly behind a healthy-looking first one.
+func fleetStats(runs []providerRun) (open, target int, resets int64) {
+	for _, r := range runs {
+		st := r.pool.Stats()
+		open += st.Open
+		target += st.Target
+		resets += st.Resets
+	}
+	return open, target, resets
+}
+
+// totalConns is the pass's whole connection budget across its providers.
+func totalConns(runs []providerRun) int {
+	n := 0
+	for _, r := range runs {
+		n += r.size
+	}
+	return n
+}
+
+// providerLabels names the accounts sharing this pass, for the log line — an
+// operator seeing "100 connections" needs to know which accounts they came
+// from, especially when one is benched and the number silently halves.
+func providerLabels(runs []providerRun) string {
+	names := make([]string, 0, len(runs))
+	for _, r := range runs {
+		names = append(names, r.prov.label())
+	}
+	return strings.Join(names, " + ")
+}
+
+// assignPools maps each fetch worker to the pool it will draw from, dealing
+// one worker at a time around the providers so the load spreads evenly instead
+// of filling the first account before touching the second.
+//
+// Bounded by what each pool actually opened: a provider that opened 10 takes
+// 10 workers and no more, and the remainder go to whoever still has room. That
+// is what keeps a small standby account from being handed a third of the work
+// it cannot serve.
+func assignPools(runs []providerRun, workers int) []*nntp.Pool {
+	out := make([]*nntp.Pool, 0, workers)
+	room := make([]int, len(runs))
+	for i, r := range runs {
+		room[i] = r.size
+	}
+	for len(out) < workers {
+		dealt := false
+		for i, r := range runs {
+			if room[i] <= 0 {
+				continue
+			}
+			out = append(out, r.pool)
+			room[i]--
+			dealt = true
+			if len(out) == workers {
+				break
+			}
+		}
+		// Every pool is at capacity. batchWorkers already caps at the same
+		// total, so this is unreachable in practice — but an unreachable
+		// infinite loop is still an infinite loop.
+		if !dealt {
+			break
+		}
+	}
+	return out
+}
+
 // batchWorkers is how many fetch goroutines a pass runs: one per available
 // connection, never more than there is work for, never zero.
 //
@@ -417,15 +523,15 @@ func batchWorkers(conns, jobs int) int {
 	return w
 }
 
-func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, conns int, jobs []batchJob, cfg Config, onGroup func(group string, rs []batchResult)) []batchResult {
-	// conns is THIS pass's resolved budget (providerRun.size), not the
-	// site-wide setting. They differ the moment a second crawler host joins:
-	// the account cap is split across the fleet, so the pool opens 25 while
-	// cfg.Connections still reads 50. Spawning the larger number put every
-	// surplus goroutine into the pool's blocking fallback to contend for a
-	// connection that was never going to exist, and the pass log already
-	// printed run.size, so the log and the behaviour disagreed.
-	workers := batchWorkers(conns, len(jobs))
+func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batchJob, cfg Config, onGroup func(group string, rs []batchResult)) []batchResult {
+	// The budget is the sum of what THIS pass's pools actually opened
+	// (providerRun.size), not the site-wide setting. They differ the moment a
+	// second crawler host joins: the account cap is split across the fleet, so
+	// a pool opens 25 while cfg.Connections still reads 50, and the surplus
+	// goroutines would sit in the pool's blocking fallback waiting on
+	// connections that were never going to exist.
+	workers := batchWorkers(totalConns(runs), len(jobs))
+	assigned := assignPools(runs, workers)
 	expected := make(map[string]int, 8)
 	for _, j := range jobs {
 		expected[j.group]++
@@ -436,6 +542,7 @@ func (p *Plugin) runBatches(ctx context.Context, pool *nntp.Pool, conns int, job
 
 	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ {
+		pool := assigned[w]
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

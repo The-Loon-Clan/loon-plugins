@@ -184,7 +184,7 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	// nil onGroup: backfill passes are bounded (backfill_batches_per_run) and
 	// recordBackfill needs the complete result set — with no callback,
 	// runBatches returns every result.
-	results := p.runBatches(ctx, pool, run.size, jobs, cfg, nil)
+	results := p.runBatches(ctx, []providerRun{run}, jobs, cfg, nil)
 	for _, r := range results {
 		p.tel.backfill.noteBatch(r.articles, r.staged, r.wire, r.ok)
 	}
