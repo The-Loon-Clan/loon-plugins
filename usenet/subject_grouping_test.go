@@ -293,3 +293,93 @@ func TestTemplateTokenSparesUppercaseTags(t *testing.T) {
 		}
 	}
 }
+
+// Manga and image sets post one page per article with the page counter in one
+// of three forms. Only the bracketed one parsed, so the other two made every
+// page its own sub-1 MiB "release" — which under_1mib then dropped by design.
+// Grouped, a 199-page set is ~120 MB and no size rule comes near it.
+func TestPageCounterFormsGroupTheSet(t *testing.T) {
+	groups := []struct {
+		name     string
+		wantBase string
+		subjects []string
+	}{
+		{
+			name:     "prose 'N of M'",
+			wantBase: "[ABPEA - Original] Anthology - Maman Love 2",
+			subjects: []string{
+				`[ABPEA - Original] Anthology - Maman Love 2 - 092 of 209 - yEnc "Maman_Love_2-092.jpg" (1/1)`,
+				`[ABPEA - Original] Anthology - Maman Love 2 - 093 of 209 - yEnc "Maman_Love_2-093.jpg" (1/1)`,
+				`[ABPEA - Original] Anthology - Maman Love 2 - 194 of 209 - yEnc "Maman_Love_2-194.jpg" (1/2)`,
+			},
+		},
+		{
+			name:     "bare two-digit N/M",
+			wantBase: "[abpea] Uchiyama Aki - Nyan Nyan Princess",
+			subjects: []string{
+				`[abpea] Uchiyama Aki - Nyan Nyan Princess - 127/214 - "128.jpg" - yEnc - [594k] (1/1)`,
+				`[abpea] Uchiyama Aki - Nyan Nyan Princess - 128/214 - "129.jpg" - yEnc - [594k] (1/1)`,
+				`[abpea] Uchiyama Aki - Nyan Nyan Princess - 12/214 - "13.jpg" - yEnc - [594k] (1/1)`,
+			},
+		},
+		{
+			name:     "bracketed, unchanged",
+			wantBase: "[abpea] Uchiyama Aki - Momoiro Kurepasu ~Colorful Crayons~",
+			subjects: []string{
+				`[abpea] Uchiyama Aki - Momoiro Kurepasu ~Colorful Crayons~ - [125/199] - "124.jpg" - yEnc - [682k] (1/2)`,
+				`[abpea] Uchiyama Aki - Momoiro Kurepasu ~Colorful Crayons~ - [126/199] - "125.jpg" - yEnc - [682k] (1/2)`,
+			},
+		},
+	}
+	for _, g := range groups {
+		t.Run(g.name, func(t *testing.T) {
+			seen := map[string]bool{}
+			total := 0
+			for _, s := range g.subjects {
+				base, _, _, _, _, tf, fp := parseSubject(s)
+				if !fp {
+					t.Errorf("no file counter recognised in %q", s)
+				}
+				total = tf
+				seen[base] = true
+			}
+			if len(seen) != 1 {
+				t.Errorf("set split across %d bases, want 1:", len(seen))
+				for b := range seen {
+					t.Errorf("   %q", b)
+				}
+				return
+			}
+			for b := range seen {
+				if b != g.wantBase {
+					t.Errorf("base = %q, want %q", b, g.wantBase)
+				}
+			}
+			if total < 2 {
+				t.Errorf("totalFiles = %d, want the page count", total)
+			}
+		})
+	}
+}
+
+// Ranma 1/2 is a real anime, not a file counter, and the catalogue holds dozens
+// of its releases from four groups. This is why the bare slash form demands two
+// digits on each side: at one digit it eats the title.
+func TestRanmaIsNotAFileCounter(t *testing.T) {
+	for _, s := range []string{
+		`[GLSubs] Ranma 1/2 (2024) - S01E01v2 [Dual Audio HEVC Improved Subs] (1/500) yEnc`,
+		`[Erai-raws] Ranma 1/2 (2024) 2nd Season - 03 [ AVC AAC][MultiSub][C23E5B8F] (1/300) yEnc`,
+	} {
+		base, _, _, _, _, _, fp := parseSubject(s)
+		if fp {
+			t.Errorf("%q read as multi-file — 1/2 is the title", s)
+		}
+		if !strings.Contains(base, "Ranma 1/2") {
+			t.Errorf("base = %q, want it to still contain %q", base, "Ranma 1/2")
+		}
+	}
+	// Small fractions elsewhere in a name are equally safe.
+	if b, _, _, _, _, _, _ := parseSubject(`Christopher Hitchens - Hitch-22 2010 - 2/5 something (1/9) yEnc`); !strings.Contains(b, "2/5") {
+		t.Errorf("base = %q, want the 2/5 kept", b)
+	}
+}

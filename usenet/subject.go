@@ -8,8 +8,23 @@ import (
 
 var (
 	reFileOf = regexp.MustCompile(`\[(\d+)/(\d+)\]`) // [1/12] multi-file header
-	rePartOf = regexp.MustCompile(`\((\d+)/(\d+)\)`) // (1/45) yEnc segment marker
-	reYenc   = regexp.MustCompile(`(?i)\byenc\b`)
+	// Two more file-counter forms, both verified against 430k production titles
+	// before being trusted.
+	//
+	// The prose form ("092 of 209", "[684 of 842]", "File 42 of 52") appears in
+	// 1,453 titles, every sampled one a counter; 815 of them are really 72
+	// releases split per file.
+	//
+	// The bare slash form ("- 127/214 -") demands TWO digits on each side, and
+	// that is not cosmetic: "Ranma 1/2" is a real anime with dozens of releases
+	// in the catalogue from four different groups, and a one-digit-tolerant rule
+	// mangles every one. At two digits the pattern matches 2,867 titles and zero
+	// Ranma. Space-delimited so the "(1/2)" segment marker cannot be mistaken
+	// for it.
+	reFileOfWords = regexp.MustCompile(`\[?(\d{1,4})\s+of\s+(\d{1,4})\]?`)
+	reFileOfBare  = regexp.MustCompile(`(?:^|\s)(\d{2,4})/(\d{2,4})(?:\s|$)`)
+	rePartOf      = regexp.MustCompile(`\((\d+)/(\d+)\)`) // (1/45) yEnc segment marker
+	reYenc        = regexp.MustCompile(`(?i)\byenc\b`)
 	// The byte count some posters emit between the yEnc keyword and the segment
 	// counter: `... yEnc  1053788 (1/2)`. It has to be removed BEFORE the
 	// keyword itself, because afterwards there is nothing to anchor on and a
@@ -83,7 +98,15 @@ func fileNameFromSubject(subject string) string {
 func parseSubject(subject string) (base string, partNum, totalParts, segTotal, fileNum, totalFiles int, fileParts bool) {
 	partNum, totalParts = 1, 1
 
+	// Bracketed form first — it is the least ambiguous. The others only get a
+	// look when it is absent, so a subject carrying both cannot be misread.
 	fileLoc := reFileOf.FindStringSubmatchIndex(subject)
+	if fileLoc == nil {
+		fileLoc = reFileOfWords.FindStringSubmatchIndex(subject)
+	}
+	if fileLoc == nil {
+		fileLoc = reFileOfBare.FindStringSubmatchIndex(subject)
+	}
 	if fileLoc != nil {
 		fileNum = atoi(subject[fileLoc[2]:fileLoc[3]])
 		totalFiles = atoi(subject[fileLoc[4]:fileLoc[5]])
@@ -156,6 +179,8 @@ func parseSubject(subject string) (base string, partNum, totalParts, segTotal, f
 // trailing extension — used to derive a single-file base from the whole subject.
 func stripAllMarkers(s string) string {
 	s = reFileOf.ReplaceAllString(s, " ")
+	s = reFileOfWords.ReplaceAllString(s, " ")
+	s = reFileOfBare.ReplaceAllString(s, " ")
 	s = rePartOf.ReplaceAllString(s, " ")
 	s = reArchivePart.ReplaceAllString(s, " ") // before reExt eats the .rar/.7z anchor
 	s = reYencSize.ReplaceAllString(s, " ")    // before reYenc — it needs the keyword
