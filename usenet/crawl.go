@@ -325,6 +325,14 @@ func (p *Plugin) crawlBackbone(ctx context.Context, runs []providerRun, cfg Conf
 			return
 		}
 		s, adv := p.advanceOneGroup(ctx, bb, plan, rs)
+		// Attribution lands with the group, not with the round. A round is up
+		// to crawl_max_batches (20,000) against whatever backlog exists — on a
+		// 347M-article group that is hours — so round-scoped flushing still
+		// showed an operator an empty table while the crawler was fetching
+		// millions of articles past the very posters they were watching. This
+		// is the same reasoning that already advances the watermark and
+		// coverage here rather than at pass end.
+		p.flushPosterHits(ctx)
 		staged += s
 		if adv {
 			advanced++

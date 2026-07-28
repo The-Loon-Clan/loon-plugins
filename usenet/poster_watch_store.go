@@ -111,9 +111,14 @@ func (s *PGStore) recordPosterHits(ctx context.Context, hits map[posterHitKey]*p
 	})
 }
 
-// loadPosterWatch refreshes the in-memory matcher for this pass. Read once per
-// pass rather than per article, so adding a pattern takes effect on the next
-// pass and costs nothing in between.
+// loadPosterWatch refreshes the in-memory matcher. Called once per crawl ROUND
+// rather than per article: adding a pattern takes effect on the next round and
+// costs nothing in between.
+//
+// Per round, not per pass — a pass runs for hours through the catch-up loop, so
+// a pass-scoped read meant a pattern added just after a pass began recorded
+// nothing until it ended, which is indistinguishable from the watch being
+// broken.
 func (p *Plugin) loadPosterWatch(ctx context.Context) {
 	pats, err := p.st.posterWatchPatterns(ctx)
 	if err != nil {

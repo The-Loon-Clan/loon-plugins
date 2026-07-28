@@ -72,3 +72,36 @@ func TestPerRoundFlushWritesEachRound(t *testing.T) {
 		t.Error("the second round's tally was not written")
 	}
 }
+
+// Flushing per GROUP rather than per round is what makes attribution readable
+// while a long pass is still running. Many flushes across one pass must still
+// sum to the truth — an upsert that replaced instead of accumulating would show
+// only the last group's tally, which looks like a quiet crawler.
+func TestManyFlushesSumToTheTruth(t *testing.T) {
+	rec := &recordingPosterStore{}
+	p := &Plugin{st: rec, posterHits: newPosterHits(), tel: newTelemetry()}
+
+	// Five groups land in one round; the same poster appears in three of them.
+	for i := 0; i < 5; i++ {
+		if i%2 == 0 {
+			p.posterHits.note("tsukihime", "ingest", "staged", "subject")
+		}
+		p.flushPosterHits(context.Background())
+	}
+
+	writes, total := 0, int64(0)
+	for _, call := range rec.calls {
+		for k, v := range call {
+			if k.poster == "tsukihime" {
+				writes++
+				total += v.count
+			}
+		}
+	}
+	if writes != 3 {
+		t.Errorf("%d writes carried the poster, want 3 — a flush with nothing new must not write", writes)
+	}
+	if total != 3 {
+		t.Errorf("flushed counts sum to %d, want 3", total)
+	}
+}
