@@ -235,3 +235,39 @@ func (p *Plugin) publishTelemetry(ctx context.Context) {
 		}
 	}
 }
+
+// Span is how many article numbers this set covers on the server, or 0 when
+// the bounds are unknown (sets staged before span tracking existed).
+func (p pendingSet) Span() int {
+	if p.ArtLo <= 0 || p.ArtHi < p.ArtLo {
+		return 0
+	}
+	return p.ArtHi - p.ArtLo + 1
+}
+
+// spanCollisionMin is the article span past which a set cannot be one upload.
+//
+// ABSOLUTE, not a ratio of articles held. The first version scaled with Have and
+// was wrong in the worst possible way: a set early in its arrival holds very few
+// articles while already spanning a legitimate range, so every release got
+// flagged during exactly the window an operator is watching it. A test with a
+// genuine four-article release caught it.
+//
+// A busy group takes one to two million articles a day, so a million article
+// numbers is on the order of half a day of posting — far beyond any single
+// upload run, while an ordinary release with other posters interleaved sits
+// three or four orders of magnitude below it. That gap is what makes an absolute
+// boundary safe here.
+//
+// A constant rather than a knob because it classifies a diagnostic rather than
+// tuning behaviour: nothing schedules, drops or retries on it. If it proves
+// noisy on a slower group it should become one.
+const spanCollisionMin = 1_000_000
+
+// Collided reports a set whose articles are spread far too wide to be a single
+// upload — the shape of a base subject generic enough to have merged unrelated
+// posts. Such a set is unbuildable by construction rather than merely
+// unfinished: it waits on files belonging to somebody else's upload.
+func (p pendingSet) Collided() bool {
+	return p.Span() >= spanCollisionMin && p.Have > 0
+}

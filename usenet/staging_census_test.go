@@ -95,7 +95,18 @@ func TestStagingHealthCardRenders(t *testing.T) {
 	var buf bytes.Buffer
 	err = tmpl.ExecuteTemplate(&buf, "jobs.html", map[string]any{
 		"Jobs":   []jobPaneVM{{crawlerJobVM: crawlerJobVM{Name: "Usenet Builder", Status: "idle"}, Slug: "builder", Short: "Builder"}},
-		"Schema": "024_staging_census.sql", "Pending": []pendingSet{}, "ReadyGroups": int64(0),
+		"Schema": "024_staging_census.sql",
+		"Pending": []pendingSet{
+			// A collided set must be NAMED on the card, not merely given a
+			// number: "1900001" is a fact, "collision" is the diagnosis, and
+			// only the second tells an operator the set is unbuildable rather
+			// than slow.
+			{Base: "}WT Tube", Group: "a.b.group", Have: 4, Need: 900,
+				ArtLo: 1_000_000, ArtHi: 2_900_001, Multi: true, Files: 10, Seen: 1},
+			{Base: "[Group] A Real Release - 01", Group: "a.b.group", Have: 40, Need: 50,
+				ArtLo: 4_100, ArtHi: 5_900},
+		},
+		"ReadyGroups": int64(0),
 		"Census": []censusRow{
 			{At: at, ReadyDepth: 41000, Sampled: 500, LiveCandidates: 463, FossilDropped: 37,
 				PendingSets: 15, MemUsedBytes: 8 << 30, MemMaxBytes: 8 << 30,
@@ -122,6 +133,8 @@ func TestStagingHealthCardRenders(t *testing.T) {
 		`class="text-end small text-danger">37</td>`,
 		"4120000", "+8400", // cumulative AND the delta that matters
 		"100%",
+		// The span column, and the word that turns a number into a verdict.
+		"1900002", "collision",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("staging health card missing %q", want)

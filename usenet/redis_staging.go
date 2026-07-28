@@ -399,7 +399,10 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 		hash, groupName, baseSub string
 		articles                 []stagedArticle
 	}
+
 	groups := make(map[string]*groupUpdate)
+	// Article-number bounds per touched set, folded once the pipeline lands.
+	var spans []spanUpdate
 	for _, a := range arts {
 		if a.BaseSubject == "" || a.MessageID == "" {
 			continue
@@ -473,10 +476,22 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 		// Written per touched file and only ever upward, so a later batch
 		// carrying a larger count for the same file corrects an earlier one.
 		perFile := map[int]int{}
+		lo, hi := 0, 0
 		for _, a := range gu.articles {
 			if a.SegTotal > perFile[a.FileNum] {
 				perFile[a.FileNum] = a.SegTotal
 			}
+			if a.ArticleNum > 0 {
+				if lo == 0 || a.ArticleNum < lo {
+					lo = a.ArticleNum
+				}
+				if a.ArticleNum > hi {
+					hi = a.ArticleNum
+				}
+			}
+		}
+		if lo > 0 {
+			spans = append(spans, spanUpdate{key: gk, lo: lo, hi: hi})
 		}
 		for fn, st := range perFile {
 			if st > 0 {
@@ -519,6 +534,8 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
 		return 0, fmt.Errorf("redis insert pipeline: %w", err)
 	}
+	// After the metadata exists, so a fold can never create a half-formed set.
+	r.foldSpans(ctx, spans)
 
 	var readyGroups []interface{}
 	var evictKeys []string
@@ -1029,11 +1046,14 @@ func (r *redisStaging) incompleteSets(ctx context.Context, limit int) ([]pending
 		}
 		per := perFileSegTotals(meta)
 		files, _ := strconv.Atoi(meta["total_files"])
+		lo, _ := strconv.Atoi(meta["art_lo"])
+		hi, _ := strconv.Atoi(meta["art_hi"])
 		out = append(out, pendingSet{
 			Base: meta["base_subject"], Group: rf.group,
 			Have: have, Need: need, Segments: have,
 			Multi: multi,
 			Files: files, Seen: len(per), PerFile: formatPerFileTotals(per),
+			ArtLo: lo, ArtHi: hi,
 		})
 	}
 	for group, hashes := range dead {
@@ -1158,4 +1178,57 @@ func (r *redisStaging) reapReadyQueue(ctx context.Context, maxScan int) (scanned
 		}
 	}
 	return scanned, removed, nil
+}
+
+// spanFoldScript folds a batch's article-number bounds into each set's running
+// span, keeping the minimum art_lo and the maximum art_hi.
+//
+// A script because Redis has no "set this hash field only if smaller": doing it
+// in Go needs a read, a compare and a write, and between the read and the write
+// a sibling crawler working the same group on another backbone would clobber
+// the value. One script call folds a whole batch atomically.
+//
+// Single-keyspace assumption, as elsewhere in this backend: the grp: keys are
+// passed as ARGV rather than KEYS. Redis Cluster would need key-slot work
+// across the whole staging design, not just here.
+var spanFoldScript = redis.NewScript(`
+for i = 1, #ARGV, 3 do
+  local k  = ARGV[i]
+  local lo = tonumber(ARGV[i+1])
+  local hi = tonumber(ARGV[i+2])
+  local cur = redis.call('HGET', k, 'art_lo')
+  if (not cur) or tonumber(cur) > lo then redis.call('HSET', k, 'art_lo', lo) end
+  cur = redis.call('HGET', k, 'art_hi')
+  if (not cur) or tonumber(cur) < hi then redis.call('HSET', k, 'art_hi', hi) end
+end
+return #ARGV / 3
+`)
+
+// spanFoldChunk bounds how many sets one fold call carries. Each set costs three
+// ARGV entries and Lua's stack tops out around 8000, so this leaves ample room.
+const spanFoldChunk = 500
+
+// foldSpans records each set's article-number bounds. Best-effort: this is a
+// diagnostic, and losing a span reading must never fail a staging write.
+func (r *redisStaging) foldSpans(ctx context.Context, spans []spanUpdate) {
+	for start := 0; start < len(spans); start += spanFoldChunk {
+		end := start + spanFoldChunk
+		if end > len(spans) {
+			end = len(spans)
+		}
+		argv := make([]interface{}, 0, (end-start)*3)
+		for _, sp := range spans[start:end] {
+			argv = append(argv, sp.key, sp.lo, sp.hi)
+		}
+		if err := spanFoldScript.Run(ctx, r.rdb, nil, argv...).Err(); err != nil && err != redis.Nil {
+			r.note(ctx, "usenet/staging-span", err)
+			return // one failure is enough; do not spam the log per chunk
+		}
+	}
+}
+
+// spanUpdate is one set's article-number bounds within a single batch.
+type spanUpdate struct {
+	key    string
+	lo, hi int
 }

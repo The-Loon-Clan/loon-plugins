@@ -558,3 +558,107 @@ func TestIncompleteSetsExactBelowTheCap(t *testing.T) {
 		t.Errorf("largest shortfall first: got need=%d, want 900", sets[0].Need)
 	}
 }
+
+// The span has to survive out-of-order arrival. Batches land across many
+// parallel connections and the backfill walks DESCENDING, so a set's lowest
+// article number is frequently seen after its highest — a naive
+// first-write-wins would record the wrong bounds and make a normal release look
+// like a collision.
+func TestSpanFoldKeepsTrueBounds(t *testing.T) {
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+	ctx := context.Background()
+
+	base := "[Group] A Real Release - 01"
+	stage := func(nums ...int) {
+		t.Helper()
+		arts := make([]stagedArticle, 0, len(nums))
+		for i, n := range nums {
+			arts = append(arts, stagedArticle{
+				ArticleNum: n,
+				MessageID:  fmt.Sprintf("<%d.%d@example>", n, i),
+				Subject:    base + ".mkv", BaseSubject: base,
+				Group: "a.b.group", PartNum: i + 1, TotalParts: 50, SegTotal: 50,
+			})
+		}
+		if _, err := r.stageArticles(ctx, arts); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Middle first, then higher, then LOWER than anything seen.
+	stage(5000, 5001)
+	stage(5900)
+	stage(4100)
+
+	meta, err := rdb.HGetAll(ctx, grpKey("a.b.group", groupHashKey("a.b.group", base))).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta["art_lo"] != "4100" {
+		t.Errorf("art_lo = %q, want 4100 — a later batch with a LOWER number must "+
+			"lower the bound, or descending backfill records the wrong span", meta["art_lo"])
+	}
+	if meta["art_hi"] != "5900" {
+		t.Errorf("art_hi = %q, want 5900", meta["art_hi"])
+	}
+
+	// And it reaches the readout as a sane, non-colliding span.
+	sets, err := r.incompleteSets(ctx, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, s := range sets {
+		if s.Base != base {
+			continue
+		}
+		found = true
+		if s.Span() != 1801 {
+			t.Errorf("span = %d, want 1801", s.Span())
+		}
+		if s.Collided() {
+			t.Error("a genuine 4-article release read as a base collision")
+		}
+	}
+	if !found {
+		t.Fatal("the set never reached the forming-releases readout")
+	}
+}
+
+// The shape this was built to find: many unrelated posts sharing one generic
+// base subject, so the set spans a swathe of the group and can never complete.
+func TestSpanExposesABaseCollision(t *testing.T) {
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+	ctx := context.Background()
+
+	base := "}WT Tube" // the real shape: a base short enough to merge everything
+	for i, n := range []int{1_000_000, 1_400_000, 2_100_000, 2_900_000} {
+		if _, err := r.stageArticles(ctx, []stagedArticle{{
+			ArticleNum: n,
+			MessageID:  fmt.Sprintf("<c%d@example>", n),
+			Subject:    base + " something.mkv", BaseSubject: base,
+			Group: "a.b.group", PartNum: i + 1, TotalParts: 900, SegTotal: 900,
+		}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sets, err := r.incompleteSets(ctx, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range sets {
+		if s.Base != base {
+			continue
+		}
+		if !s.Collided() {
+			t.Errorf("4 articles spanning %d article numbers did not read as a "+
+				"collision — this set can never complete and nothing else says so",
+				s.Span())
+		}
+		return
+	}
+	t.Fatal("the collided set never reached the readout")
+}

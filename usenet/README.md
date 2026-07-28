@@ -304,6 +304,23 @@ deliberate `under_1mib`/`under_5mib` size bands catching subtitle packs, manga
 and audio rather than a rule defect. **Run that audit before changing a junk
 rule**; none of these were visible by inspection.
 
+Each staged set records the **article-number span** it covers (`art_lo`/`art_hi`
+in its meta, folded per batch by a Lua min/max script so out-of-order and
+descending-backfill arrival still record true bounds). Article numbers ascend
+with posting time and one upload happens in a single run, so a real release is
+near-contiguous even with other posters interleaved. A set spanning a million or
+more article numbers — roughly half a day of posting on a busy group — is
+therefore not one release but several unrelated posts that collided on the same
+base subject, and it can NEVER complete: it is waiting on files belonging to
+somebody else's upload. The forming-releases card shows the span and flags those
+as `collision`, which is a different fact from "incomplete" and calls for a
+different fix (tighten the base derivation, not wait longer).
+
+The threshold is absolute rather than a ratio of articles held. Scaling it with
+`Have` — the first attempt — flags every set early in its arrival, when it holds
+few articles but already covers a real range, which is precisely the window an
+operator is watching. A test with a genuine four-article release caught that.
+
 The forward crawl **yields when staging is full**, at `crawl_pressure_high_pct`
 (default 95, deliberately above the backfill's 85: new articles matter more than
 history, so the crawl stops only when storing would actively destroy what is

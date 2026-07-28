@@ -18,6 +18,15 @@ import (
 
 // stagedArticle is one parsed overview line awaiting assembly.
 type stagedArticle struct {
+	// ArticleNum is the server's message number for this article. Article
+	// numbers are per BACKBONE and ascend with posting time, so the span
+	// between a set's lowest and highest is how far apart its articles sit on
+	// the server. A real release is posted in one run, so its articles are
+	// near-contiguous; a set spanning millions of article numbers is not one
+	// release but several unrelated posts that collided on the same base
+	// subject — and such a set can never complete, because it is waiting for
+	// files that belong to somebody else's upload.
+	ArticleNum  int
 	MessageID   string
 	Subject     string
 	BaseSubject string
@@ -828,7 +837,8 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, 
 			ph.note(p, "ingest", "staged", subject)
 		}
 		out = append(out, stagedArticle{
-			MessageID: ov.MessageId, Subject: subject, BaseSubject: base,
+			ArticleNum: ov.MessageNumber,
+			MessageID:  ov.MessageId, Subject: subject, BaseSubject: base,
 			Poster: ov.From, Bytes: int64(ov.Bytes), Posted: ov.Date, Group: group,
 			PartNum: pn, TotalParts: tp, SegTotal: seg, FileNum: fn, TotalFiles: tf, FileParts: fp,
 		})

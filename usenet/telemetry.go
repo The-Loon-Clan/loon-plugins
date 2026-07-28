@@ -329,6 +329,16 @@ type pendingSet struct {
 	// deploy cycles of guessing; these three fields are already in the meta hash
 	// the caller fetched, so publishing them is free and turns the question into
 	// a readout.
+	// ArtLo/ArtHi are the lowest and highest server article numbers seen in
+	// this set. Article numbers ascend with posting time, so their span is how
+	// far apart the set's articles sit on the server. One release is uploaded
+	// in a single run, so its articles are near-contiguous — a set spanning
+	// millions of article numbers is not one release but several unrelated
+	// posts that collided on the same base subject, and it can never complete
+	// because it is waiting on files belonging to somebody else's upload.
+	ArtLo int `json:"art_lo,omitempty"`
+	ArtHi int `json:"art_hi,omitempty"`
+
 	Files   int    `json:"files"`    // total_files as the posts declare it
 	Seen    int    `json:"seen"`     // files with at least one article staged
 	PerFile string `json:"per_file"` // "1:1000 2:14 3:14" — declared total per file
