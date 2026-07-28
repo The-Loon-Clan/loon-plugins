@@ -100,19 +100,19 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 			             ON r.backbone = st.backbone AND r.group_name = st.group_name
 			          WHERE st.group_name = g.name
 			         HAVING max(r.range_start) < max(st.high_watermark)) AS reset_articles,
-			        -- What reopening the backfill would queue: the window
-			        -- [server_low, high_watermark] minus everything already
-			        -- recorded as fetched. Backfill plans from exactly these
-			        -- gaps, so this is the real cost, not the window size.
-			        (SELECT GREATEST(st.high_watermark - st.server_low, 0)
-			                - COALESCE((SELECT sum(LEAST(r.range_end, st.high_watermark)
-			                                     - GREATEST(r.range_start, st.server_low) + 1)
-			                              FROM newsgroup_ranges r
-			                             WHERE r.backbone = st.backbone AND r.group_name = st.group_name
-			                               AND r.range_end >= st.server_low
-			                               AND r.range_start <= st.high_watermark), 0)
+			        -- What a history re-walk would queue: everything below this
+			        -- crawler's own earliest recorded fetch, down to the server's
+			        -- oldest article. That span is exactly what the reset
+			        -- repudiates and the backfill then re-reads. NULL when the
+			        -- crawler's coverage already reaches the bottom, which is the
+			        -- case resetWatermark refuses.
+			        (SELECT max(r.range_start) - st.server_low
 			           FROM newsgroup_state st
+			           JOIN newsgroup_ranges r
+			             ON r.backbone = st.backbone AND r.group_name = st.group_name
 			          WHERE st.group_name = g.name
+			          GROUP BY st.server_low
+			         HAVING max(r.range_start) > st.server_low
 			          LIMIT 1) AS reset_history_articles
 			 FROM newsgroups g LEFT JOIN nzbs n ON n.group_name = g.name
 			 WHERE ($1 = '' OR g.name ILIKE '%' || $1 || '%')

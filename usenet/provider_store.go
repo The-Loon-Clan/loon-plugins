@@ -285,24 +285,13 @@ func (s *PGStore) resetWatermark(ctx context.Context, backbone, group string, sc
 			ServerLow     int64         `db:"server_low"`
 			Target        sql.NullInt64 `db:"target"`
 			Frags         int           `db:"frags"`
-			GapBelow      int64         `db:"gap_below"`
 		}
 		err := tx.GetContext(ctx, &cur, `
 			SELECT s.high_watermark, s.server_low,
 			       (SELECT max(range_start) FROM newsgroup_ranges r
 			         WHERE r.backbone = s.backbone AND r.group_name = s.group_name) AS target,
 			       (SELECT count(*) FROM newsgroup_ranges r
-			         WHERE r.backbone = s.backbone AND r.group_name = s.group_name) AS frags,
-			       -- Articles inside [server_low, high_watermark] that no
-			       -- recorded range covers: exactly what reopening the backfill
-			       -- would queue, since it plans from the gaps in this table.
-			       GREATEST(s.high_watermark - s.server_low, 0)
-			         - COALESCE((SELECT sum(LEAST(r.range_end, s.high_watermark)
-			                              - GREATEST(r.range_start, s.server_low) + 1)
-			                       FROM newsgroup_ranges r
-			                      WHERE r.backbone = s.backbone AND r.group_name = s.group_name
-			                        AND r.range_end >= s.server_low
-			                        AND r.range_start <= s.high_watermark), 0) AS gap_below
+			         WHERE r.backbone = s.backbone AND r.group_name = s.group_name) AS frags
 			  FROM newsgroup_state s
 			 WHERE s.backbone = $1 AND s.group_name = $2`, backbone, group)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -313,16 +302,41 @@ func (s *PGStore) resetWatermark(ctx context.Context, backbone, group string, sc
 		}
 
 		if scope == resetHistory {
-			if cur.GapBelow <= 0 {
-				return fmt.Errorf(
-					"%s: every article between %d and %d is already recorded as fetched — "+
-						"reopening the backfill would find no gaps and immediately mark itself done",
-					group, cur.ServerLow, cur.HighWatermark)
+			if !cur.Target.Valid {
+				return fmt.Errorf("%s has no recorded coverage — there is nothing to re-walk below", group)
 			}
-			// back_watermark is the point the backfill walks DOWN from. Setting
-			// it to the forward mark reopens the whole window; the spans this
-			// crawler already fetched stay in newsgroup_ranges, so the backfill
-			// skips them and only the genuine gaps are queued.
+			// Everything below the crawler's own most recent run. On an adopted
+			// install this is the span a PREVIOUS crawler claimed, which is the
+			// claim being repudiated.
+			below := cur.Target.Int64 - cur.ServerLow
+			if below <= 0 {
+				return fmt.Errorf(
+					"%s: this crawler's coverage already starts at the server's oldest article (%d) — "+
+						"there is no earlier history to re-walk",
+					group, cur.ServerLow)
+			}
+
+			// DROP the claimed coverage below that run, rather than trusting a
+			// migration to have done it.
+			//
+			// The backfill plans from gaps in this table, so a claim of coverage
+			// IS the thing preventing a re-walk — deleting it is the operation,
+			// not a tidy-up before the operation. Doing it here also avoids the
+			// mistake migration 022 made: it identified the rows to remove by
+			// recomputing GREATEST(back_watermark, server_low), and server_low
+			// drifts upward as the provider expires articles, so by the time it
+			// ran the value no longer matched anything and it deleted nothing.
+			// Here the boundary is the crawler's own max(range_start), which is
+			// a recorded fact rather than a re-derived one.
+			if _, err := tx.ExecContext(ctx, `
+				DELETE FROM newsgroup_ranges
+				 WHERE backbone = $1 AND group_name = $2 AND range_start < $3`,
+				backbone, group, cur.Target.Int64); err != nil {
+				return err
+			}
+			// back_watermark is where the backfill walks DOWN from. The run at
+			// or above Target stays recorded, so the backfill skips it and
+			// queues only what was just repudiated.
 			if _, err := tx.ExecContext(ctx, `
 				UPDATE newsgroup_state
 				   SET back_watermark = high_watermark, back_watermark_date = NULL,
@@ -332,7 +346,7 @@ func (s *PGStore) resetWatermark(ctx context.Context, backbone, group string, sc
 			}
 			out = watermarkReset{
 				Group: group, Scope: scope, OldMark: cur.HighWatermark,
-				NewMark: cur.ServerLow, Frags: cur.Frags, Articles: cur.GapBelow,
+				NewMark: cur.ServerLow, Frags: cur.Frags, Articles: below,
 			}
 			return nil
 		}

@@ -123,13 +123,47 @@ func TestResetWatermarkHistoryScope(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A CLAIMED range below the crawler's own run — the shape an adopted
+	// install has, and the thing being repudiated.
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO newsgroup_ranges (backbone, group_name, range_start, range_end)
+		 VALUES ('bb','hist.group', 900, 1899999)`); err != nil {
+		t.Fatal(err)
+	}
+
 	got, err := s.resetWatermark(ctx, "bb", "hist.group", resetHistory)
 	if err != nil {
 		t.Fatalf("history reset: %v", err)
 	}
-	// window 1000..2000000 = 1,999,000; covered 1,900,000..2,000,000 = 100,001
-	if want := int64(1999000 - 100001); got.Articles != want {
-		t.Errorf("gap = %d, want %d — it must exclude what is already recorded as fetched", got.Articles, want)
+	// Everything below the crawler's own earliest fetch: 1,900,000 - 1,000.
+	if want := int64(1900000 - 1000); got.Articles != want {
+		t.Errorf("articles = %d, want %d", got.Articles, want)
+	}
+
+	// The claimed range must be GONE, or the backfill still sees no gap. This
+	// is the failure that shipped: migration 022 tried to delete it by
+	// recomputing GREATEST(back_watermark, server_low), server_low had drifted
+	// upward as the provider expired articles, nothing matched, and the reset
+	// then refused with "already recorded as fetched".
+	var below int
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM newsgroup_ranges
+		  WHERE backbone='bb' AND group_name='hist.group' AND range_start < 1900000`).Scan(&below); err != nil {
+		t.Fatal(err)
+	}
+	if below != 0 {
+		t.Errorf("%d claimed range(s) below the crawler's run survived — the backfill will still find no gaps", below)
+	}
+	// The crawler's own run must SURVIVE: re-reading what it genuinely fetched
+	// is not what was asked for, and it is the expensive half.
+	var kept int
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM newsgroup_ranges
+		  WHERE backbone='bb' AND group_name='hist.group' AND range_start >= 1900000`).Scan(&kept); err != nil {
+		t.Fatal(err)
+	}
+	if kept != 1 {
+		t.Errorf("the crawler's own coverage was deleted too (kept=%d)", kept)
 	}
 
 	var back int64
@@ -172,8 +206,8 @@ func TestResetWatermarkHistoryScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.resetWatermark(ctx, "bb", "covered.group", resetHistory); err == nil {
-		t.Error("fully-covered group: want a refusal, got success")
-	} else if !strings.Contains(err.Error(), "already recorded as fetched") {
+		t.Error("coverage already at the server floor: want a refusal, got success")
+	} else if !strings.Contains(err.Error(), "no earlier history to re-walk") {
 		t.Errorf("unhelpful error: %v", err)
 	}
 }
