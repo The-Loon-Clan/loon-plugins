@@ -634,6 +634,12 @@ func evictionStaleness(meta map[string]string, now int64) (age int64, ok bool) {
 	return now - from, true
 }
 
+// pendingNeed is what the "forming releases" card shows as a set's requirement.
+// It is deliberately a thin alias for groupNeededParts rather than its own
+// calculation: the card exists to explain why the builder has not taken a set,
+// so any divergence between them makes it actively misleading.
+func pendingNeed(meta map[string]string) int { return groupNeededParts(meta) }
+
 // groupNeededParts is a cheap LOWER BOUND on the article count a set needs, used
 // only to decide whether the exact check (isGroupComplete, which costs an HKEYS)
 // is worth running.
@@ -939,23 +945,15 @@ func (r *redisStaging) incompleteSets(ctx context.Context, limit int) ([]pending
 		// The writer stores file_parts as "1"/"0" (boolStr) — matching every
 		// other reader; == "true" was never true, which hid multi-file sets.
 		multi := meta["file_parts"] == "1" || meta["file_parts"] == "true"
-		need := 0
-		if multi {
-			// A multi-file set needs totalFiles*segTotal parts, same as the
-			// builder's groupNeededParts — seg_total alone undercounts and made
-			// exactly the big multi-file sets this card exists to explain
-			// read as "complete" and vanish.
-			tf, st := atoiField(meta["total_files"]), atoiField(meta["seg_total"])
-			if tf > 0 && st > 0 {
-				need = tf * st
-			}
-		}
-		if need <= 0 {
-			need = atoiField(meta["seg_total"])
-		}
-		if need <= 0 {
-			need = atoiField(meta["total_parts"])
-		}
+		// CALL the builder's function rather than restating it. This block used
+		// to carry its own copy, with a comment claiming the two agreed; they
+		// stopped agreeing the moment groupNeededParts was corrected to a
+		// per-file lower bound, and the card went on reporting the old
+		// impossible figures — 2,016,196 needed for a 157k-article set — while
+		// the builder had already moved on. A dashboard that disagrees with the
+		// code it describes is worse than no dashboard, because it is what an
+		// operator reaches for when something is wrong.
+		need := pendingNeed(meta)
 		if need <= 0 || have >= need {
 			continue // complete (or unknowable) — the builder will take it
 		}

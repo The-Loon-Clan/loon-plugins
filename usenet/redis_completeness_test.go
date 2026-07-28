@@ -152,3 +152,28 @@ func TestEvictionMeasuresStalenessNotAge(t *testing.T) {
 		t.Error("a set with no timestamps must not resolve an age")
 	}
 }
+
+// The "forming releases" card and the builder must agree on what a set needs.
+// They did not: the card carried its own copy of the calculation, and when
+// groupNeededParts was corrected the card kept reporting the old impossible
+// figures — 2,016,196 needed for a 157k-article set — while the builder had
+// moved on. An operator debugging a stalled crawler reads the card.
+func TestPendingCardAgreesWithTheBuilder(t *testing.T) {
+	cases := []map[string]string{
+		// Post-upgrade set with per-file totals.
+		func() map[string]string { m, _ := metaOneBigManySmall(13, 400, 3); return m }(),
+		// Pre-upgrade multi-file set: no per-file totals recorded.
+		{"file_parts": "1", "total_files": "13", "seg_total": "155092", "total_parts": "155092"},
+		// Single-file set.
+		{"file_parts": "0", "total_parts": "45"},
+		// Nothing knowable.
+		{"file_parts": "1"},
+	}
+	for i, meta := range cases {
+		want := groupNeededParts(meta)
+		got := pendingNeed(meta)
+		if got != want {
+			t.Errorf("case %d: card needs %d, builder needs %d — the two have drifted apart", i, got, want)
+		}
+	}
+}
