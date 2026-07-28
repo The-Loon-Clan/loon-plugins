@@ -417,3 +417,74 @@ func TestJobsWidgetRenders(t *testing.T) {
 		}
 	}
 }
+
+// Inline handlers must be syntactically valid JavaScript, and the way they stop
+// being valid is a RAW newline inside a string literal — JS has no multi-line
+// string literals, so one unterminates the string and the whole handler throws.
+//
+// This shipped. The Reset Watermarks prompt was written with real line breaks
+// instead of \n escapes, so onsubmit threw, the hidden confirm field was never
+// populated, and every reset came back "the typed name did not match" no matter
+// what the operator typed. The existing test asserted the prompt TEXT was
+// present, which it was — in a handler that could not run.
+func TestInlineHandlersHaveNoRawNewlines(t *testing.T) {
+	tmpl, err := template.ParseFS(viewFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, name := range []string{"settings.html", "crawlers.html"} {
+		var buf bytes.Buffer
+		// Errors are ignored: several templates need data this test does not
+		// supply. Whatever rendered before the error is still worth scanning,
+		// and the dedicated render tests cover completeness.
+		_ = tmpl.ExecuteTemplate(&buf, name, map[string]any{
+			"Servers": []provider{}, "DefaultConns": 10, "Knobs": []knob{},
+			"SkipBackfill": false, "Tiers": AllTiers,
+			"Groups": []pluginapi.GroupInfo{{
+				Name: "alt.binaries.example", Active: true,
+				ResetArticles: 10076933, ResetHistoryArticles: 793770354,
+			}},
+			"GroupQuery": "", "GroupTotal": 1, "Shown": 1, "Msg": "", "Err": "",
+			"CrawlersTab": template.HTML(""), "FiltersTab": template.HTML(""),
+			"Stats": pluginapi.IndexStats{}, "Fleet": nil, "Workers": nil,
+			"Pass": passVM{}, "Backfill": passVM{}, "Health": healthVM{},
+			"IndexStats": indexStatsVM{}, "Backbones": nil,
+		})
+		if buf.Len() == 0 {
+			t.Errorf("%s rendered nothing — this test would pass vacuously", name)
+			continue
+		}
+		for _, attr := range []string{"onsubmit=\"", "onclick=\"", "onchange=\""} {
+			rest := buf.String()
+			for {
+				i := strings.Index(rest, attr)
+				if i < 0 {
+					break
+				}
+				rest = rest[i+len(attr):]
+				end := strings.Index(rest, "\"")
+				if end < 0 {
+					break
+				}
+				if body := rest[:end]; strings.ContainsAny(body, "\n\r") {
+					t.Errorf("%s: %s handler contains a raw newline — JS string literals "+
+						"cannot span lines, so this handler throws and never runs:\n%.160s",
+						name, strings.TrimSuffix(attr, "=\""), body)
+				}
+				found++
+				rest = rest[end:]
+			}
+		}
+	}
+	// Anti-vacuous. Not every template has inline handlers, but if NONE of them
+	// do, the fixture has stopped rendering the rows that carry them and this
+	// test silently stops testing anything. It did exactly that on the first
+	// attempt: it passed against a template with the bug deliberately
+	// reintroduced, because settings.html was not rendering far enough to emit
+	// the handler at all.
+	if found == 0 {
+		t.Error("no inline handlers found in any template — the fixture no longer " +
+			"renders them, so this test is not checking anything")
+	}
+}

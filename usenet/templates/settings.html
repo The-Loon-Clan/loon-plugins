@@ -275,13 +275,7 @@
                              prompt is UX only — the handler re-checks the typed name. */}}
                         {{if .ResetArticles}}
                         <form method="post" action="/admin/p/usenet/group-reset" style="display:inline"
-                              onsubmit="var v=prompt('Reset watermarks for {{.Name}}?
-
-Re-reads {{.ResetArticles}} article(s) — the span THIS crawler fetched, not the whole newsgroup. History indexed before the crawler took over is not touched.
-
-Already-stored releases dedup on content hash, so nothing duplicates; the cost is provider bandwidth.
-
-Type the group name to confirm:'); if(v===null){return false;} this.confirm.value=v; return true;">
+                              onsubmit="var v=prompt('Reset watermarks for {{.Name}}?\n\nRe-reads {{.ResetArticles}} article(s) - the span THIS crawler fetched, not the whole newsgroup. History indexed before the crawler took over is not touched.\n\nAlready-stored releases dedup on content hash, so nothing duplicates; the cost is provider bandwidth.\n\nType the group name to confirm:'); if(v===null){return false;} this.confirm.value=v; return true;">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="confirm" value="">
                             <button class="btn btn-sm py-0 btn-outline-danger" type="submit"
@@ -301,13 +295,7 @@ Type the group name to confirm:'); if(v===null){return false;} this.confirm.valu
                              behind one click would hide which one is being bought. */}}
                         {{if .ResetHistoryArticles}}
                         <form method="post" action="/admin/p/usenet/group-reset" style="display:inline"
-                              onsubmit="var v=prompt('Re-walk HISTORY for {{.Name}}?
-
-Reopens the backfill over {{.ResetHistoryArticles}} article(s) — everything below the forward mark that this crawler has not recorded as fetched. This is much larger than the recent reset and runs for a long time, bounded per pass so the forward crawl keeps up.
-
-Use this when a PREVIOUS crawler missed content, not for a recent parsing fix.
-
-Type the group name to confirm:'); if(v===null){return false;} this.confirm.value=v; return true;">
+                              onsubmit="var v=prompt('Re-walk HISTORY for {{.Name}}?\n\nReopens the backfill over {{.ResetHistoryArticles}} article(s) - everything below the forward mark that this crawler has not recorded as fetched. Much larger than the recent reset, and runs for a long time; bounded per pass so the forward crawl keeps up.\n\nUse this when a PREVIOUS crawler missed content, not for a recent parsing fix.\n\nType the group name to confirm:'); if(v===null){return false;} this.confirm.value=v; return true;">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="scope" value="history">
                             <input type="hidden" name="confirm" value="">
