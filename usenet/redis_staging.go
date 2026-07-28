@@ -532,6 +532,15 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 
 		if needed > 0 && length >= needed {
 			fields, err := r.rdb.HKeys(ctx, artKey(ci.gu.groupName, ci.gu.hash)).Result()
+			if err != nil {
+				// This is the ONE moment a set can be recognised as complete:
+				// completeness is checked only on a batch that ADDS to the set,
+				// so a set whose last batch hits this error is never re-checked
+				// and sits staged until it expires. Swallowing it made that
+				// loss indistinguishable from a set that was never finished.
+				r.note(ctx, "usenet/staging-complete-check",
+					fmt.Errorf("%s: %w", ci.gu.groupName, err))
+			}
 			if err == nil && isGroupComplete(meta, fields) {
 				readyGroups = append(readyGroups, ci.gu.groupName+":"+ci.gu.hash)
 				continue
@@ -739,9 +748,15 @@ func isGroupComplete(meta map[string]string, fields []string) bool {
 // (which re-verifies with isComplete and titles the NZB from base) gets a real
 // groupKey. Popping matches prod's BLPOP semantics — a popped set that fails to
 // build is left in art:/grp: to TTL out rather than re-queued.
-func (r *redisStaging) candidateGroups(ctx context.Context, limit int) ([]groupKey, error) {
+func (r *redisStaging) candidateGroups(ctx context.Context, limit int) ([]groupKey, candidateStats, error) {
 	if limit <= 0 {
 		limit = 500
+	}
+	var stats candidateStats
+	// Depth BEFORE the draw. The draw is a random sample, not a queue head, so
+	// depth-vs-sampled is the only way to see the backlog it is sampling from.
+	if n, err := r.rdb.SCard(ctx, readyKey).Result(); err == nil {
+		stats.ReadyDepth = n
 	}
 	// PEEK, don't pop. The build loop is written for the pg contract "leave
 	// staged, retry next pass" — it deleteStaged's a set only on success or a
@@ -764,10 +779,11 @@ func (r *redisStaging) candidateGroups(ctx context.Context, limit int) ([]groupK
 		return e
 	})
 	if err != nil {
-		return nil, err
+		return nil, stats, err
 	}
+	stats.Sampled = len(entries)
 	if len(entries) == 0 {
-		return nil, nil
+		return nil, stats, nil
 	}
 	pipe := r.rdb.Pipeline()
 	cmds := make([]*redis.StringCmd, len(entries))
@@ -780,7 +796,7 @@ func (r *redisStaging) candidateGroups(ctx context.Context, limit int) ([]groupK
 		}
 	}
 	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
-		return nil, err
+		return nil, stats, err
 	}
 	out := make([]groupKey, 0, len(entries))
 	var stale []interface{}
@@ -799,10 +815,11 @@ func (r *redisStaging) candidateGroups(ctx context.Context, limit int) ([]groupK
 		}
 		out = append(out, groupKey{Group: gh[i][0], Base: base})
 	}
+	stats.Live, stats.Fossil = len(out), len(stale)
 	if len(stale) > 0 {
 		_ = r.rdb.SRem(ctx, readyKey, stale...).Err() // best-effort: a leftover dead entry is retried harmlessly
 	}
-	return out, nil
+	return out, stats, nil
 }
 
 // groupArticles loads a set's articles by (group, base) — the hash is recomputed
@@ -881,13 +898,31 @@ func (r *redisStaging) stagingInfo(ctx context.Context) (stagingInfo, error) {
 	if n, err := r.rdb.SCard(ctx, readyKey).Result(); err == nil {
 		out.ReadyGroups = n
 	}
-	info, err := r.rdb.Info(ctx, "memory").Result()
+	// memory AND stats: used/maxmemory come from the first, evicted_keys and
+	// expired_keys from the second. Reading only "memory" — which is what this
+	// did — makes eviction structurally unobservable.
+	info, err := r.rdb.Info(ctx, "memory", "stats").Result()
 	if err != nil {
 		return out, err
 	}
 	out.MemUsedBytes = parseInfoInt(info, "used_memory:")
 	out.MemMaxBytes = parseInfoInt(info, "maxmemory:")
+	out.EvictedKeys = parseInfoInt(info, "evicted_keys:")
+	out.ExpiredKeys = parseInfoInt(info, "expired_keys:")
+	out.MaxMemoryPolicy = parseInfoStr(info, "maxmemory_policy:")
 	return out, nil
+}
+
+// parseInfoStr is parseInfoInt for the fields that are not numbers —
+// maxmemory_policy being the one that decides whether this Redis destroys
+// staged releases or refuses the write.
+func parseInfoStr(info, prefix string) string {
+	for _, line := range strings.Split(info, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		}
+	}
+	return ""
 }
 
 // incompleteSets walks every active set and returns the largest incomplete

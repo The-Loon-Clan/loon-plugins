@@ -111,6 +111,19 @@ Principal tables:
   *every* candidate — including the two outcomes the pass never used to report,
   `incomplete` and `duplicate`, which are usually the largest. Bucketed by day
   rather than all-time because the question is almost always "what changed".
+- `staging_census` — one row per build pass covering the stretch between "the
+  articles are staged" and "a release exists", which was previously
+  unobservable end to end. Three different mechanisms can destroy a completed
+  release in that gap — Redis evicting keys under `maxmemory`, the staging TTL,
+  and a ready queue deeper than the per-pass draw — and all three remove work
+  silently, so a release could stage, complete, queue itself and vanish without
+  touching `build_outcomes`, the job log, the error log or any counter. The
+  columns are cheap (one `INFO` plus two O(1) reads) and the signal is in the
+  DELTA between rows: `evicted_keys` climbing means Redis is destroying staged
+  work; `ready_depth` far above `sampled` pass after pass means arrivals outpace
+  the drain; `fossil_dropped` counts releases that completed and then expired
+  before the builder drew them. Rendered as the **Staging health** card on the
+  Jobs tab, and pruned to 14 days. Migration 024.
 - `leases`, `crawler_workers` — multi-host coordination.
 
 Reads **`public.newsgroups` / `public.blacklist_regexes`** once, at host
@@ -311,6 +324,7 @@ known (the build path); the per-article ingest path runs the unsized subset.
 - `nntp.go` / `pool.go` (loon) — NNTP conn handling; the shared connection pool.
 - `staging.go` / `redis_staging.go` — the `stagingStore` seam (pg | redis).
 - `assemble.go` — completeness detection, NZB XML build, classification, the store handoff.
+- `staging_census.go` — per-build-pass staging health series (migration 024).
 - `subject_mime.go` — RFC 2047 encoded-word decoding at ingest.
 - `subject.go` / `tags.go` — subject parsing; title-derived quality tags + category helpers.
 - `junk.go` / `junk_store.go` / `seed/junk_rules.tsv` — the junk-filter engine + its data.

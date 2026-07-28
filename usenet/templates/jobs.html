@@ -63,6 +63,54 @@
           <span id="bld-evicted">{{$.Evicted}}</span> hopeless set(s) evicted since worker start
         </p>
         {{end}}
+{{if $.Census}}
+<div class="card bg-dark border-secondary mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Staging health{{if $.Schema}} <span class="text-muted small">(plugin schema {{$.Schema}})</span>{{end}}</span>
+    {{$now := index $.Census 0}}
+    {{if $now.MaxMemoryPolicy}}
+      <span class="small {{if $now.EvictionRisk}}text-warning{{else}}text-muted{{end}}">
+        maxmemory-policy: {{$now.MaxMemoryPolicy}}{{if $now.EvictionRisk}} — Redis may DELETE staged releases to stay under its ceiling{{end}}
+      </span>
+    {{end}}
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-2">
+      One row per build pass. The columns that matter are the deltas: <b>evicted</b> rising means Redis is
+      destroying keys to stay under maxmemory — forming releases die before they can complete. <b>Fossils</b>
+      are releases that completed, queued, and then expired before the builder drew them. <b>Ready</b> far
+      above <b>drew</b>, pass after pass, means arrivals outpace the drain.
+    </p>
+    <div class="table-responsive">
+      <table class="table table-dark table-sm align-middle">
+        <thead><tr>
+          <th>At</th>
+          <th class="text-end">Ready</th><th class="text-end">Drew</th>
+          <th class="text-end">Live</th><th class="text-end">Fossils</th>
+          <th class="text-end">Forming</th>
+          <th class="text-end">Memory</th>
+          <th class="text-end">Evicted (+new)</th><th class="text-end">Expired (+new)</th>
+        </tr></thead>
+        <tbody>
+        {{range $.Census}}
+          <tr>
+            <td class="small text-muted">{{.At.Format "15:04:05"}}</td>
+            <td class="text-end small{{if .Starved}} text-warning{{end}}">{{.ReadyDepth}}</td>
+            <td class="text-end small">{{.Sampled}}</td>
+            <td class="text-end small">{{.LiveCandidates}}</td>
+            <td class="text-end small{{if .FossilDropped}} text-danger{{end}}">{{.FossilDropped}}</td>
+            <td class="text-end small">{{.PendingSets}}</td>
+            <td class="text-end small">{{if lt .MemPct 0.0}}unbounded{{else}}{{printf "%.0f%%" .MemPct}}{{end}}</td>
+            <td class="text-end small{{if .EvictedDelta}} text-danger{{end}}">{{.EvictedKeys}}{{if .EvictedDelta}} (+{{.EvictedDelta}}){{end}}</td>
+            <td class="text-end small text-muted">{{.ExpiredKeys}}{{if .ExpiredDelta}} (+{{.ExpiredDelta}}){{end}}</td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{{end}}
         {{if $.Pending}}
         <p class="text-muted small mb-2">Largest incomplete releases (still missing articles — later passes complete them; stale ones are evicted):</p>
         <div class="table-responsive">

@@ -126,7 +126,13 @@ type BlacklistStore interface {
 
 // AssemblerStore is the staging area the NZB assembler reads + drains.
 type AssemblerStore interface {
-	candidateGroups(ctx context.Context, limit int) ([]groupKey, error)
+	candidateGroups(ctx context.Context, limit int) ([]groupKey, candidateStats, error)
+
+	// Staging census — the time series that makes the gap between "staged" and
+	// "built" observable. See staging_census.go.
+	recordStagingCensus(ctx context.Context, c stagingCensus) error
+	stagingCensusRows(ctx context.Context, limit int) ([]censusRow, error)
+	pruneStagingCensus(ctx context.Context, keepDays int) (int64, error)
 	groupArticles(ctx context.Context, group, base string) ([]stagedArticle, error)
 	deleteStaged(ctx context.Context, group, base string) error
 	insertNzb(ctx context.Context, n nzbRow) (bool, error)

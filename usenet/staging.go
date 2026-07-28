@@ -20,7 +20,13 @@ import (
 // (isComplete -> buildNZB -> insertNzb) stays backend-agnostic on PGStore.
 type stagingStore interface {
 	stageArticles(ctx context.Context, arts []stagedArticle) (int, error)
-	candidateGroups(ctx context.Context, limit int) ([]groupKey, error)
+	// candidateGroups returns sets ready to assemble, PLUS what the draw
+	// looked like. The stats are not decoration: with a queue that can outgrow
+	// the per-pass draw, "no releases appeared" has three different causes
+	// (nothing completed / the queue is deeper than the draw / entries expired
+	// before being drawn) and they are indistinguishable from the returned
+	// keys alone.
+	candidateGroups(ctx context.Context, limit int) ([]groupKey, candidateStats, error)
 	groupArticles(ctx context.Context, group, base string) ([]stagedArticle, error)
 	deleteStaged(ctx context.Context, group, base string) error
 	deleteJunkStaged(ctx context.Context) (int64, error)
@@ -41,6 +47,26 @@ type stagingStore interface {
 	incompleteSets(ctx context.Context, limit int) ([]pendingSet, error)
 }
 
+// candidateStats describes one draw from the ready queue.
+//
+// ReadyDepth is the queue BEFORE the draw, so ReadyDepth > Sampled means work
+// is waiting that this pass will not touch — and if that holds pass after pass
+// while the queue grows, arrivals outpace the drain and entries age out before
+// their turn. Fossil counts entries drawn whose set metadata was already gone:
+// those completed, were queued, and then expired or were evicted. Every one is
+// a release that no outcome, log line or counter would otherwise record.
+type candidateStats struct {
+	ReadyDepth int64
+	Sampled    int
+	Live       int
+	Fossil     int
+}
+
+// Starved reports that the queue held more than this draw could take. One pass
+// means nothing; sustained, it means arrivals outpace the drain and entries will
+// expire waiting for a turn no matter how healthy each one is.
+func (c candidateStats) Starved() bool { return c.ReadyDepth > int64(c.Sampled) }
+
 // stagingInfo is the Index Stats card's staging section. Mode discriminates
 // which fields are meaningful (redis: key/queue/memory; pg: row count).
 type stagingInfo struct {
@@ -50,6 +76,23 @@ type stagingInfo struct {
 	ReadyGroups    int64  // redis only: SCARD nzb:ready — sets awaiting assembly
 	MemUsedBytes   int64  // redis only
 	MemMaxBytes    int64  // redis only; 0 = unbounded
+
+	// Eviction visibility. Without these, "pressure 100%" and "the release
+	// vanished" are two unrelated observations; with them they are one fact.
+	// Redis at maxmemory under an allkeys-* policy DELETES keys to admit
+	// writes, and a forming release is exactly the kind of key it picks — cold
+	// between crawl visits. The plugin previously read used/maxmemory only, so
+	// this was invisible in every readout it had.
+	EvictedKeys     int64  // redis only: cumulative, INFO stats
+	ExpiredKeys     int64  // redis only: cumulative TTL expiries, for contrast
+	MaxMemoryPolicy string // redis only: noeviction | allkeys-lru | volatile-* …
+}
+
+// EvictionRisk reports whether this Redis can silently destroy staged work.
+// "noeviction" cannot — it refuses writes instead, which surfaces as an error
+// the crawler reports. Every other policy discards keys quietly.
+func (s stagingInfo) EvictionRisk() bool {
+	return s.MaxMemoryPolicy != "" && s.MaxMemoryPolicy != "noeviction"
 }
 
 // pgStaging is the durable, never-lost backend: every staged article is a

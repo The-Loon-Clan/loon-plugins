@@ -119,6 +119,16 @@ type workerTelemetry struct {
 	// Evicted counts hopeless sets shed by redis staging since worker start —
 	// the answer to "is eviction failing or filtering".
 	Evicted int64 `json:"evicted,omitempty"`
+	// Census is the last few staging-health samples, newest first. Published
+	// because the readings that matter are DELTAS between build passes, and a
+	// dashboard showing one instant cannot express "evictions are climbing" —
+	// which is the difference between a crawler that is filtering and one that
+	// is destroying completed work.
+	Census []censusRow `json:"census,omitempty"`
+	// Schema is the newest plugin migration this binary carries. app_versions
+	// reports the SITE's git SHA, so a plugin-only deploy is invisible there;
+	// this is the marker that says which plugin code is actually running.
+	Schema string `json:"schema,omitempty"`
 }
 
 // pickPass prefers the running pass, falling back to the last completed one,
@@ -149,6 +159,13 @@ func (p *Plugin) localTelemetry() workerTelemetry {
 	tv.Jobs, _ = p.jobVMs()
 	tv.Pending = p.tel.pendingSets()
 	tv.Evicted = p.tel.evictedCount()
+	tv.Schema = newestMigration()
+	if p.st != nil {
+		// Cheap: an indexed LIMIT read of a table with one row per build pass.
+		if rows, err := p.st.stagingCensusRows(context.Background(), 12); err == nil {
+			tv.Census = rows
+		}
+	}
 	return tv
 }
 

@@ -61,11 +61,25 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		return
 	}
 
-	keys, err := p.staging.candidateGroups(ctx, p.effective(ctx).BuildDrainPerPass)
+	keys, drawn, err := p.staging.candidateGroups(ctx, p.effective(ctx).BuildDrainPerPass)
 	if err != nil {
 		p.buildJob.SetError(err.Error())
 		p.reportErr(ctx, "usenet/build-scan", err)
 		return
+	}
+	// Sample staging health for THIS pass before doing any work with the draw.
+	// Deferred so it still records when the pass returns early — a pass that
+	// died is exactly when the operator most needs the reading.
+	defer p.takeStagingCensus(ctx, drawn)
+	if drawn.Fossil > 0 {
+		// Each fossil is a release that completed, queued itself, and then
+		// expired or was evicted before the builder drew it. Nothing else
+		// records these: they never reach an outcome, so build_outcomes cannot
+		// see them, and the SRem that removes them is best-effort and silent.
+		p.buildJob.Log("ready queue: drew %d of %d, %d already expired (completed releases lost before assembly)",
+			drawn.Sampled, drawn.ReadyDepth, drawn.Fossil)
+	} else if drawn.Starved() {
+		p.buildJob.Log("ready queue: drew %d of %d waiting", drawn.Sampled, drawn.ReadyDepth)
 	}
 	built, skippedExt, skippedBL := 0, 0, 0
 	for _, k := range keys {
@@ -458,7 +472,7 @@ type groupKey struct {
 // distinct parts reach total_parts, multi-file when all file numbers are
 // present. runBuild re-verifies each with isComplete (which checks per-file
 // segment counts the SQL can't cheaply express).
-func (s *PGStore) candidateGroups(ctx context.Context, limit int) ([]groupKey, error) {
+func (s *PGStore) candidateGroups(ctx context.Context, limit int) ([]groupKey, candidateStats, error) {
 	type row struct {
 		Group string `db:"group_name"`
 		Base  string `db:"base_subject"`
@@ -473,13 +487,19 @@ func (s *PGStore) candidateGroups(ctx context.Context, limit int) ([]groupKey, e
 			 LIMIT $1`, limit)
 	})
 	if err != nil {
-		return nil, err
+		return nil, candidateStats{}, err
 	}
 	out := make([]groupKey, len(rows))
 	for i, r := range rows {
 		out[i] = groupKey{Group: r.Group, Base: r.Base}
 	}
-	return out, nil
+	// pg has no queue to be starved by: the SELECT recomputes completeness from
+	// durable rows every pass, so nothing can be "waiting behind the draw" and
+	// nothing can expire before its turn. Depth and Live equal what was found;
+	// Fossil is structurally impossible here. Reporting them keeps the readout
+	// meaningful in both modes rather than blank in one.
+	st := candidateStats{ReadyDepth: int64(len(out)), Sampled: len(out), Live: len(out)}
+	return out, st, nil
 }
 
 func (s *PGStore) groupArticles(ctx context.Context, group, base string) ([]stagedArticle, error) {

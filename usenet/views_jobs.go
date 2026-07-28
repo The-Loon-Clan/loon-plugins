@@ -97,6 +97,7 @@ func (p *Plugin) renderJobs(ctx context.Context) (template.HTML, error) {
 		"Jobs":    panes,
 		"Builder": builder, "PGStaging": pgStaging,
 		"Pending": tv.Pending, "Evicted": tv.Evicted, "ReadyGroups": ready,
+		"Census": tv.Census, "Schema": tv.Schema,
 		"Health":   p.healthVM(ctx, cs),
 		"Pass":     statsVM(pickPass(tv.CrawlCur, tv.CrawlLast)),
 		"Backfill": statsVM(pickPass(tv.BackfillCur, tv.BackfillLast)),
