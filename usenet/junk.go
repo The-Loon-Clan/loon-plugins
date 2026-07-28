@@ -417,17 +417,56 @@ func isRepeatedShortTokenJunk(title string) bool {
 // separators (.-_()[] and space) are allowed, and so are angle brackets —
 // legitimate posters wrap signatures in them ("<<<Nimue>>>< file >") and they
 // over-caught real rips before prod excluded them.
+// reTrailingTagBlock matches a trailing "{...}" metadata block — the
+// {Tags:L0;V7;A=ja,en;S=en,ar;} convention several release groups append.
+//
+// The closing brace is OPTIONAL because whichJunkRuleSized normalises with
+// strings.Trim(t, "'\"{}[]- ") first, which strips it: by the time a rule sees
+// the title the block is already unterminated. Requiring the brace made this
+// pattern silently never match — the audit reported the same 71 false
+// positives before and after adding it.
+//
+// The block must still contain a ":" or "=" so it reads as structured metadata
+// rather than a stray brace in genuine garble.
+var reTrailingTagBlock = regexp.MustCompile(`\s*\{[^{}]*[:=][^{}]*\}?\s*$`)
+
 func highSpecialChars(t string, p junkParams) bool {
 	minLen := p.MinLen
 	if minLen <= 0 {
 		minLen = 12
 	}
+	// A trailing {Tags:...} block is metadata, not garble. Several major groups
+	// (Erai-raws, VARYG, Gecko, Himejoshi) append one, and it is almost entirely
+	// ';' '=' ',' ':' — so a release with a long language list scored as
+	// punctuation soup on the strength of its own structured metadata. Measured
+	// against 20,000 catalogued titles this was 71 of the 96 false positives,
+	// every one a real release. Stripped for the RATIO only; the rest of the
+	// title is judged as it stands, and a genuinely garbled title does not
+	// become clean by having braces at the end.
+	t = reTrailingTagBlock.ReplaceAllString(t, "")
+
 	// Runes, not bytes, on BOTH sides of the ratio. The numerator has always
 	// counted runes; leaving the denominator as len(t) made the verdict depend
 	// on how the title was encoded rather than on what it said — a multi-byte
 	// script silently got a third of the divisor it should have had.
-	var special, total int
+	// A RUN of the same mark is one piece of emphasis, not N pieces of garble.
+	// Anime naming uses it constantly — "Keijo!!!!!!!!", "New Game!!",
+	// "Ore Monogatari!!" — and counting each mark separately junked
+	// "[HorchataScans] Keijo!!!!!!!! … [競女!!!!!!!!]" on the strength of the
+	// show's own name. Garble is VARIED punctuation; "$&!@#=$%^&*=!@" survives
+	// this collapse untouched because no two of its marks are adjacent twins.
+	//
+	// The length gate stays on the RAW rune count: collapsing first would let a
+	// title that is nothing but one repeated mark shrink below minLen and escape
+	// the rule entirely.
+	var special, total, raw int
+	prev := rune(-1)
 	for _, c := range t {
+		raw++
+		if c == prev {
+			continue
+		}
+		prev = c
 		total++
 		// unicode.IsLetter/IsDigit, not the ASCII isAlnum this used to call.
 		// This rule means "the title is mostly spam-grade punctuation", and
@@ -444,13 +483,25 @@ func highSpecialChars(t string, p junkParams) bool {
 		if unicode.IsLetter(c) || unicode.IsDigit(c) {
 			continue
 		}
+		// Only ASCII punctuation counts. What this rule exists to catch is
+		// keyboard soup — "$&!@#=$%^&*=!@", "${tmFKdpM6G(3^HdolJ[56NHAa|" —
+		// and the obfuscation bots that generate it work in ASCII. Non-ASCII
+		// punctuation is structure: 【】（）〔〕 are brackets, ・／ are
+		// separators, │ divides fields, ： introduces one. We already allow
+		// the ASCII []() forms, so counting their full-width equivalents as
+		// garble junked real releases for using the punctuation of their own
+		// script — 7 of the 8 remaining false positives against the
+		// production corpus, including two audio releases and a radio show.
+		if c > 127 {
+			continue
+		}
 		switch c {
 		case ' ', '.', '-', '_', '[', ']', '(', ')', '<', '>':
 			continue
 		}
 		special++
 	}
-	if total < minLen {
+	if raw < minLen || total == 0 {
 		return false
 	}
 	return float64(special)/float64(total) > 0.15

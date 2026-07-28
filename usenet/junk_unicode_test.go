@@ -30,11 +30,30 @@ func TestPunctuationSoupIsStillJunk(t *testing.T) {
 		`~!@#$%^&*()_+~!@#$%^&*(){}|:"<>?`,
 		`!!!!!!!!!!!!!!!!!!!!`,
 		`$&!@#=$%^&*=!@`, // the parity-suite vector
-		// Native script is no defence when the title really is mostly marks.
-		`名探偵プリキュア！！！！！！！！！！`,
 	} {
 		if whichJunkRule(title) == "" {
 			t.Errorf("punctuation soup passed the filter: %s", title)
+		}
+	}
+}
+
+// Real releases from the production corpus that the rule used to junk. The
+// full-width brackets and separators here are ordinary structure in their own
+// script, and a run of exclamation marks is a title style, not garble —
+// "Keijo!!!!!!!!" / "競女!!!!!!!!" is a real anime, which is why a repeated-mark
+// vector cannot be used as a soup fixture.
+func TestCataloguedReleasesSurviveTheFilter(t *testing.T) {
+	for _, title := range []string{
+		`[Audio > Lossless] 【ASMR】雙生蘿莉魅魔♪～在您耳畔舔舐、嬌喘、呢喃、絕頂、高潮瘋狂～[WAV/MP3]`,
+		`【さめラジ！】第1回 Same RADIO│MC：花澤香菜（子ザメちゃん役）ゲスト：潘めぐみ（あんこうちゃん役）`,
+		`[HorchataScans] Keijo!!!!!!!! - Las Musas de la Calipigia - 01 [競女!!!!!!!!] [Sub Español]`,
+		// The {Tags:...} metadata block several groups append. Almost entirely
+		// ';' '=' ',' — structure, not garble.
+		`[LbE3L] BLACK TORCH S01E01–E02 [1080p CR WEBRip AV1 Opus 2.0 Multi-Audio MSubs] ` +
+			`{Tags:L0;V7;C3;A=ja,en,ar,de,es419,eses,frfr,it,pl,ptbr;S=en,ar,zhhans,zhhant,frfr,de,id,it,ms,pl,ptbr,ru,eses,es419,th,vi;}`,
+	} {
+		if rule := whichJunkRule(title); rule != "" {
+			t.Errorf("junked a catalogued release as %q:\n  %s", rule, title)
 		}
 	}
 }

@@ -278,6 +278,19 @@ climbed as if it were working. The host-side mirror in
 `pkg/services/junk_title.go` carries the same fix (the SQL sweep clause counts a
 fixed ASCII set and was never affected).
 
+Three further corrections came out of running the engine over 20,000 titles
+already in the production catalogue (`TestJunkCorpusAudit`, which skips unless
+`USENET_AUDIT_CORPUS` is set): a trailing `{Tags:L0;A=ja,en;S=en,ar;}` metadata
+block is stripped before the ratio (it is `;=,` almost end to end, so a long
+language list read as soup); only ASCII punctuation counts, because the
+obfuscation bots work in ASCII while `【】（）｜` are ordinary structure in their own
+script; and a RUN of the same mark counts once, since `Keijo!!!!!!!!` and
+`New Game!!` are title styles rather than garble. Together those took the
+false-positive rate from 96 titles to 27 — 23 of the remainder are the
+deliberate `under_1mib`/`under_5mib` size bands catching subtitle packs, manga
+and audio rather than a rule defect. **Run that audit before changing a junk
+rule**; none of these were visible by inspection.
+
 The **junk engine** is a full, data-driven port of the production filter: 24
 rules (regex + named heuristics for shapes regexes can't express) in the
 production evaluation order, shipped in `seed/junk_rules.tsv`, seeded to
