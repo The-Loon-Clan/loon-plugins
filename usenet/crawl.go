@@ -730,20 +730,24 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, 
 		if ov.MessageId == "" {
 			continue
 		}
+		// Before anything reads the subject: it is a raw header, and a poster
+		// writing outside ASCII sends it RFC 2047 encoded. Undecoded it is
+		// unparseable AND reads as punctuation soup to the junk engine.
+		subject := decodeSubject(ov.Subject)
 		if !ov.Date.IsZero() && ov.Date.Before(cutoff) {
 			// A watched poster's article dropped for age is worth saying out
 			// loud: "the crawl depth excludes them" looks identical to "the
 			// crawler never saw them" in every other readout.
 			if p, ok := watch.watched(ov.From); ok {
-				ph.note(p, "ingest", "before-retention-cutoff", ov.Subject)
+				ph.note(p, "ingest", "before-retention-cutoff", subject)
 			}
 			continue
 		}
-		base, pn, tp, seg, fn, tf, fp := parseSubject(ov.Subject)
+		base, pn, tp, seg, fn, tf, fp := parseSubject(subject)
 		if rule := whichJunkRule(base); rule != "" {
 			hits.note("junk", rule, base)
 			if p, ok := watch.watched(ov.From); ok {
-				ph.note(p, "ingest", rule, ov.Subject)
+				ph.note(p, "ingest", rule, subject)
 			}
 			continue // obfuscated random-token post — never index it
 		}
@@ -751,10 +755,10 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, 
 		// ambiguous between "never fetched" and "fetched and all dropped", and
 		// those have opposite fixes.
 		if p, ok := watch.watched(ov.From); ok {
-			ph.note(p, "ingest", "staged", ov.Subject)
+			ph.note(p, "ingest", "staged", subject)
 		}
 		out = append(out, stagedArticle{
-			MessageID: ov.MessageId, Subject: ov.Subject, BaseSubject: base,
+			MessageID: ov.MessageId, Subject: subject, BaseSubject: base,
 			Poster: ov.From, Bytes: int64(ov.Bytes), Posted: ov.Date, Group: group,
 			PartNum: pn, TotalParts: tp, SegTotal: seg, FileNum: fn, TotalFiles: tf, FileParts: fp,
 		})

@@ -258,6 +258,16 @@ worker (container hostname), so without takeover every deploy idled the
 crawler until the TTL lapsed. The catch-up loop retries an all-blocked pass
 every 45s to ride out the takeover window.
 
+Subjects are RFC 2047 **decoded at ingest**, before anything reads them. A
+subject is a raw header, and a poster writing outside ASCII sends
+`=?UTF-8?q?...?=`; undecoded, the title is unparseable — a base64
+encoded-word can even swallow the yEnc segment counter — and reads as
+punctuation soup to the junk engine, which had dropped 41.6 million
+articles that way. Charsets Go has no table for are passed through
+unconverted (mojibake in the right release beats an absent release), except
+the stateful ISO-2022/UTF-7 family, where doing so spills ESC bytes into the
+title and measurably makes things worse; those keep the raw header.
+
 The **junk engine** is a full, data-driven port of the production filter: 24
 rules (regex + named heuristics for shapes regexes can't express) in the
 production evaluation order, shipped in `seed/junk_rules.tsv`, seeded to
@@ -278,6 +288,7 @@ known (the build path); the per-article ingest path runs the unsized subset.
 - `nntp.go` / `pool.go` (loon) — NNTP conn handling; the shared connection pool.
 - `staging.go` / `redis_staging.go` — the `stagingStore` seam (pg | redis).
 - `assemble.go` — completeness detection, NZB XML build, classification, the store handoff.
+- `subject_mime.go` — RFC 2047 encoded-word decoding at ingest.
 - `subject.go` / `tags.go` — subject parsing; title-derived quality tags + category helpers.
 - `junk.go` / `junk_store.go` / `seed/junk_rules.tsv` — the junk-filter engine + its data.
 - `blacklist.go` / `blacklist_store.go` — the operator blacklist + filter-hit counters.
@@ -293,7 +304,9 @@ known (the build path); the per-article ingest path runs the unsized subset.
 
 Unit-tested (no DB): the junk engine (a 47-vector parity suite differentially
 verified against the production filter, plus rule-order/attribution and the
-size-band contract), the poster watch (substring matching keyed by PATTERN
+size-band contract), encoded-word decoding (the production subject that was
+being junked, a base64 subject hiding its segment counter, the stateful-charset
+refusal, and malformed input falling back to the raw header), the poster watch (substring matching keyed by PATTERN
 rather than raw `From` so one poster's history does not scatter across header
 variants, nil/empty safety on the per-article path, and accumulate/drain with a
 stable first sample), the blacklist matcher (per-field matching, fail-closed on
