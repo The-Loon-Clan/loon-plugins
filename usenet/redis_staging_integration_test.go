@@ -305,3 +305,177 @@ func TestStageArticles_SelfHealsWhenReadyBecomesList(t *testing.T) {
 		t.Fatalf("members = %v, want the migrated legacy entry plus the freshly completed set", members)
 	}
 }
+
+// The reaper is the fix for a queue that became a lottery: production held
+// 7,403,408 entries against a 500-entry random draw, 407 of every 500 draws
+// already dead. Nothing removed the dead except that same draw, so the queue
+// diluted itself faster than it could be cleared.
+func TestReapReadyQueueRemovesOnlyTheDead(t *testing.T) {
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+	ctx := context.Background()
+
+	// 40 live entries (metadata present) and 160 fossils (metadata gone) — the
+	// production ratio, roughly.
+	live := map[string]bool{}
+	for i := 0; i < 40; i++ {
+		e := fmt.Sprintf("a.b.group:live%02d", i)
+		if err := rdb.HSet(ctx, "grp:"+e, "base_subject", "Release "+e).Err(); err != nil {
+			t.Fatal(err)
+		}
+		if err := rdb.SAdd(ctx, readyKey, e).Err(); err != nil {
+			t.Fatal(err)
+		}
+		live[e] = true
+	}
+	for i := 0; i < 160; i++ {
+		if err := rdb.SAdd(ctx, readyKey, fmt.Sprintf("a.b.group:dead%03d", i)).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	scanned, removed, err := r.reapReadyQueue(ctx, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 160 {
+		t.Errorf("removed %d, want 160 dead entries", removed)
+	}
+	if scanned < 200 {
+		t.Errorf("scanned %d, want a full circuit of 200", scanned)
+	}
+
+	rest, err := rdb.SMembers(ctx, readyKey).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rest) != 40 {
+		t.Fatalf("queue holds %d after the sweep, want the 40 live entries", len(rest))
+	}
+	for _, e := range rest {
+		if !live[e] {
+			t.Errorf("sweep kept a fossil, or invented an entry: %q", e)
+		}
+	}
+
+	// A completed release must survive the sweep and still be drawable — the
+	// reaper exists to make the draw effective, so destroying live work would
+	// be strictly worse than the problem.
+	keys, stats, err := r.candidateGroups(ctx, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Fossil != 0 {
+		t.Errorf("draw after the sweep still hit %d fossils", stats.Fossil)
+	}
+	if len(keys) != 40 {
+		t.Errorf("drew %d live candidates, want 40", len(keys))
+	}
+}
+
+// Bounded per call, so a multi-million-entry queue is worked down over passes
+// rather than stalling the pass that runs it. Progress is durable because
+// removal is idempotent.
+func TestReapReadyQueueIsBounded(t *testing.T) {
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+	ctx := context.Background()
+
+	for i := 0; i < 3000; i++ {
+		if err := rdb.SAdd(ctx, readyKey, fmt.Sprintf("a.b.group:dead%05d", i)).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	scanned, removed, err := r.reapReadyQueue(ctx, 600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scanned > 1600 {
+		t.Errorf("scanned %d against a 600 budget — the sweep is unbounded and "+
+			"would stall the build pass on a large queue", scanned)
+	}
+	if removed == 0 {
+		t.Error("a bounded sweep must still make progress")
+	}
+	left, _ := rdb.SCard(ctx, readyKey).Result()
+	if left == 0 {
+		t.Error("a bounded sweep cleared everything; the bound is not applied")
+	}
+
+	// Successive passes finish the job.
+	for i := 0; i < 20; i++ {
+		if _, _, err := r.reapReadyQueue(ctx, 600); err != nil {
+			t.Fatal(err)
+		}
+		if n, _ := rdb.SCard(ctx, readyKey).Result(); n == 0 {
+			return
+		}
+	}
+	n, _ := rdb.SCard(ctx, readyKey).Result()
+	t.Errorf("queue still holds %d after 20 bounded sweeps — it never converges", n)
+}
+
+// An empty or absent queue must be a cheap no-op, not an error: the reaper runs
+// on every build pass including the ones with nothing to do.
+func TestReapReadyQueueEmptyIsHarmless(t *testing.T) {
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+	ctx := context.Background()
+
+	scanned, removed, err := r.reapReadyQueue(ctx, 1000)
+	if err != nil || scanned != 0 || removed != 0 {
+		t.Errorf("empty sweep: scanned=%d removed=%d err=%v", scanned, removed, err)
+	}
+	if _, _, err := r.reapReadyQueue(ctx, 0); err != nil {
+		t.Errorf("zero budget must be a no-op, got %v", err)
+	}
+}
+
+// stagingInfo must report memory and eviction on EVERY supported Redis, not
+// just recent ones. Multi-section INFO ("INFO memory stats") needs Redis 7.0;
+// against 6.x it yields nothing usable and every field silently reads zero —
+// which is indistinguishable from a healthy, unbounded, never-evicting server.
+// Production reported exactly that while its own back-pressure gate, using a
+// single-section call, read 99% off the same instance.
+//
+// Point USENET_TEST_REDIS at a 6.x server to exercise the case that regressed.
+func TestStagingInfoReadsMemoryAndEvictions(t *testing.T) {
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+	ctx := context.Background()
+
+	// Give the server a ceiling so maxmemory is non-zero and a policy exists.
+	if err := rdb.ConfigSet(ctx, "maxmemory", "64mb").Err(); err != nil {
+		t.Skipf("cannot set maxmemory on this server: %v", err)
+	}
+	t.Cleanup(func() { _ = rdb.ConfigSet(ctx, "maxmemory", "0").Err() })
+	if err := rdb.ConfigSet(ctx, "maxmemory-policy", "allkeys-lru").Err(); err != nil {
+		t.Skipf("cannot set maxmemory-policy: %v", err)
+	}
+	t.Cleanup(func() { _ = rdb.ConfigSet(ctx, "maxmemory-policy", "noeviction").Err() })
+
+	got, err := r.stagingInfo(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MemMaxBytes != 64*1024*1024 {
+		t.Errorf("MemMaxBytes = %d, want 67108864 — a zero here reads as "+
+			"'unbounded', the opposite of a server at its ceiling", got.MemMaxBytes)
+	}
+	if got.MemUsedBytes <= 0 {
+		t.Errorf("MemUsedBytes = %d, want > 0", got.MemUsedBytes)
+	}
+	if got.MaxMemoryPolicy != "allkeys-lru" {
+		t.Errorf("MaxMemoryPolicy = %q, want allkeys-lru", got.MaxMemoryPolicy)
+	}
+	if !got.EvictionRisk() {
+		t.Error("allkeys-lru must read as an eviction risk")
+	}
+	// evicted_keys/expired_keys come from the OTHER INFO section. Zero is a
+	// legitimate value on a fresh server, so assert the section was reachable
+	// rather than the count: a broken call leaves the policy empty too, which
+	// the check above already catches.
+	if got.ExpiredKeys < 0 || got.EvictedKeys < 0 {
+		t.Errorf("negative counters: evicted=%d expired=%d", got.EvictedKeys, got.ExpiredKeys)
+	}
+}

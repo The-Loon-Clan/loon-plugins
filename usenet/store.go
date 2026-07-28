@@ -26,13 +26,36 @@ var _ Store = (*PGStore)(nil)
 // forwardBacklog sums server_high - high_watermark across active groups: how
 // many articles the servers hold that we have not crawled forward to yet.
 // A handful of indexed rows — safe to consult once per catch-up iteration.
-func (s *PGStore) forwardBacklog(ctx context.Context) (int64, error) {
+// forwardBacklog is what the catch-up loop measures to decide whether to go
+// again immediately instead of sleeping out the interval.
+//
+// holdLow must match the crawl's own hold, or the loop chases work it has
+// decided not to do. With the hold enabled and a low-tier group 299M articles
+// behind, an unfiltered backlog told the loop it was hopelessly behind after a
+// pass that had legitimately finished everything available — so it re-rounded
+// every two seconds, doing a handful of batches each time and never sleeping.
+// The stall guard eventually caught it (the figure stops falling), but only
+// after a burst of empty rounds, and it re-armed on every interval.
+//
+// The EXISTS clause is what keeps this honest: low-tier groups are discounted
+// only while critical backfill is actually outstanding, which is exactly when
+// the crawl is holding them. The moment that clears they count again, in the
+// same query, with no second source of truth to drift.
+func (s *PGStore) forwardBacklog(ctx context.Context, holdLow bool) (int64, error) {
 	var n int64
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.GetContext(ctx, &n,
 			`SELECT COALESCE(SUM(GREATEST(s.server_high - s.high_watermark, 0)), 0)
 			   FROM newsgroup_state s
-			   JOIN newsgroups g ON g.name = s.group_name AND g.active`)
+			   JOIN newsgroups g ON g.name = s.group_name AND g.active
+			  WHERE NOT ($1::boolean
+			         AND g.tier = 'low'
+			         AND EXISTS (SELECT 1
+			                       FROM newsgroups gc
+			                       JOIN newsgroup_state sc ON sc.group_name = gc.name
+			                      WHERE gc.active
+			                        AND gc.tier = 'critical'
+			                        AND sc.backfill_done = FALSE))`, holdLow)
 	})
 	return n, err
 }

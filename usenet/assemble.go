@@ -61,6 +61,17 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		return
 	}
 
+	// Sweep dead entries BEFORE drawing. The draw is a random sample, so every
+	// fossil left in the queue is a slot the pass wastes — production was
+	// spending 407 of every 500 on entries whose articles were already gone.
+	// Bounded per pass so a multi-million-entry queue is worked down over
+	// successive passes instead of stalling one.
+	if scanned, removed, err := p.staging.reapReadyQueue(ctx, p.effective(ctx).ReadyReapPerPass); err != nil {
+		p.reportErr(ctx, "usenet/ready-reap", err)
+	} else if removed > 0 {
+		p.buildJob.Log("ready queue: swept %d entr(ies), removed %d dead", scanned, removed)
+	}
+
 	keys, drawn, err := p.staging.candidateGroups(ctx, p.effective(ctx).BuildDrainPerPass)
 	if err != nil {
 		p.buildJob.SetError(err.Error())

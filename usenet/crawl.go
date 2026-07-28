@@ -141,7 +141,7 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		if cfg.CrawlNoCatchup || ctx.Err() != nil {
 			break
 		}
-		behind, err := p.st.forwardBacklog(ctx)
+		behind, err := p.st.forwardBacklog(ctx, cfg.HoldLowUntilBackfilled)
 		if err != nil || behind <= int64(cfg.Batch) {
 			break // caught up (within one batch) — the interval takes over
 		}

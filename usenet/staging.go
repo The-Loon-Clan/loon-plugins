@@ -45,6 +45,11 @@ type stagingStore interface {
 	// sets with pipelined reads, which is fine once per pass and unacceptable
 	// per page view).
 	incompleteSets(ctx context.Context, limit int) ([]pendingSet, error)
+	// reapReadyQueue removes entries whose staged data is already gone. Only
+	// redis has a queue that can accumulate them — pg recomputes completeness
+	// from durable rows every pass and has nothing to reap — so the pg
+	// implementation is a no-op. Bounded per call; returns scanned, removed.
+	reapReadyQueue(ctx context.Context, maxScan int) (int, int, error)
 }
 
 // candidateStats describes one draw from the ready queue.
@@ -167,4 +172,11 @@ func newStaging(mode StagingMode, pg *PGStore, redisSvc core.RedisService, limit
 	default:
 		return nil, fmt.Errorf("unknown staging mode %q (want pg|redis)", mode)
 	}
+}
+
+// reapReadyQueue is a no-op for pg staging: candidateGroups recomputes
+// completeness from durable rows on every pass, so there is no queue to hold
+// stale entries and nothing to sweep.
+func (s *pgStaging) reapReadyQueue(ctx context.Context, maxScan int) (int, int, error) {
+	return 0, 0, nil
 }

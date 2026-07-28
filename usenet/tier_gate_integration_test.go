@@ -104,3 +104,74 @@ func TestPendingClampsExpiredHistory(t *testing.T) {
 		t.Errorf("articles = %d — expired history must clamp to 0, not go negative", got.Articles)
 	}
 }
+
+// The catch-up loop decides "go again immediately" from forwardBacklog. If that
+// figure includes groups the crawl is HOLDING, the loop chases work it has
+// decided not to do: production re-rounded every two seconds against 299M
+// articles it would never fetch, doing a handful of batches each time.
+//
+// The discount must be conditional, not unconditional — low-tier groups stop
+// counting only while critical backfill is outstanding, which is exactly when
+// they are held.
+func TestForwardBacklogHonoursTheHold(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	seed := func(name, tier string, high, serverHigh int64, done bool) {
+		t.Helper()
+		if err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO newsgroups (name, active, tier) VALUES ($1, TRUE, $2)`, name, tier); err != nil {
+				return err
+			}
+			_, err := tx.ExecContext(ctx,
+				`INSERT INTO newsgroup_state
+				   (group_name, backbone, high_watermark, server_high, back_watermark, server_low, backfill_done)
+				 VALUES ($1,'netnews',$2,$3,0,0,$4)`, name, high, serverHigh, done)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Critical: caught up forward, but history still outstanding — the hold's
+	// trigger. Low: 300M behind forward, the flood being held back.
+	seed("a.b.crit", "critical", 1_000, 1_000, false)
+	seed("a.b.low", "low", 1_000, 300_000_001_000, true)
+
+	full, err := s.forwardBacklog(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if full != 300_000_000_000 {
+		t.Fatalf("unheld backlog = %d, want 300,000,000,000", full)
+	}
+
+	held, err := s.forwardBacklog(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if held != 0 {
+		t.Errorf("held backlog = %d, want 0 — the loop is still chasing groups it "+
+			"has decided not to crawl, which is what made it spin", held)
+	}
+
+	// Once critical backfill completes, the low tier is crawled again and MUST
+	// count again — otherwise the catch-up loop goes permanently blind to a
+	// 300M-article backlog it is now actively working.
+	if err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`UPDATE newsgroup_state SET backfill_done = TRUE WHERE group_name = 'a.b.crit'`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.forwardBacklog(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after != 300_000_000_000 {
+		t.Errorf("backlog with the hold satisfied = %d, want the full 300,000,000,000 — "+
+			"the discount must lift the moment critical backfill finishes", after)
+	}
+}

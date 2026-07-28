@@ -898,18 +898,27 @@ func (r *redisStaging) stagingInfo(ctx context.Context) (stagingInfo, error) {
 	if n, err := r.rdb.SCard(ctx, readyKey).Result(); err == nil {
 		out.ReadyGroups = n
 	}
-	// memory AND stats: used/maxmemory come from the first, evicted_keys and
-	// expired_keys from the second. Reading only "memory" — which is what this
-	// did — makes eviction structurally unobservable.
-	info, err := r.rdb.Info(ctx, "memory", "stats").Result()
+	// TWO calls, not one INFO with two sections. Multi-section INFO needs Redis
+	// 7.0; against an older server it yields nothing usable and every field
+	// below silently reads zero — which is indistinguishable from a healthy,
+	// unbounded, never-evicting Redis. That misreport is worse than no reading
+	// at all, and it happened: the census reported "unbounded, 0 evicted" while
+	// the backfill's own single-section pressure() read 99% off the same server.
+	// Two plain calls work on every version.
+	info, err := r.rdb.Info(ctx, "memory").Result()
 	if err != nil {
 		return out, err
 	}
 	out.MemUsedBytes = parseInfoInt(info, "used_memory:")
 	out.MemMaxBytes = parseInfoInt(info, "maxmemory:")
-	out.EvictedKeys = parseInfoInt(info, "evicted_keys:")
-	out.ExpiredKeys = parseInfoInt(info, "expired_keys:")
 	out.MaxMemoryPolicy = parseInfoStr(info, "maxmemory_policy:")
+
+	// Eviction counters are best-effort: losing them must not cost the memory
+	// figures, which are the ones the back-pressure gate acts on.
+	if stats, err := r.rdb.Info(ctx, "stats").Result(); err == nil {
+		out.EvictedKeys = parseInfoInt(stats, "evicted_keys:")
+		out.ExpiredKeys = parseInfoInt(stats, "expired_keys:")
+	}
 	return out, nil
 }
 
@@ -1059,4 +1068,68 @@ func formatPerFileTotals(per map[int]int) string {
 		fmt.Fprintf(&b, "%d:%d", fn, per[fn])
 	}
 	return b.String()
+}
+
+// reapReadyQueue removes dead entries from nzb:ready.
+//
+// The queue is drained by a random sample of build_drain_per_pass entries, and
+// nothing ever removed the dead ones except that same sample — so a queue that
+// grows faster than the draw accumulates fossils without bound and dilutes
+// itself. Production reached 7,403,408 entries against a 500-entry draw, of
+// which 407 per draw were already dead: a completed release had roughly a 1 in
+// 15,000 chance of being picked in a given pass, and its articles expire after
+// two hours. That is not a queue, it is a lottery nobody wins.
+//
+// A fossil is an entry whose set metadata is gone — the same definition
+// candidateGroups already uses, so this changes no policy, only who applies it
+// and how often. SSCAN with a cursor, bounded per call: a full sweep of
+// millions of entries inside one build pass would stall the pass it is meant to
+// help, and progress is durable because removal is idempotent.
+//
+// Returns entries scanned and entries removed.
+func (r *redisStaging) reapReadyQueue(ctx context.Context, maxScan int) (scanned, removed int, err error) {
+	if maxScan <= 0 {
+		return 0, 0, nil
+	}
+	r.ensureReadySet(ctx)
+	var cursor uint64
+	for scanned < maxScan {
+		var batch []string
+		batch, cursor, err = r.rdb.SScan(ctx, readyKey, cursor, "", 512).Result()
+		if err != nil {
+			return scanned, removed, err
+		}
+		if len(batch) == 0 && cursor == 0 {
+			break
+		}
+		scanned += len(batch)
+
+		// One pipelined EXISTS per entry, then one SRem for the dead. A ready
+		// entry is "{group}:{hash}" and grpKey is "grp:"+group+":"+hash, so the
+		// metadata key is simply "grp:"+entry.
+		pipe := r.rdb.Pipeline()
+		cmds := make([]*redis.IntCmd, len(batch))
+		for i, e := range batch {
+			cmds[i] = pipe.Exists(ctx, "grp:"+e)
+		}
+		if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+			return scanned, removed, err
+		}
+		var dead []interface{}
+		for i, c := range cmds {
+			if n, err := c.Result(); err == nil && n == 0 {
+				dead = append(dead, batch[i])
+			}
+		}
+		if len(dead) > 0 {
+			if e := r.rdb.SRem(ctx, readyKey, dead...).Err(); e != nil {
+				return scanned, removed, e
+			}
+			removed += len(dead)
+		}
+		if cursor == 0 {
+			break // full circuit complete
+		}
+	}
+	return scanned, removed, nil
 }

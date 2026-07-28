@@ -41,7 +41,7 @@ type ReleaseReader interface {
 	stats(ctx context.Context) (pluginapi.IndexStats, error)
 	// forwardBacklog is the total articles the servers hold past our forward
 	// watermarks across active groups — the crawl catch-up loop's signal.
-	forwardBacklog(ctx context.Context) (int64, error)
+	forwardBacklog(ctx context.Context, holdLow bool) (int64, error)
 }
 
 // GroupStore manages the newsgroup catalog.

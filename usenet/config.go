@@ -68,8 +68,13 @@ type Config struct {
 	// while any CRITICAL group still has history to backfill. See
 	// holdLowTier in provider_state.go for why ordering alone is not enough.
 	HoldLowUntilBackfilled bool `json:"hold_low_until_backfilled"`
-	BackfillBatchesPerRun  int  `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 25)
-	BackfillIntervalMin    int  `json:"backfill_interval_min"`    // backfill cadence (default 5)
+	// ReadyReapPerPass bounds the dead-entry sweep of nzb:ready per build pass.
+	// Default 50000: a full circuit of a multi-million-entry queue takes several
+	// passes, which is the point — the sweep must not cost more than the pass it
+	// is clearing the way for.
+	ReadyReapPerPass      int `json:"ready_reap_per_pass"`
+	BackfillBatchesPerRun int `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 25)
+	BackfillIntervalMin   int `json:"backfill_interval_min"`    // backfill cadence (default 5)
 
 	// Staging backend (README.md). Boot config, not a live knob:
 	// switching backends at runtime would strand staged data.
@@ -149,6 +154,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.CrawlMaxBatches <= 0 {
 		c.CrawlMaxBatches = 20000
+	}
+	if c.ReadyReapPerPass <= 0 {
+		c.ReadyReapPerPass = 50000
 	}
 	if c.MaxArticlesPerGroup <= 0 {
 		c.MaxArticlesPerGroup = 20000
@@ -238,6 +246,7 @@ func (c *Config) knobFields() map[string]*int {
 		"max_groups":                 &c.MaxGroups,
 		"crawl_max_batches":          &c.CrawlMaxBatches,
 		"max_articles_per_group":     &c.MaxArticlesPerGroup,
+		"ready_reap_per_pass":        &c.ReadyReapPerPass,
 		"backfill_interval_min":      &c.BackfillIntervalMin,
 		"backfill_batches_per_run":   &c.BackfillBatchesPerRun,
 		"staging_max_rows":           &c.StagingMaxRows,

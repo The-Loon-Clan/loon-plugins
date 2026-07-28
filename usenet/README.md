@@ -304,6 +304,26 @@ deliberate `under_1mib`/`under_5mib` size bands catching subtitle packs, manga
 and audio rather than a rule defect. **Run that audit before changing a junk
 rule**; none of these were visible by inspection.
 
+The ready queue is **swept before each draw**. `candidateGroups` takes a random
+sample of `build_drain_per_pass` entries, and nothing else ever removed the dead
+ones — so a queue growing faster than the draw accumulates fossils without bound
+and dilutes itself. Production reached **7,403,408 entries against a 500-entry
+draw, 407 of every 500 already dead**: a completed release had roughly a 1-in-
+15,000 chance of being picked in a pass, and its articles expire after two
+hours. That is not a queue, it is a lottery nobody wins. `reapReadyQueue` SSCANs
+a bounded slice per pass (`ready_reap_per_pass`, default 50,000), pipelines
+EXISTS against each entry's `grp:` metadata, and SRems the dead — the same
+liveness definition `candidateGroups` already used, applied by something that
+runs often enough to matter. Bounded so a multi-million-entry queue is worked
+down over passes instead of stalling the one clearing it.
+
+Note that `stagingInfo` issues **two single-section INFO calls**, not one
+multi-section call: `INFO memory stats` requires Redis 7.0, and against 6.x it
+returns nothing usable so every memory and eviction field silently reads zero —
+reporting a server at its ceiling as unbounded and never-evicting. The
+integration test catches this only when pointed at a 6.x server, which is noted
+there.
+
 Tier decides ORDER, not entitlement — and on a site where the critical groups
 are caught up, that gap is a starvation bug rather than a nuance. Critical and
 normal plan in an instant, the whole remaining pass budget falls to whichever
