@@ -427,7 +427,7 @@ func (p *Plugin) actionResetWatermark(gc *gin.Context) (template.HTML, error) {
 		return settingsRedirect(gc, "err", err.Error())
 	}
 	if res.Scope == resetHistory {
-		p.crawlJob.Log("%s: backfill reopened down to %d (%s article(s) of gaps to re-walk)",
+		p.logAction("%s: backfill reopened down to %d (%s article(s) of gaps to re-walk)",
 			res.Group, res.NewMark, fmtComma(res.Articles))
 		return settingsRedirect(gc, "msg", fmt.Sprintf(
 			"%s: backfill reopened — %s article(s) of gaps below article %d will be re-walked, "+
@@ -435,10 +435,31 @@ func (p *Plugin) actionResetWatermark(gc *gin.Context) (template.HTML, error) {
 				"dedup on content hash, so nothing duplicates.",
 			res.Group, fmtComma(res.Articles), res.OldMark))
 	}
-	p.crawlJob.Log("%s: watermark reset %d -> %d (%s article(s) queued for re-read)",
+	p.logAction("%s: watermark reset %d -> %d (%s article(s) queued for re-read)",
 		res.Group, res.OldMark, res.NewMark, fmtComma(res.Articles))
 	return settingsRedirect(gc, "msg", fmt.Sprintf(
 		"%s: watermark rewound to %d — %s article(s) will be re-read on the next pass. "+
 			"Already-stored releases dedup on content hash, so nothing duplicates.",
 		res.Group, res.NewMark, fmtComma(res.Articles)))
+}
+
+// logAction records an operator action from an admin handler.
+//
+// Admin handlers run in the WEB process, where the job pointers are nil — the
+// jobs are registered only in worker/all (plugin.go). Calling crawlJob.Log()
+// from here panicked the settings page on a split deployment: the reset itself
+// had already committed, so the operator got a 500 for work that had actually
+// succeeded, which is the worst of both.
+//
+// The host logger is the right sink because it exists in every process. The job
+// log is a bonus when this process happens to own it, so a single-process
+// install still sees the line in the place it expects.
+func (p *Plugin) logAction(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	if p.core != nil && p.core.Logger != nil {
+		p.core.Logger.Info("usenet: " + msg)
+	}
+	if p.crawlJob != nil {
+		p.crawlJob.Log("%s", msg)
+	}
 }
