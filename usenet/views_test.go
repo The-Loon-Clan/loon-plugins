@@ -369,12 +369,28 @@ func TestFiltersRenders(t *testing.T) {
 			{Kind: "blacklist", Rule: "(?i)spam", Count: 100, Pct: 10, Sample: "Some.Release", LastSeen: "12:01"},
 		},
 		"TotalHits": 1000, "Msg": "", "Err": "",
+		"Watched": []string{"tsukihime"},
+		"PosterHits": []posterHitRow{
+			{Poster: "tsukihime", Stage: "ingest", Reason: "staged", Count: 4210,
+				Sample: "[Judas] Liar Game - S01E17.mkv", LastAt: "2026-07-28 04:10"},
+			{Poster: "tsukihime", Stage: "build", Reason: "under_1mib", Count: 96,
+				Sample: "[Judas] Liar Game - S01E17", LastAt: "2026-07-28 04:11"},
+			{Poster: "tsukihime", Stage: "build", Reason: "built", Count: 4,
+				Sample: "[Erai-raws] Neko to Ryuu - 04", LastAt: "2026-07-28 04:12"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("render filters: %v", err)
 	}
 	out := buf.String()
 	for _, want := range []string{
+		// Watched posters: the card exists to answer "why am I missing this
+		// poster", so the OUTCOME names and the counts must render, not just
+		// the form. Successes too — a watch that only ever shows drops reads
+		// as broken even when it is working.
+		"Watched posters", "poster-watch", "tsukihime",
+		"under_1mib", "staged", "built", "4210",
+
 		"(?i)spam", "poster", "bare-token", "this rule is inert",
 		// forms post under the unified /admin/p/usenet page (filters tab)
 		"usenet/filter-add", "usenet/filter-toggle", "usenet/filter-del", "usenet/filter-reset",

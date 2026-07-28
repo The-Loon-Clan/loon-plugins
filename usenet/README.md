@@ -50,7 +50,8 @@ Routes:
     `group-tune`, `group-move`, `group-del`,
     `groups-purge`, `crawl`, `backfill`, `run-crawl`, `run-backfill`,
     `run-build`, `run-tagfill`, `run-prune`, `run-health`, `reset-backfill`,
-    `filter-add`, `filter-toggle`, `filter-del`, `filter-reset`. Each action
+    `filter-add`, `filter-toggle`, `filter-del`, `filter-reset`,
+    `poster-watch-add`, `poster-watch-del`. Each action
     redirects back to its own tab.
   - `SlotJobsWidget` anchor `Usenet` — a richer card for the Usenet job group
     on the host's `/admin/jobs`.
@@ -95,6 +96,14 @@ Principal tables:
 - `junk_rules` — the junk-filter rule set, seeded from `seed/junk_rules.tsv`.
 - `blacklist_regexes` — the operator's editorial blacklist.
 - `filter_hits` — per-rule drop counters (junk + blacklist).
+- `poster_watch` / `poster_hits` — the same accounting asked the other way
+  round: `filter_hits` answers "which rule drops the most", which is right when
+  tuning rules and useless when an operator says "this poster puts out a
+  hundred releases a day and I have four of them". A watched pattern is matched
+  case-insensitively against each article's `From`, and every outcome for it is
+  tallied per (poster, stage, reason) — including the SUCCESSES, because
+  "nothing at all for this poster" and "all of it junked at ingest" look
+  identical from the outside and have opposite fixes. Migration 023.
 - `build_outcomes` — per-day, per-reason counts of what the build pass did with
   every candidate set (`built`, `incomplete`, `duplicate`, `junk`, `blacklist`,
   `blocked_ext`, `empty`, and the four error reasons), plus one sample subject
@@ -272,6 +281,7 @@ known (the build path); the per-article ingest path runs the unsized subset.
 - `subject.go` / `tags.go` — subject parsing; title-derived quality tags + category helpers.
 - `junk.go` / `junk_store.go` / `seed/junk_rules.tsv` — the junk-filter engine + its data.
 - `blacklist.go` / `blacklist_store.go` — the operator blacklist + filter-hit counters.
+- `poster_watch.go` / `poster_watch_store.go` — per-poster outcome attribution.
 - `health.go` / `health_store.go` — NZB health checking + its backend seam (internal | host).
 - `lease.go` / `assign.go` — multi-host leases + term assignment.
 - `adopt.go` — one-time host-state adoption for a production flip.
@@ -283,7 +293,10 @@ known (the build path); the per-article ingest path runs the unsized subset.
 
 Unit-tested (no DB): the junk engine (a 47-vector parity suite differentially
 verified against the production filter, plus rule-order/attribution and the
-size-band contract), the blacklist matcher (per-field matching, fail-closed on
+size-band contract), the poster watch (substring matching keyed by PATTERN
+rather than raw `From` so one poster's history does not scatter across header
+variants, nil/empty safety on the per-article path, and accumulate/drain with a
+stable first sample), the blacklist matcher (per-field matching, fail-closed on
 unknown field, one-bad-pattern isolation), coverage-cell math, backfill gap
 complement, term-assignment partitioning (every group to exactly one worker,
 stable across churn), content-hash identity (pinned cross-repo to the host's

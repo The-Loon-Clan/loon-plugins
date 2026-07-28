@@ -105,6 +105,11 @@ type Plugin struct {
 	// hits accumulates filter-rule hits in memory; a pass flushes them in one
 	// batch. Never written per article — see blacklist.go.
 	hits *filterHits
+	// posterWatch/posterHits trace WHY a specific poster's releases do or do
+	// not appear. Off unless the operator adds patterns, and then one substring
+	// check per article — see poster_watch.go.
+	posterWatch *posterWatch
+	posterHits  *posterHits
 	// outcomes accounts for what each build pass did with every candidate set.
 	outcomes *buildOutcomes
 }
@@ -130,6 +135,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.fleet = newProviderFleet()
 	p.tel = newTelemetry()
 	p.hits = newFilterHits()
+	p.posterHits = newPosterHits()
+	p.posterWatch = newPosterWatch(nil) // replaced per pass from the DB
 	p.outcomes = newBuildOutcomes()
 	// Staging backend behind the seam. Limits are read per-call (via effective)
 	// so the admin knobs apply live. nzbs writes always go through pg regardless.

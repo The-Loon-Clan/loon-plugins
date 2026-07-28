@@ -46,6 +46,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 	// if that pass died before its own flush.
 	p.reloadBlacklist(ctx)
 	defer p.flushFilterHits(ctx)
+	defer p.flushPosterHits(ctx)
 	// Every branch below names its outcome, so the reasons sum to the
 	// candidates examined — see build_outcomes.go.
 	defer p.flushBuildOutcomes(ctx)
@@ -101,6 +102,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			// job ring. The count folds into that summary instead.
 			skippedExt++
 			p.outcomes.note(outcomeBlockedExt, k.Base)
+			p.notePoster(arts, "blocked-ext", title)
 			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
 				p.reportErr(ctx, "usenet/build-delete-staged", err)
 			}
@@ -118,6 +120,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			// per-release log line is redundant with that and floods the ring.
 			p.hits.note("blacklist", pat, k.Base)
 			p.outcomes.note(outcomeBlacklist, k.Base)
+			p.notePoster(arts, "blacklist:"+pat, title)
 			skippedBL++
 			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
 				p.reportErr(ctx, "usenet/build-delete-staged", err)
@@ -127,6 +130,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		if junkRule != "" {
 			p.hits.note("junk", junkRule, k.Base)
 			p.outcomes.note(outcomeJunk, k.Base)
+			p.notePoster(arts, junkRule, title)
 			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil { // drop, don't build
 				p.reportErr(ctx, "usenet/build-delete-staged", err)
 			}
@@ -157,6 +161,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		created, err := sink.store(ctx, rel)
 		if err != nil {
 			p.outcomes.note(outcomeStoreError, k.Base)
+			p.notePoster(arts, "store-error", title)
 			// Storage failed — leave the set staged so a later pass retries.
 			// A transient sink outage must never lose a release.
 			p.reportErr(ctx, "usenet/build-store", fmt.Errorf("%s: %w", title, err))
@@ -172,6 +177,12 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			// the pass counted creations only, so a pass that deduped every
 			// set reported "built 0" and offered no reason.
 			p.outcomes.note(outcomeDuplicate, k.Base)
+			p.notePoster(arts, "duplicate", title)
+		} else {
+			// The success case matters as much as the failures: an operator
+			// asking "am I getting this poster" needs to see yes, and a watch
+			// that only ever shows drops reads as broken even when it is not.
+			p.notePoster(arts, "built", title)
 		}
 		if created {
 			p.outcomes.note(outcomeBuilt, k.Base)
@@ -736,4 +747,16 @@ func (s *PGStore) builderInfo(ctx context.Context, limit int) (BuilderInfo, erro
 		return nil
 	})
 	return bi, err
+}
+
+// notePoster records a build-stage outcome against a watched poster.
+//
+// Uses firstPoster — the same value the sink stores — so the trace names
+// whoever the catalogue would have credited, not some other article's header.
+func (p *Plugin) notePoster(arts []stagedArticle, reason, sample string) {
+	who, ok := p.posterWatch.watched(firstPoster(arts))
+	if !ok {
+		return
+	}
+	p.posterHits.note(who, "build", reason, sample)
 }

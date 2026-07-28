@@ -100,8 +100,10 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	// do share is the staging area, where message-id dedup turns the overlap into
 	// better completeness: a release short a segment on one backbone can be
 	// finished by another.
+	p.loadPosterWatch(ctx)
 	p.tel.crawl.passStart(len(runs))
 	defer p.tel.crawl.passEnd()
+	defer p.flushPosterHits(ctx)
 	totalStaged := 0
 	// Catch-up loop: when the servers still hold a meaningful forward backlog
 	// after a pass, go again immediately instead of sleeping out the interval —
@@ -616,7 +618,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) ba
 	res.maxDate = newestDate(ovs)
 	res.minDate = oldestDate(ovs)
 
-	arts := parseOverviews(ovs, j.group, j.cutoff, p.hits)
+	arts := parseOverviews(ovs, j.group, j.cutoff, p.hits, p.posterWatch, p.posterHits)
 	if len(arts) > 0 {
 		n, err := p.staging.stageArticles(ctx, arts)
 		if err != nil {
@@ -722,19 +724,34 @@ func contiguousEnd(start int, rs []batchResult) (int, time.Time) {
 // no message-id and ones posted before the retention cutoff.
 //
 // hits may be nil (tests): junk counting is observability, not behaviour.
-func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, hits *filterHits) []stagedArticle {
+func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, hits *filterHits, watch *posterWatch, ph *posterHits) []stagedArticle {
 	out := make([]stagedArticle, 0, len(ovs))
 	for _, ov := range ovs {
 		if ov.MessageId == "" {
 			continue
 		}
 		if !ov.Date.IsZero() && ov.Date.Before(cutoff) {
+			// A watched poster's article dropped for age is worth saying out
+			// loud: "the crawl depth excludes them" looks identical to "the
+			// crawler never saw them" in every other readout.
+			if p, ok := watch.watched(ov.From); ok {
+				ph.note(p, "ingest", "before-retention-cutoff", ov.Subject)
+			}
 			continue
 		}
 		base, pn, tp, seg, fn, tf, fp := parseSubject(ov.Subject)
 		if rule := whichJunkRule(base); rule != "" {
 			hits.note("junk", rule, base)
+			if p, ok := watch.watched(ov.From); ok {
+				ph.note(p, "ingest", rule, ov.Subject)
+			}
 			continue // obfuscated random-token post — never index it
+		}
+		// Record the keeps too. Without them "no rows for this poster" is
+		// ambiguous between "never fetched" and "fetched and all dropped", and
+		// those have opposite fixes.
+		if p, ok := watch.watched(ov.From); ok {
+			ph.note(p, "ingest", "staged", ov.Subject)
 		}
 		out = append(out, stagedArticle{
 			MessageID: ov.MessageId, Subject: ov.Subject, BaseSubject: base,

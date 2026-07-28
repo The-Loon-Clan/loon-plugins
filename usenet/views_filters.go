@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -103,10 +104,24 @@ func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg string) (templat
 		}
 	}
 
+	// Poster watch: the same events as Hits above, indexed by POSTER instead of
+	// by rule, plus the successes. "Which rule drops the most" is the right
+	// question when tuning rules and the wrong one when an operator says "this
+	// poster puts out a hundred a day and I have four".
+	watched, err := p.st.posterWatchPatterns(ctx)
+	if err != nil {
+		return "", err
+	}
+	phits, err := p.st.posterHitRows(ctx, 200)
+	if err != nil {
+		return "", err
+	}
+
 	return p.frag("filters.html", map[string]any{
 		"Rules": vms, "Fields": blacklistFields,
 		"Hits": hvms, "TotalHits": total,
 		"Sweep": svms, "SweepTotal": sweepTotal,
+		"Watched": watched, "PosterHits": phits,
 		"Msg": msg, "Err": errMsg,
 	})
 }
@@ -151,4 +166,33 @@ func (p *Plugin) actionResetHits(gc *gin.Context) (template.HTML, error) {
 		return filtersRedirect(gc, "err", err.Error())
 	}
 	return filtersRedirect(gc, "msg", "counters cleared")
+}
+
+// actionAddPosterWatch starts tracing a poster. Substring, case-insensitive —
+// the operator knows the poster, not the exact From header formatting.
+func (p *Plugin) actionAddPosterWatch(gc *gin.Context) (template.HTML, error) {
+	pat := strings.TrimSpace(gc.PostForm("pattern"))
+	if pat == "" {
+		return filtersRedirect(gc, "err", "no poster pattern given")
+	}
+	if len(pat) < 3 {
+		// A one- or two-character substring matches most of Usenet, and the
+		// watch sits on the per-article ingest path.
+		return filtersRedirect(gc, "err", "pattern too short — use at least 3 characters")
+	}
+	if err := p.st.setPosterWatch(gc.Request.Context(), pat, strings.TrimSpace(gc.PostForm("note")), true); err != nil {
+		return filtersRedirect(gc, "err", err.Error())
+	}
+	return filtersRedirect(gc, "msg", "watching "+pat+" — attribution appears after the next crawl pass")
+}
+
+func (p *Plugin) actionDeletePosterWatch(gc *gin.Context) (template.HTML, error) {
+	pat := strings.TrimSpace(gc.PostForm("pattern"))
+	if pat == "" {
+		return filtersRedirect(gc, "err", "no poster pattern given")
+	}
+	if err := p.st.deletePosterWatch(gc.Request.Context(), pat); err != nil {
+		return filtersRedirect(gc, "err", err.Error())
+	}
+	return filtersRedirect(gc, "msg", "stopped watching "+pat)
 }

@@ -44,18 +44,20 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			return p.renderSettings(gc.Request.Context(), gc.Query("gq"), gc.Query("msg"), gc.Query("err"))
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
-			"knobs":          p.actionSaveKnobs,
-			"fetch-groups":   p.actionFetchGroups,
-			"group":          p.actionToggleGroup,
-			"provider":       p.actionSaveProvider,
-			"provider-del":   p.actionDeleteProvider,
-			"provider-test":  p.actionTestProvider,
-			"provider-probe": p.actionProbeProvider,
-			"group-tune":     p.actionTuneGroup,
-			"group-move":     p.actionMoveGroup,
-			"group-reset":    p.actionResetWatermark,
-			"group-del":      p.actionDeleteGroup,
-			"groups-purge":   p.actionPurgeInactive,
+			"knobs":            p.actionSaveKnobs,
+			"fetch-groups":     p.actionFetchGroups,
+			"group":            p.actionToggleGroup,
+			"provider":         p.actionSaveProvider,
+			"provider-del":     p.actionDeleteProvider,
+			"provider-test":    p.actionTestProvider,
+			"provider-probe":   p.actionProbeProvider,
+			"group-tune":       p.actionTuneGroup,
+			"group-move":       p.actionMoveGroup,
+			"group-reset":      p.actionResetWatermark,
+			"poster-watch":     p.actionAddPosterWatch,
+			"poster-watch-del": p.actionDeletePosterWatch,
+			"group-del":        p.actionDeleteGroup,
+			"groups-purge":     p.actionPurgeInactive,
 			// Crawlers tab. On a split deployment these buttons run in the WEB
 			// process, whose trigger func-vars are nil (the jobs live in the
 			// worker) — TriggerCrawl() here used to be a silent no-op. Relay
@@ -153,6 +155,8 @@ func tabForAction(path string) string {
 	case strings.HasSuffix(path, "/provider"), strings.HasSuffix(path, "/provider-del"),
 		strings.HasSuffix(path, "/provider-test"), strings.HasSuffix(path, "/provider-probe"):
 		return "providers"
+	case strings.HasSuffix(path, "/poster-watch"), strings.HasSuffix(path, "/poster-watch-del"):
+		return "filters"
 	case strings.HasSuffix(path, "/knobs"):
 		return "indexing"
 	case strings.HasSuffix(path, "/group-tune"), strings.HasSuffix(path, "/group-move"),

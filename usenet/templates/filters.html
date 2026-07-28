@@ -152,3 +152,72 @@
     </div>
 </div>
 {{end}}
+
+{{/* Poster watch. The same drop events as the hits table above, indexed by
+     POSTER rather than by rule, plus the successes — because "which rule fires
+     most" and "why am I missing this poster" are different questions and only
+     the first had an answer. A poster producing a hundred releases a day showed
+     four in the catalogue and nothing anywhere said at which stage the rest
+     died. */}}
+<div class="card mt-3">
+  <div class="card-header">Watched posters</div>
+  <div class="card-body">
+    <p class="text-muted small mb-2">
+      Trace one poster end to end: how many of their articles are staged, and which
+      rule or stage drops the rest. Matched case-insensitively as a substring of the
+      From header, so <code>tsukihime</code> catches
+      <code>TsukiHime &lt;usenet.bot@tsukihime.org&gt;</code>. Counts accumulate from
+      the next crawl pass onward.
+    </p>
+    <form method="post" action="/admin/p/usenet/poster-watch" class="d-flex mb-3" style="gap:.5rem;flex-wrap:wrap">
+      <input class="form-control form-control-sm" type="text" name="pattern"
+             placeholder="tsukihime" style="max-width:16rem" required>
+      <input class="form-control form-control-sm" type="text" name="note"
+             placeholder="why (optional)" style="max-width:20rem">
+      <button class="btn btn-sm btn-outline-primary" type="submit">Watch</button>
+    </form>
+
+    {{if .Watched}}
+    <div class="d-flex mb-3" style="gap:.4rem;flex-wrap:wrap">
+      {{range .Watched}}
+      <form method="post" action="/admin/p/usenet/poster-watch-del" style="display:inline">
+        <input type="hidden" name="pattern" value="{{.}}">
+        <button class="btn btn-sm py-0 btn-outline-secondary" type="submit"
+                title="stop watching this poster">{{.}} &times;</button>
+      </form>
+      {{end}}
+    </div>
+    {{else}}
+    <div class="empty mb-3">No posters watched. Add one above when a poster you expect is missing.</div>
+    {{end}}
+
+    {{if .PosterHits}}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-1">
+        <thead><tr>
+          <th>Poster</th><th>Stage</th><th>Outcome</th>
+          <th class="text-end">Count</th><th>Last sample</th><th>Last seen</th>
+        </tr></thead>
+        <tbody>
+        {{range .PosterHits}}
+          <tr>
+            <td><code>{{.Poster}}</code></td>
+            <td class="small text-muted">{{.Stage}}</td>
+            {{/* staged/built are the good outcomes; everything else is a drop
+                 and is what the operator came here to find. */}}
+            <td>{{if or (eq .Reason "staged") (eq .Reason "built")}}<span class="text-success">{{.Reason}}</span>
+                {{else if eq .Reason "duplicate"}}<span class="text-muted">{{.Reason}}</span>
+                {{else}}<span class="text-warning">{{.Reason}}</span>{{end}}</td>
+            <td class="text-end">{{.Count}}</td>
+            <td class="small text-muted" style="max-width:30rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{.Sample}}</td>
+            <td class="small text-muted">{{.LastAt}}</td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else if .Watched}}
+    <div class="empty">Nothing recorded yet — attribution appears after the next crawl pass.</div>
+    {{end}}
+  </div>
+</div>

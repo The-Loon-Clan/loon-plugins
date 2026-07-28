@@ -55,6 +55,14 @@ type GroupStore interface {
 	setGroupActive(ctx context.Context, name string, active bool) error
 	setGroupTuning(ctx context.Context, name string, retentionDays, throttleMs int, tier Tier) error
 	resetWatermark(ctx context.Context, backbone, group string, scope resetScope) (watermarkReset, error)
+
+	// Poster watch: per-poster attribution of why releases do or do not
+	// appear (poster_watch.go).
+	posterWatchPatterns(ctx context.Context) ([]string, error)
+	setPosterWatch(ctx context.Context, pattern, note string, enabled bool) error
+	deletePosterWatch(ctx context.Context, pattern string) error
+	posterHitRows(ctx context.Context, limit int) ([]posterHitRow, error)
+	recordPosterHits(ctx context.Context, hits map[posterHitKey]*posterHitVal) error
 	moveGroup(ctx context.Context, name string, delta int) error
 	deleteGroup(ctx context.Context, name string) error
 	deleteInactiveGroups(ctx context.Context) (int64, error)
