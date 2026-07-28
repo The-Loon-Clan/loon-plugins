@@ -938,17 +938,43 @@ func parseInfoStr(info, prefix string) string {
 // ones. SCAN over the per-group active sets + one pipelined HGetAll/HLen pair
 // per staged set — bounded by what is actually in flight (sets expire on the
 // staging TTL), fine once per build pass, NOT for the render path.
+// pendingSampleCap bounds how many staged sets the forming-releases readout
+// inspects per call. The card shows at most a hundred rows; sampling twenty
+// times that leaves plenty of headroom to find the largest ones while keeping
+// the cost independent of how many sets are in flight.
+const pendingSampleCap = 2000
+
 func (r *redisStaging) incompleteSets(ctx context.Context, limit int) ([]pendingSet, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 15
 	}
-	// Collect (group, hash) pairs from the active_groups:* sets.
+	// SAMPLE the active sets; never enumerate them.
+	//
+	// This used SMEMBERS, which returns every hash in the group. That is fine
+	// with a few thousand sets in flight and catastrophic at the scale this
+	// backend actually reaches: production held ~3.5 MILLION staged sets, so
+	// each call pulled millions of strings into the client and then issued a
+	// pipeline of twice that many HGetAll/HLen commands — per build pass, on a
+	// Redis already at its memory ceiling. Work that heavy, that often, starves
+	// the server's own expiry cycle, which is the mechanism supposed to be
+	// draining the backlog. The readout was helping cause the condition it was
+	// installed to explain.
+	//
+	// SRandMemberN with a positive count returns DISTINCT members, so a bounded
+	// sample costs one round trip per group regardless of how many sets exist.
+	// The result is therefore "the largest incomplete sets IN A SAMPLE", not the
+	// global top-N; at these cardinalities that distinction does not change what
+	// an operator learns, and the alternative is a readout that cannot be
+	// afforded at all.
 	type ref struct{ group, hash string }
-	var refs []ref
+	refs := make([]ref, 0, pendingSampleCap)
 	iter := r.rdb.Scan(ctx, 0, activeKey("*"), 200).Iterator()
 	for iter.Next(ctx) {
+		if len(refs) >= pendingSampleCap {
+			break
+		}
 		group := strings.TrimPrefix(iter.Val(), "active_groups:")
-		hashes, err := r.rdb.SMembers(ctx, iter.Val()).Result()
+		hashes, err := r.rdb.SRandMemberN(ctx, iter.Val(), int64(pendingSampleCap-len(refs))).Result()
 		if err != nil {
 			continue
 		}

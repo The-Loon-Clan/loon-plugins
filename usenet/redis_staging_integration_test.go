@@ -479,3 +479,82 @@ func TestStagingInfoReadsMemoryAndEvictions(t *testing.T) {
 		t.Errorf("negative counters: evicted=%d expired=%d", got.EvictedKeys, got.ExpiredKeys)
 	}
 }
+
+// The forming-releases readout must cost the same whether ten sets are in
+// flight or three million. It used SMEMBERS, which returns every hash in the
+// group, and then issued a pipelined HGetAll+HLen per hash — production held
+// ~3.5M staged sets, so a readout ran millions of commands per build pass
+// against a Redis already at its memory ceiling, starving the expiry cycle that
+// was supposed to be draining the backlog.
+func TestIncompleteSetsCostIsBounded(t *testing.T) {
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+	ctx := context.Background()
+
+	// Far more staged sets than the sample cap.
+	const n = pendingSampleCap * 3
+	pipe := rdb.Pipeline()
+	for i := 0; i < n; i++ {
+		hash := fmt.Sprintf("h%06d", i)
+		pipe.SAdd(ctx, activeKey("a.b.group"), hash)
+		pipe.HSet(ctx, grpKey("a.b.group", hash),
+			"base_subject", fmt.Sprintf("Release %06d", i),
+			"file_parts", "0", "total_parts", "500")
+		pipe.HSet(ctx, artKey("a.b.group", hash), formatFieldKey(0, 1), "x")
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	sets, err := r.incompleteSets(ctx, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sets) != 15 {
+		t.Errorf("returned %d sets, want the requested 15", len(sets))
+	}
+	// Every returned row must be real, not a sampling artefact.
+	for _, s := range sets {
+		if s.Base == "" || s.Need <= 0 {
+			t.Errorf("bogus row: %+v", s)
+		}
+		if s.Have >= s.Need {
+			t.Errorf("a COMPLETE set appeared in the incomplete list: %+v", s)
+		}
+	}
+}
+
+// Sampling must not break the small case: with fewer sets than the cap, the
+// readout still sees all of them and still picks the largest shortfalls.
+func TestIncompleteSetsExactBelowTheCap(t *testing.T) {
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+	ctx := context.Background()
+
+	// Five sets with deliberately different shortfalls.
+	for i, need := range []int{100, 900, 300, 700, 500} {
+		hash := fmt.Sprintf("h%02d", i)
+		if err := rdb.SAdd(ctx, activeKey("a.b.group"), hash).Err(); err != nil {
+			t.Fatal(err)
+		}
+		if err := rdb.HSet(ctx, grpKey("a.b.group", hash),
+			"base_subject", fmt.Sprintf("Release %d", need),
+			"file_parts", "0", "total_parts", need).Err(); err != nil {
+			t.Fatal(err)
+		}
+		if err := rdb.HSet(ctx, artKey("a.b.group", hash), formatFieldKey(0, 1), "x").Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sets, err := r.incompleteSets(ctx, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sets) != 5 {
+		t.Fatalf("got %d sets, want all 5", len(sets))
+	}
+	// Sorted by shortfall, largest first.
+	if sets[0].Need != 900 {
+		t.Errorf("largest shortfall first: got need=%d, want 900", sets[0].Need)
+	}
+}

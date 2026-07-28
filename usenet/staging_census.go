@@ -159,7 +159,7 @@ func (c censusRow) Starved() bool { return c.ReadyDepth > int64(c.Sampled) }
 // Best-effort throughout: every failure degrades to a partial row rather than
 // costing the pass, because a build that fails on account of its own telemetry
 // would be a strictly worse bug than the one this exists to find.
-func (p *Plugin) takeStagingCensus(ctx context.Context, drawn candidateStats) {
+func (p *Plugin) takeStagingCensus(ctx context.Context, drawn candidateStats, pendingSeen int) {
 	if p.staging == nil || p.st == nil {
 		return
 	}
@@ -177,11 +177,12 @@ func (p *Plugin) takeStagingCensus(ctx context.Context, drawn candidateStats) {
 		c.ExpiredKeys = info.ExpiredKeys
 		c.MaxMemoryPolicy = info.MaxMemoryPolicy
 	}
-	// Reuse the pending list the pass already publishes rather than walking the
-	// active sets a second time.
-	if pend, err := p.staging.incompleteSets(ctx, 100); err == nil {
-		c.PendingSets = len(pend)
-	}
+	// The pass's own sample, passed in — walking the active sets a second time
+	// doubled the cost of the most expensive read in the pipeline. The comment
+	// here used to claim this reused the pass's list; it did not, and at three
+	// million staged sets that gap was the difference between an observation
+	// and an outage.
+	c.PendingSets = pendingSeen
 	if err := p.st.recordStagingCensus(ctx, c); err != nil {
 		p.reportErr(ctx, "usenet/staging-census", err)
 	}

@@ -81,7 +81,11 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 	// Sample staging health for THIS pass before doing any work with the draw.
 	// Deferred so it still records when the pass returns early — a pass that
 	// died is exactly when the operator most needs the reading.
-	defer p.takeStagingCensus(ctx, drawn)
+	// Sampled once per pass and shared with the census below. Listing staged
+	// sets is the most expensive read in the pipeline, so it happens exactly
+	// once.
+	pendingSeen := 0
+	defer func() { p.takeStagingCensus(ctx, drawn, pendingSeen) }()
 	if drawn.Fossil > 0 {
 		// Each fossil is a release that completed, queued itself, and then
 		// expired or was evicted before the builder drew it. Nothing else
@@ -235,6 +239,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 	// heavy for the render path.
 	if sets, err := p.staging.incompleteSets(ctx, 15); err == nil {
 		p.tel.setPending(sets)
+		pendingSeen = len(sets)
 	} else {
 		p.reportErr(ctx, "usenet/incomplete-sample", err)
 	}
