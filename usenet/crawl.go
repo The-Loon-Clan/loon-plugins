@@ -309,7 +309,7 @@ func (p *Plugin) crawlBackbone(ctx context.Context, runs []providerRun, cfg Conf
 	p.crawlJob.Log("%s: crawling %d group(s), %d batch(es) over %d connection(s) on %s…",
 		bb, len(plans), len(jobs), totalConns(runs), providerLabels(runs))
 	staged, advanced := 0, 0
-	leftover := p.runBatches(ctx, runs, jobs, cfg, func(name string, rs []batchResult) {
+	leftover := p.runBatches(ctx, runs, jobs, cfg, &p.tel.crawl, func(name string, rs []batchResult) {
 		plan := plans[name]
 		if plan == nil {
 			return
@@ -529,7 +529,7 @@ func batchWorkers(conns, jobs int) int {
 	return w
 }
 
-func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batchJob, cfg Config, onGroup func(group string, rs []batchResult)) []batchResult {
+func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batchJob, cfg Config, tel *passTracker, onGroup func(group string, rs []batchResult)) []batchResult {
 	// The budget is the sum of what THIS pass's pools actually opened
 	// (providerRun.size), not the site-wide setting. They differ the moment a
 	// second crawler host joins: the account cap is split across the fleet, so
@@ -553,7 +553,7 @@ func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batc
 		go func() {
 			defer wg.Done()
 			for j := range jobCh {
-				resCh <- p.fetchBatch(ctx, pool, j)
+				resCh <- p.fetchBatch(ctx, pool, j, tel)
 			}
 		}()
 	}
@@ -586,12 +586,20 @@ func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batc
 
 // fetchBatch pulls one overview range and stages it. The connection is returned
 // to the pool before any parsing or database work.
-func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) batchResult {
+//
+// tel is the tracker that OWNS this batch. It is a parameter rather than
+// p.tel.crawl because backfill shares this path: hardcoding the forward
+// tracker meant every backfill batch incremented the forward crawl's counters,
+// which is how the progress bar reached "21,000 / 20,000 batches (100.0%)" —
+// the numerator was counting two jobs, the denominator one. It also put the
+// backfill's newsgroup in the forward pass's "reading" field, so the live view
+// named a group the forward crawl was not on.
+func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, tel *passTracker) batchResult {
 	res := batchResult{group: j.group, lo: j.lo, hi: j.hi}
 	if ctx.Err() != nil {
 		return res
 	}
-	p.tel.crawl.noteReading(j.group)
+	tel.noteReading(j.group)
 
 	var ovs []nntp.MessageOverview
 	var wire int64
@@ -611,7 +619,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) ba
 	if err != nil {
 		p.reportErr(ctx, "usenet/crawl-fetch",
 			fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
-		p.tel.crawl.noteBatchFor(j.group, 0, 0, 0, false)
+		tel.noteBatchFor(j.group, 0, 0, 0, false)
 		return res // ok stays false — the watermark will not pass this range
 	}
 	res.articles, res.wire = len(ovs), wire
@@ -627,13 +635,13 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob) ba
 			// already-advanced watermark, losing those articles permanently.)
 			p.reportErr(ctx, "usenet/crawl-stage",
 				fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
-			p.tel.crawl.noteBatchFor(j.group, res.articles, 0, wire, false)
+			tel.noteBatchFor(j.group, res.articles, 0, wire, false)
 			return res
 		}
 		res.staged = n
 	}
 	res.ok = true
-	p.tel.crawl.noteBatchFor(j.group, res.articles, res.staged, wire, true)
+	tel.noteBatchFor(j.group, res.articles, res.staged, wire, true)
 	// Per-group pacing: some providers rate limit per group, and some groups are
 	// not worth saturating the pool for. Applied after the connection is back in
 	// the pool, so throttling this group frees capacity for others rather than

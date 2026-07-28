@@ -168,6 +168,10 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 		budget -= len(gj)
 		jobs = append(jobs, gj...)
 		targets[g.Name] = g
+		// The denominator for backfill's own progress bar. Without it
+		// BatchesTotal stayed 0 and the bar never rendered, so a pass that runs
+		// for hours showed a batch count with nothing to measure it against.
+		p.tel.backfill.notePlanned(g.Name, len(gj))
 	}
 	if len(jobs) == 0 {
 		p.backfillJob.Log("%s: nothing to do this pass", run.prov.label())
@@ -184,10 +188,9 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	// nil onGroup: backfill passes are bounded (backfill_batches_per_run) and
 	// recordBackfill needs the complete result set — with no callback,
 	// runBatches returns every result.
-	results := p.runBatches(ctx, []providerRun{run}, jobs, cfg, nil)
-	for _, r := range results {
-		p.tel.backfill.noteBatch(r.articles, r.staged, r.wire, r.ok)
-	}
+	// Counting happens inside fetchBatch against the tracker passed here; a
+	// second pass over the results would double every backfill batch.
+	results := p.runBatches(ctx, []providerRun{run}, jobs, cfg, &p.tel.backfill, nil)
 
 	// On lease loss the coverage writes are skipped, not just doomed to fail:
 	// a sibling may own these groups now, and coverage-IS-state means the
