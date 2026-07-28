@@ -80,8 +80,6 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	defer p.crawlMu.Unlock()
 	p.crawlJob.SetRunning()
 	cfg := p.effective(ctx)
-	// Pick up any admin edits to the junk rules before this pass filters anything.
-	p.reloadJunkRules(ctx)
 
 	runs, err := p.activeFleet(ctx, cfg)
 	if err != nil {
@@ -100,7 +98,6 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	// do share is the staging area, where message-id dedup turns the overlap into
 	// better completeness: a release short a segment on one backbone can be
 	// finished by another.
-	p.loadPosterWatch(ctx)
 	p.tel.crawl.passStart(len(runs))
 	defer p.tel.crawl.passEnd()
 	defer p.flushPosterHits(ctx)
@@ -118,6 +115,14 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		// current watermarks and runs a fresh batch budget, so the progress
 		// counters restart with it.
 		p.tel.crawl.roundStart()
+		// Operator config is re-read every ROUND, not once per pass. A catch-up
+		// pass runs for HOURS, so a pass-scoped read means an admin editing a
+		// junk rule or adding a watched poster sees no effect until the pass
+		// ends — indistinguishable from the feature being broken, and it cost a
+		// diagnostic cycle when a poster added 90 seconds into a pass recorded
+		// nothing. Same reasoning as re-resolving the fleet each round below.
+		p.reloadJunkRules(ctx)
+		p.loadPosterWatch(ctx)
 		staged, claimed := 0, 0
 		for _, bbRuns := range groupByBackbone(runs) {
 			if ctx.Err() != nil {
@@ -128,6 +133,11 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 			claimed += c
 		}
 		totalStaged += staged
+		// Publish this round's attribution now. Held to pass end, a multi-hour
+		// catch-up shows an operator an empty table while it is actively
+		// accumulating the rows they are waiting for. drain() resets, so the
+		// deferred pass-end flush cannot double-count what this already wrote.
+		p.flushPosterHits(ctx)
 		if cfg.CrawlNoCatchup || ctx.Err() != nil {
 			break
 		}
