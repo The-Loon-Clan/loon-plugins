@@ -484,6 +484,10 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 			}
 		}
 		pipe.HSetNX(ctx, gk, "created_at", now)
+		// touched_at moves on every batch that adds to this set. The eviction
+		// below needs "has it stopped growing", not "how long ago did it start" —
+		// see there.
+		pipe.HSet(ctx, gk, "touched_at", now)
 		pipe.SAdd(ctx, activeKey(gu.groupName), gu.hash)
 		pipe.Expire(ctx, ak, ttl)
 		pipe.Expire(ctx, gk, ttl)
@@ -533,9 +537,20 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 				continue
 			}
 		}
-		// Hopeless-eviction: stale (>5min) and <30% of expected parts present.
-		createdAt, _ := strconv.ParseInt(meta["created_at"], 10, 64)
-		if createdAt > 0 && now-createdAt > 300 {
+		// Hopeless-eviction: a set that has STOPPED GROWING and is still far
+		// short of what it needs.
+		//
+		// Measured from touched_at, not created_at. A large release is tens of
+		// thousands of segments spread over dozens of batches, and a bulk
+		// re-read fetches those batches out of order across many parallel
+		// connections — so it cannot be 30% complete five minutes after its
+		// first article lands. Judging from creation deleted exactly the big
+		// multi-file releases while they were still actively filling: prod shed
+		// ~128 sets a minute during a re-read and built nothing.
+		//
+		// created_at is the fallback for sets staged before touched_at existed;
+		// they age out within the staging TTL.
+		if age, ok := evictionStaleness(meta, now); ok && age > 300 {
 			if needed > 0 && length > 0 && float64(length)/float64(needed) < 0.30 {
 				evictKeys = append(evictKeys,
 					artKey(ci.gu.groupName, ci.gu.hash), grpKey(ci.gu.groupName, ci.gu.hash))
@@ -594,6 +609,29 @@ func perFileSegTotals(meta map[string]string) map[int]int {
 		}
 	}
 	return out
+}
+
+// evictionStaleness reports how long a set has gone WITHOUT a new article, and
+// whether that is knowable at all.
+//
+// Measured from touched_at rather than created_at, and that distinction is the
+// whole point. A large release is tens of thousands of segments across dozens
+// of batches, and a bulk re-read fetches those out of order over many parallel
+// connections — so it cannot be far along five minutes after its first article
+// lands. Counting from creation deleted exactly those releases while they were
+// still filling; production shed ~128 sets a minute during a re-read and built
+// nothing. A set still receiving articles is not hopeless, however incomplete.
+//
+// created_at is the fallback for sets staged before touched_at existed.
+func evictionStaleness(meta map[string]string, now int64) (age int64, ok bool) {
+	from, _ := strconv.ParseInt(meta["touched_at"], 10, 64)
+	if from == 0 {
+		from, _ = strconv.ParseInt(meta["created_at"], 10, 64)
+	}
+	if from <= 0 {
+		return 0, false
+	}
+	return now - from, true
 }
 
 // groupNeededParts is a cheap LOWER BOUND on the article count a set needs, used

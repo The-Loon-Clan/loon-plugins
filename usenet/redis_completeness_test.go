@@ -108,3 +108,47 @@ func TestGroupCompleteSingleFileUnchanged(t *testing.T) {
 		t.Errorf("single-file needed = %d, want 45", got)
 	}
 }
+
+// A large release is tens of thousands of segments over dozens of batches, and
+// a bulk re-read fetches those out of order across many parallel connections.
+// Judging "hopeless" from when the set was CREATED deleted exactly those
+// releases while they were still filling — production shed ~128 sets/minute
+// during a re-read and built nothing.
+func TestEvictionMeasuresStalenessNotAge(t *testing.T) {
+	now := int64(1_000_000)
+
+	// Created 20 minutes ago but touched 10 seconds ago: still arriving.
+	growing := map[string]string{
+		"created_at": strconv.FormatInt(now-1200, 10),
+		"touched_at": strconv.FormatInt(now-10, 10),
+	}
+	age, ok := evictionStaleness(growing, now)
+	if !ok {
+		t.Fatal("no timestamp resolved")
+	}
+	if age > 300 {
+		t.Errorf("a set touched %ds ago reads as %ds stale — it is still growing "+
+			"and would be evicted mid-fill", 10, age)
+	}
+
+	// Created and last touched 20 minutes ago: genuinely stalled.
+	stalled := map[string]string{
+		"created_at": strconv.FormatInt(now-1200, 10),
+		"touched_at": strconv.FormatInt(now-1200, 10),
+	}
+	if age, _ := evictionStaleness(stalled, now); age <= 300 {
+		t.Errorf("a set untouched for 20 minutes reads as %ds stale — eviction "+
+			"would never shed genuinely dead sets", age)
+	}
+
+	// Pre-upgrade set with no touched_at falls back to created_at.
+	legacy := map[string]string{"created_at": strconv.FormatInt(now-600, 10)}
+	if age, ok := evictionStaleness(legacy, now); !ok || age != 600 {
+		t.Errorf("legacy fallback: age=%d ok=%v, want 600/true", age, ok)
+	}
+
+	// No timestamps at all must not evict on a zero age.
+	if _, ok := evictionStaleness(map[string]string{}, now); ok {
+		t.Error("a set with no timestamps must not resolve an age")
+	}
+}
