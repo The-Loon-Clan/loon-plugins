@@ -67,14 +67,22 @@
         <p class="text-muted small mb-2">Largest incomplete releases (still missing articles — later passes complete them; stale ones are evicted):</p>
         <div class="table-responsive">
           <table class="table table-dark table-sm align-middle">
-            <thead><tr><th>Release</th><th>Group</th><th class="text-end">Have / need</th><th class="text-end">Missing</th></tr></thead>
+            <thead><tr><th>Release</th><th>Group</th><th class="text-end">Articles have / need</th><th class="text-end">Missing</th><th class="text-end">Files</th></tr></thead>
             <tbody>
             {{range $.Pending}}
               <tr>
-                <td class="small" style="max-width:30rem;overflow-wrap:anywhere"><code>{{.Base}}</code></td>
+                <td class="small" style="max-width:30rem;overflow-wrap:anywhere">
+                  <code>{{.Base}}</code>
+                  {{if .PerFile}}<div class="text-muted" style="font-size:.75rem">declared per file: {{.PerFile}}</div>{{end}}
+                </td>
                 <td class="small text-muted">{{.Group}}</td>
-                <td class="text-end small">{{.Have}} / {{.Need}} {{if .Multi}}files{{else}}segments{{end}}</td>
+                {{/* Both numbers are ARTICLE counts. This column used to label them
+                     "files" for multi-file sets, which is what they are grouped BY,
+                     not what they count — and reading 1,000 / 11,314 as files sent a
+                     diagnosis down the wrong path. */}}
+                <td class="text-end small">{{.Have}} / {{.Need}}</td>
                 <td class="text-end small" style="color:#e0a030">{{.Missing}}</td>
+                <td class="text-end small text-muted">{{if .Multi}}{{.Seen}} / {{.Files}}{{else}}single{{end}}</td>
               </tr>
             {{end}}
             </tbody>

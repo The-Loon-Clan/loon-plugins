@@ -957,10 +957,13 @@ func (r *redisStaging) incompleteSets(ctx context.Context, limit int) ([]pending
 		if need <= 0 || have >= need {
 			continue // complete (or unknowable) — the builder will take it
 		}
+		per := perFileSegTotals(meta)
+		files, _ := strconv.Atoi(meta["total_files"])
 		out = append(out, pendingSet{
 			Base: meta["base_subject"], Group: rf.group,
 			Have: have, Need: need, Segments: have,
 			Multi: multi,
+			Files: files, Seen: len(per), PerFile: formatPerFileTotals(per),
 		})
 	}
 	for group, hashes := range dead {
@@ -989,4 +992,36 @@ func parseInfoInt(info, prefix string) int64 {
 		}
 	}
 	return 0
+}
+
+// formatPerFileTotals renders the declared segment total for each seen file, in
+// file order, for the pending-set readout: "1:1000 2:14 3:14".
+//
+// Bounded to a dozen entries because a set can legitimately hold hundreds of
+// par2 volumes and this goes into telemetry JSON that the admin page renders on
+// every poll. The count of remaining files is stated rather than dropped —
+// silently truncating a diagnostic reads as "that is all there is".
+func formatPerFileTotals(per map[int]int) string {
+	if len(per) == 0 {
+		return ""
+	}
+	nums := make([]int, 0, len(per))
+	for fn := range per {
+		nums = append(nums, fn)
+	}
+	sort.Ints(nums)
+
+	const maxShown = 12
+	var b strings.Builder
+	for i, fn := range nums {
+		if i >= maxShown {
+			fmt.Fprintf(&b, " +%d more", len(nums)-maxShown)
+			break
+		}
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(&b, "%d:%d", fn, per[fn])
+	}
+	return b.String()
 }

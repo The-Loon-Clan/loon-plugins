@@ -319,6 +319,19 @@ type pendingSet struct {
 	Need     int    `json:"need"`
 	Segments int    `json:"segments"`
 	Multi    bool   `json:"multi"`
+
+	// Why this set is short, not just that it is. "have 1,000 / need 11,314"
+	// says a set is stalled and nothing about which of the two numbers is
+	// wrong — and for a multi-file release Need is DERIVED (the sum of each
+	// known file's declared segment count plus one article for every file not
+	// seen yet), so a single file declaring a bogus total inflates it and the
+	// set can never complete. Diagnosing that from have/need alone took several
+	// deploy cycles of guessing; these three fields are already in the meta hash
+	// the caller fetched, so publishing them is free and turns the question into
+	// a readout.
+	Files   int    `json:"files"`    // total_files as the posts declare it
+	Seen    int    `json:"seen"`     // files with at least one article staged
+	PerFile string `json:"per_file"` // "1:1000 2:14 3:14" — declared total per file
 }
 
 // Missing is the article shortfall — what the dashboard's "Forming releases"
