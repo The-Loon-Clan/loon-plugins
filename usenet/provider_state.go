@@ -86,6 +86,7 @@ func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, 
 		// All active rows (a curated catalog, not a firehose); the tier split,
 		// stalest-first ordering, and cap happen in orderCrawlGroups. The ORDER
 		// BY only fixes its SliceStable tiebreak (sort_order then name).
+		// sqllint:allow tierOrderSQL is a compile-time constant expression, no input
 		return tx.SelectContext(ctx, &rows,
 			`SELECT g.name, COALESCE(st.high_watermark, 0) AS high_watermark,
 			        st.last_crawl, g.retention_days, g.throttle_ms, g.tier
@@ -93,7 +94,7 @@ func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, 
 			   LEFT JOIN newsgroup_state st
 			     ON st.group_name = g.name AND st.backbone = $1
 			  WHERE g.active = TRUE
-			  ORDER BY g.tier, g.sort_order, g.name`, backbone)
+			  ORDER BY `+tierOrderSQL+`, g.sort_order, g.name`, backbone) // sqllint:allow constant tier-rank expression, no input
 	})
 	if err != nil {
 		return nil, err
@@ -153,6 +154,7 @@ func (s *PGStore) groupsNeedingBackfillForBackbone(ctx context.Context, backbone
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		// sqllint:allow tierOrderSQL is a compile-time constant expression, no input
 		return tx.SelectContext(ctx, &rows,
 			`SELECT g.name, st.back_watermark, st.server_low,
 			        g.retention_days, g.throttle_ms
@@ -163,7 +165,7 @@ func (s *PGStore) groupsNeedingBackfillForBackbone(ctx context.Context, backbone
 			    AND st.backfill_done = FALSE
 			    AND st.back_watermark IS NOT NULL
 			    AND st.back_watermark > st.server_low
-			  ORDER BY g.tier, g.sort_order, g.name
+			  ORDER BY `+tierOrderSQL+`, g.sort_order, g.name
 			  LIMIT NULLIF($2, 0)`, backbone, limit)
 	})
 	if err != nil {

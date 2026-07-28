@@ -33,6 +33,19 @@ func tierRank(t Tier) int {
 	}
 }
 
+// tierOrderSQL orders rows by crawl priority, for use in an ORDER BY.
+//
+// The tier column is TEXT, so a bare `ORDER BY g.tier` sorts ALPHABETICALLY —
+// critical, low, normal — which puts every LOW group ahead of every NORMAL one.
+// That is precisely the inversion the tier exists to prevent, and it was live in
+// all three query paths: forward crawl planning, backfill group selection, and
+// the admin group list. It stayed invisible because the alphabetical order
+// happens to be right for critical, and prod's normal-tier groups were all
+// caught up, so nothing was visibly starved.
+//
+// Must stay in step with tierRank; the integration test asserts they agree.
+const tierOrderSQL = `CASE g.tier WHEN 'critical' THEN 0 WHEN 'low' THEN 2 ELSE 1 END`
+
 // normalizeTier maps a stored value onto the closed set, defaulting anything
 // unrecognised (or empty — a row written before migration 019) to normal.
 func normalizeTier(s string) Tier {

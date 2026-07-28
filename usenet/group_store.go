@@ -86,6 +86,7 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		// Ordered the way the crawler will actually visit them: active first,
 		// then normal before low-priority, then manual order.
+		// sqllint:allow tierOrderSQL is a compile-time constant expression, no input
 		return tx.SelectContext(ctx, &rows,
 			`SELECT g.name, g.active, COUNT(n.id) AS nzbs,
 			        g.retention_days, g.throttle_ms, g.tier,
@@ -117,7 +118,7 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 			 FROM newsgroups g LEFT JOIN nzbs n ON n.group_name = g.name
 			 WHERE ($1 = '' OR g.name ILIKE '%' || $1 || '%')
 			 GROUP BY g.name, g.active, g.retention_days, g.throttle_ms, g.tier, g.sort_order
-			 ORDER BY g.active DESC, g.tier, g.sort_order, g.name LIMIT $2`, query, limit)
+			 ORDER BY g.active DESC, `+tierOrderSQL+`, g.sort_order, g.name LIMIT $2`, query, limit) // sqllint:allow constant tier-rank expression, no input
 	})
 	if err != nil {
 		return nil, err
