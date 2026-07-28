@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"sync/atomic"
+	"unicode"
 )
 
 // Junk-title detection — THE canonical engine (ported from prod's
@@ -421,18 +422,38 @@ func highSpecialChars(t string, p junkParams) bool {
 	if minLen <= 0 {
 		minLen = 12
 	}
-	if len(t) < minLen {
+	// Runes, not bytes, on BOTH sides of the ratio. The numerator has always
+	// counted runes; leaving the denominator as len(t) made the verdict depend
+	// on how the title was encoded rather than on what it said — a multi-byte
+	// script silently got a third of the divisor it should have had.
+	var special, total int
+	for _, c := range t {
+		total++
+		// unicode.IsLetter/IsDigit, not the ASCII isAlnum this used to call.
+		// This rule means "the title is mostly spam-grade punctuation", and
+		// with an ASCII-only test every CJK ideograph, kana and Hangul
+		// syllable counted as punctuation — so a Japanese title scored
+		// ~100% special and was dropped at ingest. On an anime indexer that
+		// is not an edge case: it silently excluded the native-language
+		// releases the catalogue most wants, and did it inside a rule whose
+		// counter climbing looked like evidence it was working.
+		//
+		// Full-width punctuation (！ ／ 、) still counts as special, which is
+		// correct — it IS punctuation, and a title carrying a couple of marks
+		// stays far below the threshold.
+		if unicode.IsLetter(c) || unicode.IsDigit(c) {
+			continue
+		}
+		switch c {
+		case ' ', '.', '-', '_', '[', ']', '(', ')', '<', '>':
+			continue
+		}
+		special++
+	}
+	if total < minLen {
 		return false
 	}
-	var special int
-	for _, c := range t {
-		if !isAlnum(c) && c != ' ' && c != '.' && c != '-' && c != '_' &&
-			c != '[' && c != ']' && c != '(' && c != ')' &&
-			c != '<' && c != '>' {
-			special++
-		}
-	}
-	return float64(special)/float64(len(t)) > 0.15
+	return float64(special)/float64(total) > 0.15
 }
 
 // randomWordsJunk: random alphanumeric words make up 70%+ of the non-punct

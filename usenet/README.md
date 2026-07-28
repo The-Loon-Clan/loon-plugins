@@ -268,6 +268,16 @@ unconverted (mojibake in the right release beats an absent release), except
 the stateful ISO-2022/UTF-7 family, where doing so spills ESC bytes into the
 title and measurably makes things worse; those keep the raw header.
 
+`high_special_chars` ("the title is mostly spam-grade punctuation") judges
+letters and digits with Unicode, not ASCII, and takes its ratio over runes
+rather than bytes. Deciding it the ASCII way counted every CJK ideograph, kana
+and Hangul syllable as punctuation, so a native-script title scored ~100%
+special and was dropped at ingest — on an anime indexer that excluded exactly
+the Japanese-titled releases the catalogue most wants, while the rule's counter
+climbed as if it were working. The host-side mirror in
+`pkg/services/junk_title.go` carries the same fix (the SQL sweep clause counts a
+fixed ASCII set and was never affected).
+
 The **junk engine** is a full, data-driven port of the production filter: 24
 rules (regex + named heuristics for shapes regexes can't express) in the
 production evaluation order, shipped in `seed/junk_rules.tsv`, seeded to
