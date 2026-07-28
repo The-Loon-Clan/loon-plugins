@@ -460,6 +460,29 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 			"seg_total", maxST,
 			"newest_date", newestDate,
 		)
+		// Per-file segment totals, as segFieldKey(fileNum).
+		//
+		// seg_total above is the MAX across the whole set, and a release is one
+		// large media file plus a handful of tiny par2s — so applying that max
+		// to every file demands orders of magnitude more articles than exist.
+		// Production showed a complete set reading have=156,882 need=2,016,196
+		// and never building. assemble.go's isComplete has always tracked this
+		// per file; the Redis port collapsed it to one global value, and only
+		// the per-file numbers can restore the distinction.
+		//
+		// Written per touched file and only ever upward, so a later batch
+		// carrying a larger count for the same file corrects an earlier one.
+		perFile := map[int]int{}
+		for _, a := range gu.articles {
+			if a.SegTotal > perFile[a.FileNum] {
+				perFile[a.FileNum] = a.SegTotal
+			}
+		}
+		for fn, st := range perFile {
+			if st > 0 {
+				pipe.HSet(ctx, gk, segFieldKey(fn), st)
+			}
+		}
 		pipe.HSetNX(ctx, gk, "created_at", now)
 		pipe.SAdd(ctx, activeKey(gu.groupName), gu.hash)
 		pipe.Expire(ctx, ak, ttl)
@@ -551,14 +574,66 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 	return len(arts), nil
 }
 
-// groupNeededParts returns how many article keys a set needs to be complete.
+// segFieldKey names the per-file segment-total field in a set's meta hash.
+// Prefixed so it cannot collide with the fixed keys beside it.
+func segFieldKey(fileNum int) string { return "st:" + strconv.Itoa(fileNum) }
+
+// perFileSegTotals reads the segFieldKey entries back out of a meta hash.
+func perFileSegTotals(meta map[string]string) map[int]int {
+	out := map[int]int{}
+	for k, v := range meta {
+		if !strings.HasPrefix(k, "st:") {
+			continue
+		}
+		fn, err := strconv.Atoi(k[3:])
+		if err != nil {
+			continue
+		}
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			out[fn] = n
+		}
+	}
+	return out
+}
+
+// groupNeededParts is a cheap LOWER BOUND on the article count a set needs, used
+// only to decide whether the exact check (isGroupComplete, which costs an HKEYS)
+// is worth running.
+//
+// A lower bound is the correct shape here. Overestimating does not merely delay
+// a set — it withholds it forever, because the exact check never gets to run.
+// The previous totalFiles*seg_total was an over-estimate by roughly the ratio
+// between a release's media file and its par2s, and it kept every multi-file
+// release out of the builder permanently.
 func groupNeededParts(meta map[string]string) int {
 	fileParts := meta["file_parts"] == "true" || meta["file_parts"] == "1"
 	totalParts, _ := strconv.Atoi(meta["total_parts"])
 	totalFiles, _ := strconv.Atoi(meta["total_files"])
 	segTotal, _ := strconv.Atoi(meta["seg_total"])
-	if fileParts && totalFiles > 0 && segTotal > 0 {
-		return totalFiles * segTotal
+
+	if fileParts && totalFiles > 0 {
+		// Sum of what each KNOWN file needs. Files not seen yet contribute
+		// nothing, so the bound only rises as the set fills — never above the
+		// truth, which is exactly the property required.
+		if per := perFileSegTotals(meta); len(per) > 0 {
+			sum := 0
+			for _, n := range per {
+				sum += n
+			}
+			// Every file still unseen owes at least one article.
+			if missing := totalFiles - len(per); missing > 0 {
+				sum += missing
+			}
+			if sum > 0 {
+				return sum
+			}
+		}
+		// Sets staged before per-file totals existed: the largest file plus one
+		// article for each remaining file. Still a lower bound, still safe.
+		if segTotal > 0 {
+			return segTotal + totalFiles - 1
+		}
+		return totalFiles
 	}
 	if totalParts > 0 {
 		return totalParts
@@ -587,9 +662,23 @@ func isGroupComplete(meta map[string]string, fields []string) bool {
 			fn, _ := strconv.Atoi(p[0])
 			fileSegs[fn]++
 		}
+		// Each file is judged against ITS OWN segment total, mirroring
+		// assemble.go's isComplete. Judging every file against the set-wide
+		// maximum meant only the largest file could ever qualify, so a release
+		// of one media file plus a dozen par2s counted 1 complete file out of
+		// 13 and stayed pending until it expired.
+		per := perFileSegTotals(meta)
 		completeFiles := 0
-		for _, count := range fileSegs {
-			if count >= segTotal {
+		for fn, count := range fileSegs {
+			need := per[fn]
+			if need <= 0 {
+				// Pre-upgrade set with no per-file total recorded. The set-wide
+				// max is the old behaviour and is wrong for small files, but it
+				// is the only figure available; these expire within the staging
+				// TTL.
+				need = segTotal
+			}
+			if count >= need {
 				completeFiles++
 			}
 		}
