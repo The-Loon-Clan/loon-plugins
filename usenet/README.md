@@ -304,6 +304,19 @@ deliberate `under_1mib`/`under_5mib` size bands catching subtitle packs, manga
 and audio rather than a rule defect. **Run that audit before changing a junk
 rule**; none of these were visible by inspection.
 
+The forward crawl **yields when staging is full**, at `crawl_pressure_high_pct`
+(default 95, deliberately above the backfill's 85: new articles matter more than
+history, so the crawl stops only when storing would actively destroy what is
+already there). Under redis with an `allkeys-*` policy at its ceiling every
+write evicts something to make room, and the coldest keys are precisely the
+forming sets waiting between crawl visits — production evicted **97.4 million**
+keys that way, roughly 640 staged releases a minute, while the crawler kept
+feeding it. Skipping the round leaves the watermark where it is, so nothing is
+skipped: those articles are re-read next pass. Storing them into a full backend
+is what loses them. Set to 0 to disable, which is right on a backend that cannot
+destroy what it holds (pg staging, or redis under `noeviction`, where a full
+server refuses the write instead).
+
 The ready queue is **swept before each draw**. `candidateGroups` takes a random
 sample of `build_drain_per_pass` entries, and nothing else ever removed the dead
 ones — so a queue growing faster than the draw accumulates fossils without bound

@@ -123,6 +123,27 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		// nothing. Same reasoning as re-resolving the fleet each round below.
 		p.reloadJunkRules(ctx)
 		p.loadPosterWatch(ctx)
+		// Do not stage into a staging backend that is already full.
+		//
+		// The backfill has yielded to pressure since it was written; the forward
+		// crawl never did, on the reasoning that new articles matter more than
+		// history. That reasoning holds only while storing them WORKS. Under
+		// redis with an allkeys-* policy at its ceiling, every write evicts
+		// something else to make room — and the coldest keys are precisely the
+		// forming sets waiting between crawl visits. Production evicted 97.4
+		// MILLION keys that way, roughly 640 staged releases a minute, while the
+		// crawler kept feeding it.
+		//
+		// Skipping the round leaves the watermark where it is, so nothing is
+		// lost: those articles are re-read next pass. Storing them into a full
+		// backend is what loses them.
+		if pause, pr := p.pauseForStagingPressure(ctx, cfg); pause {
+			p.crawlJob.Log("crawl paused: staging %.0f%% full (>= %d%%) — storing now would evict "+
+				"sets that are still assembling; watermarks held so nothing is skipped",
+				pr*100, cfg.CrawlPressureHighPct)
+			p.crawlJob.SetIdle(p.nextCrawl(ctx))
+			return
+		}
 		staged, claimed := 0, 0
 		for _, bbRuns := range groupByBackbone(runs) {
 			if ctx.Err() != nil {
@@ -916,4 +937,27 @@ func oldestDate(ovs []nntp.MessageOverview) time.Time {
 		}
 	}
 	return t
+}
+
+// pauseForStagingPressure reports whether this round must not stage, and the
+// pressure reading behind that answer.
+//
+// A method rather than an inline check so the WIRING is testable, not just the
+// arithmetic: a test that only exercises shouldPauseForPressure passes happily
+// while the crawl loop ignores it entirely, which is exactly what mutation
+// testing caught here.
+//
+// Fails OPEN. If the backend cannot report its own fullness, crawling is the
+// safer default — refusing to stage on an unreadable gauge would idle the
+// crawler over a monitoring failure.
+func (p *Plugin) pauseForStagingPressure(ctx context.Context, cfg Config) (bool, float64) {
+	if p.staging == nil {
+		return false, 0
+	}
+	pr, err := p.staging.pressure(ctx)
+	if err != nil {
+		p.reportErr(ctx, "usenet/crawl-pressure", err)
+		return false, 0
+	}
+	return shouldPauseForPressure(pr, cfg.CrawlPressureHighPct), pr
 }

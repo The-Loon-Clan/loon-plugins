@@ -111,7 +111,12 @@ type Config struct {
 	// Backfill back-pressure thresholds (percent of staging pressure). Backfill
 	// pauses at high, resumes below low; the forward crawl is never paused.
 	BackfillPressureHighPct int `json:"backfill_pressure_high_pct"` // default 85
-	BackfillPressureLowPct  int `json:"backfill_pressure_low_pct"`  // default 70
+	// CrawlPressureHighPct stops the FORWARD crawl staging when the staging
+	// backend is this full. Higher than the backfill gate on purpose: new
+	// articles matter more than history, so the forward crawl yields only when
+	// storing would actively destroy what is already there.
+	CrawlPressureHighPct   int `json:"crawl_pressure_high_pct"`   // default 95
+	BackfillPressureLowPct int `json:"backfill_pressure_low_pct"` // default 70
 }
 
 type ServerConfig struct {
@@ -221,6 +226,9 @@ func (c *Config) applyDefaults() {
 	if c.BackfillPressureHighPct <= 0 {
 		c.BackfillPressureHighPct = 85
 	}
+	if c.CrawlPressureHighPct <= 0 {
+		c.CrawlPressureHighPct = 95
+	}
 	if c.BackfillPressureLowPct <= 0 {
 		c.BackfillPressureLowPct = 70
 	}
@@ -261,6 +269,7 @@ func (c *Config) knobFields() map[string]*int {
 		"health_min_age_hours":       &c.HealthMinAgeHours,
 		"health_stat_chunk":          &c.HealthStatChunk,
 		"backfill_pressure_high_pct": &c.BackfillPressureHighPct,
+		"crawl_pressure_high_pct":    &c.CrawlPressureHighPct,
 		"backfill_pressure_low_pct":  &c.BackfillPressureLowPct,
 	}
 }
@@ -304,4 +313,19 @@ func (c Config) withOverrides(s map[string]string) Config {
 		}
 	}
 	return out
+}
+
+// shouldPauseForPressure decides whether a staging backend is too full to write
+// into. Extracted so the crawl loop and its test exercise the SAME code: a test
+// that restates the comparison passes happily while the caller does something
+// else, which is how three drifted duplicates in this plugin started.
+//
+// A zero threshold disables the gate — meaningful on a backend that cannot
+// destroy what it holds (pg staging, or redis under noeviction, where a full
+// backend refuses the write instead of evicting).
+func shouldPauseForPressure(pressure float64, highPct int) bool {
+	if highPct <= 0 {
+		return false
+	}
+	return pressure >= float64(highPct)/100.0
 }
