@@ -66,6 +66,15 @@ type Deps struct {
 	// after the basename (covers -> covers.zip). The host passes its canonical
 	// persistent-dirs list; this plugin has no way to know what is persistent.
 	StaticDirs []string
+	// Classes are the asset directories to index, with their ordering. Only the
+	// host knows which directories are persistent — the same knowledge behind
+	// StaticDirs — but the index needs the slug and the order too, so a run cut
+	// short still covered the cheap irreplaceable classes before the 117 GB of
+	// screenshots.
+	Classes []AssetClass
+	// Root is the directory the class paths are relative to. Empty means the
+	// process working directory, which is what production uses; tests set it.
+	Root string
 	// BackupDir is where dated run folders are written.
 	//
 	// It MUST be a bind mount on the host side. Left inside a container's

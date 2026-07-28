@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"sync"
 	"time"
@@ -10,11 +11,27 @@ import (
 	"github.com/the-loon-clan/loon/schedule"
 )
 
+// migrations carries the inventory schema. This plugin used to be deliberately
+// stateless — its README argued the dated folders WERE the last-run record —
+// and that was right for "zip everything again each week". It cannot survive an
+// incremental: deciding what changed requires remembering what was there, and
+// the per-file inventory is also the first answer this site has ever had to
+// "what is on disk and is it intact".
+//
+//go:embed migrations/*.sql
+var migrations embed.FS
+
 func init() {
 	core.RegisterPlugin("backup", func() core.Plugin { return &Plugin{} })
 }
 
-const backupIntervalMin = 7 * 24 * 60 // weekly
+const (
+	backupIntervalMin = 7 * 24 * 60 // weekly
+	// The index is cheap — almost nothing changes between runs, so the stat
+	// gate does the work and hashing is the exception. Daily keeps the window
+	// in which an in-place overwrite can hide down to a day.
+	indexIntervalMin = 24 * 60
+)
 
 // Plugin owns the single backup job. The mutex keeps a manual /admin/jobs
 // trigger from racing the scheduled loop — a second concurrent run would
@@ -23,6 +40,14 @@ const backupIntervalMin = 7 * 24 * 60 // weekly
 type Plugin struct {
 	job *schedule.JobInfo
 	mu  sync.Mutex
+
+	// indexJob walks the asset classes and records a generation. Separate from
+	// the archive job because they run on different clocks: the index is cheap
+	// enough to run daily, the full archive is not.
+	indexJob *schedule.JobInfo
+	indexMu  sync.Mutex
+	st       inventoryStore
+	core     *core.Core
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -31,7 +56,8 @@ func (p *Plugin) Metadata() core.Metadata {
 		Version:     "0.1.0",
 		Description: "Weekly backup: zips persistent static-asset directories and dumps the PostgreSQL database, with retention pruning.",
 		// Worker-only: no routes, just the scheduled loop.
-		Processes: []string{"worker"},
+		Processes:  []string{"worker"},
+		Migrations: migrations,
 	}
 }
 
@@ -45,6 +71,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if deps.DB.DBName == "" {
 		return fmt.Errorf("backup: SetDeps missing DB connection (DBName empty) — pg_dump has nothing to target")
 	}
+
+	p.core = c
+	p.st = NewPGStore(c.Storage.SchemaDB("backup"))
+
+	p.indexJob = schedule.RegisterJob("Backup Index",
+		"Walks the asset directories and records every file's size and content hash")
+	p.indexJob.IntervalMin = indexIntervalMin
+	p.indexJob.SetTrigger(func() { go p.runIndex(context.Background()) })
 
 	p.job = schedule.RegisterJob("Backup",
 		"Weekly backup: compresses cover art and dumps the PostgreSQL database")
