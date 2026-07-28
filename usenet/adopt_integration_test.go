@@ -143,7 +143,7 @@ func TestAdoptFromHostCarriesEverything(t *testing.T) {
 	}
 
 	// Tuning carried: the operator's legacy crawler-settings survive.
-	tuned, err := s.activeGroupsForBackbone(ctx, "omicron", 50)
+	tuned, err := s.activeGroupsForBackbone(ctx, "omicron", 50, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestAdoptFromHostResumePoint(t *testing.T) {
 	if _, _, _, _, err := s.adoptFromHost(ctx, "omicron"); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := s.activeGroupsForBackbone(ctx, "omicron", 50)
+	rows, err := s.activeGroupsForBackbone(ctx, "omicron", 50, false)
 	if err != nil {
 		t.Fatal(err)
 	}

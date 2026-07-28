@@ -34,7 +34,28 @@ type crawlGroupSel struct {
 // SliceStable preserves it as the tiebreak among equally-stale groups, so
 // sort_order still decides ties. Extracted so the ordering is unit-testable
 // without a database.
-func orderCrawlGroups(rows []crawlGroupSel, limit int) []crawlGroupSel {
+func orderCrawlGroups(rows []crawlGroupSel, limit int, holdLow bool) []crawlGroupSel {
+	// Tier decides ORDER, which is not the same as entitlement — and the
+	// difference is what let a low-tier group starve a critical one. Once every
+	// critical and normal group is caught up they plan in an instant, and the
+	// whole remaining pass budget falls to whichever low group still has a
+	// backlog. That group then fills staging with articles the builder mostly
+	// junks, and the resulting memory pressure pauses the BACKFILL — the only
+	// job that can serve the critical group's history. Low-priority work
+	// crowding out critical work, entirely within the rules.
+	//
+	// holdLow removes the low tier from the pass altogether rather than merely
+	// ranking it last. Their watermarks stop advancing and their backlogs grow;
+	// that is the trade the operator is choosing when they enable it.
+	if holdLow {
+		kept := rows[:0:0]
+		for _, r := range rows {
+			if normalizeTier(r.TierRaw) != TierLow {
+				kept = append(kept, r)
+			}
+		}
+		rows = kept
+	}
 	// One bucket per tier, indexed by tierRank so adding a tier is a change to
 	// tier.go alone.
 	buckets := make([][]crawlGroupSel, 3)
@@ -80,7 +101,7 @@ func orderCrawlGroups(rows []crawlGroupSel, limit int) []crawlGroupSel {
 // normal whenever the normal tier was momentarily caught up, and (b) handed the
 // same top-n every pass, starving the tail FOREVER once n or more groups were
 // active. limit <= 0 means "no cap — every active group each pass" (max_groups=0).
-func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, limit int) ([]groupRow, error) {
+func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, limit int, holdLow bool) ([]groupRow, error) {
 	var rows []crawlGroupSel
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		// All active rows (a curated catalog, not a firehose); the tier split,
@@ -100,7 +121,7 @@ func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, 
 		return nil, err
 	}
 
-	pick := orderCrawlGroups(rows, limit)
+	pick := orderCrawlGroups(rows, limit, holdLow)
 	out := make([]groupRow, len(pick))
 	for i, r := range pick {
 		out[i] = groupRow{
@@ -337,4 +358,62 @@ func (s *PGStore) allCoveredRanges(ctx context.Context) (map[coverKey][]articleR
 		out[k] = append(out[k], articleRange{Start: r.Start, End: r.End})
 	}
 	return out, nil
+}
+
+// backfillPending describes the critical-tier history still outstanding on one
+// backbone. Carried as a struct rather than a bool so the log line can say what
+// is being waited on: "holding 14 low-tier groups" is an alarming thing to read
+// with no stated reason, and an operator who cannot see the reason will
+// reasonably assume the crawler is broken.
+type backfillPending struct {
+	Groups   int    // critical groups with backfill_done = FALSE
+	Articles int64  // their combined remaining history
+	Stalest  string // the one furthest from done, for the log line
+}
+
+// Any reports whether anything is outstanding.
+func (b backfillPending) Any() bool { return b.Groups > 0 }
+
+// criticalBackfillPending measures the critical tier's outstanding history on
+// one backbone.
+//
+// Article numbers are per-backbone, so this is asked per backbone rather than
+// globally: a group fully backfilled on one provider may be untouched on
+// another, and holding the low tier fleet-wide on another backbone's progress
+// would be wrong.
+func (s *PGStore) criticalBackfillPending(ctx context.Context, backbone string) (backfillPending, error) {
+	var out backfillPending
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		var row struct {
+			Groups   int            `db:"groups"`
+			Articles sql.NullInt64  `db:"articles"`
+			Stalest  sql.NullString `db:"stalest"`
+		}
+		// GREATEST(...,0) because server_low drifts UPWARD as articles expire
+		// off the server, so a group can legitimately read "negative history
+		// remaining" once retention has overtaken the back watermark. That is
+		// nothing outstanding, not a negative amount of work.
+		if err := tx.GetContext(ctx, &row,
+			`SELECT count(*)                                        AS groups,
+			        sum(GREATEST(st.back_watermark - st.server_low, 0)) AS articles,
+			        (SELECT g2.name
+			           FROM newsgroups g2
+			           JOIN newsgroup_state s2
+			             ON s2.group_name = g2.name AND s2.backbone = $1
+			          WHERE g2.active AND g2.tier = 'critical'
+			            AND s2.backfill_done = FALSE
+			          ORDER BY GREATEST(s2.back_watermark - s2.server_low, 0) DESC
+			          LIMIT 1)                                      AS stalest
+			   FROM newsgroups g
+			   JOIN newsgroup_state st
+			     ON st.group_name = g.name AND st.backbone = $1
+			  WHERE g.active = TRUE
+			    AND g.tier = 'critical'
+			    AND st.backfill_done = FALSE`, backbone); err != nil {
+			return err
+		}
+		out = backfillPending{Groups: row.Groups, Articles: row.Articles.Int64, Stalest: row.Stalest.String}
+		return nil
+	})
+	return out, err
 }

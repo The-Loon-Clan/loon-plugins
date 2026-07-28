@@ -304,6 +304,22 @@ deliberate `under_1mib`/`under_5mib` size bands catching subtitle packs, manga
 and audio rather than a rule defect. **Run that audit before changing a junk
 rule**; none of these were visible by inspection.
 
+Tier decides ORDER, not entitlement — and on a site where the critical groups
+are caught up, that gap is a starvation bug rather than a nuance. Critical and
+normal plan in an instant, the whole remaining pass budget falls to whichever
+LOW group still has a backlog, and the articles it stages fill the staging
+memory whose pressure gate pauses the BACKFILL — the only job that can serve the
+critical group's history. `hold_low_until_backfilled` closes it by REMOVING the
+low tier from the pass (not merely ranking it last) while any critical group on
+that backbone still has history to pull. Asked per backbone, because article
+numbers and therefore backfill progress are per backbone. It fails OPEN: if the
+check errors, the crawl proceeds rather than converting a transient query
+failure into an outage for every low group. Off by default, since it
+deliberately starves a tier — right when the critical group is far behind, wrong
+on a site that is caught up everywhere. Both the hold and an all-held pass log
+what they did; a tier that silently stops crawling is indistinguishable from a
+broken crawler.
+
 The **junk engine** is a full, data-driven port of the production filter: 24
 rules (regex + named heuristics for shapes regexes can't express) in the
 production evaluation order, shipped in `seed/junk_rules.tsv`, seeded to

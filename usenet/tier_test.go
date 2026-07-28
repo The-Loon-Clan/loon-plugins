@@ -67,7 +67,7 @@ func TestOrderCrawlGroups_CriticalBeatsStaleness(t *testing.T) {
 		sel("ancient-normal", "normal", "2020-01-02T00:00:00Z"),
 		sel("just-crawled-critical", "critical", "2026-07-27T06:00:00Z"),
 	}
-	got := names(orderCrawlGroups(rows, 0))
+	got := names(orderCrawlGroups(rows, 0, false))
 	eqNames(t, got, []string{
 		"just-crawled-critical", // freshest of all, still first
 		"never-crawled-normal",  // never-crawled ahead of dated, within normal
@@ -82,7 +82,7 @@ func TestOrderCrawlGroups_StalestFirstWithinTier(t *testing.T) {
 		sel("c-old", "critical", "2026-07-01T00:00:00Z"),
 		sel("c-never", "critical", ""),
 	}
-	eqNames(t, names(orderCrawlGroups(rows, 0)), []string{"c-never", "c-old", "c-recent"})
+	eqNames(t, names(orderCrawlGroups(rows, 0, false)), []string{"c-never", "c-old", "c-recent"})
 }
 
 // The cap must fall on the low tail, never on a critical group.
@@ -93,7 +93,7 @@ func TestOrderCrawlGroups_CapSparesCritical(t *testing.T) {
 		sel("normal-1", "normal", "2021-01-01T00:00:00Z"),
 		sel("crit", "critical", "2026-07-27T06:00:00Z"),
 	}
-	eqNames(t, names(orderCrawlGroups(rows, 2)), []string{"crit", "normal-1"})
+	eqNames(t, names(orderCrawlGroups(rows, 2, false)), []string{"crit", "normal-1"})
 }
 
 // An unrecognised tier must be crawled as normal rather than dropped from the
@@ -105,18 +105,18 @@ func TestOrderCrawlGroups_UnknownTierIsCrawledAsNormal(t *testing.T) {
 		sel("low-1", "low", "2019-01-01T00:00:00Z"),
 		sel("crit", "critical", "2026-01-01T00:00:00Z"),
 	}
-	eqNames(t, names(orderCrawlGroups(rows, 0)), []string{"crit", "bogus", "low-1"})
+	eqNames(t, names(orderCrawlGroups(rows, 0, false)), []string{"crit", "bogus", "low-1"})
 }
 
 func TestOrderCrawlGroups_EmptyAndNoCap(t *testing.T) {
-	if got := orderCrawlGroups(nil, 5); len(got) != 0 {
+	if got := orderCrawlGroups(nil, 5, false); len(got) != 0 {
 		t.Errorf("nil rows: got %d, want 0", len(got))
 	}
 	rows := []crawlGroupSel{sel("a", "normal", ""), sel("b", "normal", "")}
-	if got := orderCrawlGroups(rows, 0); len(got) != 2 {
+	if got := orderCrawlGroups(rows, 0, false); len(got) != 2 {
 		t.Errorf("limit 0 means no cap: got %d, want 2", len(got))
 	}
-	if got := orderCrawlGroups(rows, 99); len(got) != 2 {
+	if got := orderCrawlGroups(rows, 99, false); len(got) != 2 {
 		t.Errorf("limit above len: got %d, want 2", len(got))
 	}
 }

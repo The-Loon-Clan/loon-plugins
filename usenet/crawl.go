@@ -214,13 +214,36 @@ func (p *Plugin) crawlBackbone(ctx context.Context, runs []providerRun, cfg Conf
 		r.pool.TopUp(ctx) // refill anything the last pass discarded
 	}
 
-	groups, err := p.st.activeGroupsForBackbone(ctx, bb, cfg.MaxGroups)
+	// Should the low tier sit this pass out? Asked per backbone, because
+	// article numbers — and therefore backfill progress — are per backbone.
+	holdLow := false
+	if cfg.HoldLowUntilBackfilled {
+		pend, err := p.st.criticalBackfillPending(ctx, bb)
+		if err != nil {
+			// Fail OPEN. Not knowing whether critical history is outstanding is
+			// no reason to stop crawling a whole tier; the alternative silently
+			// converts a transient query error into an outage for 14 groups.
+			p.reportErr(ctx, "usenet/crawl-hold-check", err)
+		} else if pend.Any() {
+			holdLow = true
+			p.crawlJob.Log("holding LOW-tier groups: %d critical group(s) still backfilling, %s article(s) of history left (stalest: %s)",
+				pend.Groups, fmtComma(pend.Articles), pend.Stalest)
+		}
+	}
+
+	groups, err := p.st.activeGroupsForBackbone(ctx, bb, cfg.MaxGroups, holdLow)
 	if err != nil {
 		p.reportErr(ctx, "usenet/crawl-groups", err)
 		return 0, 0
 	}
 	if len(groups) == 0 {
-		p.crawlJob.Log("no active groups — pick some in the admin wizard")
+		if holdLow {
+			// Distinguish "held on purpose" from "misconfigured". Both leave the
+			// pass with nothing to do, and only one of them is a problem.
+			p.crawlJob.Log("nothing to crawl: every active group is LOW-tier and held until critical backfill completes")
+		} else {
+			p.crawlJob.Log("no active groups — pick some in the admin wizard")
+		}
 		return 0, 0
 	}
 	// Split first, then lease. Assignment decides what to ATTEMPT so N crawlers

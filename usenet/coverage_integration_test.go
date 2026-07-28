@@ -342,7 +342,7 @@ func TestLowPriorityTierRule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := s.activeGroupsForBackbone(ctx, bb, 2)
+	got, err := s.activeGroupsForBackbone(ctx, bb, 2, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +356,7 @@ func TestLowPriorityTierRule(t *testing.T) {
 	if err := s.updateGroupStateForBackbone(ctx, bb, "n.one", 1, 1100, 1100, 1000, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	got, err = s.activeGroupsForBackbone(ctx, bb, 2)
+	got, err = s.activeGroupsForBackbone(ctx, bb, 2, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +369,7 @@ func TestLowPriorityTierRule(t *testing.T) {
 
 	// Uncapped, the low-pri group appears -- LAST. This is what proves the
 	// flag survived the round trip rather than the tier being filtered out.
-	got, err = s.activeGroupsForBackbone(ctx, bb, 0) // 0 = no cap
+	got, err = s.activeGroupsForBackbone(ctx, bb, 0, false) // 0 = no cap
 	if err != nil {
 		t.Fatal(err)
 	}

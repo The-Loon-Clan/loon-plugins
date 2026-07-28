@@ -86,8 +86,9 @@ func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string) (te
 	return p.frag("settings.html", map[string]any{
 		"Servers": servers, "DefaultConns": p.effective(ctx).Connections,
 		"Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,
-		"CrawlNoCatchup": p.effective(ctx).CrawlNoCatchup,
-		"Groups":         groups, "GroupQuery": gq, "Tiers": AllTiers,
+		"CrawlNoCatchup":         p.effective(ctx).CrawlNoCatchup,
+		"HoldLowUntilBackfilled": p.effective(ctx).HoldLowUntilBackfilled,
+		"Groups":                 groups, "GroupQuery": gq, "Tiers": AllTiers,
 		"GroupTotal": total, "Shown": len(groups),
 		"CrawlersTab": crawlersTab, "JobsTab": jobsTab, "FiltersTab": filtersTab,
 		"Msg": msg, "Err": errMsg,

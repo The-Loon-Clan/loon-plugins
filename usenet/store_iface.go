@@ -49,7 +49,10 @@ type GroupStore interface {
 	groups(ctx context.Context) ([]pluginapi.GroupInfo, error)
 	allGroups(ctx context.Context, query string, limit int) ([]pluginapi.GroupInfo, error)
 	activeGroups(ctx context.Context, limit int) ([]groupRow, error)
-	activeGroupsForBackbone(ctx context.Context, backbone string, limit int) ([]groupRow, error)
+	activeGroupsForBackbone(ctx context.Context, backbone string, limit int, holdLow bool) ([]groupRow, error)
+	// criticalBackfillPending reports whether any CRITICAL group still has
+	// history to pull on this backbone — the condition that holds the low tier.
+	criticalBackfillPending(ctx context.Context, backbone string) (backfillPending, error)
 	updateGroupStateForBackbone(ctx context.Context, backbone, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error
 	groupCount(ctx context.Context) (int, error)
 	setGroupActive(ctx context.Context, name string, active bool) error

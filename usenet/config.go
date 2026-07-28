@@ -62,10 +62,14 @@ type Config struct {
 	// documented.
 	KeepaliveMin int `json:"keepalive_min"` // default 2
 
-	SkipBackfill          bool `json:"skip_backfill"`            // "new articles only" — disable the backfill job
-	CrawlNoCatchup        bool `json:"crawl_no_catchup"`         // disable the catch-up loop (default off = catch-up ON)
-	BackfillBatchesPerRun int  `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 25)
-	BackfillIntervalMin   int  `json:"backfill_interval_min"`    // backfill cadence (default 5)
+	SkipBackfill   bool `json:"skip_backfill"`    // "new articles only" — disable the backfill job
+	CrawlNoCatchup bool `json:"crawl_no_catchup"` // disable the catch-up loop (default off = catch-up ON)
+	// HoldLowUntilBackfilled stops LOW-tier groups being crawled forward
+	// while any CRITICAL group still has history to backfill. See
+	// holdLowTier in provider_state.go for why ordering alone is not enough.
+	HoldLowUntilBackfilled bool `json:"hold_low_until_backfilled"`
+	BackfillBatchesPerRun  int  `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 25)
+	BackfillIntervalMin    int  `json:"backfill_interval_min"`    // backfill cadence (default 5)
 
 	// Staging backend (README.md). Boot config, not a live knob:
 	// switching backends at runtime would strand staged data.
@@ -259,6 +263,10 @@ func (c *Config) boolFields() map[string]*bool {
 		// Inverted flag so the zero value = catch-up enabled: a crawler that
 		// KNOWS it is behind should not sleep out the interval by default.
 		"crawl_no_catchup": &c.CrawlNoCatchup,
+		// Off by default: it deliberately starves a whole tier, which is the
+		// right call on a site whose critical group is far behind and the
+		// wrong one on a site that is caught up everywhere.
+		"hold_low_until_backfilled": &c.HoldLowUntilBackfilled,
 	}
 }
 

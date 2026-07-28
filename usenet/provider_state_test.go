@@ -53,7 +53,7 @@ func TestOrderCrawlGroups(t *testing.T) {
 	}
 
 	t.Run("no cap: normal before low, stalest (never) first within each tier", func(t *testing.T) {
-		got := names(orderCrawlGroups(rows, 0))
+		got := names(orderCrawlGroups(rows, 0, false))
 		want := []string{"n_never", "n_stale", "n_fresh", "l_stale", "l_fresh"}
 		if !eq(got, want) {
 			t.Errorf("got %v want %v", got, want)
@@ -61,13 +61,13 @@ func TestOrderCrawlGroups(t *testing.T) {
 	})
 
 	t.Run("negative limit is also no cap", func(t *testing.T) {
-		if len(orderCrawlGroups(rows, -1)) != len(rows) {
+		if len(orderCrawlGroups(rows, -1, false)) != len(rows) {
 			t.Error("negative limit must not cap")
 		}
 	})
 
 	t.Run("cap falls on the low-pri tail first (low never preempts normal)", func(t *testing.T) {
-		got := names(orderCrawlGroups(rows, 3))
+		got := names(orderCrawlGroups(rows, 3, false))
 		want := []string{"n_never", "n_stale", "n_fresh"} // all normal; low starved under a tight cap
 		if !eq(got, want) {
 			t.Errorf("got %v want %v", got, want)
@@ -75,7 +75,7 @@ func TestOrderCrawlGroups(t *testing.T) {
 	})
 
 	t.Run("cap adds the stalest low group after every normal group", func(t *testing.T) {
-		got := names(orderCrawlGroups(rows, 4))
+		got := names(orderCrawlGroups(rows, 4, false))
 		want := []string{"n_never", "n_stale", "n_fresh", "l_stale"}
 		if !eq(got, want) {
 			t.Errorf("got %v want %v", got, want)
@@ -85,7 +85,7 @@ func TestOrderCrawlGroups(t *testing.T) {
 	t.Run("equal last_crawl keeps the SQL (sort_order, name) input order", func(t *testing.T) {
 		same := nt(-5 * time.Minute)
 		in := []crawlGroupSel{mk("a", false, same), mk("b", false, same), mk("c", false, same)}
-		got := names(orderCrawlGroups(in, 0))
+		got := names(orderCrawlGroups(in, 0, false))
 		if !eq(got, []string{"a", "b", "c"}) {
 			t.Errorf("stable tiebreak broken: got %v", got)
 		}
