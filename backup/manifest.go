@@ -8,6 +8,8 @@ import (
 	"io"
 	"sort"
 	"sync"
+
+	lpapi "github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // Serving packs straight to a puller, without staging anything locally.
@@ -243,4 +245,35 @@ func (s *skipWriter) Write(p []byte) (int, error) {
 	s.remaining = 0
 	n, err := s.w.Write(p[drop:])
 	return n + int(drop), err
+}
+
+// packServer adapts the plugin to pluginapi.BackupPacks.
+//
+// A separate type rather than methods on Plugin, so the capability's shape is
+// visible in one place and the plugin's own Manifest/PackInfo stay private —
+// the host talks to the neutral contract and never imports this package.
+type packServer struct{ p *Plugin }
+
+var _ lpapi.BackupPacks = packServer{}
+
+func (s packServer) Manifest(ctx context.Context) (lpapi.BackupManifest, error) {
+	m, err := s.p.BuildManifest(ctx)
+	if err != nil {
+		return lpapi.BackupManifest{}, err
+	}
+	out := lpapi.BackupManifest{
+		Generation: m.Generation, SealedAt: m.SealedAt,
+		Files: m.Files, Bytes: m.Bytes,
+		Packs: make([]lpapi.BackupPack, 0, len(m.Packs)),
+	}
+	for _, p := range m.Packs {
+		out.Packs = append(out.Packs, lpapi.BackupPack{
+			ID: p.ID, Class: p.Class, Bytes: p.Bytes, Content: p.Content, Members: p.Members,
+		})
+	}
+	return out, nil
+}
+
+func (s packServer) WritePack(ctx context.Context, w io.Writer, gen int64, id string, skip int64) error {
+	return s.p.StreamPack(ctx, w, gen, id, skip)
 }

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	lpapi "github.com/the-loon-clan/loon-plugins/pluginapi"
 	"github.com/the-loon-clan/loon/core"
 	"github.com/the-loon-clan/loon/schedule"
 )
@@ -86,6 +87,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// The trigger forces: an operator pressing Run in /admin/jobs means "now",
 	// not "now unless a recent backup exists".
 	p.job.SetTrigger(func() { go p.runForced(context.Background()) })
+
+	// Publish the pack server so the host can mount HTTP routes over it
+	// without importing this package. Registered here rather than in Start
+	// because the host wires its routes straight after Boot, which runs
+	// Provision — by Start it would be too late.
+	if err := c.Register(lpapi.BackupPacksName, packServer{p: p}); err != nil {
+		return err
+	}
 	return nil
 }
 
