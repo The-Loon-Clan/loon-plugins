@@ -89,15 +89,44 @@ func (p *Plugin) Provision(c *core.Core) error {
 	return nil
 }
 
+// scheduledJob is one background loop: which job, when it first runs, how often
+// after that, and what it does.
+type scheduledJob struct {
+	job       *schedule.JobInfo
+	bootDelay time.Duration
+	interval  time.Duration
+	run       func(context.Context)
+}
+
+// loops is every background loop this plugin runs.
+//
+// Declared as data so a test can assert that every REGISTERED job also gets
+// SCHEDULED. That invariant was broken and stayed broken silently: the index
+// job was registered with a trigger and an IntervalMin — which is enough to
+// render a Run button and an interval in /admin/jobs — but no loop was ever
+// started for it. It therefore only ran when an operator pressed the button,
+// showed run_count 0 after every deploy, and reported a next_run that nothing
+// would ever honour. Nothing failed; the inventory simply stopped advancing.
+func (p *Plugin) loops() []scheduledJob {
+	return []scheduledJob{
+		// The boot delay replaces the old service's `for { sleep(week); run() }`,
+		// which never ran at boot and so slept a full week before its first
+		// backup. An hour is late enough not to compete with boot, early enough
+		// that a fresh deploy has a backup the same day.
+		{p.job, 1 * time.Hour, backupIntervalMin * time.Minute, p.run},
+		// The index is the cheap half and its whole value is freshness — it is
+		// what bounds the window in which an in-place overwrite can hide — so
+		// it waits minutes rather than an hour.
+		{p.indexJob, 10 * time.Minute, time.Duration(indexIntervalMin) * time.Minute, p.runIndex},
+	}
+}
+
 func (p *Plugin) Start(ctx context.Context) error {
 	// Bare ServiceLoop: the host installs the off-peak / interval-override /
 	// CPU / panic hooks globally.
-	//
-	// The boot delay replaces the old service's `for { sleep(week); run() }`,
-	// which never ran at boot and so slept a full week before its first
-	// backup. An hour is late enough not to compete with boot, early enough
-	// that a fresh deploy has a backup the same day.
-	go schedule.ServiceLoop(ctx, p.job, 1*time.Hour, backupIntervalMin*time.Minute, p.run)
+	for _, l := range p.loops() {
+		go schedule.ServiceLoop(ctx, l.job, l.bootDelay, l.interval, l.run)
+	}
 	return nil
 }
 

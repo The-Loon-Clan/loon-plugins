@@ -508,3 +508,60 @@ func TestSkipRegenerableMakesAnImpossibleBackupPossible(t *testing.T) {
 		t.Errorf("an unrecognised mode archived %d classes, want all 2", got)
 	}
 }
+
+// Every job this plugin REGISTERS must also be SCHEDULED.
+//
+// The index job was registered with a trigger and an IntervalMin, which is
+// enough for /admin/jobs to render a Run button and an interval, but Start()
+// only ever launched a loop for the archive job. So the index ran solely when
+// somebody pressed the button: run_count reset to 0 on every deploy, next_run
+// was a time nothing would honour, and the inventory quietly stopped advancing.
+// Nothing errored — the job just sat idle forever looking configured.
+func TestEveryRegisteredJobIsScheduled(t *testing.T) {
+	p := &Plugin{
+		job:      schedule.RegisterJob("Backup test archive "+t.Name(), ""),
+		indexJob: schedule.RegisterJob("Backup test index "+t.Name(), ""),
+	}
+
+	scheduled := map[*schedule.JobInfo]scheduledJob{}
+	for _, l := range p.loops() {
+		if l.job == nil {
+			t.Fatal("a loop was declared with no job")
+		}
+		if _, dup := scheduled[l.job]; dup {
+			t.Errorf("%s is scheduled twice — two loops would run it concurrently", l.job.Name)
+		}
+		scheduled[l.job] = l
+	}
+
+	for _, want := range []struct {
+		name string
+		job  *schedule.JobInfo
+	}{
+		{"archive", p.job},
+		{"index", p.indexJob},
+	} {
+		l, ok := scheduled[want.job]
+		if !ok {
+			t.Errorf("the %s job is registered but never scheduled — it would only ever run "+
+				"when an operator pressed Run, which is how the inventory silently stopped advancing", want.name)
+			continue
+		}
+		if l.run == nil {
+			t.Errorf("the %s job is scheduled with no function to run", want.name)
+		}
+		if l.interval <= 0 {
+			t.Errorf("the %s job has interval %s — a non-positive interval would spin", want.name, l.interval)
+		}
+		// A boot delay of zero would put a heavy pass in the middle of startup,
+		// competing with migrations and cache warming on every deploy.
+		if l.bootDelay <= 0 {
+			t.Errorf("the %s job has boot delay %s, want a positive delay", want.name, l.bootDelay)
+		}
+		if l.bootDelay >= l.interval {
+			t.Errorf("the %s job waits %s before its first run but repeats every %s — "+
+				"the delay must not exceed the interval or the first run is late for no reason",
+				want.name, l.bootDelay, l.interval)
+		}
+	}
+}
