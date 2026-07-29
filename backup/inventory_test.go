@@ -192,6 +192,46 @@ func TestTruncatedImagesAreDetected(t *testing.T) {
 		}
 	}
 
+	// THE FALSE POSITIVE THAT MATTERED. A JPEG may carry padding, EXIF or CDN
+	// junk AFTER its FFD9 marker, and demanding the file END with FFD9 reported
+	// 4,163 of 14,817 production covers as truncated. The size distribution gave
+	// it away: flagged files averaged 375 KB against 71 KB for healthy ones, and
+	// truncation makes files SMALLER, not larger. A detector wrong at that rate
+	// is worse than none — it sends thousands of healthy files for re-download
+	// and teaches everyone to ignore the signal.
+	padded := filepath.Join(dir, "padded.jpg")
+	body := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, 0xFF, 0xD9)
+	body = append(body, make([]byte, 200)...) // trailing padding after the marker
+	if err := os.WriteFile(padded, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pinfo, _ := os.Stat(padded)
+	if _, torn, err := hashFile(padded, pinfo.Size()); err != nil || torn {
+		t.Errorf("a JPEG with trailing bytes after FFD9 was flagged as truncated "+
+			"(torn=%v, err=%v) — this is the bug that over-reported 28%% of covers", torn, err)
+	}
+
+	// A zero-byte image IS damaged: a download that created the file and then
+	// failed. The first version passed these, missing the only genuinely broken
+	// files while flagging thousands of healthy ones.
+	empty := filepath.Join(dir, "empty.jpg")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	einfo, _ := os.Stat(empty)
+	if _, torn, err := hashFile(empty, einfo.Size()); err != nil || !torn {
+		t.Errorf("a zero-byte JPEG was not flagged (torn=%v, err=%v)", torn, err)
+	}
+	// But an empty file of an unknown type is not evidence of anything.
+	emptyTxt := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(emptyTxt, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tinfo, _ := os.Stat(emptyTxt)
+	if _, torn, _ := hashFile(emptyTxt, tinfo.Size()); torn {
+		t.Error("an empty non-image file was flagged as damaged")
+	}
+
 	// An unknown format must never be flagged: being unable to check is not
 	// evidence of damage, and a false positive here means a real file gets
 	// reported as suspect forever.
