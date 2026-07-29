@@ -264,3 +264,40 @@ func itoa(i int) string {
 	}
 	return string(b)
 }
+
+// The gap the shrink gate structurally cannot cover. detectShrink compares
+// against the previous generation, so a class that was NEVER mounted has always
+// been zero, never shrank, and is waved through every run for as long as it
+// stays broken. Production is currently in exactly this state: four classes
+// index zero files, and from inside the container an unmounted volume and a
+// genuinely empty directory look identical.
+func TestZeroFileClassesAreNamedEveryRun(t *testing.T) {
+	classes := []AssetClass{
+		{Slug: "screenshots", Order: 90},
+		{Slug: "covers", Order: 50},
+		{Slug: "mascots", Order: 10},
+		{Slug: "img", Order: 10},
+	}
+	got := emptyClasses(classes, map[string]classTotal{
+		"screenshots": {Files: 305_578, Bytes: 116 << 30},
+		"covers":      {Files: 14_817, Bytes: 2 << 30},
+		"mascots":     {Files: 0},
+		// img absent from the map entirely — the walk produced no rows at all,
+		// which is what a missing mount actually looks like.
+	})
+	if len(got) != 2 {
+		t.Fatalf("got %v, want the two zero-file classes", got)
+	}
+	// Cheapest-first, so the names that cannot be re-fetched lead.
+	if got[0] != "img" || got[1] != "mascots" {
+		t.Errorf("got %v, want [img mascots] — irreplaceable classes must be named first", got)
+	}
+
+	// A healthy corpus must stay silent, or the line becomes noise and gets
+	// ignored on the run that matters.
+	if got := emptyClasses(classes, map[string]classTotal{
+		"screenshots": {Files: 1}, "covers": {Files: 1}, "mascots": {Files: 1}, "img": {Files: 1},
+	}); len(got) != 0 {
+		t.Errorf("a fully-populated corpus reported empty classes: %v", got)
+	}
+}

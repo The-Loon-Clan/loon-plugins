@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -82,7 +83,39 @@ func (p *Plugin) runIndex(ctx context.Context) {
 			p.indexJob.Log("  %-16s %8s file(s)  %10s", c.Slug, fmtComma(t.Files), fmtBytes(t.Bytes))
 		}
 	}
+	if empty := emptyClasses(deps.Classes, res.PerClass); len(empty) > 0 {
+		p.indexJob.Log("NOTE: %d class(es) hold no files: %s. Confirm each is genuinely empty "+
+			"rather than an unmounted volume — they are listed cheapest-first, so the earliest "+
+			"names are the ones that cannot be re-fetched from anywhere.",
+			len(empty), strings.Join(empty, ", "))
+	}
 	p.indexJob.SetIdle(time.Now().Add(time.Duration(indexIntervalMin) * time.Minute))
+}
+
+// emptyClasses names the classes that indexed nothing, cheapest-first.
+//
+// The shrink gate cannot cover this case and it is worth being precise about
+// why: it compares against the previous sealed generation, so it fires when a
+// class LOSES files. A class that was never mounted has always been zero, never
+// shrank, and is therefore waved through every run for as long as it stays
+// broken — the backup reporting success while protecting nothing, which is the
+// exact failure the gate was written to prevent, in its other form.
+//
+// This cannot be resolved automatically. From inside the container an unmounted
+// class and a genuinely empty one are indistinguishable: the boot check creates
+// the directory either way, and Docker silently creates a missing bind source
+// as an empty directory too. Several classes here really are empty — no wiki
+// uploads yet, no music covers yet — so refusing to seal would cry wolf and get
+// the gate switched off. Naming them every run is the honest middle: it costs
+// one line and makes the difference discoverable before a restore needs them.
+func emptyClasses(classes []AssetClass, perClass map[string]classTotal) []string {
+	var out []string
+	for _, c := range orderedClasses(classes) {
+		if t, ok := perClass[c.Slug]; !ok || t.Files == 0 {
+			out = append(out, c.Slug)
+		}
+	}
+	return out
 }
 
 // fmtComma renders a count with thousands separators. Six-figure file counts
