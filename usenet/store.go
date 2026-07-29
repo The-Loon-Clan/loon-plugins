@@ -178,7 +178,12 @@ func (s *PGStore) setSetting(ctx context.Context, key, value string) error {
 // backfillRow is one active group that still has history to fetch below its
 // back_watermark.
 type backfillRow struct {
-	Name          string
+	Name string
+	// Tier is the group's priority. Backfill spends its budget on the highest
+	// tier that still has history, because a lower tier can be gated on a
+	// higher one finishing (hold_low_until_backfilled) — and splitting effort
+	// across tiers then makes the gate last proportionally longer.
+	Tier          string
 	BackWatermark int64
 	ServerLow     int64
 	// Per-group tuning, so backfill honours the same retention horizon and

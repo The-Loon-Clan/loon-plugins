@@ -147,11 +147,6 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	budget := cfg.BackfillBatchesPerRun
 	targets := make(map[string]backfillRow, len(groups))
 
-	type candidate struct {
-		g       backfillRow
-		batches []batchJob
-		taken   int
-	}
 	var cands []candidate
 	for _, g := range groups {
 		if ctx.Err() != nil {
@@ -181,20 +176,25 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 		cands = append(cands, candidate{g: g, batches: gj})
 	}
 
-	perGroup := make([][]batchJob, len(cands))
-	for i := range cands {
-		perGroup[i] = cands[i].batches
-	}
-	jobs, taken := shareBudget(perGroup, budget)
-	for i := range cands {
-		if taken[i] == 0 {
-			continue
-		}
-		targets[cands[i].g.Name] = cands[i].g
+	// Share WITHIN a tier, but never ACROSS one.
+	//
+	// Sharing the budget evenly over every candidate fixed one starvation and
+	// caused another, worse one. The groups are already tier-ordered by the
+	// query, and the tiers mean something: with hold_low_until_backfilled set,
+	// LOW-tier groups are not crawled at all until every CRITICAL group has its
+	// history. Splitting the budget three ways between one critical group and
+	// two low ones therefore spent two thirds of every pass on history that is
+	// gated behind the very group it was starving — and made the gate last
+	// three times as long. Production sat with exactly one unfinished critical
+	// group holding fourteen LOW groups, while most of the budget went to
+	// alt.binaries.nzb, which is itself LOW.
+	jobs, used := planPass(cands, budget)
+	for i := range used {
+		targets[used[i].g.Name] = used[i].g
 		// The denominator for backfill's own progress bar. Without it
 		// BatchesTotal stayed 0 and the bar never rendered, so a pass that runs
 		// for hours showed a batch count with nothing to measure it against.
-		p.tel.backfill.notePlanned(cands[i].g.Name, taken[i])
+		p.tel.backfill.notePlanned(used[i].g.Name, used[i].taken)
 	}
 	if len(jobs) == 0 {
 		p.backfillJob.Log("%s: nothing to do this pass", run.prov.label())
@@ -298,4 +298,64 @@ func (p *Plugin) recordBackfill(ctx context.Context, backbone string, targets ma
 		}
 	}
 	return staged
+}
+
+// candidate is one group's planned batches for a pass.
+type candidate struct {
+	g       backfillRow
+	batches []batchJob
+	taken   int
+}
+
+// highestTierOnly keeps the most important tier that still has work.
+//
+// Tiers exist to say which groups matter more, and hold_low_until_backfilled
+// makes that concrete: LOW groups are not crawled at all while a CRITICAL group
+// still owes history. Spending a share of every pass on LOW history in that
+// state is worse than useless — it lengthens exactly the gate that is holding
+// those same groups back. Within one tier the budget is shared evenly, which is
+// the starvation this originally set out to fix.
+func highestTierOnly(cands []candidate) []candidate {
+	if len(cands) == 0 {
+		return cands
+	}
+	best := tierRank(normalizeTier(cands[0].g.Tier))
+	for _, c := range cands[1:] {
+		if r := tierRank(normalizeTier(c.g.Tier)); r < best {
+			best = r
+		}
+	}
+	out := cands[:0]
+	for _, c := range cands {
+		if tierRank(normalizeTier(c.g.Tier)) == best {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// planPass decides everything about one backfill pass's shape: which groups it
+// touches and how much of the budget each gets.
+//
+// Both rules live here, behind ONE call, because they are a single decision and
+// splitting them is how the wrong one ships. Tier filtering used to be a
+// separate line at the call site, which meant a unit test of the filter passed
+// happily while the call itself could be deleted without any test noticing —
+// the same shape as a job that is registered but never scheduled.
+func planPass(cands []candidate, budget int) ([]batchJob, []candidate) {
+	cands = highestTierOnly(cands)
+	perGroup := make([][]batchJob, len(cands))
+	for i := range cands {
+		perGroup[i] = cands[i].batches
+	}
+	jobs, taken := shareBudget(perGroup, budget)
+	var used []candidate
+	for i := range cands {
+		if taken[i] == 0 {
+			continue
+		}
+		cands[i].taken = taken[i]
+		used = append(used, cands[i])
+	}
+	return jobs, used
 }

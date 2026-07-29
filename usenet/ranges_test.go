@@ -218,3 +218,89 @@ func TestBackfillBudgetIsSharedNotMonopolised(t *testing.T) {
 		t.Errorf("allocated %d with a budget of 2", len(jobs))
 	}
 }
+
+// Share within a tier, never across one.
+//
+// The even-share fix cured one starvation and caused a worse one. Production
+// had exactly ONE unfinished critical group — alt.binaries.multimedia.anime
+// .highspeed, 684 million articles — and hold_low_until_backfilled means every
+// LOW group stays uncrawled until it finishes. Splitting the pass three ways
+// between that group and two LOW ones (alt.binaries.nzb at 2.48 BILLION, and
+// movies.repost) spent two thirds of every pass on history that is itself gated
+// behind the group being starved, tripling how long the gate holds.
+func TestBackfillSpendsOnTheHighestTierWithWork(t *testing.T) {
+	batches := func(name string, n int) []batchJob {
+		out := make([]batchJob, n)
+		for i := range out {
+			out[i] = batchJob{group: name, lo: i * 100, hi: i*100 + 99}
+		}
+		return out
+	}
+	cand := func(name, tier string, n int) candidate {
+		return candidate{g: backfillRow{Name: name, Tier: tier}, batches: batches(name, n)}
+	}
+
+	// The production shape, through planPass — the function the pass actually
+	// calls — so that deleting the tier step is caught rather than only a
+	// direct test of the filter.
+	jobs, used := planPass([]candidate{
+		cand("alt.binaries.multimedia.anime.highspeed", "critical", 500),
+		cand("alt.binaries.movies.repost", "low", 500),
+		cand("alt.binaries.nzb", "low", 500),
+	}, 25)
+	if len(used) != 1 || used[0].g.Name != "alt.binaries.multimedia.anime.highspeed" {
+		names := []string{}
+		for _, c := range used {
+			names = append(names, c.g.Name)
+		}
+		t.Errorf("pass touched %v, want only the critical group — spending on LOW history while a "+
+			"CRITICAL group gates every LOW group makes that gate last longer", names)
+	}
+	if len(jobs) != 25 || used[0].taken != 25 {
+		t.Errorf("the critical group got %d of 25 batches; with LOW filtered out it should take the whole pass", len(jobs))
+	}
+
+	got := highestTierOnly([]candidate{
+		cand("alt.binaries.multimedia.anime.highspeed", "critical", 500),
+		cand("alt.binaries.nzb", "low", 500),
+	})
+	if len(got) != 1 {
+		t.Errorf("highestTierOnly kept %d candidates, want 1", len(got))
+	}
+
+	// Within a tier the share is still even: that was the original fix and it
+	// must survive.
+	got = highestTierOnly([]candidate{
+		cand("a", "critical", 500), cand("b", "critical", 500), cand("c", "low", 500),
+	})
+	if len(got) != 2 {
+		t.Errorf("got %d candidates, want both critical groups sharing", len(got))
+	}
+	_, taken := shareBudget([][]batchJob{got[0].batches, got[1].batches}, 25)
+	for i, n := range taken {
+		if n == 0 {
+			t.Errorf("critical group %d got nothing; within-tier sharing regressed", i)
+		}
+	}
+
+	// When the top tier finishes, the next one gets the budget rather than
+	// everything stalling.
+	got = highestTierOnly([]candidate{cand("x", "normal", 10), cand("y", "low", 10)})
+	if len(got) != 1 || got[0].g.Name != "x" {
+		t.Error("with no critical work left, the normal tier must take the pass")
+	}
+	got = highestTierOnly([]candidate{cand("y", "low", 10)})
+	if len(got) != 1 {
+		t.Error("a LOW-only candidate set must still be backfilled, not skipped")
+	}
+
+	// An unrecognised tier must not be treated as the lowest priority and
+	// stranded behind everything else.
+	got = highestTierOnly([]candidate{cand("weird", "typo", 10), cand("l", "low", 10)})
+	if len(got) != 1 || got[0].g.Name != "weird" {
+		t.Error("an unknown tier should rank as normal, ahead of low")
+	}
+	if len(highestTierOnly(nil)) != 0 {
+		t.Error("empty input should stay empty")
+	}
+}

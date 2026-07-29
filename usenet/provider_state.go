@@ -168,6 +168,7 @@ func (s *PGStore) groupsNeedingBackfillForBackbone(ctx context.Context, backbone
 	}
 	type row struct {
 		Name      string        `db:"name"`
+		Tier      string        `db:"tier"`
 		Back      int64         `db:"back_watermark"`
 		Low       int64         `db:"server_low"`
 		Retention sql.NullInt64 `db:"retention_days"`
@@ -177,7 +178,7 @@ func (s *PGStore) groupsNeedingBackfillForBackbone(ctx context.Context, backbone
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		// sqllint:allow tierOrderSQL is a compile-time constant expression, no input
 		return tx.SelectContext(ctx, &rows,
-			`SELECT g.name, st.back_watermark, st.server_low,
+			`SELECT g.name, g.tier, st.back_watermark, st.server_low,
 			        g.retention_days, g.throttle_ms
 			   FROM newsgroups g
 			   JOIN newsgroup_state st
@@ -195,7 +196,7 @@ func (s *PGStore) groupsNeedingBackfillForBackbone(ctx context.Context, backbone
 	out := make([]backfillRow, len(rows))
 	for i, r := range rows {
 		out[i] = backfillRow{
-			Name: r.Name, BackWatermark: r.Back, ServerLow: r.Low,
+			Name: r.Name, Tier: r.Tier, BackWatermark: r.Back, ServerLow: r.Low,
 			RetentionDays: int(r.Retention.Int64), ThrottleMs: r.Throttle,
 		}
 	}
