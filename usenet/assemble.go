@@ -31,15 +31,42 @@ func (p *Plugin) runBuild(ctx context.Context) {
 	}
 	defer p.buildMu.Unlock()
 	// The builder drains shared staging, so it must run once cluster-wide.
-	if !p.withLease(ctx, leaseScopeJob, jobNameBuild, p.leaseTTL(p.effective(ctx)), func(ctx context.Context) {
-		p.buildLocked(ctx)
-	}) {
+	if !p.withLease(ctx, leaseScopeJob, jobNameBuild, p.leaseTTL(p.effective(ctx)), p.buildCatchUp) {
 		p.buildJob.Log("build skipped — another worker holds this job")
 		p.buildJob.SetIdle(p.nextCrawl(ctx))
 	}
 }
 
-func (p *Plugin) buildLocked(ctx context.Context) {
+// buildCatchUp keeps assembling while the ready queue is actually shrinking.
+//
+// The builder had the same shape the backfill did: one bounded pass — 500 sets,
+// about eight seconds — then sleep out the interval. Against a queue of 1.46
+// MILLION that is 500 a minute and 48 hours to look at each entry once, while
+// the machine sits idle 87% of the time. Worse, it is the backfill's release
+// valve: staging fills, the backfill parks itself at the pressure gate, and the
+// only thing that can unpark it drains at 500 a minute.
+//
+// Progress is ENTRIES DRAINED, not releases built. Most of this queue is junk
+// and will never produce a release, but throwing it away still frees the Redis
+// the real sets need — so a round that builds nothing and discards 500 is
+// progress. Incomplete sets stay staged and do not count, which is what stops
+// the loop spinning on a queue that is merely waiting for more articles.
+func (p *Plugin) buildCatchUp(ctx context.Context) {
+	res := runCatchUp(ctx,
+		func() (int, int) { return p.buildLocked(ctx) },
+		func() bool { return p.effective(ctx).BuildNoCatchup },
+		// No pressure gate: this job is what RELIEVES pressure. Stopping it
+		// because staging is full would deadlock the pipeline against itself.
+		func() (bool, float64) { return false, 0 },
+		nil)
+	if res.Rounds > 1 {
+		p.buildJob.Log("build catch-up: %d round(s), %s set(s) drained, %s release(s) built (%s)",
+			res.Rounds, fmtComma(int64(res.Batches)), fmtComma(int64(res.Staged)), res.StoppedBy)
+	}
+	p.buildJob.SetIdle(p.nextCrawl(ctx))
+}
+
+func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	p.buildJob.SetRunning()
 
 	// Pick up admin edits, and make sure last pass's counters are persisted even
@@ -58,7 +85,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 	if err != nil {
 		p.buildJob.SetError(err.Error())
 		p.reportErr(ctx, "usenet/build-sink", err)
-		return
+		return 0, 0
 	}
 
 	// Sweep dead entries BEFORE drawing. The draw is a random sample, so every
@@ -76,7 +103,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 	if err != nil {
 		p.buildJob.SetError(err.Error())
 		p.reportErr(ctx, "usenet/build-scan", err)
-		return
+		return 0, 0
 	}
 	// Sample staging health for THIS pass before doing any work with the draw.
 	// Deferred so it still records when the pass returns early — a pass that
@@ -96,7 +123,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 	} else if drawn.Starved() {
 		p.buildJob.Log("ready queue: drew %d of %d waiting", drawn.Sampled, drawn.ReadyDepth)
 	}
-	built, skippedExt, skippedBL := 0, 0, 0
+	skippedExt, skippedBL := 0, 0
 	for _, k := range keys {
 		if ctx.Err() != nil {
 			break
@@ -134,6 +161,8 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			p.notePoster(arts, "blocked-ext", title)
 			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
 				p.reportErr(ctx, "usenet/build-delete-staged", err)
+			} else {
+				drained++
 			}
 			continue
 		}
@@ -153,6 +182,8 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			skippedBL++
 			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
 				p.reportErr(ctx, "usenet/build-delete-staged", err)
+			} else {
+				drained++
 			}
 			continue
 		}
@@ -162,6 +193,8 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 			p.notePoster(arts, junkRule, title)
 			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil { // drop, don't build
 				p.reportErr(ctx, "usenet/build-delete-staged", err)
+			} else {
+				drained++
 			}
 			continue
 		}
@@ -200,6 +233,8 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		// a persistent failure re-builds the same set every pass forever.
 		if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
 			p.reportErr(ctx, "usenet/build-delete-staged", err)
+		} else {
+			drained++
 		}
 		if !created {
 			// Assembled fine, the sink already had it. Previously invisible:
@@ -249,7 +284,7 @@ func (p *Plugin) buildLocked(ctx context.Context) {
 		// host event bus => no-op.
 		pluginapi.EmitEvent(p.core, ctx, pluginapi.EventIngested, built)
 	}
-	p.buildJob.SetIdle(p.nextCrawl(ctx))
+	return built, drained
 }
 
 // isComplete decides whether a staged (group, base_subject) set is ready to

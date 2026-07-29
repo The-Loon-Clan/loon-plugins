@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/the-loon-clan/loon/schedule"
 )
 
 // runBackfill closes the GAPS below each group's back_watermark.
@@ -102,7 +104,7 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 			cfg = p.effective(ctx)
 			return cfg.BackfillNoCatchup
 		},
-		func() (bool, float64) { return p.backfillYields(ctx, cfg) },
+		func() (bool, float64) { return p.waitForDrain(ctx, cfg) },
 		func(rounds, batches, staged int) {
 			if time.Since(lastLog) >= 30*time.Second {
 				p.backfillJob.Log("catch-up: %d round(s), %s batch(es), %s article(s) staged so far",
@@ -478,3 +480,44 @@ func runCatchUp(ctx context.Context, round func() (int, int), disabled func() bo
 		}
 	}
 }
+
+// waitForDrain is the pressure check, plus the thing that was missing: asking
+// for the drain instead of just giving up.
+//
+// Staging filling is not a reason to stop working. It means the builder is
+// behind, and the builder is the only thing that can relieve it — so the
+// backfill would park itself for a full interval while the queue that blocks it
+// sat there draining at whatever rate the builder's own schedule happened to
+// manage. On this install that was 500 sets a minute against 1.46 million, so
+// the pause was effectively permanent and every job showed idle.
+//
+// Now the backfill kicks the builder and waits, in short steps, re-checking as
+// it goes. The two run together: one making room, the other using it. Bounded,
+// so a builder that cannot make progress ends the pass rather than holding it
+// open forever, and cancellable so shutdown is never delayed.
+func (p *Plugin) waitForDrain(ctx context.Context, cfg Config) (bool, float64) {
+	yield, pr := p.backfillYields(ctx, cfg)
+	if !yield {
+		return false, pr
+	}
+	waited := 0
+	for waited < cfg.BackfillDrainWaitSec {
+		// TryLock inside runBuild makes a redundant kick a no-op, so this is
+		// "ensure a build is running", not "start another one".
+		go p.runBuild(ctx)
+		if !schedule.SleepCtx(ctx, drainPollInterval) {
+			return true, pr // shutdown: stop, do not report a false all-clear
+		}
+		waited += int(drainPollInterval / time.Second)
+		if again, pr2 := p.backfillYields(ctx, cfg); !again {
+			p.backfillJob.Log("staging drained to %.0f%% after %ds — resuming backfill", pr2*100, waited)
+			return false, pr2
+		}
+	}
+	return true, pr
+}
+
+// drainPollInterval is how often the backfill re-checks while waiting for the
+// builder. Short enough that it resumes promptly once room appears, long enough
+// that the check itself is not the load.
+const drainPollInterval = 10 * time.Second

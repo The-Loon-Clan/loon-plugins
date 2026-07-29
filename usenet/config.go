@@ -68,6 +68,14 @@ type Config struct {
 	// sense as the crawl one: the zero value keeps catching up, because a job
 	// with hundreds of millions of articles outstanding should not sleep.
 	BackfillNoCatchup bool `json:"backfill_no_catchup"`
+	// BuildNoCatchup disables the builder's catch-up loop. Same inverted sense:
+	// a builder holding the backfill's release valve should not nap.
+	BuildNoCatchup bool `json:"build_no_catchup"`
+	// BackfillDrainWaitSec is how long the backfill will wait for the builder to
+	// make room before ending its pass. It waits rather than returning so the
+	// two jobs run together instead of taking turns — the builder is the only
+	// thing that can relieve the pressure the backfill is blocked on.
+	BackfillDrainWaitSec int `json:"backfill_drain_wait_sec"`
 	// HoldLowUntilBackfilled stops LOW-tier groups being crawled forward
 	// while any CRITICAL group still has history to backfill. See
 	// holdLowTier in provider_state.go for why ordering alone is not enough.
@@ -154,6 +162,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.BuildDrainPerPass <= 0 {
 		c.BuildDrainPerPass = 500
+	}
+	if c.BackfillDrainWaitSec <= 0 {
+		c.BackfillDrainWaitSec = 180
 	}
 	if c.Batch <= 0 {
 		c.Batch = 3000
@@ -254,6 +265,7 @@ func (c *Config) knobFields() map[string]*int {
 		"tagfill_interval_min":       &c.TagFillIntervalMin,
 		"prune_interval_min":         &c.PruneIntervalMin,
 		"build_drain_per_pass":       &c.BuildDrainPerPass,
+		"backfill_drain_wait_sec":    &c.BackfillDrainWaitSec,
 		"batch":                      &c.Batch,
 		"max_groups":                 &c.MaxGroups,
 		"crawl_max_batches":          &c.CrawlMaxBatches,
@@ -290,6 +302,7 @@ func (c *Config) boolFields() map[string]*bool {
 		// wrong one on a site that is caught up everywhere.
 		"hold_low_until_backfilled": &c.HoldLowUntilBackfilled,
 		"backfill_no_catchup":       &c.BackfillNoCatchup,
+		"build_no_catchup":          &c.BuildNoCatchup,
 	}
 }
 

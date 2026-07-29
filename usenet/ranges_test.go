@@ -451,3 +451,48 @@ func TestCatchUpKeepsGoingWhileThereIsWork(t *testing.T) {
 		t.Errorf("hook saw batches=%d staged=%d, want 2/10", lastB, lastS)
 	}
 }
+
+// The builder's catch-up loop measures ENTRIES DRAINED, not releases built.
+//
+// Most of this queue is junk that will never produce a release, but discarding
+// it still frees the Redis the real sets need to complete — so a round that
+// builds nothing and throws away 500 is progress. Incomplete sets stay staged
+// and must NOT count, or the loop spins forever on a queue that is simply
+// waiting for more articles to arrive.
+func TestBuildCatchUpCountsDrainedNotBuilt(t *testing.T) {
+	never := func() bool { return false }
+	noYield := func() (bool, float64) { return false, 0 }
+
+	// Builds nothing, drains 500 a round: real progress, keep going.
+	rounds := 0
+	res := runCatchUp(context.Background(), func() (int, int) {
+		rounds++
+		if rounds > 4 {
+			return 0, 0
+		}
+		return 0, 500
+	}, never, noYield, nil)
+	if res.Rounds != 5 || res.Batches != 2000 {
+		t.Errorf("rounds=%d drained=%d, want 5/2000 — a round that discards junk is progress",
+			res.Rounds, res.Batches)
+	}
+
+	// A queue of nothing but incomplete sets drains nothing, so the pass must
+	// end rather than spin: those sets need the backfill, not the builder.
+	res = runCatchUp(context.Background(), func() (int, int) { return 0, 0 }, never, noYield, nil)
+	if res.Rounds != 1 || res.StoppedBy != stopNoWork {
+		t.Errorf("rounds=%d stoppedBy=%q, want 1/%s", res.Rounds, res.StoppedBy, stopNoWork)
+	}
+
+	// Building releases while draining is the normal case and both are tracked.
+	res = runCatchUp(context.Background(), func() (int, int) {
+		rounds++
+		if rounds > 7 {
+			return 0, 0
+		}
+		return 10, 500
+	}, never, noYield, nil)
+	if res.Staged == 0 || res.Batches == 0 {
+		t.Errorf("built=%d drained=%d, want both counted", res.Staged, res.Batches)
+	}
+}
