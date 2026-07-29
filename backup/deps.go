@@ -62,15 +62,13 @@ type Deps struct {
 	// recoverable, a full disk is not.
 	FreeDisk func(ctx context.Context) (int64, error)
 	DBSize   func(ctx context.Context) (int64, error)
-	// StaticDirs is the list of directories to zip, one archive each, named
-	// after the basename (covers -> covers.zip). The host passes its canonical
-	// persistent-dirs list; this plugin has no way to know what is persistent.
-	StaticDirs []string
-	// Classes are the asset directories to index, with their ordering. Only the
-	// host knows which directories are persistent — the same knowledge behind
-	// StaticDirs — but the index needs the slug and the order too, so a run cut
-	// short still covered the cheap irreplaceable classes before the 117 GB of
-	// screenshots.
+	// Classes are the asset directories, with their ordering and whether each
+	// can be regenerated. Only the host knows which directories are persistent.
+	//
+	// This drives BOTH the index and the archive. It used to be two fields —
+	// a bare StaticDirs []string for the archive and this one for the index —
+	// which meant the archive could not tell a 116 GB regenerable class from
+	// 7 MB of irreplaceable artwork, and so had to treat them alike.
 	Classes []AssetClass
 	// Root is the directory the class paths are relative to. Empty means the
 	// process working directory, which is what production uses; tests set it.

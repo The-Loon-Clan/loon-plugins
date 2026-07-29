@@ -38,6 +38,19 @@ type AssetClass struct {
 	// else. Cheap and irreplaceable classes go first, so an interrupted pass
 	// still protected the 30 MB that cannot be re-fetched.
 	Order int
+	// Regenerable marks a class that can be rebuilt from something the site
+	// still has — derived thumbnails, extracted frames — as opposed to one
+	// whose only copy is this directory.
+	//
+	// It exists because the archive job stages a full local copy before it
+	// writes anything, and on this install one regenerable class is 116 GB of
+	// the 129 GB total. Including it pushes the staging requirement past the
+	// free space on the box, so the pre-flight refuses and NOTHING is backed
+	// up — the 13 GB that actually matters included. Excluding it turns an
+	// impossible backup into a routine one.
+	//
+	// The host sets this: only it knows what it can rebuild.
+	Regenerable bool
 }
 
 // fileRow is one indexed file.

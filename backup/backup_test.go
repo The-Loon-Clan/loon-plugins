@@ -97,11 +97,11 @@ func TestPreflight(t *testing.T) {
 			t.Fatal(err)
 		}
 		deps = &Deps{
-			BackupDir:  t.TempDir(),
-			StaticDirs: []string{assets},
-			Config:     stubConfig{mode: mode},
-			FreeDisk:   func(context.Context) (int64, error) { return free, nil },
-			DBSize:     func(context.Context) (int64, error) { return dbSize, nil },
+			BackupDir: t.TempDir(),
+			Classes:   []AssetClass{{Slug: "covers", Dir: assets}},
+			Config:    stubConfig{mode: mode},
+			FreeDisk:  func(context.Context) (int64, error) { return free, nil },
+			DBSize:    func(context.Context) (int64, error) { return dbSize, nil },
 		}
 		t.Cleanup(func() { deps = nil })
 		return &Plugin{job: schedule.RegisterJob("Backup test "+t.Name(), "")}
@@ -287,11 +287,11 @@ func TestAPartialRunIsReportedAndLeavesNoUsableMarker(t *testing.T) {
 	}
 	backupDir := t.TempDir()
 	deps = &Deps{
-		BackupDir:  backupDir,
-		StaticDirs: []string{assets},
-		Config:     stubConfig{mode: "full"},
-		FreeDisk:   func(context.Context) (int64, error) { return 1 << 40, nil },
-		DBSize:     func(context.Context) (int64, error) { return 1 << 20, nil },
+		BackupDir: backupDir,
+		Classes:   []AssetClass{{Slug: "covers", Dir: assets}},
+		Config:    stubConfig{mode: "full"},
+		FreeDisk:  func(context.Context) (int64, error) { return 1 << 40, nil },
+		DBSize:    func(context.Context) (int64, error) { return 1 << 20, nil },
 		// Port 1 is closed, so pg_dump fails immediately rather than hanging.
 		DB: PGConn{Host: "127.0.0.1", Port: 1, User: "nobody", DBName: "nothing"},
 	}
@@ -316,7 +316,7 @@ func TestAPartialRunIsReportedAndLeavesNoUsableMarker(t *testing.T) {
 
 	// The asset zip should have succeeded, proving the run really did partial
 	// work rather than bailing before it started.
-	if _, err := os.Stat(filepath.Join(backupDir, runs[0], filepath.Base(assets)+".zip")); err != nil {
+	if _, err := os.Stat(filepath.Join(backupDir, runs[0], "covers.zip")); err != nil {
 		t.Errorf("the asset zip is missing, so this test is not exercising a PARTIAL failure: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(backupDir, runs[0], completeMarker)); err == nil {
@@ -358,14 +358,17 @@ func TestAMissingAssetDirectoryIsNamedInTheFailure(t *testing.T) {
 	backupDir := t.TempDir()
 	deps = &Deps{
 		BackupDir: backupDir,
-		// Missing FIRST, deliberately. With the healthy class ahead of it the
-		// test cannot tell `continue` from `break` — the healthy zip would
-		// already be written either way.
-		StaticDirs: []string{missing, present},
-		Config:     stubConfig{mode: "full"},
-		FreeDisk:   func(context.Context) (int64, error) { return 1 << 40, nil },
-		DBSize:     func(context.Context) (int64, error) { return 1 << 20, nil },
-		DB:         PGConn{Host: "127.0.0.1", Port: 1, User: "nobody", DBName: "nothing"},
+		// Missing FIRST, deliberately (Order, not slice position — the archive
+		// sorts). With the healthy class ahead of it the test cannot tell
+		// `continue` from `break`: the healthy zip would be written either way.
+		Classes: []AssetClass{
+			{Slug: "unmounted-class", Dir: missing, Order: 1},
+			{Slug: "present", Dir: present, Order: 2},
+		},
+		Config:   stubConfig{mode: "full"},
+		FreeDisk: func(context.Context) (int64, error) { return 1 << 40, nil },
+		DBSize:   func(context.Context) (int64, error) { return 1 << 20, nil },
+		DB:       PGConn{Host: "127.0.0.1", Port: 1, User: "nobody", DBName: "nothing"},
 	}
 	t.Cleanup(func() { deps = nil })
 
@@ -378,7 +381,7 @@ func TestAMissingAssetDirectoryIsNamedInTheFailure(t *testing.T) {
 	}
 	// The class that WAS present must still have been archived: one broken class
 	// must not cost the others their backup.
-	if _, err := os.Stat(filepath.Join(backupDir, mustOneRun(t, backupDir), filepath.Base(present)+".zip")); err != nil {
+	if _, err := os.Stat(filepath.Join(backupDir, mustOneRun(t, backupDir), "present.zip")); err != nil {
 		t.Errorf("a healthy class was not archived because another class failed: %v", err)
 	}
 }
@@ -413,12 +416,12 @@ func TestAnUncreatableRunFolderIsAFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	deps = &Deps{
-		BackupDir:  notADir,
-		StaticDirs: []string{assets},
-		Config:     stubConfig{mode: "full"},
-		FreeDisk:   func(context.Context) (int64, error) { return 1 << 40, nil },
-		DBSize:     func(context.Context) (int64, error) { return 1 << 20, nil },
-		DB:         PGConn{Host: "127.0.0.1", Port: 1, User: "nobody", DBName: "nothing"},
+		BackupDir: notADir,
+		Classes:   []AssetClass{{Slug: "covers", Dir: assets}},
+		Config:    stubConfig{mode: "full"},
+		FreeDisk:  func(context.Context) (int64, error) { return 1 << 40, nil },
+		DBSize:    func(context.Context) (int64, error) { return 1 << 20, nil },
+		DB:        PGConn{Host: "127.0.0.1", Port: 1, User: "nobody", DBName: "nothing"},
 	}
 	t.Cleanup(func() { deps = nil })
 
@@ -430,5 +433,78 @@ func TestAnUncreatableRunFolderIsAFailure(t *testing.T) {
 	}
 	if !strings.Contains(p.job.LastError, "backup directory") {
 		t.Errorf("LastError = %q, want it to name the backup directory", p.job.LastError)
+	}
+}
+
+// The mode that makes a backup possible at all on this box.
+//
+// Measured in production: a full run needs 202 GB of free space and the volume
+// has 180 GB, so the pre-flight refuses and NOTHING is protected — not the
+// database, not the 13 GB of irreplaceable artwork. One class (screenshots) is
+// 116 GB of the 129 GB asset tree and is the only regenerable one. Skipping it
+// drops the requirement to 63 GB and the same run covers everything else.
+func TestSkipRegenerableMakesAnImpossibleBackupPossible(t *testing.T) {
+	// Stand-ins with the production shape: one huge regenerable class, one
+	// small irreplaceable one.
+	huge := t.TempDir()
+	if err := os.WriteFile(filepath.Join(huge, "frame.jpg"), make([]byte, 8<<20), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	small := t.TempDir()
+	if err := os.WriteFile(filepath.Join(small, "mascot.png"), make([]byte, 1<<10), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	classes := []AssetClass{
+		{Slug: "mascots", Dir: small, Order: 10},
+		{Slug: "screenshots", Dir: huge, Order: 90, Regenerable: true},
+	}
+
+	newPlugin := func(mode string, free int64) *Plugin {
+		deps = &Deps{
+			BackupDir: t.TempDir(),
+			Classes:   classes,
+			Config:    stubConfig{mode: mode},
+			FreeDisk:  func(context.Context) (int64, error) { return free, nil },
+			DBSize:    func(context.Context) (int64, error) { return 1 << 20, nil },
+		}
+		t.Cleanup(func() { deps = nil })
+		return &Plugin{job: schedule.RegisterJob("Backup test "+t.Name()+mode, "")}
+	}
+
+	// Free space chosen to sit BETWEEN the two requirements, which is the only
+	// range where the mode makes a difference: the full run needs
+	// (8 MiB + 1 KiB + 1 MiB) x 1.2 ~= 10.8 MiB, skipping the regenerable class
+	// needs (1 KiB + 1 MiB) x 1.2 ~= 1.2 MiB.
+	const free = 5 << 20
+
+	if newPlugin(ModeFull, free).preflightOK(context.Background(), false) {
+		t.Error("full mode passed the pre-flight when the regenerable class does not fit — " +
+			"the gate is not measuring what the run will write")
+	}
+	if !newPlugin(ModeSkipRegenerable, free).preflightOK(context.Background(), false) {
+		t.Error("skip_regenerable refused although only the regenerable class was too big; " +
+			"this is the mode that exists to make the backup possible, so refusing here protects nothing")
+	}
+	if !newPlugin(ModeDBOnly, free).preflightOK(context.Background(), false) {
+		t.Error("db_only refused despite needing only the dump")
+	}
+
+	// And the selection itself, independent of disk.
+	deps = &Deps{Classes: classes}
+	t.Cleanup(func() { deps = nil })
+	if got := len(archiveClasses(ModeFull)); got != 2 {
+		t.Errorf("full archives %d classes, want 2", got)
+	}
+	skipped := archiveClasses(ModeSkipRegenerable)
+	if len(skipped) != 1 || skipped[0].Slug != "mascots" {
+		t.Errorf("skip_regenerable archived %v, want just the non-regenerable class", slugs(skipped))
+	}
+	if got := archiveClasses(ModeDBOnly); len(got) != 0 {
+		t.Errorf("db_only archived %v, want nothing", slugs(got))
+	}
+	// An unknown mode must archive everything rather than silently skipping —
+	// failing toward MORE data is the only safe default in a backup.
+	if got := len(archiveClasses("typo")); got != 2 {
+		t.Errorf("an unrecognised mode archived %d classes, want all 2", got)
 	}
 }

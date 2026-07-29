@@ -18,6 +18,43 @@ import (
 // lexically = chronologically, which prune relies on.
 const stampFormat = "2006-01-02_150405"
 
+// What a run covers. The archive stages a full local copy before writing
+// anything, so the choice here is really a choice about whether the run can
+// happen at all on a given box.
+const (
+	// ModeFull archives every class plus the database.
+	ModeFull = "full"
+	// ModeSkipRegenerable archives the database and every class the host
+	// cannot rebuild, skipping the ones it can.
+	//
+	// This is the mode that makes a backup possible on a box whose regenerable
+	// data dwarfs everything else. Measured here: full needs 202 GB of free
+	// space against 180 GB available, so it refuses and nothing is protected;
+	// skipping the single regenerable class drops that to 63 GB and the same
+	// run covers all of the database and every irreplaceable file.
+	ModeSkipRegenerable = "skip_regenerable"
+	// ModeDBOnly archives the database alone.
+	ModeDBOnly = "db_only"
+)
+
+// archiveClasses is the set of classes a mode archives, in index order.
+//
+// db_only returns nothing, so the disk pre-flight and the archive loop agree
+// about the size of the run without either special-casing the mode.
+func archiveClasses(mode string) []AssetClass {
+	if mode == ModeDBOnly {
+		return nil
+	}
+	out := make([]AssetClass, 0, len(deps.Classes))
+	for _, c := range orderedClasses(deps.Classes) {
+		if mode == ModeSkipRegenerable && c.Regenerable {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
 // run is the scheduled path: skip if a recent backup already exists.
 func (p *Plugin) run(ctx context.Context) { p.doRun(ctx, false) }
 
@@ -101,11 +138,16 @@ func (p *Plugin) doRun(ctx context.Context, force bool) {
 	// covers.zip) so a partial restore can target a single asset class. Skipped
 	// in db_only mode — the asset dirs are the disk hog and are re-fetchable, so
 	// a db_only run is just the DB.
-	if mode == "db_only" {
+	if mode == ModeDBOnly {
 		job.Log("db_only mode: skipping static-asset zips")
 	} else {
-		for _, src := range deps.StaticDirs {
-			base := filepath.Base(src)
+		archived := archiveClasses(mode)
+		if skipped := len(deps.Classes) - len(archived); skipped > 0 {
+			job.Log("%s mode: skipping %d regenerable class(es)", mode, skipped)
+		}
+		for _, c := range archived {
+			src := filepath.Join(deps.Root, c.Dir)
+			base := c.Slug
 			zipOut := filepath.Join(dest, base+".zip")
 			job.SetProgress("Zipping %s…", base)
 			if err := zipDir(src, zipOut, job.Log); err != nil {
@@ -169,15 +211,16 @@ func (p *Plugin) preflightOK(ctx context.Context, force bool) bool {
 	}
 
 	var need int64
-	if deps.Config.GetBackupMode(ctx) != "db_only" {
-		for _, src := range deps.StaticDirs {
-			sz, err := dirSize(src)
-			if err != nil {
-				job.Log("WARN couldn't size %s for the disk pre-flight: %v", src, err)
-				continue
-			}
-			need += sz
+	// Size exactly what will be archived. Sizing classes the run then skips
+	// would make the gate refuse backups that fit comfortably — which on this
+	// install is the difference between 202 GB and 63 GB.
+	for _, c := range archiveClasses(deps.Config.GetBackupMode(ctx)) {
+		sz, err := dirSize(filepath.Join(deps.Root, c.Dir))
+		if err != nil {
+			job.Log("WARN couldn't size %s for the disk pre-flight: %v", c.Slug, err)
+			continue
 		}
+		need += sz
 	}
 	dbBytes, err := deps.DBSize(ctx)
 	if err != nil {
