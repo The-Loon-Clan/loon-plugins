@@ -5,22 +5,37 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/the-loon-clan/loon/schedule"
 	"time"
 )
 
+// withBackupDir seeds COMPLETED run folders — each gets its completion marker,
+// because a folder without one is a failed run and deliberately does not count
+// as a backup. Use seedBackupDir(t, false, ...) for the failed-run case.
 func withBackupDir(t *testing.T, stamps ...string) string {
+	t.Helper()
+	dir := seedBackupDir(t, true, stamps...)
+	deps = &Deps{BackupDir: dir}
+	t.Cleanup(func() { deps = nil })
+	return dir
+}
+
+func seedBackupDir(t *testing.T, complete bool, stamps ...string) string {
 	t.Helper()
 	dir := t.TempDir()
 	for _, s := range stamps {
 		if err := os.MkdirAll(filepath.Join(dir, s), 0o755); err != nil {
 			t.Fatalf("seed %s: %v", s, err)
 		}
+		if complete {
+			if err := os.WriteFile(filepath.Join(dir, s, completeMarker), []byte("stamp="+s), 0o644); err != nil {
+				t.Fatalf("marker %s: %v", s, err)
+			}
+		}
 	}
-	deps = &Deps{BackupDir: dir}
-	t.Cleanup(func() { deps = nil })
 	return dir
 }
 
@@ -208,4 +223,212 @@ func TestPrune(t *testing.T) {
 			t.Error("pruned the only backup when keep=5")
 		}
 	})
+}
+
+// A failed run must not be able to answer "did we back up recently?".
+//
+// This was a real defect with a seven-day blast radius: doRun created the dated
+// folder BEFORE doing any work, logged "Backup complete" whatever happened, and
+// newestBackupAge counted any dated folder. So a run whose pg_dump failed left
+// behind the exact artifact that told the next six scheduled runs to skip. The
+// evidence of the failure was the thing that silenced it.
+func TestAFailedRunDoesNotCountAsABackup(t *testing.T) {
+	recent := time.Now().Add(-2 * time.Hour).Format(stampFormat)
+
+	t.Run("an unmarked folder reads as never backed up", func(t *testing.T) {
+		deps = &Deps{BackupDir: seedBackupDir(t, false, recent)}
+		t.Cleanup(func() { deps = nil })
+		if age, ok := (&Plugin{}).newestBackupAge(); ok {
+			t.Errorf("a folder with no completion marker counted as a backup (age=%s) — "+
+				"a failed run would suppress the next week of attempts", age)
+		}
+	})
+
+	t.Run("a completed folder still counts", func(t *testing.T) {
+		withBackupDir(t, recent)
+		if _, ok := (&Plugin{}).newestBackupAge(); !ok {
+			t.Error("a completed backup was ignored — the skip guard would never fire and every tick would re-dump")
+		}
+	})
+
+	t.Run("the newest COMPLETED one wins, not the newest folder", func(t *testing.T) {
+		older := time.Now().Add(-30 * 24 * time.Hour).Format(stampFormat)
+		dir := seedBackupDir(t, true, older)
+		// A newer run that failed: folder present, no marker.
+		if err := os.MkdirAll(filepath.Join(dir, recent), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		deps = &Deps{BackupDir: dir}
+		t.Cleanup(func() { deps = nil })
+
+		age, ok := (&Plugin{}).newestBackupAge()
+		if !ok {
+			t.Fatal("ok=false despite a completed backup being present")
+		}
+		if age < 20*24*time.Hour {
+			t.Errorf("age = %s — the failed newer run was counted, which is exactly the bug: "+
+				"a broken backup hiding a month-old real one", age)
+		}
+	})
+}
+
+// The end-to-end shape of the silent-success bug: a run that fails part-way
+// must not leave behind something the next run mistakes for a backup, and must
+// not report itself as healthy.
+//
+// The database dump is made to fail by pointing pg_dump at a closed port, which
+// is also the realistic failure (a db container down, wrong credentials). Before
+// the fix this produced a dated folder, the log line "Backup complete", a job
+// status of idle with no error, and six subsequent weekly runs skipped.
+func TestAPartialRunIsReportedAndLeavesNoUsableMarker(t *testing.T) {
+	assets := t.TempDir()
+	if err := os.WriteFile(filepath.Join(assets, "cover.jpg"), []byte("body"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	backupDir := t.TempDir()
+	deps = &Deps{
+		BackupDir:  backupDir,
+		StaticDirs: []string{assets},
+		Config:     stubConfig{mode: "full"},
+		FreeDisk:   func(context.Context) (int64, error) { return 1 << 40, nil },
+		DBSize:     func(context.Context) (int64, error) { return 1 << 20, nil },
+		// Port 1 is closed, so pg_dump fails immediately rather than hanging.
+		DB: PGConn{Host: "127.0.0.1", Port: 1, User: "nobody", DBName: "nothing"},
+	}
+	t.Cleanup(func() { deps = nil })
+
+	p := &Plugin{job: schedule.RegisterJob("Backup test "+t.Name(), "")}
+	p.doRun(context.Background(), true)
+
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runs []string
+	for _, e := range entries {
+		if e.IsDir() {
+			runs = append(runs, e.Name())
+		}
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected exactly one run folder, got %v", runs)
+	}
+
+	// The asset zip should have succeeded, proving the run really did partial
+	// work rather than bailing before it started.
+	if _, err := os.Stat(filepath.Join(backupDir, runs[0], filepath.Base(assets)+".zip")); err != nil {
+		t.Errorf("the asset zip is missing, so this test is not exercising a PARTIAL failure: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(backupDir, runs[0], completeMarker)); err == nil {
+		t.Error("a run whose database dump failed still wrote the completion marker — " +
+			"the next six weekly runs would skip on the strength of it")
+	}
+
+	// And the operator must be able to see it. SetIdle clears LastError, so an
+	// unconditional deferred SetIdle would erase this.
+	if p.job.Status != "error" {
+		t.Errorf("job status = %q, want \"error\" — a failed backup reporting idle is the whole defect", p.job.Status)
+	}
+	if p.job.LastError == "" {
+		t.Error("LastError is empty after a failed run")
+	}
+
+	// The decisive consequence: this folder must not answer "did we back up?".
+	if age, ok := p.newestBackupAge(); ok {
+		t.Errorf("the failed run counted as a backup (age=%s)", age)
+	}
+}
+
+// An asset class whose directory is absent must be counted as a failed part,
+// named in the error, and must withhold the completion marker.
+//
+// This is not hypothetical: production currently has four classes indexing zero
+// files because their bind mounts are missing, and an unmounted class is
+// indistinguishable from an empty one from inside the container. The difference
+// here is that a MISSING directory makes zipDir return an error outright, so it
+// is the one case the job can actually name — and it must not be swallowed by
+// the per-class `continue`.
+func TestAMissingAssetDirectoryIsNamedInTheFailure(t *testing.T) {
+	present := t.TempDir()
+	if err := os.WriteFile(filepath.Join(present, "a.jpg"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(t.TempDir(), "unmounted-class")
+
+	backupDir := t.TempDir()
+	deps = &Deps{
+		BackupDir: backupDir,
+		// Missing FIRST, deliberately. With the healthy class ahead of it the
+		// test cannot tell `continue` from `break` — the healthy zip would
+		// already be written either way.
+		StaticDirs: []string{missing, present},
+		Config:     stubConfig{mode: "full"},
+		FreeDisk:   func(context.Context) (int64, error) { return 1 << 40, nil },
+		DBSize:     func(context.Context) (int64, error) { return 1 << 20, nil },
+		DB:         PGConn{Host: "127.0.0.1", Port: 1, User: "nobody", DBName: "nothing"},
+	}
+	t.Cleanup(func() { deps = nil })
+
+	p := &Plugin{job: schedule.RegisterJob("Backup test "+t.Name(), "")}
+	p.doRun(context.Background(), true)
+
+	if !strings.Contains(p.job.LastError, "unmounted-class.zip") {
+		t.Errorf("LastError = %q — a missing asset directory must be named, not swallowed by the "+
+			"per-class continue; that is how an unmounted volume stays invisible", p.job.LastError)
+	}
+	// The class that WAS present must still have been archived: one broken class
+	// must not cost the others their backup.
+	if _, err := os.Stat(filepath.Join(backupDir, mustOneRun(t, backupDir), filepath.Base(present)+".zip")); err != nil {
+		t.Errorf("a healthy class was not archived because another class failed: %v", err)
+	}
+}
+
+func mustOneRun(t *testing.T, backupDir string) string {
+	t.Helper()
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			return e.Name()
+		}
+	}
+	t.Fatal("no run folder created")
+	return ""
+}
+
+// If the run folder cannot be created there is no backup at all, and that must
+// read as a failure rather than as a quiet no-op. The realistic cause is a
+// BackupDir that is not what the operator thinks it is — a file, a stale
+// symlink, or a read-only mount.
+func TestAnUncreatableRunFolderIsAFailure(t *testing.T) {
+	// BackupDir is a FILE, so MkdirAll(BackupDir/<stamp>) cannot succeed.
+	notADir := filepath.Join(t.TempDir(), "backups")
+	if err := os.WriteFile(notADir, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assets := t.TempDir()
+	if err := os.WriteFile(filepath.Join(assets, "a.jpg"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	deps = &Deps{
+		BackupDir:  notADir,
+		StaticDirs: []string{assets},
+		Config:     stubConfig{mode: "full"},
+		FreeDisk:   func(context.Context) (int64, error) { return 1 << 40, nil },
+		DBSize:     func(context.Context) (int64, error) { return 1 << 20, nil },
+		DB:         PGConn{Host: "127.0.0.1", Port: 1, User: "nobody", DBName: "nothing"},
+	}
+	t.Cleanup(func() { deps = nil })
+
+	p := &Plugin{job: schedule.RegisterJob("Backup test "+t.Name(), "")}
+	p.doRun(context.Background(), true)
+
+	if p.job.Status != "error" {
+		t.Errorf("job status = %q, want \"error\" — a run that created nothing reported healthy", p.job.Status)
+	}
+	if !strings.Contains(p.job.LastError, "backup directory") {
+		t.Errorf("LastError = %q, want it to name the backup directory", p.job.LastError)
+	}
 }

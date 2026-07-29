@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -30,7 +31,21 @@ func (p *Plugin) doRun(ctx context.Context, force bool) {
 
 	job := p.job
 	job.SetRunning()
-	defer job.SetIdle(time.Now().Add(backupIntervalMin * time.Minute))
+
+	// failures decides idle-vs-error at the end, and it has to be a deferred
+	// decision rather than a SetError at the failing line, because SetIdle
+	// CLEARS LastError (loon/schedule/registry.go:237-238). This function used
+	// to `defer job.SetIdle(...)` unconditionally, so any SetError the body
+	// performed was wiped on the way out and every partial failure reported as
+	// a clean run.
+	var failures []string
+	defer func() {
+		if len(failures) == 0 {
+			job.SetIdle(time.Now().Add(backupIntervalMin * time.Minute))
+			return
+		}
+		job.SetError(fmt.Sprintf("%d part(s) failed: %s", len(failures), strings.Join(failures, ", ")))
+	}()
 
 	// The dated folders ARE the last-run record, so no new state is needed to
 	// answer "did we back up recently?".
@@ -75,6 +90,7 @@ func (p *Plugin) doRun(ctx context.Context, force bool) {
 	job.Log("Creating backup directory: %s", dest)
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		job.Log("ERROR creating directory: %v", err)
+		failures = append(failures, "backup directory")
 		return
 	}
 
@@ -94,6 +110,7 @@ func (p *Plugin) doRun(ctx context.Context, force bool) {
 			job.SetProgress("Zipping %s…", base)
 			if err := zipDir(src, zipOut, job.Log); err != nil {
 				job.Log("ERROR zipping %s: %v", base, err)
+				failures = append(failures, base+".zip")
 				continue
 			}
 			fi, _ := os.Stat(zipOut)
@@ -108,15 +125,33 @@ func (p *Plugin) doRun(ctx context.Context, force bool) {
 	dbOut := filepath.Join(dest, "database.sql.gz")
 	if err := dumpDB(deps.DB, dbOut); err != nil {
 		job.Log("ERROR dumping database: %v", err)
+		failures = append(failures, "database.sql.gz")
 	} else {
 		fi, _ := os.Stat(dbOut)
 		job.Log("database.sql.gz written (%s)", fmtFileSize(fi))
 	}
 
 	// Retention: prune the oldest dated folders so backups don't accumulate
-	// forever (the original disk-space leak — there was no cleanup).
+	// forever (the original disk-space leak — there was no cleanup). Runs even
+	// on a failed pass, so an incomplete folder is still subject to retention
+	// and cannot leak disk.
 	p.prune(job.Log, deps.Config.GetBackupKeepCount(ctx))
 
+	if len(failures) > 0 {
+		job.Log("INCOMPLETE → %s — %d part(s) failed: %s. No completion marker written, so "+
+			"the next scheduled run will retry instead of counting this folder as a backup.",
+			dest, len(failures), strings.Join(failures, ", "))
+		return
+	}
+
+	// The marker is written last, and only here. Its absence is what stops a
+	// failed run from being mistaken for a good one — see completeMarker.
+	if err := os.WriteFile(filepath.Join(dest, completeMarker),
+		[]byte(fmt.Sprintf("stamp=%s\nmode=%s\n", stamp, mode)), 0o644); err != nil {
+		job.Log("ERROR writing the completion marker: %v", err)
+		failures = append(failures, completeMarker)
+		return
+	}
 	job.Log("Backup complete → %s", dest)
 }
 
@@ -206,7 +241,23 @@ func humanBytes(b int64) string {
 	}
 }
 
-// newestBackupAge reports how long ago the most recent dated run folder was
+// completeMarker is written into a dated run folder only when every part of
+// that run succeeded, and its presence is what makes the folder count as a
+// backup.
+//
+// Without it the job could not tell a good run from a bad one, and the damage
+// was not cosmetic. A run whose pg_dump failed still created the folder, still
+// logged "Backup complete", and newestBackupAge then read that folder as a
+// successful backup — so the skip guard suppressed the next SEVEN DAYS of
+// scheduled attempts. A failure bought itself a week of silence, and the one
+// artifact that proved it had failed was the same artifact that silenced it.
+//
+// One deploy-time effect worth knowing: folders written before this existed
+// carry no marker, so the first run after upgrading treats the history as
+// empty and considers a backup due. The disk pre-flight still gates it.
+const completeMarker = "COMPLETE"
+
+// newestBackupAge reports how long ago the most recent COMPLETED run folder was
 // written. ok=false means there are none (or the dir is unreadable), which must
 // be treated as "never backed up" — i.e. do run.
 func (p *Plugin) newestBackupAge() (time.Duration, bool) {
@@ -217,6 +268,12 @@ func (p *Plugin) newestBackupAge() (time.Duration, bool) {
 	var newest time.Time
 	for _, e := range entries {
 		if !e.IsDir() {
+			continue
+		}
+		// An unmarked folder is a failed or half-written run. Skipping it here
+		// is the whole point: it means a broken backup cannot satisfy the
+		// "did we back up recently?" question it has no business answering.
+		if _, serr := os.Stat(filepath.Join(deps.BackupDir, e.Name(), completeMarker)); serr != nil {
 			continue
 		}
 		// ParseInLocation, not Parse: stampFormat carries no zone, so Format
