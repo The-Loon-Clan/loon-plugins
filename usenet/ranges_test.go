@@ -1,6 +1,8 @@
 package usenet
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -303,4 +305,71 @@ func TestBackfillSpendsOnTheHighestTierWithWork(t *testing.T) {
 	if len(highestTierOnly(nil)) != 0 {
 		t.Error("empty input should stay empty")
 	}
+}
+
+// The backfill pressure gate, which the catch-up loop now consults every round
+// rather than once on entry.
+//
+// Hysteresis is the point: pause at the high-water mark, resume only below the
+// LOW one. Without it a backend hovering at the threshold flaps between running
+// and paused every round, which with a loop that re-checks continuously means
+// thrashing rather than the orderly drain the gate exists to produce.
+func TestBackfillPressureHysteresis(t *testing.T) {
+	cfg := Config{BackfillPressureHighPct: 85, BackfillPressureLowPct: 70}
+
+	p := &Plugin{staging: fakePressure{pr: 0.77}}
+	if yield, _ := p.backfillYields(context.Background(), cfg); yield {
+		t.Error("yielded at 77% with the gate at 85% — this is what was throttling nothing at all")
+	}
+
+	// Over the high-water mark: stop.
+	p = &Plugin{staging: fakePressure{pr: 0.86}}
+	if yield, _ := p.backfillYields(context.Background(), cfg); !yield {
+		t.Error("did not yield at 86% with the gate at 85%")
+	}
+	if !p.backfillPaused {
+		t.Error("crossing the high-water mark did not latch the paused state")
+	}
+
+	// Latched: between low and high it must STAY paused, or it flaps.
+	p.staging = fakePressure{pr: 0.80}
+	if yield, _ := p.backfillYields(context.Background(), cfg); !yield {
+		t.Error("resumed at 80% while latched; hysteresis requires falling below 70% first")
+	}
+
+	// Below the low-water mark: resume, and unlatch.
+	p.staging = fakePressure{pr: 0.69}
+	if yield, _ := p.backfillYields(context.Background(), cfg); yield {
+		t.Error("still paused at 69% with the low-water mark at 70%")
+	}
+	if p.backfillPaused {
+		t.Error("dropping below the low-water mark did not clear the latch")
+	}
+
+	// An unreadable backend must not silently stop the backfill: not knowing
+	// the pressure is not a reason to abandon 659 million missing articles.
+	p = &Plugin{staging: fakePressure{err: true}}
+	if yield, _ := p.backfillYields(context.Background(), cfg); yield {
+		t.Error("an unreadable pressure probe stopped the backfill")
+	}
+}
+
+// fakePressure answers pressure() and nothing else.
+//
+// The interface is embedded rather than implemented: this test is about the
+// gate's arithmetic, and stubbing a dozen unrelated staging methods would bury
+// that. Anything else the code under test touches nil-panics loudly, which is
+// the correct outcome — it would mean the gate had grown a dependency the test
+// does not model.
+type fakePressure struct {
+	stagingStore
+	pr  float64
+	err bool
+}
+
+func (f fakePressure) pressure(context.Context) (float64, error) {
+	if f.err {
+		return 0, errors.New("unreadable")
+	}
+	return f.pr, nil
 }

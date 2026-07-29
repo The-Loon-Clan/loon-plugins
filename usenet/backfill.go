@@ -35,27 +35,11 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		return
 	}
 
-	// Back-pressure: the forward crawl never pauses, but backfill yields when the
-	// staging buffer fills faster than the NZB builder drains it. Hysteresis
-	// (pause at high-water, resume only below low-water) avoids flapping. What
-	// pressure measures is the backend's business — pg: staged rows / cap; redis:
-	// used_memory / maxmemory.
-	if pr, perr := p.staging.pressure(ctx); perr == nil {
-		high := float64(cfg.BackfillPressureHighPct) / 100.0
-		low := float64(cfg.BackfillPressureLowPct) / 100.0
-		switch {
-		case p.backfillPaused && pr >= low:
-			p.backfillJob.Log("backfill paused: staging pressure %.0f%% (resumes below %d%%)", pr*100, cfg.BackfillPressureLowPct)
-			p.backfillJob.SetIdle(p.nextBackfill(ctx))
-			return
-		case pr >= high:
-			p.backfillPaused = true
-			p.backfillJob.Log("backfill paused: staging pressure %.0f%% >= %d%% — letting the NZB builder drain", pr*100, cfg.BackfillPressureHighPct)
-			p.backfillJob.SetIdle(p.nextBackfill(ctx))
-			return
-		default:
-			p.backfillPaused = false
-		}
+	if yield, pr := p.backfillYields(ctx, cfg); yield {
+		p.backfillJob.Log("backfill paused: staging pressure %.0f%% (high %d%%, resumes below %d%%) — letting the NZB builder drain",
+			pr*100, cfg.BackfillPressureHighPct, cfg.BackfillPressureLowPct)
+		p.backfillJob.SetIdle(p.nextBackfill(ctx))
+		return
 	}
 
 	// Same pools as the forward crawl: providers cap connections per account, so
@@ -75,18 +59,96 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 	p.tel.backfill.passStart(len(runs))
 	defer p.tel.backfill.passEnd()
 
+	// Catch-up loop: while history remains and staging has room, go again
+	// immediately instead of sleeping out the interval.
+	//
+	// The forward crawl has had this since it was written, with the reasoning
+	// spelled out there — "missing a lot of articles while sitting idle is
+	// exactly wrong" — and the backfill, which is the job with 659 MILLION
+	// articles outstanding, never got it. It did one 25-batch pass in about two
+	// seconds and then slept 58, a 6% duty cycle measured against a queue that
+	// will take days to clear. Nothing was throttling it: the pressure gate sits
+	// at 85% and staging was at 77%, so the job simply ran out of budget and
+	// went home. Bigger batches would only make each nap longer.
+	//
+	// Guarded the same three ways as the crawl loop: a round that stages nothing
+	// ends the pass (or a stalled provider would spin), pressure is re-checked
+	// every round rather than once at entry, and the operator can switch it off.
 	total := 0
-	for _, run := range runs {
-		if ctx.Err() != nil {
-			return
+	rounds := 0
+	lastLog := time.Now()
+	for {
+		rounds++
+		// Opens a catch-up round: the progress counters reset with it, so the
+		// live widget measures the round in flight rather than a denominator
+		// that grows all pass. Same call the crawl loop makes.
+		p.tel.backfill.roundStart()
+		staged := 0
+		for _, run := range runs {
+			if ctx.Err() != nil {
+				return
+			}
+			staged += p.backfillProvider(ctx, run, cfg)
 		}
-		total += p.backfillProvider(ctx, run, cfg)
+		total += staged
+
+		// Drain while filling. The builder holds its own lock and no-ops if it
+		// is already running, so calling it each productive round keeps staging
+		// falling instead of climbing toward the pressure gate this loop is
+		// otherwise racing.
+		if staged > 0 {
+			go p.runBuild(ctx)
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		// Re-read config every round: a catch-up pass can run for a long time,
+		// and an operator switching it off should not have to wait for it.
+		cfg = p.effective(ctx)
+		if cfg.BackfillNoCatchup {
+			break
+		}
+		if staged == 0 {
+			break // nothing left to fetch, or every group is lease-held elsewhere
+		}
+		if yield, pr := p.backfillYields(ctx, cfg); yield {
+			p.backfillJob.Log("catch-up stopping: staging pressure %.0f%% (high %d%%) after %d round(s), %s article(s) staged",
+				pr*100, cfg.BackfillPressureHighPct, rounds, fmtComma(int64(total)))
+			break
+		}
+		if time.Since(lastLog) >= 30*time.Second {
+			p.backfillJob.Log("catch-up: %d round(s), %s historical article(s) staged so far", rounds, fmtComma(int64(total)))
+			lastLog = time.Now()
+		}
 	}
-	p.backfillJob.Log("backfill complete across %d provider(s): %d historical article(s) staged", len(runs), total)
+	p.backfillJob.Log("backfill complete across %d provider(s): %s historical article(s) staged over %d round(s)",
+		len(runs), fmtComma(int64(total)), rounds)
 	p.backfillJob.SetIdle(p.nextBackfill(ctx))
 	if total > 0 {
 		go p.runBuild(ctx)
 	}
+}
+
+// backfillYields reports whether staging is too full to keep fetching.
+//
+// Hysteresis: pause at the high-water mark, resume only below the low one, so
+// a backend hovering at the threshold does not flap. Extracted so the entry
+// check and the per-round check are literally the same code — the crawl loop
+// grew three drifted copies of its pressure comparison exactly this way.
+func (p *Plugin) backfillYields(ctx context.Context, cfg Config) (bool, float64) {
+	pr, err := p.staging.pressure(ctx)
+	if err != nil {
+		return false, 0 // unknown pressure is not a reason to stop protecting history
+	}
+	switch {
+	case p.backfillPaused && pr >= float64(cfg.BackfillPressureLowPct)/100.0:
+		return true, pr
+	case pr >= float64(cfg.BackfillPressureHighPct)/100.0:
+		p.backfillPaused = true
+		return true, pr
+	}
+	p.backfillPaused = false
+	return false, pr
 }
 
 // backfillProvider closes one provider's gaps. Gaps are per-server: another

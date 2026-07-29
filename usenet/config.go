@@ -64,6 +64,10 @@ type Config struct {
 
 	SkipBackfill   bool `json:"skip_backfill"`    // "new articles only" — disable the backfill job
 	CrawlNoCatchup bool `json:"crawl_no_catchup"` // disable the catch-up loop (default off = catch-up ON)
+	// BackfillNoCatchup disables the backfill's catch-up loop. Same inverted
+	// sense as the crawl one: the zero value keeps catching up, because a job
+	// with hundreds of millions of articles outstanding should not sleep.
+	BackfillNoCatchup bool `json:"backfill_no_catchup"`
 	// HoldLowUntilBackfilled stops LOW-tier groups being crawled forward
 	// while any CRITICAL group still has history to backfill. See
 	// holdLowTier in provider_state.go for why ordering alone is not enough.
@@ -285,6 +289,7 @@ func (c *Config) boolFields() map[string]*bool {
 		// right call on a site whose critical group is far behind and the
 		// wrong one on a site that is caught up everywhere.
 		"hold_low_until_backfilled": &c.HoldLowUntilBackfilled,
+		"backfill_no_catchup":       &c.BackfillNoCatchup,
 	}
 }
 
