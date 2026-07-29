@@ -373,3 +373,81 @@ func (f fakePressure) pressure(context.Context) (float64, error) {
 	}
 	return f.pr, nil
 }
+
+// The catch-up decision, which has been wrong in production twice.
+func TestCatchUpKeepsGoingWhileThereIsWork(t *testing.T) {
+	noYield := func() (bool, float64) { return false, 0 }
+	enabled := func() bool { return false }
+
+	// THE BUG THAT SHIPPED. Most of this history is empty on the server, so a
+	// round covers 150,000 article numbers and stages NOTHING — and that is
+	// real progress, because the range is marked covered and never revisited.
+	// Measuring progress by articles staged put the job straight back to sleep.
+	rounds := 0
+	res := runCatchUp(context.Background(), func() (int, int) {
+		rounds++
+		if rounds >= 5 {
+			return 0, 0 // genuinely out of work
+		}
+		return 0, 25 // covered ground, staged nothing
+	}, enabled, noYield, nil)
+	if res.Rounds != 5 {
+		t.Errorf("ran %d round(s), want 5 — a round that stages nothing but covers "+
+			"25 batches is progress, not a reason to sleep", res.Rounds)
+	}
+	if res.StoppedBy != stopNoWork {
+		t.Errorf("stopped by %q, want %q", res.StoppedBy, stopNoWork)
+	}
+	if res.Batches != 100 {
+		t.Errorf("counted %d batches, want 100", res.Batches)
+	}
+
+	// No batches at all on the first round ends the pass immediately: caught up,
+	// or every group is lease-held by a sibling.
+	res = runCatchUp(context.Background(), func() (int, int) { return 0, 0 }, enabled, noYield, nil)
+	if res.Rounds != 1 || res.StoppedBy != stopNoWork {
+		t.Errorf("rounds=%d stoppedBy=%q, want 1/%s", res.Rounds, res.StoppedBy, stopNoWork)
+	}
+
+	// Pressure ends it, and reports the reading so the log can say why.
+	calls := 0
+	res = runCatchUp(context.Background(), func() (int, int) { return 100, 25 }, enabled,
+		func() (bool, float64) {
+			calls++
+			return calls >= 3, 0.87
+		}, nil)
+	if res.StoppedBy != stopPressure {
+		t.Errorf("stopped by %q, want %q", res.StoppedBy, stopPressure)
+	}
+	if res.Rounds != 3 {
+		t.Errorf("ran %d round(s) before yielding, want 3", res.Rounds)
+	}
+	if res.Pressure != 0.87 {
+		t.Errorf("pressure %.2f not carried out for the log", res.Pressure)
+	}
+
+	// The operator switch is honoured mid-pass, not only at entry.
+	n := 0
+	res = runCatchUp(context.Background(), func() (int, int) { return 1, 1 },
+		func() bool { n++; return n >= 2 }, noYield, nil)
+	if res.StoppedBy != stopDisabled || res.Rounds != 2 {
+		t.Errorf("rounds=%d stoppedBy=%q, want 2/%s", res.Rounds, res.StoppedBy, stopDisabled)
+	}
+
+	// Cancellation wins over everything, so shutdown is not delayed by a pass
+	// that still has work.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	res = runCatchUp(ctx, func() (int, int) { return 1, 25 }, enabled, noYield, nil)
+	if res.StoppedBy != stopCancelled || res.Rounds != 1 {
+		t.Errorf("rounds=%d stoppedBy=%q, want 1/%s", res.Rounds, res.StoppedBy, stopCancelled)
+	}
+
+	// The per-round hook sees cumulative totals, which is what the log reports.
+	var lastB, lastS int
+	runCatchUp(context.Background(), func() (int, int) { return 10, 2 }, func() bool { return true },
+		noYield, func(_, b, s int) { lastB, lastS = b, s })
+	if lastB != 2 || lastS != 10 {
+		t.Errorf("hook saw batches=%d staged=%d, want 2/10", lastB, lastS)
+	}
+}

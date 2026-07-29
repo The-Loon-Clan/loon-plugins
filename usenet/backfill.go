@@ -74,55 +74,49 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 	// Guarded the same three ways as the crawl loop: a round that stages nothing
 	// ends the pass (or a stalled provider would spin), pressure is re-checked
 	// every round rather than once at entry, and the operator can switch it off.
-	total := 0
-	rounds := 0
 	lastLog := time.Now()
-	for {
-		rounds++
-		// Opens a catch-up round: the progress counters reset with it, so the
-		// live widget measures the round in flight rather than a denominator
-		// that grows all pass. Same call the crawl loop makes.
-		p.tel.backfill.roundStart()
-		staged := 0
-		for _, run := range runs {
-			if ctx.Err() != nil {
-				return
+	res := runCatchUp(ctx,
+		func() (int, int) {
+			p.tel.backfill.roundStart()
+			staged, worked := 0, 0
+			for _, run := range runs {
+				if ctx.Err() != nil {
+					return staged, worked
+				}
+				st, b := p.backfillProvider(ctx, run, cfg)
+				staged += st
+				worked += b
 			}
-			staged += p.backfillProvider(ctx, run, cfg)
-		}
-		total += staged
-
-		// Drain while filling. The builder holds its own lock and no-ops if it
-		// is already running, so calling it each productive round keeps staging
-		// falling instead of climbing toward the pressure gate this loop is
-		// otherwise racing.
-		if staged > 0 {
-			go p.runBuild(ctx)
-		}
-		if ctx.Err() != nil {
-			break
-		}
-		// Re-read config every round: a catch-up pass can run for a long time,
-		// and an operator switching it off should not have to wait for it.
-		cfg = p.effective(ctx)
-		if cfg.BackfillNoCatchup {
-			break
-		}
-		if staged == 0 {
-			break // nothing left to fetch, or every group is lease-held elsewhere
-		}
-		if yield, pr := p.backfillYields(ctx, cfg); yield {
-			p.backfillJob.Log("catch-up stopping: staging pressure %.0f%% (high %d%%) after %d round(s), %s article(s) staged",
-				pr*100, cfg.BackfillPressureHighPct, rounds, fmtComma(int64(total)))
-			break
-		}
-		if time.Since(lastLog) >= 30*time.Second {
-			p.backfillJob.Log("catch-up: %d round(s), %s historical article(s) staged so far", rounds, fmtComma(int64(total)))
-			lastLog = time.Now()
-		}
+			// Drain while filling. The builder holds its own lock and no-ops if
+			// it is already running, so kicking it each productive round keeps
+			// staging falling instead of climbing toward the pressure gate this
+			// loop is otherwise racing.
+			if staged > 0 {
+				go p.runBuild(ctx)
+			}
+			return staged, worked
+		},
+		func() bool {
+			// Re-read per round: a catch-up pass can run for a long time, and an
+			// operator switching it off should not have to wait for it to end.
+			cfg = p.effective(ctx)
+			return cfg.BackfillNoCatchup
+		},
+		func() (bool, float64) { return p.backfillYields(ctx, cfg) },
+		func(rounds, batches, staged int) {
+			if time.Since(lastLog) >= 30*time.Second {
+				p.backfillJob.Log("catch-up: %d round(s), %s batch(es), %s article(s) staged so far",
+					rounds, fmtComma(int64(batches)), fmtComma(int64(staged)))
+				lastLog = time.Now()
+			}
+		})
+	total, totalBatches, rounds := res.Staged, res.Batches, res.Rounds
+	if res.StoppedBy == stopPressure {
+		p.backfillJob.Log("catch-up stopping: staging pressure %.0f%% (high %d%%) after %d round(s)",
+			res.Pressure*100, cfg.BackfillPressureHighPct, rounds)
 	}
-	p.backfillJob.Log("backfill complete across %d provider(s): %s historical article(s) staged over %d round(s)",
-		len(runs), fmtComma(int64(total)), rounds)
+	p.backfillJob.Log("backfill complete across %d provider(s): %s article(s) staged from %s batch(es) over %d round(s)",
+		len(runs), fmtComma(int64(total)), fmtComma(int64(totalBatches)), rounds)
 	p.backfillJob.SetIdle(p.nextBackfill(ctx))
 	if total > 0 {
 		go p.runBuild(ctx)
@@ -154,18 +148,18 @@ func (p *Plugin) backfillYields(ctx context.Context, cfg Config) (bool, float64)
 // backfillProvider closes one provider's gaps. Gaps are per-server: another
 // provider's coverage says nothing about this one's, because the article numbers
 // are not the same articles.
-func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Config) int {
+func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Config) (staged, batches int) {
 	pool, bb := run.pool, run.prov.backboneKey()
 	pool.TopUp(ctx)
 
 	groups, err := p.st.groupsNeedingBackfillForBackbone(ctx, bb, cfg.MaxGroups)
 	if err != nil {
 		p.reportErr(ctx, "usenet/backfill-groups", err)
-		return 0
+		return 0, 0
 	}
 	if len(groups) == 0 {
 		p.backfillJob.Log("%s: nothing to backfill — caught up to the retention horizon", run.prov.label())
-		return 0
+		return 0, 0
 	}
 	// Backfill leases the same (backbone, group) keys as the forward crawl: both
 	// advance the same row, so they must not run on it from two workers at once.
@@ -180,7 +174,7 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	heldRows, ctx, release := p.claimGroupLeases(ctx, bb, rows, p.leaseTTL(cfg))
 	defer release()
 	if len(heldRows) == 0 {
-		return 0
+		return 0, 0
 	}
 	mine := make(map[string]bool, len(heldRows))
 	for _, r := range heldRows {
@@ -212,7 +206,7 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	var cands []candidate
 	for _, g := range groups {
 		if ctx.Err() != nil {
-			return 0
+			return 0, 0
 		}
 		gaps, err := p.st.backfillGapsFor(ctx, bb, g.Name, g.ServerLow, g.BackWatermark)
 		if err != nil {
@@ -260,7 +254,7 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	}
 	if len(jobs) == 0 {
 		p.backfillJob.Log("%s: nothing to do this pass", run.prov.label())
-		return 0
+		return 0, 0
 	}
 
 	p.backfillJob.Log("%s: backfilling %d group(s), %d batch(es) over %d connection(s)…",
@@ -282,14 +276,14 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	// unrecorded batches are simply refetched next pass.
 	if ctx.Err() != nil && jobCtx.Err() == nil {
 		p.backfillJob.Log("%s: lease lost mid-pass — coverage not recorded; batches will refetch next pass", run.prov.label())
-		return 0
+		return 0, 0
 	}
-	staged := p.recordBackfill(ctx, bb, targets, results, cfg)
+	staged = p.recordBackfill(ctx, bb, targets, results, cfg)
 
 	st := pool.Stats()
 	p.backfillJob.Log("%s: %d historical article(s) staged from %d batch(es) (conns %d/%d, resets %d)",
 		run.prov.label(), staged, len(jobs), st.Open, st.Target, st.Resets)
-	return staged
+	return staged, len(jobs)
 }
 
 // nextBackfill is the displayed next-run for the backfill job. Reads the
@@ -420,4 +414,67 @@ func planPass(cands []candidate, budget int) ([]batchJob, []candidate) {
 		used = append(used, cands[i])
 	}
 	return jobs, used
+}
+
+// Why the catch-up decision lives in its own function.
+//
+// It has been wrong in production twice. First there was no loop at all, so the
+// backfill did one 25-batch pass in two seconds and slept the other 58 with 659
+// million articles outstanding — a 5.9% duty cycle. Then the loop shipped
+// measuring progress by ARTICLES STAGED, which is wrong here because most of
+// this history is empty on the server: a round routinely covers 150,000 article
+// numbers, stages nothing, and that IS progress — the range is marked and never
+// revisited. Breaking on staged == 0 put the job straight back to sleep and the
+// duty cycle went to 15.7% instead of to full.
+//
+// Both bugs were invisible to the test suite because driving runBackfill needs a
+// fake fleet, pools and store. This shape needs none of that.
+
+// stop reasons for a catch-up pass.
+const (
+	stopNoWork    = "no-work"
+	stopPressure  = "pressure"
+	stopDisabled  = "disabled"
+	stopCancelled = "cancelled"
+)
+
+type catchUpResult struct {
+	Rounds, Batches, Staged int
+	StoppedBy               string
+	Pressure                float64
+}
+
+// runCatchUp repeats rounds while there is work to do and staging has room.
+//
+// round reports (articles staged, BATCHES RUN). Batches is the progress signal:
+// staging nothing while covering ground is normal and must not end the pass.
+func runCatchUp(ctx context.Context, round func() (int, int), disabled func() bool,
+	yields func() (bool, float64), afterRound func(rounds, batches, staged int)) catchUpResult {
+	var res catchUpResult
+	for {
+		res.Rounds++
+		staged, batches := round()
+		res.Staged += staged
+		res.Batches += batches
+		if afterRound != nil {
+			afterRound(res.Rounds, res.Batches, res.Staged)
+		}
+		switch {
+		case ctx.Err() != nil:
+			res.StoppedBy = stopCancelled
+		case disabled != nil && disabled():
+			res.StoppedBy = stopDisabled
+		case batches == 0:
+			// No batches anywhere: caught up to the retention horizon, or every
+			// group is lease-held by a sibling worker.
+			res.StoppedBy = stopNoWork
+		default:
+			if y, pr := yields(); y {
+				res.StoppedBy, res.Pressure = stopPressure, pr
+			}
+		}
+		if res.StoppedBy != "" {
+			return res
+		}
+	}
 }
