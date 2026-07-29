@@ -73,11 +73,15 @@ func writeTree(t *testing.T, root string, files map[string]string) {
 func TestSecondPassHashesNothing(t *testing.T) {
 	s := testStore(t)
 	root := t.TempDir()
+	// VALID image bytes, not placeholder text. Fake bodies get flagged by the
+	// completeness check, and a flagged file is deliberately re-read every pass
+	// so a corrected detector can retire its own false positives — which would
+	// make this test measure the suspect path rather than the stat gate.
 	writeTree(t, root, map[string]string{
-		"web/static/mascots/a.png": "aaaa",
-		"web/static/mascots/b.png": "bbbb",
-		"web/static/covers/1.jpg":  "cover one",
-		"web/static/covers/2.jpg":  "cover two",
+		"web/static/mascots/a.png": pngBody("a"),
+		"web/static/mascots/b.png": pngBody("b"),
+		"web/static/covers/1.jpg":  jpegBody("one"),
+		"web/static/covers/2.jpg":  jpegBody("two"),
 	})
 	classes := []AssetClass{
 		{Slug: "mascots", Dir: "web/static/mascots", Order: 10},
@@ -118,7 +122,7 @@ func TestEditedFileGetsANewRow(t *testing.T) {
 	s := testStore(t)
 	root := t.TempDir()
 	rel := "web/static/site/logo.png"
-	writeTree(t, root, map[string]string{rel: "original"})
+	writeTree(t, root, map[string]string{rel: pngBody("original")})
 	classes := []AssetClass{{Slug: "site", Dir: "web/static/site", Order: 10}}
 	p := &Plugin{st: s}
 
@@ -129,7 +133,7 @@ func TestEditedFileGetsANewRow(t *testing.T) {
 	// Rewrite with different content AND a different length, then force a
 	// distinct mtime so the gate has something to see.
 	time.Sleep(10 * time.Millisecond)
-	if err := os.WriteFile(filepath.Join(root, rel), []byte("replaced content"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, rel), []byte(pngBody("replaced")), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -161,7 +165,7 @@ func TestEditedFileGetsANewRow(t *testing.T) {
 func TestFailedWalkLeavesTheGenerationUnsealed(t *testing.T) {
 	s := testStore(t)
 	root := t.TempDir()
-	writeTree(t, root, map[string]string{"web/static/mascots/a.png": "aaaa"})
+	writeTree(t, root, map[string]string{"web/static/mascots/a.png": pngBody("a")})
 	p := &Plugin{st: s}
 
 	// A class whose directory is a FILE: Walk reports an error rather than an
@@ -199,9 +203,9 @@ func TestClassTotalsFeedTheShrinkGate(t *testing.T) {
 	s := testStore(t)
 	root := t.TempDir()
 	writeTree(t, root, map[string]string{
-		"web/static/mascots/a.png": "a",
-		"web/static/mascots/b.png": "b",
-		"web/static/mascots/c.png": "c",
+		"web/static/mascots/a.png": pngBody("a"),
+		"web/static/mascots/b.png": pngBody("b"),
+		"web/static/mascots/c.png": pngBody("c"),
 	})
 	classes := []AssetClass{{Slug: "mascots", Dir: "web/static/mascots", Order: 10}}
 	p := &Plugin{st: s}
@@ -237,3 +241,143 @@ func TestClassTotalsFeedTheShrinkGate(t *testing.T) {
 		t.Fatalf("an emptied class did not trip the shrink gate: %+v", shrunk)
 	}
 }
+
+// A suspect row must clear when the file passes. Without this the table is
+// append-only: the stat gate skips a flagged file forever, so nothing
+// re-examines it, and the count converges on the worst historical moment rather
+// than the truth. It hid a corrected detector in production — 4,163 stale rows
+// survived a pass that no longer objected to them.
+func TestSuspectClearsWhenTheFileIsFine(t *testing.T) {
+	s := testStore(t)
+	root := t.TempDir()
+	ctx := context.Background()
+	rel := "web/static/covers/1.jpg"
+
+	// A zero-byte JPEG: damaged by definition.
+	writeTree(t, root, map[string]string{rel: ""})
+	classes := []AssetClass{{Slug: "covers", Dir: "web/static/covers", Order: 10}}
+	p := &Plugin{st: s}
+
+	res, err := p.indexPass(ctx, root, classes, 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Suspect != 1 {
+		t.Fatalf("a zero-byte image was not flagged (suspect=%d)", res.Suspect)
+	}
+	paths, err := s.suspectPaths(ctx)
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("suspect rows = %v (err %v), want 1", paths, err)
+	}
+
+	// Repair it with a complete JPEG.
+	body := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, 0xFF, 0xD9)
+	if err := os.WriteFile(filepath.Join(root, rel), body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err = p.indexPass(ctx, root, classes, 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Cleared != 1 {
+		t.Errorf("cleared=%d, want 1 — a repaired file must lose its flag", res.Cleared)
+	}
+	if paths, err := s.suspectPaths(ctx); err != nil || len(paths) != 0 {
+		t.Errorf("suspect rows after repair = %v (err %v), want none", paths, err)
+	}
+}
+
+// A flagged file must be re-read even when its stat is unchanged. This is what
+// lets a CORRECTED DETECTOR retire its own false positives: without it the
+// stat gate skips the file and the stale verdict is permanent.
+func TestFlaggedFilesAreReVerifiedDespiteTheStatGate(t *testing.T) {
+	s := testStore(t)
+	root := t.TempDir()
+	ctx := context.Background()
+	rel := "web/static/covers/2.jpg"
+	writeTree(t, root, map[string]string{rel: ""}) // zero-byte, flagged
+	classes := []AssetClass{{Slug: "covers", Dir: "web/static/covers", Order: 10}}
+	p := &Plugin{st: s}
+
+	if _, err := p.indexPass(ctx, root, classes, 1<<30); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second pass with the rolling re-hash effectively disabled and the file
+	// untouched: only the suspect re-verification can cause a read.
+	res, err := p.indexPass(ctx, root, classes, 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Hashed != 1 {
+		t.Errorf("hashed=%d — a flagged file was skipped by the stat gate, so its "+
+			"verdict could never be revisited", res.Hashed)
+	}
+}
+
+// hashed_at must advance only on a genuine re-read. If a carried-forward row
+// advanced it, "last verified" would silently become "last seen" and the
+// rolling re-hash would be measuring nothing.
+func TestHashedAtTracksRealReadsOnly(t *testing.T) {
+	s := testStore(t)
+	root := t.TempDir()
+	ctx := context.Background()
+	rel := "web/static/covers/3.jpg"
+	body := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, 0xFF, 0xD9)
+	if err := os.MkdirAll(filepath.Join(root, "web/static/covers"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, rel), body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	classes := []AssetClass{{Slug: "covers", Dir: "web/static/covers", Order: 10}}
+	p := &Plugin{st: s}
+
+	if _, err := p.indexPass(ctx, root, classes, 1<<30); err != nil {
+		t.Fatal(err)
+	}
+	var first time.Time
+	if err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT hashed_at FROM files WHERE path=$1`, rel).Scan(&first)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(1100 * time.Millisecond)
+	// Carried forward: unchanged stat, re-hash disabled, not suspect.
+	if res, err := p.indexPass(ctx, root, classes, 1<<30); err != nil {
+		t.Fatal(err)
+	} else if res.Skipped != 1 {
+		t.Fatalf("expected the file to be carried forward, got skipped=%d", res.Skipped)
+	}
+	var second time.Time
+	if err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT hashed_at FROM files WHERE path=$1`, rel).Scan(&second)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !second.Equal(first) {
+		t.Errorf("hashed_at moved on a carried-forward row (%v -> %v); it would then "+
+			"mean 'last seen' rather than 'last verified'", first, second)
+	}
+
+	// A forced re-hash must advance it.
+	if _, err := p.indexPass(ctx, root, classes, 1); err != nil {
+		t.Fatal(err)
+	}
+	var third time.Time
+	if err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT hashed_at FROM files WHERE path=$1`, rel).Scan(&third)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !third.After(first) {
+		t.Errorf("hashed_at did not advance on a real re-read (%v -> %v)", first, third)
+	}
+}
+
+// Minimal bodies that satisfy the completeness check, so a fixture is not
+// mistaken for damage. Distinct payloads keep the hashes different.
+func pngBody(seed string) string  { return "\x89PNG\r\n\x1a\n" + seed + "IEND\xae\x42\x60\x82" }
+func jpegBody(seed string) string { return "\xff\xd8\xff\xe0" + seed + "\xff\xd9" }

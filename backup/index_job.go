@@ -73,9 +73,9 @@ func (p *Plugin) runIndex(ctx context.Context) {
 		return
 	}
 
-	p.indexJob.Log("indexed %s file(s), %s — %s hashed, %s carried forward, %s suspect (%.1fs)",
+	p.indexJob.Log("indexed %s file(s), %s — %s hashed, %s carried forward, %s suspect, %s cleared (%.1fs)",
 		fmtComma(res.Files), fmtBytes(res.Bytes),
-		fmtComma(res.Hashed), fmtComma(res.Skipped), fmtComma(res.Suspect),
+		fmtComma(res.Hashed), fmtComma(res.Skipped), fmtComma(res.Suspect), fmtComma(res.Cleared),
 		time.Since(started).Seconds())
 	for _, c := range orderedClasses(deps.Classes) {
 		if t, ok := res.PerClass[c.Slug]; ok {

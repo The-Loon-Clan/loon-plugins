@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 
@@ -28,6 +29,15 @@ type inventoryStore interface {
 
 	// classTotals returns a sealed generation's per-class counts, for the
 	// shrink comparison.
+	// clearSuspect removes a file's suspect row once it passes. Without it the
+	// table is append-only: a file that healed — or that a corrected detector
+	// no longer objects to — stays flagged forever, so the count always
+	// reflects the worst historical moment rather than the current truth.
+	clearSuspect(ctx context.Context, path string) error
+	// suspectPaths lists what is currently flagged, so each pass can re-verify
+	// them regardless of their stat and the table converges on reality.
+	suspectPaths(ctx context.Context) ([]string, error)
+
 	classTotals(ctx context.Context, gen int64) (map[string]classTotal, error)
 	// lastSealedGeneration returns the newest generation that completed, or 0.
 	lastSealedGeneration(ctx context.Context) (int64, error)
@@ -121,17 +131,24 @@ func (s *PGStore) upsertFiles(ctx context.Context, gen int64, rows []fileRow) er
 		sb   strings.Builder
 		args []any
 	)
+	now := time.Now()
 	sb.WriteString(`INSERT INTO files
-		(path, class, sha256, size_bytes, mtime_ns, ctime_ns, inode, first_gen, last_gen)
+		(path, class, sha256, size_bytes, mtime_ns, ctime_ns, inode, first_gen, last_gen, hashed_at)
 		VALUES `)
 	for i, r := range rows {
 		if i > 0 {
 			sb.WriteByte(',')
 		}
-		n := i * 9
-		fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d::bigint,$%d::bigint,$%d::bigint,$%d::bigint,$%d::bigint,$%d::bigint)",
-			n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9)
-		args = append(args, r.Path, r.Class, r.SHA256, r.Size, r.MtimeNS, r.CtimeNS, r.Inode, gen, gen)
+		n := i * 10
+		fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d::bigint,$%d::bigint,$%d::bigint,$%d::bigint,$%d::bigint,$%d::bigint,$%d)",
+			n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10)
+		// A carried-forward row keeps its old hashed_at; only a genuine re-read
+		// advances it.
+		verified := time.Time{}
+		if r.Rehashed {
+			verified = now
+		}
+		args = append(args, r.Path, r.Class, r.SHA256, r.Size, r.MtimeNS, r.CtimeNS, r.Inode, gen, gen, verified)
 	}
 	sb.WriteString(`
 		ON CONFLICT (path, sha256) DO UPDATE
@@ -139,7 +156,14 @@ func (s *PGStore) upsertFiles(ctx context.Context, gen int64, rows []fileRow) er
 		       mtime_ns   = EXCLUDED.mtime_ns,
 		       ctime_ns   = EXCLUDED.ctime_ns,
 		       inode      = EXCLUDED.inode,
-		       size_bytes = EXCLUDED.size_bytes`)
+		       size_bytes = EXCLUDED.size_bytes,
+		       -- Only when the content was actually re-READ this pass. A row
+		       -- carried forward on an unchanged stat has verified nothing, so
+		       -- advancing hashed_at for it would turn "last verified" into
+		       -- "last seen" and quietly retire the rolling re-hash's whole
+		       -- purpose. The caller passes rehashed for exactly this.
+		       hashed_at  = CASE WHEN EXCLUDED.hashed_at > files.hashed_at
+		                         THEN EXCLUDED.hashed_at ELSE files.hashed_at END`)
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		// sqllint:allow placeholders generated positionally; every value is a $N argument
 		_, err := tx.ExecContext(ctx, sb.String(), args...)
@@ -204,4 +228,19 @@ func (s *PGStore) lastSealedGeneration(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return id.Int64, nil
+}
+
+func (s *PGStore) clearSuspect(ctx context.Context, path string) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM suspect WHERE path = $1`, path)
+		return err
+	})
+}
+
+func (s *PGStore) suspectPaths(ctx context.Context) ([]string, error) {
+	var out []string
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &out, `SELECT path FROM suspect`)
+	})
+	return out, err
 }

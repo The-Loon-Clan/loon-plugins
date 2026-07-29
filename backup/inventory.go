@@ -42,13 +42,17 @@ type AssetClass struct {
 
 // fileRow is one indexed file.
 type fileRow struct {
-	Path    string
-	Class   string
-	SHA256  string
-	Size    int64
-	MtimeNS int64
-	CtimeNS int64
-	Inode   int64
+	// Rehashed records that this pass actually READ the file, as opposed to
+	// carrying its hash forward on an unchanged stat. Only a real read may
+	// advance hashed_at, or "last verified" degrades into "last seen".
+	Rehashed bool
+	Path     string
+	Class    string
+	SHA256   string
+	Size     int64
+	MtimeNS  int64
+	CtimeNS  int64
+	Inode    int64
 }
 
 // statKey is the cheap identity used to decide whether a file needs re-reading.
@@ -76,6 +80,7 @@ type indexResult struct {
 	Hashed   int64
 	Skipped  int64 // carried forward on an unchanged stat
 	Suspect  int64
+	Cleared  int64 // previously flagged, read cleanly this pass
 	PerClass map[string]classTotal
 }
 
@@ -295,6 +300,19 @@ func (p *Plugin) indexPass(ctx context.Context, root string, classes []AssetClas
 		return res, fmt.Errorf("load current inventory: %w", err)
 	}
 
+	// Always re-read what is currently flagged, whatever its stat says. Two
+	// reasons, and the second is why the suspect count could not be trusted:
+	// a file may have been repaired, and the DETECTOR may have been corrected.
+	// Without this, a flagged row survives every future pass — the stat gate
+	// skips the file, so nothing ever re-examines it — and the table converges
+	// on the worst historical moment rather than on the truth.
+	suspect := map[string]bool{}
+	if paths, err := p.st.suspectPaths(ctx); err == nil {
+		for _, sp := range paths {
+			suspect[sp] = true
+		}
+	}
+
 	for _, c := range orderedClasses(classes) {
 		if ctx.Err() != nil {
 			_ = p.st.failGeneration(ctx, gen, "cancelled")
@@ -313,11 +331,13 @@ func (p *Plugin) indexPass(ctx context.Context, root string, classes []AssetClas
 		for i := range rows {
 			r := &rows[i]
 			prev, seen := known[r.Path]
-			needHash := !seen || prev.key != r.statKey() || rehashDue(r.Path, gen, rehashDenom)
+			needHash := !seen || prev.key != r.statKey() ||
+				suspect[r.Path] || rehashDue(r.Path, gen, rehashDenom)
 			if !needHash {
 				r.SHA256 = prev.sha
 				res.Skipped++
 			} else {
+				r.Rehashed = true
 				sum, truncated, herr := hashFile(filepath.Join(root, r.Path), r.Size)
 				if herr != nil {
 					_ = p.st.noteSuspect(ctx, r.Path, r.Class, "unreadable", herr.Error())
@@ -329,8 +349,14 @@ func (p *Plugin) indexPass(ctx context.Context, root string, classes []AssetClas
 					// because it looks damaged guarantees the damaged copy is
 					// the only one left.
 					_ = p.st.noteSuspect(ctx, r.Path, r.Class, "truncated",
-						"file does not end with its format's end marker")
+						fmt.Sprintf("no end-of-format marker in the last %d bytes", tailWindow))
 					res.Suspect++
+				} else if suspect[r.Path] {
+					// It read cleanly this time — repaired, or previously
+					// misjudged. Either way the flag is stale and must go, or
+					// the count only ever grows.
+					_ = p.st.clearSuspect(ctx, r.Path)
+					res.Cleared++
 				}
 				r.SHA256 = sum
 				res.Hashed++
