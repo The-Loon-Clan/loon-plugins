@@ -301,3 +301,77 @@ func TestZeroFileClassesAreNamedEveryRun(t *testing.T) {
 		t.Errorf("a fully-populated corpus reported empty classes: %v", got)
 	}
 }
+
+// THE SECOND FALSE POSITIVE, and the one that actually mattered.
+//
+// After the tail-window fix, 4,128 files were still flagged: 3,954 covers
+// (26.7% of the class) and 173 banners. Every single one turned out to be a
+// complete, valid PNG stored with a .jpg extension — the upstream serves PNG
+// bytes from a .jpg URL and the fetchers keep the URL's name. The detector
+// switched on the extension, so it looked for a JPEG end-marker inside a PNG,
+// never found one, and reported a quarter of the cover art as damaged.
+//
+// The size distribution said so both times and I read it as a puzzle rather
+// than as the answer: flagged files averaged 366 kB against 71 kB for healthy
+// covers, and 1,240 kB against 203 kB for banners. Truncation makes files
+// SMALLER. A consistent 5x INCREASE is a different format, not damage — PNG
+// against JPEG, exactly.
+func TestFormatIsDecidedByContentNotByExtension(t *testing.T) {
+	dir := t.TempDir()
+
+	// A complete PNG that happens to be named .jpg — 3,954 of these in prod.
+	pngAsJpg := filepath.Join(dir, "al-213665.jpg")
+	body := append([]byte("\x89PNG\r\n\x1a\n"), []byte("IHDRdata...")...)
+	body = append(body, []byte("IEND\xae\x42\x60\x82")...)
+	if err := os.WriteFile(pngAsJpg, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, _ := os.Stat(pngAsJpg)
+	if _, torn, err := hashFile(pngAsJpg, info.Size()); err != nil || torn {
+		t.Errorf("a complete PNG named .jpg was flagged as truncated (torn=%v, err=%v) — "+
+			"this is the bug that reported 27%% of the cover library as damaged", torn, err)
+	}
+
+	// And the inverse: a JPEG named .png must be judged as a JPEG.
+	jpgAsPng := filepath.Join(dir, "banner.png")
+	if err := os.WriteFile(jpgAsPng, []byte{0xFF, 0xD8, 0xFF, 0xE0, 'x', 0xFF, 0xD9}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, _ = os.Stat(jpgAsPng)
+	if _, torn, err := hashFile(jpgAsPng, info.Size()); err != nil || torn {
+		t.Errorf("a complete JPEG named .png was flagged (torn=%v, err=%v)", torn, err)
+	}
+
+	// Sniffing must not cost the detector its actual job. A PNG that really IS
+	// cut short still has its header — bytes arrive in order — so it sniffs as
+	// PNG and fails the IEND check.
+	tornPNG := filepath.Join(dir, "cut-short.jpg")
+	if err := os.WriteFile(tornPNG, append([]byte("\x89PNG\r\n\x1a\n"), []byte("IHDRpartial")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, _ = os.Stat(tornPNG)
+	if _, torn, err := hashFile(tornPNG, info.Size()); err != nil || !torn {
+		t.Errorf("a genuinely truncated PNG was NOT flagged (torn=%v, err=%v) — "+
+			"content sniffing must not blunt the check it dispatches", torn, err)
+	}
+
+	// A truncated JPEG likewise stays caught.
+	tornJPEG := filepath.Join(dir, "half.png")
+	if err := os.WriteFile(tornJPEG, []byte{0xFF, 0xD8, 0xFF, 0x00, 0x01}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, _ = os.Stat(tornJPEG)
+	if _, torn, err := hashFile(tornJPEG, info.Size()); err != nil || !torn {
+		t.Errorf("a truncated JPEG was not flagged (torn=%v, err=%v)", torn, err)
+	}
+
+	// Content that matches nothing known is not evidence of damage.
+	unknown := filepath.Join(dir, "mystery.jpg")
+	if err := os.WriteFile(unknown, []byte("this is not an image at all"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, _ = os.Stat(unknown)
+	if _, torn, err := hashFile(unknown, info.Size()); err != nil || torn {
+		t.Errorf("an unrecognised format was flagged as truncated (torn=%v, err=%v)", torn, err)
+	}
+}

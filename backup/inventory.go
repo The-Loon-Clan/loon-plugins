@@ -111,12 +111,22 @@ func hashFile(path string, size int64) (sum string, truncated bool, err error) {
 	// marker — requiring the file to END with it reports those as damaged, and
 	// a check that cries wolf is one that gets deleted.
 	tail := make([]byte, 0, tailWindow)
+	// The first few bytes identify the format. Kept from the same pass, so the
+	// sniff costs nothing on top of the hash.
+	var head []byte
 	buf := make([]byte, 256<<10)
 	for {
 		n, rerr := f.Read(buf)
 		if n > 0 {
 			h.Write(buf[:n])
 			chunk := buf[:n]
+			if head == nil {
+				k := len(chunk)
+				if k > headWindow {
+					k = headWindow
+				}
+				head = append([]byte(nil), chunk[:k]...)
+			}
 			if len(chunk) > tailWindow {
 				chunk = chunk[len(chunk)-tailWindow:]
 			}
@@ -132,7 +142,7 @@ func hashFile(path string, size int64) (sum string, truncated bool, err error) {
 			return "", false, rerr
 		}
 	}
-	return hex.EncodeToString(h.Sum(nil)), !hasCompleteTail(path, tail, size), nil
+	return hex.EncodeToString(h.Sum(nil)), !hasCompleteTail(head, tail, size, path), nil
 }
 
 // tailWindow is how much of a file's end is kept for the completeness check.
@@ -140,45 +150,73 @@ func hashFile(path string, size int64) (sum string, truncated bool, err error) {
 // end marker; small enough to cost nothing.
 const tailWindow = 512
 
+// headWindow is how much of a file's start is kept to identify its format.
+// The longest magic checked is 8 bytes; 16 leaves room without another read.
+const headWindow = 16
+
+// imageFormat identifies a file by its CONTENT, ignoring the name.
+//
+// The extension is not evidence of anything. On this install 3,954 covers and
+// 173 banners are complete, valid PNGs stored with a .jpg extension: the
+// upstream serves PNG bytes from a .jpg URL and the fetchers keep the URL's
+// name. Dispatching on the extension meant hunting for a JPEG end-marker inside
+// a PNG, never finding one, and reporting 27% of the cover art as damaged —
+// while every one of those files ended with a correct IEND chunk and CRC.
+//
+// Sniffing also survives the failure it is meant to catch, because a partial
+// download still has its header: the bytes arrive in order, so the magic is
+// present long before the end marker would be.
+func imageFormat(head []byte) string {
+	switch {
+	case bytes.HasPrefix(head, []byte{0xFF, 0xD8, 0xFF}):
+		return "jpeg"
+	case bytes.HasPrefix(head, []byte("\x89PNG\r\n\x1a\n")):
+		return "png"
+	case bytes.HasPrefix(head, []byte("GIF8")):
+		return "gif"
+	case bytes.HasPrefix(head, []byte("RIFF")):
+		return "webp"
+	}
+	return ""
+}
+
 // hasCompleteTail reports whether the file carries its format's end marker near
-// the end. Unknown extensions and empty files pass — this must never be the
-// reason a file is excluded from a backup, only a reason to flag it.
+// the end. Unknown formats and empty files pass — this must never be the reason
+// a file is excluded from a backup, only a reason to flag it.
 //
 // It SEARCHES the tail window rather than demanding the final bytes match.
 // Requiring an exact ending reported 4,163 of 14,817 production covers as
-// truncated, which was the check being wrong rather than a quarter of the
-// library being damaged: JPEG encoders and CDNs routinely append bytes after
-// FFD9. A detector that over-reports at that rate would have sent thousands of
-// healthy files for re-download and taught everyone to ignore the signal.
-func hasCompleteTail(path string, tail []byte, size int64) bool {
-	ext := strings.ToLower(filepath.Ext(path))
-	isImage := false
-	switch ext {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
-		isImage = true
-	}
-
+// truncated, because JPEG encoders and CDNs routinely append bytes after FFD9.
+// Fixing that left 4,128 still flagged, and the second cause turned out to be
+// the format dispatch rather than the window — see imageFormat. Both times the
+// tell was the same: flagged files averaged roughly five times the size of
+// healthy ones, and truncation makes files smaller.
+func hasCompleteTail(head, tail []byte, size int64, path string) bool {
 	// A zero-byte image is never valid — it is a download that created the
-	// file and then failed. The first version passed these as complete, which
-	// missed the only genuinely damaged files in the corpus while flagging
-	// thousands of healthy ones. An empty file of an unknown type is left
-	// alone: plenty of formats are legitimately empty.
+	// file and then failed. There is no content to sniff, so the name is the
+	// only signal left; an empty file of an unknown type is left alone,
+	// because plenty of things are legitimately empty.
 	if size == 0 {
-		return !isImage
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".jpg", ".jpeg", ".png", ".gif", ".webp":
+			return false
+		}
+		return true
 	}
 	if len(tail) == 0 {
 		return true
 	}
 
-	switch ext {
-	case ".jpg", ".jpeg":
+	switch imageFormat(head) {
+	case "jpeg":
 		return bytes.Contains(tail, []byte{0xFF, 0xD9}) // end-of-image
-	case ".png":
+	case "png":
 		return bytes.Contains(tail, []byte("IEND"))
-	case ".gif":
+	case "gif":
 		return bytes.Contains(tail, []byte{0x3B})
 	default:
-		// webp, svg, txt, anything else: no cheap end marker worth trusting.
+		// webp has no cheap trailing marker, and anything unrecognised is not
+		// evidence of damage — only of a format this check does not know.
 		return true
 	}
 }
