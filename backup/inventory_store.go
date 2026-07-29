@@ -41,6 +41,18 @@ type inventoryStore interface {
 	classTotals(ctx context.Context, gen int64) (map[string]classTotal, error)
 	// lastSealedGeneration returns the newest generation that completed, or 0.
 	lastSealedGeneration(ctx context.Context) (int64, error)
+
+	// filesForGen lists one class's current files in a sealed generation, which
+	// is what the packs are planned from.
+	filesForGen(ctx context.Context, gen int64, class string) ([]fileRow, error)
+	generationMeta(ctx context.Context, gen int64) (genMeta, error)
+}
+
+// genMeta is a sealed generation's headline numbers, for the manifest.
+type genMeta struct {
+	SealedAt string
+	Files    int64
+	Bytes    int64
 }
 
 // knownFile is one path's last recorded identity.
@@ -243,4 +255,46 @@ func (s *PGStore) suspectPaths(ctx context.Context) ([]string, error) {
 		return tx.SelectContext(ctx, &out, `SELECT path FROM suspect`)
 	})
 	return out, err
+}
+
+// filesForGen returns one class's files as of a sealed generation.
+//
+// last_gen = $1 is the whole selection: the upsert stamps every file the pass
+// saw with that generation, so a row carrying it is current and a row with an
+// older one is a superseded revision of some path. That matters because files
+// is keyed (path, sha256), so an edited file leaves BOTH rows behind — and
+// packing the stale one would restore old content over new.
+func (s *PGStore) filesForGen(ctx context.Context, gen int64, class string) ([]fileRow, error) {
+	var out []fileRow
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		rows, err := tx.QueryContext(ctx,
+			`SELECT path, sha256, size_bytes
+			   FROM files
+			  WHERE last_gen = $1::bigint AND class = $2
+			  ORDER BY path`, gen, class)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			r := fileRow{Class: class}
+			if err := rows.Scan(&r.Path, &r.SHA256, &r.Size); err != nil {
+				return err
+			}
+			out = append(out, r)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+func (s *PGStore) generationMeta(ctx context.Context, gen int64) (genMeta, error) {
+	var m genMeta
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.QueryRowContext(ctx,
+			`SELECT coalesce(to_char(sealed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), ''),
+			        coalesce(files,0), coalesce(bytes,0)
+			   FROM generations WHERE id = $1`, gen).Scan(&m.SealedAt, &m.Files, &m.Bytes)
+	})
+	return m, err
 }
