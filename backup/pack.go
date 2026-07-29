@@ -1,6 +1,8 @@
 package backup
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -8,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // Packs: many small files concatenated into one transferable unit.
@@ -207,7 +210,10 @@ func writePack(w io.Writer, root string, plan packPlan) ([]packMember, int64, er
 
 	for i := range members {
 		m := &members[i]
-		full := filepath.Join(root, m.Path)
+		full, err := memberPath(root, m.Path)
+		if err != nil {
+			return nil, 0, err
+		}
 		f, err := os.Open(full)
 		if err != nil {
 			return nil, 0, fmt.Errorf("open %s: %w", m.Path, err)
@@ -218,14 +224,24 @@ func writePack(w io.Writer, root string, plan packPlan) ([]packMember, int64, er
 		// file before writing it. Data descriptors would avoid that, but they
 		// make the archive unreadable by some tools — and break-glass
 		// compatibility is the entire justification for using ZIP.
-		crc, size, err := crcOfFile(f)
+		crc, sum, size, err := digestFile(f)
 		if err != nil {
 			f.Close()
-			return nil, 0, fmt.Errorf("crc %s: %w", m.Path, err)
+			return nil, 0, fmt.Errorf("digest %s: %w", m.Path, err)
 		}
 		if size != m.Size {
 			f.Close()
 			return nil, 0, fmt.Errorf("%s changed size between index and pack (%d -> %d)", m.Path, m.Size, size)
+		}
+		// Refuse rather than serve content the pack ID does not describe. The
+		// ID is the hash of the members' recorded hashes, so writing different
+		// bytes under it would hand a puller stale data it can never notice is
+		// stale. Only checked when the plan carries a hash, so a hand-built
+		// plan in a test is not obliged to supply one.
+		if m.SHA256 != "" && sum != m.SHA256 {
+			f.Close()
+			return nil, 0, fmt.Errorf("%s changed content between index and pack (same size, %s -> %s)",
+				m.Path, m.SHA256[:8], sum[:8])
 		}
 		m.CRC32 = crc
 
@@ -310,14 +326,87 @@ func writePack(w io.Writer, root string, plan packPlan) ([]packMember, int64, er
 	return members, cw.n, nil
 }
 
-func crcOfFile(f *os.File) (uint32, int64, error) {
-	h := crc32.NewIEEE()
-	n, err := io.Copy(h, f)
+// digestFile reads a member once and returns everything the write needs to
+// decide whether it is still the file the plan describes.
+//
+// The sha256 costs nothing extra — the bytes are already being read for the
+// CRC — and it closes the one hole a size check cannot: a rewrite to the SAME
+// LENGTH. statKey exists because that is a real scenario on this install, and
+// without a content check the pack would be served under an ID that encodes
+// the OLD hash, so a puller holding that ID keeps stale bytes forever while
+// believing it is current. Nothing downstream could detect it, because the
+// CRC written into the header is recomputed from the new bytes and is
+// therefore perfectly self-consistent.
+func digestFile(f *os.File) (crc uint32, sum string, n int64, err error) {
+	ch := crc32.NewIEEE()
+	sh := sha256.New()
+	n, err = io.Copy(io.MultiWriter(ch, sh), f)
 	if err != nil {
-		return 0, 0, err
+		return 0, "", 0, err
 	}
-	return h.Sum32(), n, nil
+	return ch.Sum32(), hex.EncodeToString(sh.Sum(nil)), n, nil
 }
+
+// memberPath resolves a member against the asset root, refusing anything that
+// would escape it.
+//
+// Member paths come from filepath.Rel during the index walk, so today they are
+// well-formed — but serving packs over HTTP turns any bad row in backup.files
+// into an arbitrary file read, and "the data happens to be clean" is not a
+// security property. Note that a non-empty root is no defence on its own:
+// filepath.Join("/srv/assets", "../../etc/passwd") is "/etc/passwd".
+func memberPath(root, rel string) (string, error) {
+	// Both separators are checked explicitly rather than relying on
+	// filepath.IsAbs, which is platform-dependent in exactly the wrong
+	// direction: on Windows "/etc/passwd" is NOT absolute, so a check written
+	// and tested there would wave through the one path shape that matters on
+	// the Linux box actually serving these packs.
+	if rel == "" || filepath.IsAbs(rel) || strings.HasPrefix(rel, "/") || strings.HasPrefix(rel, `\`) {
+		return "", fmt.Errorf("member path %q is not relative", rel)
+	}
+	if vol := filepath.VolumeName(rel); vol != "" {
+		return "", fmt.Errorf("member path %q carries a volume name", rel)
+	}
+	full := filepath.Join(root, rel)
+	base := filepath.Clean(root)
+	if base == "" {
+		base = "."
+	}
+	// Compare against the cleaned base so ".." anywhere in the member — not
+	// only at the front — is caught after normalisation.
+	within, err := filepath.Rel(base, full)
+	if err != nil {
+		return "", fmt.Errorf("member path %q: %w", rel, err)
+	}
+	if within == ".." || strings.HasPrefix(within, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("member path %q escapes the asset root", rel)
+	}
+	return full, nil
+}
+
+// packWireSize is exactly how many bytes writePack will emit for a plan.
+//
+// A pack is never stored, so its length cannot be measured by stat-ing it —
+// and PackInfo.Bytes used to report the sum of the member file sizes instead,
+// which is always short by the ZIP structure: 30 bytes plus the name per local
+// header, 46 plus the name per central-directory entry, and 22 for the
+// end-of-central-directory record. A client that sets Content-Length from that,
+// or treats it as the completion mark, stops before the EOCD on EVERY transfer
+// and stores an archive no reader will open.
+func packWireSize(plan packPlan) int64 {
+	var n int64
+	for _, m := range plan.Members {
+		n += int64(localHeaderLen+len(m.Path)) + m.Size
+		n += int64(centralHeaderLen + len(m.Path))
+	}
+	return n + eocdLen
+}
+
+const (
+	localHeaderLen   = 30
+	centralHeaderLen = 46
+	eocdLen          = 22
+)
 
 func putU16(b []byte, v uint16) []byte { return append(b, byte(v), byte(v>>8)) }
 func putU32(b []byte, v uint32) []byte {

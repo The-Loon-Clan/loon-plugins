@@ -257,20 +257,31 @@ func (s *PGStore) suspectPaths(ctx context.Context) ([]string, error) {
 	return out, err
 }
 
-// filesForGen returns one class's files as of a sealed generation.
+// filesForGen returns one class's files as they stood at a sealed generation.
 //
-// last_gen = $1 is the whole selection: the upsert stamps every file the pass
-// saw with that generation, so a row carrying it is current and a row with an
-// older one is a superseded revision of some path. That matters because files
-// is keyed (path, sha256), so an edited file leaves BOTH rows behind — and
-// packing the stale one would restore old content over new.
+// The predicate is an interval test, not equality, and the difference is a real
+// bug rather than a refinement. `last_gen = $1` looks right — the pass stamps
+// every file it saw — but the NEXT pass re-stamps those same rows as it walks,
+// one class at a time. A manifest requested while pass N+1 is running would
+// therefore lose exactly the classes N+1 had already reached: the numbers in
+// the header still read 418k because they come from generations.files, while
+// the pack list silently omits every avatar, mascot and cover. Worse, that
+// truncated result would then be cached as the answer for generation N.
+//
+// first_gen <= gen <= last_gen asks the question actually meant: which row was
+// current at that generation. A superseded revision is excluded because its
+// last_gen froze when its content changed; the replacement is excluded from
+// older generations because its first_gen is newer; and a file deleted from
+// disk after the generation is still included, which is correct — it was there.
 func (s *PGStore) filesForGen(ctx context.Context, gen int64, class string) ([]fileRow, error) {
 	var out []fileRow
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		rows, err := tx.QueryContext(ctx,
 			`SELECT path, sha256, size_bytes
 			   FROM files
-			  WHERE last_gen = $1::bigint AND class = $2
+			  WHERE class = $2
+			    AND first_gen <= $1::bigint
+			    AND last_gen  >= $1::bigint
 			  ORDER BY path`, gen, class)
 		if err != nil {
 			return err

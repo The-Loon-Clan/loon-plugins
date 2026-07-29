@@ -30,10 +30,20 @@ import (
 
 // PackInfo is one transferable unit in a generation's manifest.
 type PackInfo struct {
-	ID      string `json:"id"`
-	Class   string `json:"class"`
-	Bytes   int64  `json:"bytes"`
-	Members int    `json:"members"`
+	ID    string `json:"id"`
+	Class string `json:"class"`
+	// Bytes is the WIRE length — exactly what the pack streams, ZIP structure
+	// included. It is not the sum of the member file sizes, which is what this
+	// field used to carry and is always short by 30+name per local header,
+	// 46+name per central entry and 22 for the end-of-central-directory record.
+	// A client using that figure as Content-Length, or as the mark for "the
+	// transfer is complete", stops before the EOCD on every single pack and
+	// stores an archive no reader will open.
+	Bytes int64 `json:"bytes"`
+	// Content is the sum of the member file sizes: what a restore writes out,
+	// as opposed to what the transfer costs.
+	Content int64 `json:"content_bytes"`
+	Members int   `json:"members"`
 }
 
 // Manifest is everything a puller needs to decide what to fetch.
@@ -60,25 +70,38 @@ func packID(p packPlan) string {
 	return hex.EncodeToString(h.Sum(nil))[:32]
 }
 
-// manifestCache holds the plans for a generation.
-//
-// Planning reads every file row for the generation — 418k of them here — so
-// recomputing it per pack request would turn a resumed transfer into a
-// full-table scan per chunk. Generations are immutable once sealed, so one
-// build per generation is always correct.
-type manifestCache struct {
-	mu    sync.Mutex
-	gen   int64
+// genPlans is one generation's planned packs.
+type genPlans struct {
 	plans map[string]packPlan
 	man   Manifest
 }
 
-var packCache manifestCache
+// manifestCache holds plans per generation.
+//
+// Planning reads every file row for the generation, so recomputing it per pack
+// request would turn a resumed transfer into a full scan per chunk. Sealed
+// generations never change, so one build each is always correct.
+//
+// It keeps more than one because a pull is not instantaneous. A transfer of
+// this corpus runs for hours; the index seals a new generation daily. If only
+// the newest were resident, every pack ID the puller was working through would
+// start returning "no such pack" the moment that happened — mid-transfer,
+// through no fault of the client, and with the IDs it holds still perfectly
+// valid for the generation it pinned.
+type manifestCache struct {
+	mu    sync.Mutex
+	byGen map[int64]*genPlans
+	order []int64 // oldest first, for eviction
+}
+
+// keptGenerations is how many sealed generations stay planned. Two covers the
+// case that matters — a pull that started before the nightly index and is still
+// running after it — without holding the whole history in memory.
+const keptGenerations = 2
+
+var packCache = manifestCache{byGen: map[int64]*genPlans{}}
 
 // BuildManifest plans the newest sealed generation into packs.
-//
-// Returns the manifest and keeps the plans for StreamPack. Safe to call
-// repeatedly: the work happens once per generation.
 func (p *Plugin) BuildManifest(ctx context.Context) (Manifest, error) {
 	gen, err := p.st.lastSealedGeneration(ctx)
 	if err != nil {
@@ -87,16 +110,30 @@ func (p *Plugin) BuildManifest(ctx context.Context) (Manifest, error) {
 	if gen == 0 {
 		return Manifest{}, fmt.Errorf("backup: no sealed generation yet — run the Backup Index job first")
 	}
+	g, err := p.plansFor(ctx, gen)
+	if err != nil {
+		return Manifest{}, err
+	}
+	return g.man, nil
+}
 
+// plansFor returns a generation's packs, building them once.
+func (p *Plugin) plansFor(ctx context.Context, gen int64) (*genPlans, error) {
 	packCache.mu.Lock()
 	defer packCache.mu.Unlock()
-	if packCache.gen == gen && packCache.plans != nil {
-		return packCache.man, nil
+	if g, ok := packCache.byGen[gen]; ok {
+		return g, nil
 	}
+
+	// Detach from the caller's cancellation. A puller that times out or
+	// disconnects part-way through the scan would otherwise abort the build,
+	// and every subsequent request would start it again from nothing — the
+	// expensive work repeated indefinitely because nobody waited for it once.
+	ctx = context.WithoutCancel(ctx)
 
 	meta, err := p.st.generationMeta(ctx, gen)
 	if err != nil {
-		return Manifest{}, err
+		return nil, err
 	}
 	man := Manifest{Generation: gen, SealedAt: meta.SealedAt, Files: meta.Files, Bytes: meta.Bytes}
 	plans := map[string]packPlan{}
@@ -108,13 +145,14 @@ func (p *Plugin) BuildManifest(ctx context.Context) (Manifest, error) {
 	for _, c := range orderedClasses(deps.Classes) {
 		rows, err := p.st.filesForGen(ctx, gen, c.Slug)
 		if err != nil {
-			return Manifest{}, fmt.Errorf("files for %s: %w", c.Slug, err)
+			return nil, fmt.Errorf("files for %s: %w", c.Slug, err)
 		}
 		for _, plan := range planPacks(c.Slug, rows, packTargetBytes, packMaxMembers) {
 			id := packID(plan)
 			plans[id] = plan
 			man.Packs = append(man.Packs, PackInfo{
-				ID: id, Class: plan.Class, Bytes: plan.Bytes, Members: len(plan.Members),
+				ID: id, Class: plan.Class,
+				Bytes: packWireSize(plan), Content: plan.Bytes, Members: len(plan.Members),
 			})
 		}
 	}
@@ -125,8 +163,14 @@ func (p *Plugin) BuildManifest(ctx context.Context) (Manifest, error) {
 		return man.Packs[i].ID < man.Packs[j].ID
 	})
 
-	packCache.gen, packCache.plans, packCache.man = gen, plans, man
-	return man, nil
+	g := &genPlans{plans: plans, man: man}
+	packCache.byGen[gen] = g
+	packCache.order = append(packCache.order, gen)
+	for len(packCache.order) > keptGenerations {
+		delete(packCache.byGen, packCache.order[0])
+		packCache.order = packCache.order[1:]
+	}
+	return g, nil
 }
 
 // StreamPack writes one pack to w, reading its members as it goes.
@@ -137,22 +181,43 @@ func (p *Plugin) BuildManifest(ctx context.Context) (Manifest, error) {
 // transfer continues from where it stopped — the pack is byte-identical every
 // time it is built, so an offset means the same thing on the second attempt as
 // on the first.
-func (p *Plugin) StreamPack(ctx context.Context, w io.Writer, id string, skip int64) error {
-	if _, err := p.BuildManifest(ctx); err != nil {
+//
+// gen pins which generation the id belongs to. Passing 0 means "the newest
+// sealed one", which is only safe for a single short request — a transfer that
+// outlives an index run must pin the generation it planned against, or its
+// still-valid pack IDs start vanishing underneath it.
+func (p *Plugin) StreamPack(ctx context.Context, w io.Writer, gen int64, id string, skip int64) error {
+	if gen == 0 {
+		latest, err := p.st.lastSealedGeneration(ctx)
+		if err != nil {
+			return err
+		}
+		gen = latest
+	}
+	g, err := p.plansFor(ctx, gen)
+	if err != nil {
 		return err
 	}
-	packCache.mu.Lock()
-	plan, ok := packCache.plans[id]
-	packCache.mu.Unlock()
+	plan, ok := g.plans[id]
 	if !ok {
-		return fmt.Errorf("backup: no pack %q in the current generation", id)
+		return fmt.Errorf("backup: no pack %q in generation %d", id, gen)
+	}
+	if skip < 0 {
+		return fmt.Errorf("backup: negative resume offset %d", skip)
+	}
+	// Refuse an offset past the end rather than reading the whole pack off disk
+	// to emit nothing. Resume regenerates and discards the prefix, so an
+	// unbounded skip is an invitation to make the server read 64 MiB per
+	// request for zero bytes of response.
+	if size := packWireSize(plan); skip >= size {
+		return fmt.Errorf("backup: resume offset %d is at or past the end of pack %s (%d bytes)", skip, id, size)
 	}
 	dst := w
 	if skip > 0 {
 		dst = &skipWriter{w: w, remaining: skip}
 	}
-	_, _, err := writePack(dst, deps.Root, plan)
-	return err
+	_, _, werr := writePack(dst, deps.Root, plan)
+	return werr
 }
 
 // skipWriter drops the first n bytes written through it.

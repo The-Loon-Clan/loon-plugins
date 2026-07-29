@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -166,4 +167,99 @@ func countFiles(t *testing.T, root string) int {
 		t.Fatal(err)
 	}
 	return n
+}
+
+// PackInfo.Bytes must be what the pack STREAMS, not what its members contain.
+//
+// It used to be the member-size sum, which is always short by the ZIP structure
+// — 30 bytes plus the name per local header, 46 plus the name per central entry,
+// 22 for the end-of-central-directory record. A client using it as
+// Content-Length, or as the mark for "done", stops before the EOCD on every
+// single pack and stores an archive no reader will open.
+func TestAdvertisedSizeIsTheWireSizeNotTheContentSize(t *testing.T) {
+	root := t.TempDir()
+	rows := writeFiles(t, root, map[string]string{
+		"covers/a.jpg":      "aaaa",
+		"covers/bb.jpg":     "bbbbbbbb",
+		"covers/deep/c.jpg": "c",
+	})
+	plan := planPacks("covers", rows, 1<<20, 100)[0]
+
+	actual, _ := packBytes(t, root, plan)
+	if got := packWireSize(plan); got != int64(len(actual)) {
+		t.Errorf("packWireSize = %d but writePack emitted %d — a client sizing the transfer from "+
+			"this would truncate every pack", got, len(actual))
+	}
+	// And the old value must be visibly different, or the test proves nothing.
+	if plan.Bytes >= int64(len(actual)) {
+		t.Errorf("content sum %d is not less than the wire size %d; this fixture cannot "+
+			"distinguish the two", plan.Bytes, len(actual))
+	}
+}
+
+// A same-size in-place rewrite must not be served under the old pack ID.
+//
+// The ID encodes each member's recorded sha256, so writing different bytes
+// under it hands a puller stale content it can never detect: the CRC in the
+// header is recomputed from the new bytes and is perfectly self-consistent.
+// Size alone cannot catch this, which is precisely why statKey tracks more.
+func TestSameSizeRewriteIsRefusedNotServed(t *testing.T) {
+	root := t.TempDir()
+	rows := writeFiles(t, root, map[string]string{"covers/a.jpg": "original"})
+	plan := planPacks("covers", rows, 1<<20, 100)[0]
+
+	// Same length, different content — the case a size check waves through.
+	if err := os.WriteFile(filepath.Join(root, "covers", "a.jpg"), []byte("REPLACED"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := writePack(io.Discard, root, plan)
+	if err == nil {
+		t.Fatal("a same-size content change was packed under the old ID — a puller would keep " +
+			"stale bytes forever with nothing able to notice")
+	}
+	if !strings.Contains(err.Error(), "changed content") {
+		t.Errorf("got %v, want a content-change error", err)
+	}
+}
+
+// Member paths must never escape the asset root. Not reachable from today's
+// data — paths come from filepath.Rel during the walk — but serving packs over
+// HTTP turns any bad row into an arbitrary file read, and "the data happens to
+// be clean" is not a security property.
+func TestMemberPathsCannotEscapeTheRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "secret"), []byte("s"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bad := range []string{
+		"../../etc/passwd",
+		"covers/../../../etc/passwd",
+		"/etc/passwd",
+		"",
+		"..",
+	} {
+		if _, err := memberPath(root, bad); err == nil {
+			t.Errorf("memberPath accepted %q — that is an arbitrary file read over the pack endpoint", bad)
+		}
+	}
+
+	// A non-empty root is no defence on its own, so prove the join is checked
+	// rather than merely prefixed.
+	if _, err := memberPath("/srv/assets", "../../etc/passwd"); err == nil {
+		t.Error("a traversal escaped a non-empty root")
+	}
+
+	// Ordinary paths still resolve.
+	for _, ok := range []string{"covers/1.jpg", "covers/deep/sub/2.jpg", "a.png"} {
+		if _, err := memberPath(root, ok); err != nil {
+			t.Errorf("memberPath rejected the legitimate path %q: %v", ok, err)
+		}
+	}
+
+	// And writePack refuses rather than reading the file.
+	bad := packPlan{Class: "covers", Members: []packMember{{Path: "../secret", Size: 1}}}
+	if _, _, err := writePack(io.Discard, root, bad); err == nil {
+		t.Error("writePack followed a traversing member path")
+	}
 }
