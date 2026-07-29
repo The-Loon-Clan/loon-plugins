@@ -132,17 +132,30 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	}
 	groups = kept
 
-	// Build one flat job list from every group's gaps, oldest-work-last, bounded
-	// by the shared budget so no single group can consume the whole pass.
+	// Collect every eligible group's candidate batches first, then SHARE the
+	// pass budget between them.
+	//
+	// This loop used to hand gapJobs the whole remaining budget on the first
+	// iteration, so the first group with gaps consumed the entire pass and
+	// `budget <= 0` broke out before any other group was looked at. The old
+	// comment claimed the budget stopped exactly that; it caused it. Every pass
+	// then reported "backfilling 1 group(s)" and the progress widget sat at
+	// "0 / 1 groups", because one group was targeted and it was nowhere near
+	// finishing: the leading group here has 2.48 BILLION articles of history
+	// left, which at the observed rate is over two months during which the
+	// other three groups would not advance one batch.
 	budget := cfg.BackfillBatchesPerRun
-	var jobs []batchJob
 	targets := make(map[string]backfillRow, len(groups))
+
+	type candidate struct {
+		g       backfillRow
+		batches []batchJob
+		taken   int
+	}
+	var cands []candidate
 	for _, g := range groups {
 		if ctx.Err() != nil {
 			return 0
-		}
-		if budget <= 0 {
-			break
 		}
 		gaps, err := p.st.backfillGapsFor(ctx, bb, g.Name, g.ServerLow, g.BackWatermark)
 		if err != nil {
@@ -157,21 +170,31 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 			continue
 		}
 		gj := gapJobs(g.Name, gaps, cfg.Batch, budget)
+		if len(gj) == 0 {
+			continue
+		}
 		gc := groupRow{Name: g.Name, RetentionDays: g.RetentionDays, ThrottleMs: g.ThrottleMs}.cutoff(cfg)
 		for i := range gj {
 			gj[i].cutoff = gc
 			gj[i].throttle = time.Duration(g.ThrottleMs) * time.Millisecond
 		}
-		if len(gj) == 0 {
+		cands = append(cands, candidate{g: g, batches: gj})
+	}
+
+	perGroup := make([][]batchJob, len(cands))
+	for i := range cands {
+		perGroup[i] = cands[i].batches
+	}
+	jobs, taken := shareBudget(perGroup, budget)
+	for i := range cands {
+		if taken[i] == 0 {
 			continue
 		}
-		budget -= len(gj)
-		jobs = append(jobs, gj...)
-		targets[g.Name] = g
+		targets[cands[i].g.Name] = cands[i].g
 		// The denominator for backfill's own progress bar. Without it
 		// BatchesTotal stayed 0 and the bar never rendered, so a pass that runs
 		// for hours showed a batch count with nothing to measure it against.
-		p.tel.backfill.notePlanned(g.Name, len(gj))
+		p.tel.backfill.notePlanned(cands[i].g.Name, taken[i])
 	}
 	if len(jobs) == 0 {
 		p.backfillJob.Log("%s: nothing to do this pass", run.prov.label())

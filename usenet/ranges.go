@@ -129,3 +129,52 @@ func coverageCells(covered []articleRange, low, high int64, n int) []float64 {
 	}
 	return cells
 }
+
+// shareBudget splits a backfill pass's batch budget across groups, round-robin.
+//
+// It replaces "hand the whole remaining budget to each group in turn", which
+// meant the FIRST group with gaps consumed the entire pass and every later
+// group got nothing — for as long as that group had history left. Production
+// showed the effect plainly: "backfilling 1 group(s)" every pass and a progress
+// widget stuck at "0 / 1 groups", while the leading group still had 2.48
+// billion articles to go and three other groups sat at zero.
+//
+// Later rounds hand out whatever groups with little history left did not use,
+// so fairness never costs the pass throughput: if only one group has work, it
+// still gets the whole budget.
+func shareBudget(perGroup [][]batchJob, budget int) (jobs []batchJob, taken []int) {
+	taken = make([]int, len(perGroup))
+	if len(perGroup) == 0 || budget <= 0 {
+		return nil, taken
+	}
+	share := budget / len(perGroup)
+	if share < 1 {
+		share = 1
+	}
+	for budget > 0 {
+		progressed := false
+		for i, batches := range perGroup {
+			if budget <= 0 {
+				break
+			}
+			n := share
+			if avail := len(batches) - taken[i]; n > avail {
+				n = avail
+			}
+			if n > budget {
+				n = budget
+			}
+			if n <= 0 {
+				continue
+			}
+			jobs = append(jobs, batches[taken[i]:taken[i]+n]...)
+			taken[i] += n
+			budget -= n
+			progressed = true
+		}
+		if !progressed {
+			break
+		}
+	}
+	return jobs, taken
+}

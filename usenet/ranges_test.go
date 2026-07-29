@@ -143,3 +143,78 @@ func TestGapJobsBatchLargerThanGap(t *testing.T) {
 		t.Errorf("job = %+v, want exactly 500-520", jobs[0])
 	}
 }
+
+// The bug the operator spotted as "backfilling — 0 / 1 groups".
+//
+// gapJobs was handed the WHOLE remaining pass budget on the first iteration, so
+// the first group with gaps took every batch and `budget <= 0` broke the loop
+// before any other group was even looked at. Production had four groups needing
+// history and the leading one still had 2.48 billion articles to go — over two
+// months during which the other three would not advance a single batch.
+func TestBackfillBudgetIsSharedNotMonopolised(t *testing.T) {
+	// Four groups, each with far more work than one pass can take — the
+	// production shape, where nobody ever runs out.
+	deep := func(name string, n int) []batchJob {
+		out := make([]batchJob, n)
+		for i := range out {
+			out[i] = batchJob{group: name, lo: i * 100, hi: i*100 + 99}
+		}
+		return out
+	}
+	groups := [][]batchJob{
+		deep("alt.binaries.nzb", 500),
+		deep("alt.binaries.multimedia.anime.highspeed", 500),
+		deep("alt.binaries.movies.repost", 500),
+		deep("alt.binaries.anime.repost", 500),
+	}
+
+	jobs, taken := shareBudget(groups, 25)
+	if len(jobs) != 25 {
+		t.Errorf("allocated %d batches, want the whole budget of 25", len(jobs))
+	}
+	for i, n := range taken {
+		if n == 0 {
+			t.Errorf("group %d got ZERO batches — this is the monopolisation bug: "+
+				"one group with a deep history starves every other group indefinitely", i)
+		}
+	}
+	// Roughly even: 25 across 4 groups is 6 each with one remainder.
+	for i, n := range taken {
+		if n > 8 {
+			t.Errorf("group %d took %d of 25 batches; the split should be near-even, got %v", i, n, taken)
+		}
+	}
+
+	// Fairness must not waste the pass. When only one group has work, it should
+	// still get everything — otherwise sharing costs throughput.
+	jobs, taken = shareBudget([][]batchJob{deep("only", 500)}, 25)
+	if len(jobs) != 25 || taken[0] != 25 {
+		t.Errorf("a lone group got %d of 25 batches; sharing must not throttle a single-group pass", taken[0])
+	}
+
+	// A group with only a little history left must not hold back the remainder:
+	// its leftovers go to groups that still have work.
+	jobs, taken = shareBudget([][]batchJob{deep("nearly-done", 2), deep("deep", 500)}, 25)
+	if len(jobs) != 25 {
+		t.Errorf("allocated %d of 25 when one group ran out early — the remainder must be reallocated", len(jobs))
+	}
+	if taken[0] != 2 {
+		t.Errorf("the shallow group took %d, want its available 2", taken[0])
+	}
+	if taken[1] != 23 {
+		t.Errorf("the deep group took %d, want the remaining 23", taken[1])
+	}
+
+	// Degenerate inputs must not spin or panic.
+	if jobs, taken := shareBudget(nil, 25); len(jobs) != 0 || len(taken) != 0 {
+		t.Error("no groups should allocate nothing")
+	}
+	if jobs, _ := shareBudget(groups, 0); len(jobs) != 0 {
+		t.Error("a zero budget should allocate nothing")
+	}
+	// More groups than budget: some go without this pass, but it must terminate
+	// and spend everything it has.
+	if jobs, _ := shareBudget(groups, 2); len(jobs) != 2 {
+		t.Errorf("allocated %d with a budget of 2", len(jobs))
+	}
+}
