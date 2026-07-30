@@ -64,7 +64,12 @@ type stagingStore interface {
 	// the build pass samples it into telemetry (redis mode walks the active
 	// sets with pipelined reads, which is fine once per pass and unacceptable
 	// per page view).
-	incompleteSets(ctx context.Context, limit int) ([]pendingSet, error)
+	// groups is the active group names — the caller already holds them, and
+	// passing them is what keeps the redis side to one O(1) sample per group
+	// instead of discovering ~28 known keys with a full keyspace SCAN
+	// (~35,000 sequential round trips at the 7M-key scale this backend
+	// documents itself reaching).
+	incompleteSets(ctx context.Context, limit int, groups []string) ([]pendingSet, error)
 	// reapReadyQueue removes entries whose staged data is already gone. Only
 	// redis has a queue that can accumulate them — pg recomputes completeness
 	// from durable rows every pass and has nothing to reap — so the pg
@@ -151,7 +156,7 @@ func (s *pgStaging) stagingInfo(ctx context.Context) (stagingInfo, error) {
 	return stagingInfo{Mode: "pg", StagedArticles: int64(n)}, err
 }
 
-func (s *pgStaging) incompleteSets(ctx context.Context, limit int) ([]pendingSet, error) {
+func (s *pgStaging) incompleteSets(ctx context.Context, limit int, _ []string) ([]pendingSet, error) {
 	bi, err := s.PGStore.builderInfo(ctx, limit)
 	if err != nil {
 		return nil, err

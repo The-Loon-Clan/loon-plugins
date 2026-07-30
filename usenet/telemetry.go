@@ -288,8 +288,11 @@ type telemetry struct {
 	// history.
 	built     []builtRelease
 	builtNext int
-	// pending is the latest incomplete-sets sample (see pendingSet).
-	pending []pendingSet
+	// pending is the latest incomplete-sets sample (see pendingSet);
+	// pendingSeen marks that a sample has been taken at all, so an empty
+	// pipeline is distinguishable from an unmeasured one.
+	pending     []pendingSet
+	pendingSeen bool
 	// evicted counts hopeless sets shed by redis staging since the worker
 	// started — proof the eviction machinery is working, not failing.
 	evicted int64
@@ -453,7 +456,18 @@ func (t *telemetry) stalled() int {
 func (t *telemetry) setPending(sets []pendingSet) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.pending = sets
+	t.pending, t.pendingSeen = sets, true
+}
+
+// pendingCount is the last sample's size, or -1 when no sample has been taken
+// yet — the census must distinguish "none forming" from "never measured".
+func (t *telemetry) pendingCount() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.pendingSeen {
+		return -1
+	}
+	return len(t.pending)
 }
 
 func (t *telemetry) pendingSets() []pendingSet {

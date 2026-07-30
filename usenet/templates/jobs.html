@@ -57,10 +57,20 @@
 
         {{if eq $j.Slug "builder"}}
         {{if $.PGStaging}}
+        {{if $.BuilderShown}}
         {{with $.Builder}}
         <p class="text-muted small mb-2">
           {{.StagedArticles}} articles staged · {{.Releases}} release(s) forming ·
           <strong>{{.Ready}}</strong> ready to assemble
+        </p>
+        {{end}}
+        {{else}}
+        {{/* Opt-in: this readout aggregates the WHOLE staging table (measured
+             at 30s+ with disk spilling at 33M rows), so it is a button rather
+             than something every page view pays for. */}}
+        <p class="text-muted small mb-2">
+          <a class="btn btn-sm btn-outline-secondary py-0" href="?builder=1#jobs">Show staging detail</a>
+          <span class="ms-2">aggregates the whole staging table — seconds to minutes at scale, so it is not loaded automatically</span>
         </p>
         {{end}}
         {{else}}

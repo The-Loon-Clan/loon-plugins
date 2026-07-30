@@ -185,12 +185,15 @@ func (p *Plugin) status(ctx context.Context) StatusReport {
 	rep.Crawl = passReport(pickPass(tv.CrawlCur, tv.CrawlLast))
 	rep.Backfill = passReport(pickPass(tv.BackfillCur, tv.BackfillLast))
 
-	if st, err := p.st.stats(ctx); err == nil {
-		rep.Groups = len(st.Groups)
+	// statsTotals, never stats(): this endpoint is polled every 5s, stats()
+	// scans nzbs and articles four ways, and status() only ever consumed four
+	// scalars from it. Estimate precision is the point — see statsTotals.
+	if st, err := p.st.statsTotals(ctx); err == nil {
+		rep.Groups = st.Groups
 		rep.TotalNZBs = st.TotalNZBs
 		rep.StagedArticles = st.TotalStaged
-		rep.BackfillLeft = st.TotalBackfillRemaining
-		if d, ok := backfillETA(st.TotalBackfillRemaining, tv.BackfillRate); ok {
+		rep.BackfillLeft = st.BackfillRemaining
+		if d, ok := backfillETA(st.BackfillRemaining, tv.BackfillRate); ok {
 			rep.BackfillETASeconds = int64(d.Seconds())
 		}
 	}

@@ -41,7 +41,7 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		// keep it in their generic Plugins section.
 		Nav: core.NavHint{Group: "Operations"},
 		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.renderSettings(gc.Request.Context(), gc.Query("gq"), gc.Query("msg"), gc.Query("err"))
+			return p.renderSettings(gc.Request.Context(), gc.Query("gq"), gc.Query("msg"), gc.Query("err"), gc.Query("builder") == "1")
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			"knobs":            p.actionSaveKnobs,

@@ -39,6 +39,8 @@ type ReleaseReader interface {
 	releaseByID(ctx context.Context, id int64) (*detailRow, error)
 	nzbData(ctx context.Context, id int64) ([]byte, string, error)
 	stats(ctx context.Context) (pluginapi.IndexStats, error)
+	// statsTotals is the poll-safe scalar subset of stats — see store.go.
+	statsTotals(ctx context.Context) (indexTotals, error)
 	// forwardBacklog is the total articles the servers hold past our forward
 	// watermarks across active groups — the crawl catch-up loop's signal.
 	forwardBacklog(ctx context.Context, holdLow bool) (int64, error)
@@ -56,6 +58,7 @@ type GroupStore interface {
 	updateGroupStateForBackbone(ctx context.Context, backbone, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error
 	groupCount(ctx context.Context) (int, error)
 	setGroupActive(ctx context.Context, name string, active bool) error
+	activeGroupNames(ctx context.Context) ([]string, error)
 	setGroupTuning(ctx context.Context, name string, retentionDays, throttleMs int, tier Tier) error
 	resetWatermark(ctx context.Context, backbone, group string, scope resetScope) (watermarkReset, error)
 

@@ -60,6 +60,68 @@ func (s *PGStore) forwardBacklog(ctx context.Context, holdLow bool) (int64, erro
 	return n, err
 }
 
+// indexTotals is the poll-safe subset of stats(): exactly the four scalars
+// status() consumes, at estimate precision.
+type indexTotals struct {
+	Groups            int
+	TotalNZBs         int
+	TotalStaged       int
+	BackfillRemaining int64
+}
+
+// statsTotals answers the 5-second status poll without scanning anything.
+//
+// status() used to call stats(), which runs two exact COUNT(*)s and two
+// whole-table GROUP BYs — then threw away everything but four scalars. This
+// endpoint is polled every 5s by both admin tabs and documented for external
+// monitors, and dashboard.go's own rule is that nothing on a poll path may
+// scan a table (slow polls pile up until the DB saturates; the 2026-07-24
+// prod timeout was this exact shape at 33M staged rows). Row counts use the
+// planner's estimate like stagedCount — a liveness readout needs rough, not
+// exact — and the backfill remainder aggregates newsgroup_state, which holds
+// one row per (backbone, group).
+func (s *PGStore) statsTotals(ctx context.Context) (indexTotals, error) {
+	var t indexTotals
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		if err := tx.GetContext(ctx, &t.Groups,
+			`SELECT COUNT(*) FROM newsgroups WHERE active`); err != nil {
+			return err
+		}
+		est := func(table string, dst *int) error {
+			var n int64
+			if err := tx.GetContext(ctx, &n,
+				`SELECT COALESCE((SELECT reltuples::bigint FROM pg_class WHERE oid = to_regclass($1)), 0)`,
+				table); err != nil {
+				return err
+			}
+			if n < 0 {
+				// Never analyzed: the table is young and small — exact is cheap.
+				if err := tx.GetContext(ctx, &n, `SELECT COUNT(*) FROM `+table); err != nil { // sqllint:allow table is one of two literals passed below
+					return err
+				}
+			}
+			*dst = int(n)
+			return nil
+		}
+		if err := est("nzbs", &t.TotalNZBs); err != nil {
+			return err
+		}
+		if err := est("articles", &t.TotalStaged); err != nil {
+			return err
+		}
+		// Mirrors the accumulation in stats(): remaining = back - server_low
+		// for groups whose backfill is still open.
+		return tx.GetContext(ctx, &t.BackfillRemaining,
+			`SELECT COALESCE(SUM(COALESCE(s.back_watermark, s.high_watermark, 0) - COALESCE(s.server_low, 0)), 0)
+			   FROM newsgroups g
+			   JOIN newsgroup_state s ON s.group_name = g.name
+			  WHERE g.active
+			    AND NOT COALESCE(s.backfill_done, FALSE)
+			    AND COALESCE(s.back_watermark, s.high_watermark, 0) > COALESCE(s.server_low, 0)`)
+	})
+	return t, err
+}
+
 func (s *PGStore) stats(ctx context.Context) (pluginapi.IndexStats, error) {
 	var st pluginapi.IndexStats
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {

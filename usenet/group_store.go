@@ -150,3 +150,16 @@ func (s *PGStore) setGroupActive(ctx context.Context, name string, active bool) 
 		return err
 	})
 }
+
+// activeGroupNames is the configured active group list, names only — for
+// callers (the pending sample) that need to address per-group Redis keys
+// without discovering them by scanning the keyspace. A handful of rows off an
+// indexed flag.
+func (s *PGStore) activeGroupNames(ctx context.Context) ([]string, error) {
+	var names []string
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &names,
+			`SELECT name FROM newsgroups WHERE active ORDER BY name`)
+	})
+	return names, err
+}

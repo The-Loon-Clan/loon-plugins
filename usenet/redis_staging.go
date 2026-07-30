@@ -1043,7 +1043,7 @@ func parseInfoStr(info, prefix string) string {
 // the cost independent of how many sets are in flight.
 const pendingSampleCap = 2000
 
-func (r *redisStaging) incompleteSets(ctx context.Context, limit int) ([]pendingSet, error) {
+func (r *redisStaging) incompleteSets(ctx context.Context, limit int, groups []string) ([]pendingSet, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 15
 	}
@@ -1065,24 +1065,26 @@ func (r *redisStaging) incompleteSets(ctx context.Context, limit int) ([]pending
 	// global top-N; at these cardinalities that distinction does not change what
 	// an operator learns, and the alternative is a readout that cannot be
 	// afforded at all.
+	// The group names come from the CALLER — the configured active groups,
+	// which the build pass already holds. Discovering them here used a
+	// keyspace-wide SCAN with MATCH active_groups:*, and SCAN's MATCH filters
+	// AFTER bucket traversal: at the ~7M-key scale this backend documents,
+	// finding ~28 needles cost ~35,000 sequential round trips per build pass —
+	// against a Redis already at its memory ceiling. Named keys cost one O(1)
+	// sample each, independent of keyspace size.
 	type ref struct{ group, hash string }
 	refs := make([]ref, 0, pendingSampleCap)
-	iter := r.rdb.Scan(ctx, 0, activeKey("*"), 200).Iterator()
-	for iter.Next(ctx) {
+	for _, group := range groups {
 		if len(refs) >= pendingSampleCap {
 			break
 		}
-		group := strings.TrimPrefix(iter.Val(), "active_groups:")
-		hashes, err := r.rdb.SRandMemberN(ctx, iter.Val(), int64(pendingSampleCap-len(refs))).Result()
+		hashes, err := r.rdb.SRandMemberN(ctx, activeKey(group), int64(pendingSampleCap-len(refs))).Result()
 		if err != nil {
-			continue
+			continue // missing set = nothing in flight for this group
 		}
 		for _, h := range hashes {
 			refs = append(refs, ref{group: group, hash: h})
 		}
-	}
-	if err := iter.Err(); err != nil {
-		return nil, err
 	}
 	if len(refs) == 0 {
 		return nil, nil

@@ -20,6 +20,32 @@ import (
 	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
+// samplePending refreshes the forming-releases readout — the dashboard's
+// "which releases are still missing articles" card. Once per PASS: even the
+// bounded form (one O(1) sample per group plus a pipelined read per sampled
+// set) is far too heavy for the render path, and it was previously paid once
+// per ~500-set round.
+func (p *Plugin) samplePending(ctx context.Context) {
+	sets, err := p.staging.incompleteSets(ctx, 15, p.activeGroupNames(ctx))
+	if err != nil {
+		p.reportErr(ctx, "usenet/incomplete-sample", err)
+		return
+	}
+	p.tel.setPending(sets)
+}
+
+// activeGroupNames is the group list the pending sample addresses staging
+// with. Best-effort: on error the sample covers nothing this pass, which the
+// census records as not-sampled rather than as an empty pipeline.
+func (p *Plugin) activeGroupNames(ctx context.Context) []string {
+	names, err := p.st.activeGroupNames(ctx)
+	if err != nil {
+		p.reportErr(ctx, "usenet/group-names", err)
+		return nil
+	}
+	return names
+}
+
 // runBuild assembles complete (group, base_subject) sets into NZB files. A set
 // is complete when its distinct part count reaches the max total-parts seen.
 func (p *Plugin) runBuild(ctx context.Context) {
@@ -53,6 +79,19 @@ func (p *Plugin) runBuild(ctx context.Context) {
 // progress. Incomplete sets stay staged and do not count, which is what stops
 // the loop spinning on a queue that is merely waiting for more articles.
 func (p *Plugin) buildCatchUp(ctx context.Context) {
+	// Per-PASS work happens here, once — not inside the round function.
+	// buildLocked IS the round body, so everything it treated as "once per
+	// pass" ran once per ~500-set round instead: a blacklist rules SELECT plus
+	// full regex recompile, a 50,000-entry ready-queue reap, and the pending
+	// sample, which the code itself calls the most expensive read in the
+	// pipeline. At the round cadence a catch-up pass paid all of it dozens of
+	// times over.
+	p.reloadBlacklist(ctx)
+	if scanned, removed, err := p.staging.reapReadyQueue(ctx, p.effective(ctx).ReadyReapPerPass); err != nil {
+		p.reportErr(ctx, "usenet/ready-reap", err)
+	} else if removed > 0 {
+		p.buildJob.Log("ready queue: swept %d entr(ies), removed %d dead", scanned, removed)
+	}
 	res := runCatchUp(ctx,
 		func() (int, int) { return p.buildLocked(ctx) },
 		func() bool { return p.effective(ctx).BuildNoCatchup },
@@ -64,15 +103,20 @@ func (p *Plugin) buildCatchUp(ctx context.Context) {
 		p.buildJob.Log("build catch-up: %d round(s), %s set(s) drained, %s release(s) built (%s)",
 			res.Rounds, fmtComma(int64(res.Batches)), fmtComma(int64(res.Staged)), res.StoppedBy)
 	}
+	// The forming-releases sample, once per pass and AFTER the drain — a
+	// sample taken mid-catch-up describes a queue that has since moved, and
+	// taking it per round multiplied the pipeline's most expensive read by the
+	// round count.
+	p.samplePending(ctx)
 	p.buildJob.SetIdle(p.nextCrawl(ctx))
 }
 
 func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	p.buildJob.SetRunning()
 
-	// Pick up admin edits, and make sure last pass's counters are persisted even
-	// if that pass died before its own flush.
-	p.reloadBlacklist(ctx)
+	// Make sure last pass's counters are persisted even if that pass died
+	// before its own flush. (Blacklist reload and the ready-queue reap are
+	// per-PASS work and live in buildCatchUp.)
 	defer p.flushFilterHits(ctx)
 	defer p.flushPosterHits(ctx)
 	// Every branch below names its outcome, so the reasons sum to the
@@ -86,11 +130,11 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	// a gap that reads as "nothing happened" worse than no census at all. A
 	// zero draw honestly records that nothing was drawn while stagingInfo
 	// still captures the memory/eviction half — the half that matters during
-	// an outage. pendingSeen -1 = "the pass died before sampling", which the
-	// readout keeps distinct from "none pending".
+	// an outage. The pending figure comes from the pass-level sample
+	// (samplePending, taken once per pass in buildCatchUp): -1 until one has
+	// been taken, which the readout keeps distinct from "none pending".
 	var drawn candidateStats
-	pendingSeen := -1
-	defer func() { p.takeStagingCensus(ctx, drawn, pendingSeen) }()
+	defer func() { p.takeStagingCensus(ctx, drawn, p.tel.pendingCount()) }()
 
 	// Resolve the sink ONCE for the pass (mirrors resolveHealthBackend): a
 	// host-misconfigured pass fails here with one error instead of flooding the
@@ -100,17 +144,6 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 		p.buildJob.SetError(err.Error())
 		p.reportErr(ctx, "usenet/build-sink", err)
 		return 0, 0
-	}
-
-	// Sweep dead entries BEFORE drawing. The draw is a random sample, so every
-	// fossil left in the queue is a slot the pass wastes — production was
-	// spending 407 of every 500 on entries whose articles were already gone.
-	// Bounded per pass so a multi-million-entry queue is worked down over
-	// successive passes instead of stalling one.
-	if scanned, removed, err := p.staging.reapReadyQueue(ctx, p.effective(ctx).ReadyReapPerPass); err != nil {
-		p.reportErr(ctx, "usenet/ready-reap", err)
-	} else if removed > 0 {
-		p.buildJob.Log("ready queue: swept %d entr(ies), removed %d dead", scanned, removed)
 	}
 
 	keys, d, err := p.staging.candidateGroups(ctx, p.effective(ctx).BuildDrainPerPass)
@@ -331,16 +364,6 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 		p.outcomes.total(outcomeEmpty),
 		p.outcomes.total(outcomeLoadError)+p.outcomes.total(outcomeXMLError)+
 			p.outcomes.total(outcomeGzipError)+p.outcomes.total(outcomeStoreError))
-	// Sample the incomplete sets into telemetry — the dashboard's "which
-	// releases are still missing articles" card. Done here, once per pass,
-	// because listing them (redis: SCAN + a pipelined read per set) is too
-	// heavy for the render path.
-	if sets, err := p.staging.incompleteSets(ctx, 15); err == nil {
-		p.tel.setPending(sets)
-		pendingSeen = len(sets)
-	} else {
-		p.reportErr(ctx, "usenet/incomplete-sample", err)
-	}
 	if built > 0 {
 		// New releases changed the search surface — publish so a subscriber
 		// (e.g. a cache invalidator in the worker) can react. Best-effort: no

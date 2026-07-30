@@ -67,20 +67,30 @@ func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, li
 	var rows []releaseRow
 	var total int
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		// Page first, count only when the page cannot answer the total itself.
+		// The COUNT is a full pass over completed rows (a leading-wildcard
+		// ILIKE defeats the title index), and this runs per API request —
+		// Sonarr/Hydra poll the empty-query RSS form about once a minute. A
+		// short page means offset+len(rows) IS the exact total, which covers
+		// the every-minute poll and most real searches outright.
 		// sqllint:allow catClause is a literal built from int-only category ids (strconv.Itoa); all values flow through $N
-		if err := tx.GetContext(ctx, &total,
-			`SELECT COUNT(*) FROM nzbs
-			 WHERE status = 'completed' AND ($1 = '' OR title ILIKE '%' || $1 || '%')`+catClause, query); err != nil {
-			return err
-		}
-		// sqllint:allow catClause is a literal built from int-only category ids (strconv.Itoa); all values flow through $N
-		return tx.SelectContext(ctx, &rows,
+		if err := tx.SelectContext(ctx, &rows,
 			`SELECT id, title, size, posted_at, group_name,
 			        resolution, source, video_codec, audio, language, category_id
 			 FROM nzbs
 			 WHERE status = 'completed' AND ($1 = '' OR title ILIKE '%' || $1 || '%')`+catClause+`
 			 ORDER BY COALESCE(posted_at, created_at) DESC
-			 LIMIT $2 OFFSET $3`, query, limit, offset)
+			 LIMIT $2 OFFSET $3`, query, limit, offset); err != nil {
+			return err
+		}
+		if len(rows) < limit {
+			total = offset + len(rows)
+			return nil
+		}
+		// sqllint:allow catClause is a literal built from int-only category ids (strconv.Itoa); all values flow through $N
+		return tx.GetContext(ctx, &total,
+			`SELECT COUNT(*) FROM nzbs
+			 WHERE status = 'completed' AND ($1 = '' OR title ILIKE '%' || $1 || '%')`+catClause, query)
 	})
 	if err != nil {
 		return nil, 0, err

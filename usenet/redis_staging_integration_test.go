@@ -506,7 +506,7 @@ func TestIncompleteSetsCostIsBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sets, err := r.incompleteSets(ctx, 15)
+	sets, err := r.incompleteSets(ctx, 15, []string{"a.b.group"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -546,7 +546,7 @@ func TestIncompleteSetsExactBelowTheCap(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	sets, err := r.incompleteSets(ctx, 15)
+	sets, err := r.incompleteSets(ctx, 15, []string{"a.b.group"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -604,7 +604,7 @@ func TestSpanFoldKeepsTrueBounds(t *testing.T) {
 	}
 
 	// And it reaches the readout as a sane, non-colliding span.
-	sets, err := r.incompleteSets(ctx, 15)
+	sets, err := r.incompleteSets(ctx, 15, []string{"a.b.group"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +645,7 @@ func TestSpanExposesABaseCollision(t *testing.T) {
 		}
 	}
 
-	sets, err := r.incompleteSets(ctx, 15)
+	sets, err := r.incompleteSets(ctx, 15, []string{"a.b.group"})
 	if err != nil {
 		t.Fatal(err)
 	}

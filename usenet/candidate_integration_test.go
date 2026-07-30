@@ -9,6 +9,58 @@ import (
 	"time"
 )
 
+// The batched unnest insert, against a real Postgres. The per-row form it
+// replaced made semantics obvious; the array form has to prove them: the
+// staged count excludes conflicts, NULL posted survives the array round-trip,
+// and chunking covers batches past stageChunk.
+func TestPGStageArticlesBatchInsert(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	arts := make([]stagedArticle, stageChunk+50)
+	for i := range arts {
+		arts[i] = stagedArticle{
+			Group: "a.b.group", BaseSubject: "Batch.Release",
+			Subject:   fmt.Sprintf("Batch.Release (%d/2000)", i+1),
+			MessageID: fmt.Sprintf("<b%d@x>", i),
+			Poster:    "p", Bytes: 1000,
+			PartNum: i + 1, TotalParts: len(arts), SegTotal: len(arts),
+		}
+		if i%2 == 0 {
+			arts[i].Posted = time.Now()
+		} // odd rows keep the zero time → must store as NULL, not 0001-01-01
+	}
+	n, err := s.stageArticles(ctx, arts)
+	if err != nil {
+		t.Fatalf("batch insert: %v", err)
+	}
+	if n != len(arts) {
+		t.Fatalf("staged %d, want %d", n, len(arts))
+	}
+
+	// Re-staging the same ids is the crawl's routine overlap: count must be 0.
+	n, err = s.stageArticles(ctx, arts)
+	if err != nil {
+		t.Fatalf("re-stage: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("re-stage counted %d, want 0 — ON CONFLICT rows must not count", n)
+	}
+
+	var nulls, rows int
+	if err := s.db.DB().QueryRow(
+		`SELECT COUNT(*), COUNT(*) FILTER (WHERE posted IS NULL) FROM `+s.db.Schema()+`.articles`).
+		Scan(&rows, &nulls); err != nil {
+		t.Fatal(err)
+	}
+	if rows != len(arts) {
+		t.Errorf("table holds %d rows, want %d", rows, len(arts))
+	}
+	if nulls != len(arts)/2 {
+		t.Errorf("%d NULL posted, want %d — zero times must not serialize as a real date", nulls, len(arts)/2)
+	}
+}
+
 // The pg pre-filter's multi-file arm, against a real Postgres — this HAVING
 // clause had no integration coverage while carrying the file-0 hole: a
 // "[00/N]" header or unnumbered companion stages at file_num 0, and counting

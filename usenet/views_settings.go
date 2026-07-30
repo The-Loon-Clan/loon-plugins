@@ -114,7 +114,7 @@ func validateKnobs(cur Config, vals map[string]int) string {
 	return ""
 }
 
-func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string) (template.HTML, error) {
+func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string, showBuilder bool) (template.HTML, error) {
 	groups, err := p.st.allGroups(ctx, gq, 300)
 	if err != nil {
 		return "", err
@@ -130,18 +130,26 @@ func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string) (te
 	// The Crawlers dashboard and Filters blacklist render as embedded tab
 	// fragments — one page per plugin. Their msg/err slots stay empty because
 	// the flash renders once at the top of this page.
-	crawlersTab, err := p.renderCrawlers(ctx, "", "")
-	if err != nil {
-		return "", err
+	//
+	// A failing tab degrades to an inline card; it does NOT fail the page.
+	// Every fragment error used to propagate, so one slow query (builderInfo
+	// is a 30s+ disk-spilling aggregation at the 33M-row scale prod hit) took
+	// down the whole plugin admin page — including the Providers tab an
+	// operator needs to fix the cause. Worst exactly when staging backs up.
+	tab := func(name string, render func() (template.HTML, error)) template.HTML {
+		frag, err := render()
+		if err != nil {
+			p.reportErr(ctx, "usenet/render-"+name, err)
+			return template.HTML(`<div class="alert alert-warning">The ` +
+				template.HTMLEscapeString(name) + ` view failed to render: ` +
+				template.HTMLEscapeString(err.Error()) +
+				`. The rest of this page is unaffected.</div>`)
+		}
+		return frag
 	}
-	jobsTab, err := p.renderJobs(ctx)
-	if err != nil {
-		return "", err
-	}
-	filtersTab, err := p.renderFilters(ctx, "", "")
-	if err != nil {
-		return "", err
-	}
+	crawlersTab := tab("crawlers", func() (template.HTML, error) { return p.renderCrawlers(ctx, "", "") })
+	jobsTab := tab("jobs", func() (template.HTML, error) { return p.renderJobs(ctx, showBuilder) })
+	filtersTab := tab("filters", func() (template.HTML, error) { return p.renderFilters(ctx, "", "") })
 	return p.frag("settings.html", map[string]any{
 		"Servers": servers, "DefaultConns": p.effective(ctx).Connections,
 		"Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,

@@ -35,7 +35,7 @@ var jobPaneOrder = []struct{ name, slug, action string }{
 	{jobNameHealth, "health", "run-health"},
 }
 
-func (p *Plugin) renderJobs(ctx context.Context) (template.HTML, error) {
+func (p *Plugin) renderJobs(ctx context.Context, showBuilder bool) (template.HTML, error) {
 	tv := p.telemetryView(ctx)
 	jobs, _ := p.jobVMs()
 	if !p.runsJobs {
@@ -65,13 +65,19 @@ func (p *Plugin) renderJobs(ctx context.Context) (template.HTML, error) {
 	// Builder pane: the dashboard's old Builder card, mode-truthful. PG mode
 	// reads builderInfo (bounded install by design); redis mode reads the
 	// O(1) queue depth + the telemetry sample.
+	// builderInfo is OPT-IN, not automatic. In pg mode it is a COUNT plus
+	// three GROUP BY passes over the whole staging table — measured at 30s+
+	// with disk spilling at 33M rows — and it ran on every visit to ANY tab
+	// of this page, plus every post-action redirect. Now a button asks for it.
 	var builder BuilderInfo
+	builderShown := false
 	pgStaging := p.cfg.Staging != StagingRedis
-	if pgStaging {
+	if pgStaging && showBuilder {
 		var err error
 		if builder, err = p.st.builderInfo(ctx, 15); err != nil {
 			return "", err
 		}
+		builderShown = true
 	}
 	var ready int64
 	if !pgStaging {
@@ -96,7 +102,7 @@ func (p *Plugin) renderJobs(ctx context.Context) (template.HTML, error) {
 	return p.frag("jobs.html", map[string]any{
 		"Jobs":        panes,
 		"WorkerStale": tv.Stale, "WorkerLastSeen": fmtTime(tv.UpdatedAt),
-		"Builder": builder, "PGStaging": pgStaging,
+		"Builder": builder, "PGStaging": pgStaging, "BuilderShown": builderShown,
 		"Pending": tv.Pending, "Evicted": tv.Evicted, "ReadyGroups": ready,
 		"Census": tv.Census, "Schema": tv.Schema,
 		"Health":   p.healthVM(ctx, cs),

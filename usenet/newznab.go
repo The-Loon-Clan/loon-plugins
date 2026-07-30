@@ -158,6 +158,13 @@ func (s *service) newznabGet(ctx context.Context, req pluginapi.NewznabRequest) 
 	return pluginapi.NewznabResult{Body: data, ContentType: "application/x-nzb", Filename: filename}, nil
 }
 
+// maxFeedOffset bounds how deep API pagination may reach. OFFSET N costs a
+// scan of N rows before the page, so unbounded paging is a free heavy-query
+// primitive for any API key holder. 10,000 rows = 100 pages of the max page
+// size — far past any real feed walker; indexers that want the whole catalog
+// mirror it, they don't paginate a million deep.
+const maxFeedOffset = 10000
+
 func (s *service) newznabFeed(ctx context.Context, req pluginapi.NewznabRequest) (pluginapi.NewznabResult, error) {
 	// Clamp the client-supplied paging BEFORE it reaches SQL: caps advertises
 	// <limits max="100"> and this is where that promise is enforced (hosts
@@ -172,6 +179,13 @@ func (s *service) newznabFeed(ctx context.Context, req pluginapi.NewznabRequest)
 	offset := req.Offset
 	if offset < 0 {
 		offset = 0
+	}
+	// An upper clamp too: OFFSET is scan-and-discard, so a client-supplied
+	// offset of 10^9 forced Postgres to walk and throw away a billion rows on
+	// a PUBLIC request path. Newznab clients treat a short page as
+	// end-of-results, so capping deep pagination is protocol-clean.
+	if offset > maxFeedOffset {
+		offset = maxFeedOffset
 	}
 	releases, total, err := s.store.feedReleases(ctx, strings.TrimSpace(req.Query), req.Categories, limit, offset)
 	if err != nil {

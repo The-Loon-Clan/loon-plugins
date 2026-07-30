@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 
 	"github.com/the-loon-clan/loon/nntp"
 	"github.com/the-loon-clan/loon/schedule"
@@ -1025,27 +1026,67 @@ func (s *PGStore) activeGroups(ctx context.Context, limit int) ([]groupRow, erro
 	return out, nil
 }
 
+// stageChunk bounds one unnest INSERT. Well under any parameter limit (13
+// arrays regardless of rows) — this bounds statement size and memory, not
+// placeholders.
+const stageChunk = 1000
+
 func (s *PGStore) stageArticles(ctx context.Context, arts []stagedArticle) (int, error) {
+	// One unnest INSERT per chunk, not one ExecContext per article. This is
+	// the hottest write path in pg-staging mode — the crawl runs up to 20,000
+	// batches of up to 3,000 articles per round and the backfill shares the
+	// path — and the per-row form was 3,000 sequential network round-trips
+	// per batch inside one transaction, serialized on a worker goroutine that
+	// held no NNTP connection but did hold the tx. RowsAffected of the single
+	// statement preserves the staged count exactly: ON CONFLICT DO NOTHING
+	// rows don't count, same as before. (The redis backend always pipelined;
+	// pg was the unbatched outlier.)
 	n := 0
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		for _, a := range arts {
-			var posted sql.NullTime
-			if !a.Posted.IsZero() {
-				posted = sql.NullTime{Time: a.Posted, Valid: true}
+		for start := 0; start < len(arts); start += stageChunk {
+			end := start + stageChunk
+			if end > len(arts) {
+				end = len(arts)
+			}
+			chunk := arts[start:end]
+			ids := make([]string, len(chunk))
+			subjects := make([]string, len(chunk))
+			bases := make([]string, len(chunk))
+			posters := make([]string, len(chunk))
+			bytesArr := make([]int64, len(chunk))
+			posted := make([]sql.NullTime, len(chunk))
+			groupsArr := make([]string, len(chunk))
+			partNums := make([]int64, len(chunk))
+			totalParts := make([]int64, len(chunk))
+			segTotals := make([]int64, len(chunk))
+			fileNums := make([]int64, len(chunk))
+			totalFiles := make([]int64, len(chunk))
+			fileParts := make([]bool, len(chunk))
+			for i, a := range chunk {
+				ids[i], subjects[i], bases[i], posters[i] = a.MessageID, a.Subject, a.BaseSubject, a.Poster
+				bytesArr[i], groupsArr[i] = a.Bytes, a.Group
+				if !a.Posted.IsZero() {
+					posted[i] = sql.NullTime{Time: a.Posted, Valid: true}
+				}
+				partNums[i], totalParts[i], segTotals[i] = int64(a.PartNum), int64(a.TotalParts), int64(a.SegTotal)
+				fileNums[i], totalFiles[i], fileParts[i] = int64(a.FileNum), int64(a.TotalFiles), a.FileParts
 			}
 			res, err := tx.ExecContext(ctx,
 				`INSERT INTO articles
 				   (message_id, subject, base_subject, poster, bytes, posted, group_name,
 				    part_num, total_parts, seg_total, file_num, total_files, file_parts)
-				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+				 SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::bigint[],
+				                      $6::timestamptz[], $7::text[], $8::int[], $9::int[], $10::int[],
+				                      $11::int[], $12::int[], $13::boolean[])
 				 ON CONFLICT (message_id) DO NOTHING`,
-				a.MessageID, a.Subject, a.BaseSubject, a.Poster, a.Bytes, posted, a.Group,
-				a.PartNum, a.TotalParts, a.SegTotal, a.FileNum, a.TotalFiles, a.FileParts)
+				pq.Array(ids), pq.Array(subjects), pq.Array(bases), pq.Array(posters), pq.Array(bytesArr),
+				pq.GenericArray{A: posted}, pq.Array(groupsArr), pq.Array(partNums), pq.Array(totalParts), pq.Array(segTotals),
+				pq.Array(fileNums), pq.Array(totalFiles), pq.Array(fileParts))
 			if err != nil {
 				return err
 			}
 			if c, _ := res.RowsAffected(); c > 0 {
-				n++
+				n += int(c)
 			}
 		}
 		return nil
