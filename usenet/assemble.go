@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 
 	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
@@ -132,20 +133,31 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	fastDropped := 0
 	kept, rejects := splitByTitle(keys, p.posterWatch.active())
 	keys = kept
-	for _, r := range rejects {
-		if r.blockedExt {
-			skippedExt++
-			p.outcomes.note(outcomeBlockedExt, r.key.Base)
-		} else {
-			p.hits.note("junk", r.junkRule, r.title)
-			p.outcomes.note(outcomeJunk, r.key.Base)
+	if len(rejects) > 0 {
+		// Account for every reject first, then remove them in one go. Deleting
+		// them one at a time costs a round-trip each, and with the title
+		// pre-filter doing the judging in microseconds those round-trips became
+		// the entire cost of the junk path — 500 of them per pass.
+		doomed := make([]groupKey, 0, len(rejects))
+		for _, r := range rejects {
+			if r.blockedExt {
+				skippedExt++
+				p.outcomes.note(outcomeBlockedExt, r.key.Base)
+			} else {
+				p.hits.note("junk", r.junkRule, r.title)
+				p.outcomes.note(outcomeJunk, r.key.Base)
+			}
+			doomed = append(doomed, r.key)
 		}
-		if err := p.staging.deleteStaged(ctx, r.key.Group, r.key.Base); err != nil {
+		removed, err := p.staging.deleteStagedBatch(ctx, doomed)
+		if err != nil {
 			p.reportErr(ctx, "usenet/build-delete-staged", err)
-		} else {
-			drained++
-			fastDropped++
 		}
+		// Count what actually went, not what was asked for: a partial failure
+		// must not report a drain that did not happen, or the catch-up loop
+		// believes it is making progress it is not.
+		drained += removed
+		fastDropped += removed
 	}
 
 	for _, k := range keys {
@@ -655,6 +667,37 @@ func (s *PGStore) insertNzb(ctx context.Context, n nzbRow) (bool, error) {
 		return nil
 	})
 	return inserted, err
+}
+
+// deleteStagedBatch removes many sets in one statement rather than one
+// transaction each — the same reasoning as the redis path, where the cost is a
+// round-trip per set.
+func (s *PGStore) deleteStagedBatch(ctx context.Context, keys []groupKey) (int, error) {
+	if len(keys) == 0 {
+		return 0, nil
+	}
+	groups := make([]string, len(keys))
+	bases := make([]string, len(keys))
+	for i, k := range keys {
+		groups[i] = k.Group
+		bases[i] = k.Base
+	}
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		// unnest pairs the two arrays positionally, so this deletes exactly the
+		// (group, base) combinations given and never a cross product.
+		_, err := tx.ExecContext(ctx,
+			`DELETE FROM articles a
+			  USING unnest($1::text[], $2::text[]) AS t(group_name, base_subject)
+			  WHERE a.group_name = t.group_name AND a.base_subject = t.base_subject`,
+			pq.Array(groups), pq.Array(bases))
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	// The count is SETS, not rows: RowsAffected here counts articles, and every
+	// caller is measuring how much of the queue it drained.
+	return len(keys), nil
 }
 
 func (s *PGStore) deleteStaged(ctx context.Context, group, base string) error {

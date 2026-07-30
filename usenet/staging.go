@@ -29,6 +29,13 @@ type stagingStore interface {
 	candidateGroups(ctx context.Context, limit int) ([]groupKey, candidateStats, error)
 	groupArticles(ctx context.Context, group, base string) ([]stagedArticle, error)
 	deleteStaged(ctx context.Context, group, base string) error
+	// deleteStagedBatch removes many sets in as few round-trips as possible.
+	//
+	// It exists because deleting one set costs one Redis round-trip, and the
+	// builder's title pre-filter turned the junk path into almost nothing BUT
+	// deletes — 500 round-trips a pass to discard sets it had already judged in
+	// microseconds. Returns how many were removed.
+	deleteStagedBatch(ctx context.Context, keys []groupKey) (int, error)
 	deleteJunkStaged(ctx context.Context) (int64, error)
 	// prune drops stale staging. pg: DELETE WHERE added_at < now()-horizon;
 	// redis: no-op — the key TTL + inline hopeless-eviction handle it.

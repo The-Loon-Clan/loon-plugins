@@ -878,6 +878,41 @@ func (r *redisStaging) deleteStaged(ctx context.Context, group, base string) err
 // deleteJunkStaged is a no-op in redis mode: junk base_subjects are dropped at
 // ingest (parseOverviews) and again at build (classifyRelease), and
 // there is no cheap way to scan every staged set — so nothing to sweep here.
+// deleteStagedBatch removes every named set in as few round-trips as it can.
+//
+// deleteStaged issues four commands in one pipeline for ONE set, so a pass that
+// discards 500 junk sets pays 500 round-trips. Batching folds those into a
+// handful: the commands are identical, only the count changes. Chunked because a
+// single pipeline holding four commands per set for an unbounded draw is a large
+// buffer on both ends for no benefit.
+func (r *redisStaging) deleteStagedBatch(ctx context.Context, keys []groupKey) (int, error) {
+	const chunk = 500 // 4 commands each -> 2000 per round-trip
+	done := 0
+	for start := 0; start < len(keys); start += chunk {
+		end := start + chunk
+		if end > len(keys) {
+			end = len(keys)
+		}
+		pipe := r.rdb.Pipeline()
+		for _, k := range keys[start:end] {
+			hash := groupHashKey(k.Group, k.Base)
+			pipe.Del(ctx, artKey(k.Group, hash))
+			pipe.Del(ctx, grpKey(k.Group, hash))
+			pipe.SRem(ctx, activeKey(k.Group), hash)
+			// candidateGroups PEEKS rather than pops, so this is the one place
+			// an entry leaves nzb:ready.
+			pipe.SRem(ctx, readyKey, k.Group+":"+hash)
+		}
+		if _, err := pipe.Exec(ctx); err != nil {
+			// Partial failure still removed everything before it; report what
+			// landed so the caller's drain count stays honest.
+			return done, err
+		}
+		done += end - start
+	}
+	return done, nil
+}
+
 func (r *redisStaging) deleteJunkStaged(ctx context.Context) (int64, error) { return 0, nil }
 
 // prune is a no-op in redis mode: the key TTL + the inline hopeless-eviction
