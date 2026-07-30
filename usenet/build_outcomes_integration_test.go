@@ -252,14 +252,14 @@ func TestSubjectCorpusInsertAndPrune(t *testing.T) {
 func TestSetResolutionsStore(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
-	rows := []setResolution{{group: "a.b.g", kind: "built", artLo: 100, artHi: 200, held: 40}}
+	rows := []setResolution{{group: "a.b.g", base: "Some.Release", kind: "built", artLo: 100, artHi: 200, held: 40}}
 	marks := map[string]groupMarks{"a.b.g": {Back: 50, High: 900}}
 	if err := s.insertSetResolutions(ctx, rows, marks); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 	var n int
 	if err := s.db.DB().QueryRow(`SELECT COUNT(*) FROM ` + s.db.Schema() +
-		`.set_resolutions WHERE kind='built' AND art_lo=100 AND back_watermark=50 AND high_watermark=900`).
+		`.set_resolutions WHERE kind='built' AND base_subject='Some.Release' AND art_lo=100 AND back_watermark=50 AND high_watermark=900`).
 		Scan(&n); err != nil {
 		t.Fatal(err)
 	}

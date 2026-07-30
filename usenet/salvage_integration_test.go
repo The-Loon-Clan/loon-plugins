@@ -87,6 +87,19 @@ func nzbHealth(t *testing.T, st *PGStore, title string) (int, string) {
 	return n, status
 }
 
+// nzbHealthCounts returns the stored (total_segments, missing_segments) for a
+// title — the recheck-durability half of a salvage verdict.
+func nzbHealthCounts(t *testing.T, st *PGStore, title string) (total, missing int) {
+	t.Helper()
+	err := st.db.DB().QueryRow(
+		`SELECT COALESCE(total_segments, 0), COALESCE(missing_segments, 0)
+		   FROM `+st.db.Schema()+`.nzbs WHERE title = $1`, title).Scan(&total, &missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return total, missing
+}
+
 // The full salvage path through the real round entry point: a walk-past-dead
 // set whose surviving par2 covers its data gap must become a stored release
 // MARKED BROKEN — not evicted, and never stored unmarked, because an unmarked
@@ -98,8 +111,10 @@ func TestSalvageStoresBrokenRelease(t *testing.T) {
 	const group, base = "a.b.group", "Kaiju.Show.S01E02.1080p.BluRay.x264-GRP"
 
 	seedCoverage(t, p.st.(*PGStore), group, 1, 100000)
-	// 3 of 4 data segments, both par2 segments: one gap, two recovery blocks.
-	stageSalvageSet(t, staging, group, base, 3, 4, 2, 2)
+	// 3 of 4 data segments; par2 claims 3 blocks, 1 fetched: one data gap, one
+	// surviving recovery block. The under-held par2 is deliberate — it is the
+	// shape where the stored total went wrong.
+	stageSalvageSet(t, staging, group, base, 3, 4, 1, 3)
 	backdate(t, staging, group, base, time.Hour)
 
 	p.runWalkPastSweep(ctx, p.effective(ctx))
@@ -110,6 +125,15 @@ func TestSalvageStoresBrokenRelease(t *testing.T) {
 	}
 	if status != healthBroken {
 		t.Fatalf("health_status = %q, want %q — a broken release stored unmarked serves as complete", status, healthBroken)
+	}
+	// The stored total must be EXACTLY the listed articles plus the missing
+	// DATA (4 held + 1 gap): a health recheck reconstructs its baseline as
+	// total - listed, and that baseline is scored as missing data. Storing
+	// salvageTally's total here (which also counts the 2 never-fetched par2
+	// claims) inflated the baseline every recheck and decayed broken releases
+	// straight to dead — erasing the mark this whole path exists to write.
+	if total, missing := nzbHealthCounts(t, p.st.(*PGStore), base); total != 5 || missing != 1 {
+		t.Fatalf("stored total=%d missing=%d, want 5/1 — total must equal listed articles + missing data exactly", total, missing)
 	}
 	if stagedKeysExist(t, staging, group, base) {
 		t.Error("staged keys survived the salvage — the set must drain once stored")

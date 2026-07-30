@@ -221,7 +221,15 @@ type healthOutcome int
 const (
 	healthWritten       healthOutcome = iota // verdict recorded
 	healthSkipPermanent                      // bad data: stamp it so it stops jamming the queue
-	healthSkipTransient                      // pool busy / too much doubt: leave it, retry soon
+	healthSkipTransient                      // pool-level trouble (busy / transport failures): end the pass
+	// healthSkipRow — THIS row's answers were too doubtful to trust, but the
+	// pool is fine. Continue to the next row. Splitting this from transient
+	// was a confirmed high: a release whose ids draw deterministic non-430
+	// replies is inconclusive on EVERY pass, and because candidates order
+	// never-checked/recheck-requested rows first, breaking the pass on it
+	// meant one pathological release starved catalogue-wide health checking
+	// forever — with a log line indistinguishable from pool contention.
+	healthSkipRow
 )
 
 // checkOne STATs an entire release and returns its verdict plus what should be
@@ -320,9 +328,17 @@ func checkSegments(ctx context.Context, segs releaseSegments, chunk, claimedTota
 
 	// Too much doubt: keep whatever verdict this release already had. The
 	// baseline is excluded from the doubt ratio — those segments are KNOWN
-	// missing, not unanswered.
+	// missing, not unanswered. WHERE the doubt came from decides who skips:
+	// unknowns minted by dying connections mean the POOL is sick (yield the
+	// pass, same as the corpse-pool bail-out), but unknowns the server
+	// actually answered are a property of this release — it will be exactly
+	// as inconclusive next pass, and candidates sort it first, so ending the
+	// pass on it starved every other check forever. Row-level: move on.
 	if float64(unknown)/float64(total-baseline) > maxInconclusiveRatio {
-		return "", 0, 0, 0, healthSkipTransient
+		if transportFails > 0 {
+			return "", 0, 0, 0, healthSkipTransient
+		}
+		return "", 0, 0, 0, healthSkipRow
 	}
 	missData += baseline
 	return healthVerdict(missData, len(segs.Par2), missPar2), total, missData, len(segs.Par2), healthWritten
@@ -453,6 +469,8 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 
 	var checked, unreadable int
 	var yielded bool
+	var inconclusive int
+	var inconclusiveIDs []int64
 	tally := map[string]int{}
 	for _, row := range rows {
 		if ctx.Err() != nil {
@@ -474,6 +492,16 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 				p.reportErr(ctx, "usenet/health-touch", err)
 			}
 			unreadable++
+		case healthSkipRow:
+			// This release's answers were too doubtful to trust, but the pool
+			// is fine — move on. The row keeps its prior verdict and stays
+			// unstamped (retried promptly), but it must never end the pass:
+			// candidates order these first, so breaking here let one
+			// pathological release starve every other check forever.
+			inconclusive++
+			if len(inconclusiveIDs) < 3 {
+				inconclusiveIDs = append(inconclusiveIDs, row.ID)
+			}
 		case healthSkipTransient:
 			// The connections are wanted elsewhere, or the provider is flaky.
 			// Stop the pass instead of grinding through the rest for the same
@@ -487,8 +515,13 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 
 	msg := fmt.Sprintf("health check: %d checked (%d healthy, %d broken, %d dead), %d unreadable",
 		checked, tally[healthHealthy], tally[healthBroken], tally[healthDead], unreadable)
+	if inconclusive > 0 {
+		// Named, not folded into the yield message: "which release keeps
+		// refusing to answer" is the first question of the wedge diagnosis.
+		msg += fmt.Sprintf(", %d inconclusive (e.g. nzb %v)", inconclusive, inconclusiveIDs)
+	}
 	if yielded {
-		msg += " — yielded early (connections busy or results inconclusive)"
+		msg += " — yielded early (connection pool busy or failing)"
 	}
 	p.healthJob.Log("%s", msg)
 	p.healthJob.SetIdle(p.nextHealth(cfg))

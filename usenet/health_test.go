@@ -310,19 +310,62 @@ func TestNzbCharsetReaderRejectsUnknown(t *testing.T) {
 	}
 }
 
-// TestHealthOutcomeSemantics pins the three-way outcome, which exists because
+// TestHealthOutcomeSemantics pins the four-way outcome, which exists because
 // prod's two-way version misbehaves in both directions: it writes nothing when a
 // check fails, so the same rows return next pass and the drain loop spins with
 // no backoff — while stamping everything instead would make a release skipped
 // for a momentary busy pool wait the whole recheck window.
 func TestHealthOutcomeSemantics(t *testing.T) {
-	if healthWritten == healthSkipPermanent || healthSkipPermanent == healthSkipTransient {
+	if healthWritten == healthSkipPermanent || healthSkipPermanent == healthSkipTransient ||
+		healthSkipTransient == healthSkipRow || healthSkipRow == healthWritten {
 		t.Fatal("outcomes must be distinct")
 	}
 	// Permanent = bad data; the row gets stamped so it stops jamming the queue.
-	// Transient = bad luck; the row is left alone so it is retried promptly.
+	// Transient = bad luck with the POOL; end the pass, retry promptly.
+	// Row = doubt about THIS release only; skip it and keep the pass going.
 	// This test documents the contract the sweep loop relies on; the loop's
 	// branches are asserted by the switch in runHealthCheck.
+}
+
+// A release the SERVER answers ambiguously is deterministically inconclusive:
+// it will stat exactly the same next pass, and the candidate query sorts
+// requested rechecks first — so ending the whole pass on it (the old
+// transient handling) let one pathological release starve every other health
+// check forever. Server-answered doubt must skip the ROW; only doubt minted
+// by dying connections may end the pass.
+func TestCheckSegmentsRowDoubtVsPoolDoubt(t *testing.T) {
+	ids := func(n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = fmt.Sprintf("<%d@x>", i)
+		}
+		return out
+	}
+	allUnknown := func(chunk []string) ([]statResult, error) {
+		res := make([]statResult, len(chunk))
+		for i := range res {
+			res[i] = statUnknown
+		}
+		return res, nil // the server ANSWERED — no transport failure
+	}
+	segs := releaseSegments{Data: ids(100)}
+	if _, _, _, _, outcome := checkSegments(context.Background(), segs, 200, 0, allUnknown); outcome != healthSkipRow {
+		t.Fatalf("outcome = %v, want healthSkipRow — server-answered doubt is a property of the release, not the pool", outcome)
+	}
+
+	// Same doubt ratio, but produced by a died connection: pool trouble, and
+	// the pass must still yield (the corpse-pool lesson).
+	transportErr := errors.New("read tcp: connection reset by peer")
+	failing := func(chunk []string) ([]statResult, error) {
+		res := make([]statResult, len(chunk))
+		for i := range res {
+			res[i] = statUnknown
+		}
+		return res, transportErr
+	}
+	if _, _, _, _, outcome := checkSegments(context.Background(), segs, 200, 0, failing); outcome != healthSkipTransient {
+		t.Fatalf("outcome = %v, want healthSkipTransient — connection-minted doubt is pool trouble", outcome)
+	}
 }
 
 // A salvaged release's NZB lists only the segments that were ever fetched —

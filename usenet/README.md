@@ -79,7 +79,7 @@ Process kinds (`Metadata.Processes`): `web`, `worker`, `api`.
 ## Data
 
 Owns the **`usenet` Postgres schema** (loon scopes `search_path` to it;
-unqualified names in migrations resolve there). Migrations `001`–`017`, embedded
+unqualified names in migrations resolve there). Migrations `001`–`028`, embedded
 via `//go:embed migrations/*.sql`, run under loon's plugin-migration path on
 boot. Every statement is `IF NOT EXISTS` / idempotent.
 
@@ -154,7 +154,11 @@ values; these are defaults):
   ready queue, `staging_ttl_hours` knob). The pg backend is CORRECT and its
   hot write path is batched (`stageArticles` inserts through a chunked unnest
   INSERT); prefer `redis` when crawling a full feed, `pg` when durability
-  matters more than throughput.
+  matters more than throughput. One known pg cost: the SQL candidate
+  pre-filter is looser than the in-memory completeness check (it cannot see
+  per-file segment totals), so a multi-file set the SQL admits but the check
+  refuses is re-drawn — articles re-loaded — every build pass until it
+  completes or ages out on the prune horizon.
 - `sink` — `internal` (own `nzbs` table, default) | `host` (hand releases to the
   host's `ReleaseSink`; requires the host to register the sink + health
   capabilities). A production host pins this to `host`.

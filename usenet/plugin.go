@@ -138,6 +138,17 @@ type Plugin struct {
 	// basis the position-based staging window will be derived from
 	// (resolutions.go).
 	resolutions *resolutionLog
+
+	// lastGood caches the most recent successfully overlaid config, so a
+	// transient settings-read failure keeps the operator's tuned knobs
+	// instead of silently reverting a run to the boot defaults (effective()).
+	lastGoodMu  sync.Mutex
+	lastGoodCfg *Config
+
+	// censusLastAt/censusLast rate-limit the staging census during catch-up
+	// (takeStagingCensus). Build job only, so unguarded is fine.
+	censusLastAt time.Time
+	censusLast   stagingCensus
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -442,14 +453,29 @@ func (p *Plugin) seedServer(ctx context.Context) {
 
 // effective returns the config with any admin-edited settings overlaid (the
 // /admin/settings knobs). Jobs call this at run start so edits apply on the
-// next run without a restart. Falls back to the boot config on read error.
+// next run without a restart. On a read error it returns the LAST
+// successfully overlaid config, not the boot config: reverting tuned knobs
+// (batch size, walk-past toggles, caps) for one run because the settings
+// table was briefly unreachable is a silent behaviour change on exactly the
+// kind of run — mid-incident — where the operator's overrides matter most.
+// Only a plugin that has never read its settings falls back to boot defaults.
 func (p *Plugin) effective(ctx context.Context) Config {
 	s, err := p.st.getSettings(ctx)
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/settings", err)
+		p.lastGoodMu.Lock()
+		cached := p.lastGoodCfg
+		p.lastGoodMu.Unlock()
+		if cached != nil {
+			return *cached
+		}
 		return p.cfg
 	}
-	return p.cfg.withOverrides(s)
+	cfg := p.cfg.withOverrides(s)
+	p.lastGoodMu.Lock()
+	p.lastGoodCfg = &cfg
+	p.lastGoodMu.Unlock()
+	return cfg
 }
 
 // runPrune deletes NZBs past the retention window + stale staged articles.

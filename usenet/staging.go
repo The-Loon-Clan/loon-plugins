@@ -99,7 +99,10 @@ type stagingStore interface {
 	// margin is the frontier guard: a set is judged dead only when coverage
 	// extends a full batch window beyond BOTH ends of its seen span, so a
 	// release straddling a fetch frontier is never judgeable.
-	sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int, margin int64) (scanned, evicted int, salvage []groupKey, err error)
+	// evicted returns each destroyed set's identity + span snapshot (read from
+	// its meta before deletion) so the caller can record it — the eviction row
+	// in set_resolutions is the only surviving record of what was removed.
+	sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int, margin int64) (scanned int, evicted []evictedSet, salvage []groupKey, err error)
 	// setSpan reads a staged set's recorded article-number span (0,0 when
 	// unknown). Redis folds spans into the set meta at stage time; pg staging
 	// never stored article numbers, so it answers 0s — completion-distance
@@ -245,17 +248,22 @@ func (s *pgStaging) reapReadyQueue(ctx context.Context, maxScan int) (int, int, 
 }
 
 // demoteReady is a no-op for pg staging for the same reason as the reaper:
-// candidacy is recomputed from rows every draw, so an incomplete set stops
-// qualifying by itself. false so the caller does not count a withdrawal that
-// never happened.
+// candidacy is recomputed from rows every draw, so there is no queue entry to
+// withdraw. NOTE the recompute is NOT a fix for a refused set: the SQL
+// pre-filter is looser than isComplete (it cannot see per-file segment
+// totals), so a set the SQL admits and isComplete refuses keeps qualifying —
+// and is re-drawn and fully re-loaded — every pass until the prune horizon
+// ages it out. Do not design against "it stops qualifying by itself"; it
+// does not. false so the caller does not count a withdrawal that never
+// happened.
 func (s *pgStaging) demoteReady(ctx context.Context, group, base string) (bool, error) {
 	return false, nil
 }
 
 // sweepWalkPast is a no-op for pg staging: rows age out on the prune horizon,
 // and the memory ceiling the sweep protects is a redis phenomenon.
-func (s *pgStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int, margin int64) (int, int, []groupKey, error) {
-	return 0, 0, nil, nil
+func (s *pgStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int, margin int64) (int, []evictedSet, []groupKey, error) {
+	return 0, nil, nil, nil
 }
 
 // setSpan is unknowable in pg staging: article numbers were never stored.

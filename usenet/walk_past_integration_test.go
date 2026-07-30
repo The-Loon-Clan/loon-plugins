@@ -68,8 +68,13 @@ func TestSweepWalkPastEvictsOnlyTheDead(t *testing.T) {
 	if scanned < 6 {
 		t.Errorf("scanned %d, want all 6", scanned)
 	}
-	if evicted != 1 {
-		t.Fatalf("evicted %d, want exactly 1 (Dead.Set)", evicted)
+	if len(evicted) != 1 {
+		t.Fatalf("evicted %d, want exactly 1 (Dead.Set)", len(evicted))
+	}
+	// The eviction's identity row is the only record of what was destroyed —
+	// it must name the set and carry the span/held snapshot from its meta.
+	if e := evicted[0]; e.Group != group || e.Base != "Dead.Set" || e.Held != 2 || e.Lo != 100 || e.Hi != 101 {
+		t.Errorf("evicted identity = %+v, want {%s Dead.Set held=2 span=[100,101]}", e, group)
 	}
 
 	exists := func(base string) bool {
@@ -130,10 +135,10 @@ func TestSweepWalkPastIsBoundedAndConverges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if evicted == 0 {
+	if len(evicted) == 0 {
 		t.Fatal("a bounded sweep must still make progress")
 	}
-	if evicted >= n {
+	if len(evicted) >= n {
 		t.Fatalf("one call evicted all %d against a budget of 100 — the bound is not applied", n)
 	}
 	// The cursor must survive the call. Convergence alone cannot prove this
@@ -198,8 +203,8 @@ func TestSweepSalvageOverflowStaysStaged(t *testing.T) {
 	if len(salvage) != 2 {
 		t.Errorf("salvage list holds %d, want the cap of 2", len(salvage))
 	}
-	if evicted != 0 {
-		t.Errorf("evicted %d salvage-worthy set(s) — overflow past the cap must stay staged", evicted)
+	if len(evicted) != 0 {
+		t.Errorf("evicted %d salvage-worthy set(s) — overflow past the cap must stay staged", len(evicted))
 	}
 	if left, _ := rdb.SCard(ctx, activeKey(group)).Result(); left != n {
 		t.Errorf("%d of %d sets remain staged — the doom pipeline took the overflow", left, n)
@@ -253,8 +258,8 @@ func TestSweepBudgetRedistributesAcrossSkewedGroups(t *testing.T) {
 	if scanned < 150 {
 		t.Errorf("scanned %d of a 200 budget over a skewed population — leftover budget is not redistributed", scanned)
 	}
-	if evicted < 150 {
-		t.Errorf("evicted %d — the redistributed budget must actually judge what it scans", evicted)
+	if len(evicted) < 150 {
+		t.Errorf("evicted %d — the redistributed budget must actually judge what it scans", len(evicted))
 	}
 	// And the rotation advances so the next round starts from the other group.
 	r.walkMu.Lock()

@@ -18,6 +18,7 @@ import (
 // setResolution is one resolved set, pending flush.
 type setResolution struct {
 	group        string
+	base         string
 	kind         string
 	artLo, artHi int64
 	held         int
@@ -35,13 +36,14 @@ func newResolutionLog() *resolutionLog { return &resolutionLog{} }
 // note records one resolution. The span comes from the set's staged META
 // (staging.setSpan) — the loaded articles do not carry their numbers, only
 // the meta fold does. A set staged before span tracking records 0s and the
-// analysis filters those out.
-func (l *resolutionLog) note(group, kind string, held int, lo, hi int64) {
+// analysis filters those out. base identifies the set: for an eviction this
+// row is the only surviving record of what the sweep removed.
+func (l *resolutionLog) note(group, base, kind string, held int, lo, hi int64) {
 	if l == nil {
 		return
 	}
 	l.mu.Lock()
-	l.rows = append(l.rows, setResolution{group: group, kind: kind, artLo: lo, artHi: hi, held: held})
+	l.rows = append(l.rows, setResolution{group: group, base: base, kind: kind, artLo: lo, artHi: hi, held: held})
 	l.mu.Unlock()
 }
 
@@ -124,6 +126,7 @@ func (s *PGStore) groupWatermarks(ctx context.Context, groups []string) (map[str
 func (s *PGStore) insertSetResolutions(ctx context.Context, rows []setResolution, marks map[string]groupMarks) error {
 	n := len(rows)
 	groups := make([]string, n)
+	bases := make([]string, n)
 	kinds := make([]string, n)
 	los := make([]int64, n)
 	his := make([]int64, n)
@@ -131,16 +134,16 @@ func (s *PGStore) insertSetResolutions(ctx context.Context, rows []setResolution
 	backs := make([]int64, n)
 	highs := make([]int64, n)
 	for i, r := range rows {
-		groups[i], kinds[i] = r.group, r.kind
+		groups[i], bases[i], kinds[i] = r.group, r.base, r.kind
 		los[i], his[i], helds[i] = r.artLo, r.artHi, int64(r.held)
 		m := marks[r.group]
 		backs[i], highs[i] = m.Back, m.High
 	}
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		_, err := tx.ExecContext(ctx,
-			`INSERT INTO set_resolutions (group_name, kind, art_lo, art_hi, held, back_watermark, high_watermark)
-			 SELECT * FROM unnest($1::text[], $2::text[], $3::bigint[], $4::bigint[], $5::int[], $6::bigint[], $7::bigint[])`,
-			pq.Array(groups), pq.Array(kinds), pq.Array(los), pq.Array(his),
+			`INSERT INTO set_resolutions (group_name, base_subject, kind, art_lo, art_hi, held, back_watermark, high_watermark)
+			 SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::bigint[], $5::bigint[], $6::int[], $7::bigint[], $8::bigint[])`,
+			pq.Array(groups), pq.Array(bases), pq.Array(kinds), pq.Array(los), pq.Array(his),
 			pq.Array(helds), pq.Array(backs), pq.Array(highs))
 		return err
 	})

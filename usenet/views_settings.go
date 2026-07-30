@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -409,7 +410,8 @@ func (p *Plugin) actionSaveKnobs(gc *gin.Context) (template.HTML, error) {
 		}
 		ints[key], vals[key] = raw, n
 	}
-	if msg := validateKnobs(p.effective(ctx), vals); msg != "" {
+	eff := p.effective(ctx)
+	if msg := validateKnobs(eff, vals); msg != "" {
 		return settingsRedirect(gc, "err", msg)
 	}
 	bools := postedBools(gc.PostForm, cfg.boolFields())
@@ -423,6 +425,26 @@ func (p *Plugin) actionSaveKnobs(gc *gin.Context) (template.HTML, error) {
 		if err := p.st.setSetting(ctx, key, val); err != nil {
 			return settingsRedirect(gc, "err", err.Error())
 		}
+	}
+	// Knob changes alter crawler behaviour on the next run with no other
+	// trace — when a job suddenly behaves differently, "did a setting change
+	// just before this?" must be answerable from the log. old->new, against
+	// the effective config read BEFORE the writes above.
+	effInts, effBools := eff.knobFields(), eff.boolFields()
+	var changed []string
+	for key, val := range vals {
+		if old := effInts[key]; old != nil && *old != val {
+			changed = append(changed, fmt.Sprintf("%s: %d -> %d", key, *old, val))
+		}
+	}
+	for key, val := range bools {
+		if old := effBools[key]; old != nil && strconv.FormatBool(*old) != val {
+			changed = append(changed, fmt.Sprintf("%s: %t -> %s", key, *old, val))
+		}
+	}
+	if len(changed) > 0 {
+		sort.Strings(changed)
+		p.logAction("settings saved: %s", strings.Join(changed, ", "))
 	}
 	return settingsRedirect(gc, "msg", "settings saved — applied on each job's next run")
 }

@@ -663,6 +663,7 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 	var evictKeys []string
 	type evictEntry struct{ group, hash string }
 	var evictMembers []evictEntry
+	var checkErr error
 
 	for _, ci := range checks {
 		meta := ci.metaCmd.Val()
@@ -687,12 +688,18 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 				// This is the ONE moment a set can be recognised as complete:
 				// completeness is checked only on a batch that ADDS to the set,
 				// so a set whose last batch hits this error is never re-checked
-				// and sits staged until it expires. Swallowing it made that
-				// loss indistinguishable from a set that was never finished.
-				r.note(ctx, "usenet/staging-complete-check",
-					fmt.Errorf("%s: %w", ci.gu.groupName, err))
+				// and sits staged until it expires. The batch must FAIL —
+				// crawl.go treats a staging error as ok=false, the watermark
+				// stays put, and the re-crawl re-runs this check. A note-only
+				// path here silently lost the release (confirmed finding); the
+				// error is deferred to the function tail so the other sets this
+				// batch completed still reach the ready queue first.
+				if checkErr == nil {
+					checkErr = fmt.Errorf("completeness check %s: %w", ci.gu.groupName, err)
+				}
+				continue
 			}
-			if err == nil && isGroupComplete(meta, fields) {
+			if isGroupComplete(meta, fields) {
 				readyGroups = append(readyGroups, ci.gu.groupName+":"+ci.gu.hash)
 				continue
 			}
@@ -746,7 +753,7 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 		}
 	}
 
-	return len(arts), nil
+	return len(arts), checkErr
 }
 
 // segFieldKey names the per-file segment-total field in a set's meta hash.
@@ -1126,9 +1133,9 @@ const salvageFloor = 0.5
 // Candidates past the cap stay staged — the cursor brings them around again.
 // salvageCap 0 disables salvage and everything dead evicts. margin is the
 // frontier guard walkPastDead requires — the caller passes its batch window.
-func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int, margin int64) (scanned, evicted int, salvage []groupKey, err error) {
+func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int, margin int64) (scanned int, evicted []evictedSet, salvage []groupKey, err error) {
 	if budget <= 0 || len(cov) == 0 {
-		return 0, 0, nil, nil
+		return 0, nil, nil, nil
 	}
 	groups := make([]string, 0, len(cov))
 	for g := range cov {
@@ -1211,6 +1218,7 @@ func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]artic
 			}
 			var doomKeys []string
 			var doomMembers []interface{}
+			var doomSets []evictedSet
 			for i, h := range hashes {
 				meta := metas[i].Val()
 				if len(meta) == 0 {
@@ -1232,8 +1240,13 @@ func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]artic
 						continue
 					}
 				}
+				lo, _ := strconv.ParseInt(meta["art_lo"], 10, 64)
+				hi, _ := strconv.ParseInt(meta["art_hi"], 10, 64)
 				doomKeys = append(doomKeys, artKey(group, h), grpKey(group, h))
 				doomMembers = append(doomMembers, h)
+				doomSets = append(doomSets, evictedSet{
+					Group: group, Base: meta["base_subject"], Held: held, Lo: lo, Hi: hi,
+				})
 			}
 			if len(doomKeys) > 0 {
 				evPipe := r.rdb.Pipeline()
@@ -1242,7 +1255,7 @@ func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]artic
 				// Counted only when the pipeline ran, same rule as the hopeless
 				// eviction: this counter proves the sweep is WORKING.
 				if _, perr := evPipe.Exec(ctx); perr == nil {
-					evicted += len(doomMembers)
+					evicted = append(evicted, doomSets...)
 				} else if firstErr == nil {
 					firstErr = perr
 				}
@@ -1326,11 +1339,18 @@ func (r *redisStaging) pressure(ctx context.Context) (float64, error) {
 // summing HLENs across every set — a scan — so it stays zero in this mode.
 func (r *redisStaging) stagingInfo(ctx context.Context) (stagingInfo, error) {
 	out := stagingInfo{Mode: "redis"}
+	// -1 on probe failure, never 0: a failed count rendering as "staging is
+	// empty" is the same misreport class as the multi-section INFO bug below —
+	// the reader must be able to tell "nothing staged" from "could not ask".
 	if n, err := r.rdb.DBSize(ctx).Result(); err == nil {
 		out.Keys = n
+	} else {
+		out.Keys = -1
 	}
 	if n, err := r.rdb.SCard(ctx, readyKey).Result(); err == nil {
 		out.ReadyGroups = n
+	} else {
+		out.ReadyGroups = -1
 	}
 	// TWO calls, not one INFO with two sections. Multi-section INFO needs Redis
 	// 7.0; against an older server it yields nothing usable and every field

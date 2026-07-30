@@ -222,9 +222,28 @@ func (p *Plugin) takeStagingCensus(ctx context.Context, drawn candidateStats, pe
 	// million staged sets that gap was the difference between an observation
 	// and an outage.
 	c.PendingSets = pendingSeen
+	// Rate limit: buildLocked runs per catch-up ROUND, and rounds can complete
+	// every few seconds — a row per round is write amplification carrying no
+	// information, because the deltas the series exists for are minutes-scale.
+	// A quiet round inside the minute is dropped; anything that moved a loss
+	// counter (fossils this draw, eviction/shed counters, the policy) writes
+	// through regardless, so the signatures the census separates are never
+	// thinned. Build job only, so the unguarded fields are fine (same rule as
+	// crawlStallStreak).
+	notable := c.FossilDropped > 0 ||
+		c.EvictedKeys != p.censusLast.EvictedKeys ||
+		c.HopelessSeen != p.censusLast.HopelessSeen ||
+		c.WalkPast != p.censusLast.WalkPast ||
+		c.MaxMemoryPolicy != p.censusLast.MaxMemoryPolicy
+	if !notable && time.Since(p.censusLastAt) < time.Minute {
+		return
+	}
 	if err := p.st.recordStagingCensus(ctx, c); err != nil {
 		p.reportErr(ctx, "usenet/staging-census", err)
+		return // leave the last-written marker so the next round retries
 	}
+	p.censusLastAt = time.Now()
+	p.censusLast = c
 }
 
 // newestMigration reports the highest-numbered migration this binary embeds.

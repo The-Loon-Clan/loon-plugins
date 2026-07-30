@@ -393,7 +393,7 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			// plugin table records this, and the host table mixes in agent
 			// uploads — the ring is what the crawlers page shows.
 			p.tel.noteBuilt(title, k.Group, size)
-			p.resolutions.note(k.Group, "built", len(arts), spanLo, spanHi)
+			p.resolutions.note(k.Group, k.Base, "built", len(arts), spanLo, spanHi)
 		}
 	}
 	// The summary now accounts for every candidate, not just the ones that
@@ -467,12 +467,18 @@ func (p *Plugin) runWalkPastSweep(ctx context.Context, cfg Config) (removed int)
 	if err != nil {
 		p.reportErr(ctx, "usenet/walk-past-sweep", err)
 	}
-	if evicted > 0 {
-		p.tel.noteWalkPast(evicted)
+	if len(evicted) > 0 {
+		p.tel.noteWalkPast(len(evicted))
+		// Evictions join the completion-distance series: deriving the staging
+		// window only from sets that resolved happily would bias it short, and
+		// this row is the only record of what the sweep destroyed.
+		for _, e := range evicted {
+			p.resolutions.note(e.Group, e.Base, "evicted", e.Held, e.Lo, e.Hi)
+		}
 		p.buildJob.Log("walk-past sweep: evicted %d of %d examined set(s) — span fully fetched, still incomplete, past grace",
-			evicted, scanned)
+			len(evicted), scanned)
 	}
-	return evicted + p.salvageSets(ctx, salvage)
+	return len(evicted) + p.salvageSets(ctx, salvage)
 }
 
 // salvageSets assembles walk-past-dead sets that still hold most of their
@@ -570,7 +576,7 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			}
 			continue
 		}
-		total, missData, par2Claimed, par2Missing := salvageTally(arts)
+		_, missData, par2Claimed, par2Missing := salvageTally(arts)
 		verdict := healthVerdict(missData, par2Claimed, par2Missing)
 		// Span read BEFORE any delete destroys the meta it lives on.
 		spanLo, spanHi, _ := p.staging.setSpan(ctx, k.Group, k.Base)
@@ -581,7 +587,7 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			} else {
 				dead++
 				p.tel.noteWalkPast(1)
-				p.resolutions.note(k.Group, "salvage_dead", len(arts), spanLo, spanHi)
+				p.resolutions.note(k.Group, k.Base, "salvage_dead", len(arts), spanLo, spanHi)
 			}
 			continue
 		}
@@ -615,15 +621,20 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			// attempt stored the row and died before marking it, and the sink
 			// returns the existing id exactly so this retry can finish the
 			// job. A failed write leaves the set staged and the cursor retries
-			// the whole store+verdict pair; total includes the never-fetched
-			// segments, which is also what keeps the verdict durable across
-			// health rechecks (see checkSegments' claimedTotal).
+			// the whole store+verdict pair.
+			//
+			// The stored total is len(arts)+missData, NOT salvageTally's
+			// total: a health recheck reconstructs its baseline as
+			// claimedTotal - len(segments in the NZB), and that baseline must
+			// equal the missing DATA exactly. Tally total also counts par2
+			// claims and absent-file estimates, which inflated the baseline
+			// on every recheck and decayed broken releases straight to dead.
 			if id <= 0 {
 				p.reportErr(ctx, "usenet/salvage-verdict", fmt.Errorf(
 					"%s: sink returned no id (created=%v) — release may be stored unmarked; leaving staged to retry", title, created))
 				continue
 			}
-			if err := hb.setVerdict(ctx, id, healthBroken, total, missData, par2Claimed); err != nil {
+			if err := hb.setVerdict(ctx, id, healthBroken, len(arts)+missData, missData, par2Claimed); err != nil {
 				p.reportErr(ctx, "usenet/salvage-verdict", fmt.Errorf("nzb %d stored but not marked broken: %w", id, err))
 				continue
 			}
@@ -634,7 +645,7 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			p.reportErr(ctx, "usenet/salvage-delete", err)
 		}
 		p.outcomes.note(outcomeSalvaged, k.Base)
-		p.resolutions.note(k.Group, "salvaged", len(arts), spanLo, spanHi)
+		p.resolutions.note(k.Group, k.Base, "salvaged", len(arts), spanLo, spanHi)
 		if created {
 			salvaged++
 			p.tel.noteSalvaged(1)
@@ -1014,6 +1025,15 @@ type groupKey struct {
 	Base  string
 }
 
+// evictedSet is one walk-past eviction: identity plus the span/held snapshot
+// read from the set's meta in the same pipeline that judged it, because the
+// eviction destroys that meta — this value is all that survives.
+type evictedSet struct {
+	Group, Base string
+	Held        int
+	Lo, Hi      int64
+}
+
 // candidateGroups pre-filters likely-complete releases in SQL: single-file when
 // distinct parts reach total_parts, multi-file when all file numbers are
 // present. runBuild re-verifies each with isComplete (which checks per-file
@@ -1029,9 +1049,13 @@ func (s *PGStore) candidateGroups(ctx context.Context, limit int) ([]groupKey, c
 		// post or an unnumbered companion sits at file_num 0 and counting it
 		// satisfied MAX(total_files) one real file early. This is a cheap
 		// PRE-filter — isComplete re-verifies per file on the loaded articles
-		// — so it may stay optimistic (a set passed here and refused there
-		// just waits), but it must not be optimistic in a way that admits
-		// every [0/N]-companioned set the moment its last file starts.
+		// — so it may stay optimistic, but it must not be optimistic in a way
+		// that admits every [0/N]-companioned set the moment its last file
+		// starts. The optimism has a standing cost: a set admitted here and
+		// refused by isComplete re-qualifies (and re-loads its articles) on
+		// EVERY pass until it completes or the prune horizon removes it —
+		// the SQL cannot see the per-file segment totals that isComplete
+		// checks, so it can never learn to stop offering the set.
 		return tx.SelectContext(ctx, &rows,
 			`SELECT group_name, base_subject FROM articles
 			 GROUP BY group_name, base_subject
