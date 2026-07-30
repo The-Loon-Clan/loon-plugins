@@ -60,6 +60,17 @@ type redisStaging struct {
 	convDone    bool
 	convScanned int
 	convLive    int
+
+	// reapMu/reapCursor carry the ready-queue reaper's SSCAN position across
+	// build passes. The per-pass scan budget only sweeps the whole queue if
+	// each pass resumes where the last one stopped — restarting from 0 meant
+	// a queue deeper than the budget had the same head window re-verified
+	// forever while everything beyond it was never examined. A per-process
+	// field is correct: only the holder of the cluster-wide build lease calls
+	// the reaper, and after a restart or lease handover the cursor starts at
+	// 0 again, which merely re-scans — removal is idempotent.
+	reapMu     sync.Mutex
+	reapCursor uint64
 }
 
 func newRedisStaging(rdb redis.UniversalClient, ttlHours func(context.Context) int, onEvict func(int), report func(context.Context, string, error)) *redisStaging {
@@ -434,9 +445,26 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 		pipe.HSet(ctx, artKey(gu.groupName, gu.hash), fields...)
 	}
 
+	// Cheap HLen + meta per touched group; HKeys (which ships every field name)
+	// only runs out-of-band below when HLen says a set could be complete — prod
+	// learned the hard way that pipelining HKeys on every batch OOM-kills Redis.
+	type checkItem struct {
+		gu *groupUpdate
+		// prevTouch is the set's touched_at from BEFORE this batch, queued
+		// ahead of the write below. The hopeless-eviction check needs "how
+		// long had this set stopped growing" — the touched_at in metaCmd is
+		// the one this same pipeline just wrote, and judging staleness from
+		// it made age always zero and the whole eviction block dead code.
+		prevTouch *redis.StringCmd
+		metaCmd   *redis.MapStringStringCmd
+		lenCmd    *redis.IntCmd
+	}
+	checks := make([]checkItem, 0, len(groups))
+
 	for _, gu := range groups {
 		gk := grpKey(gu.groupName, gu.hash)
 		ak := artKey(gu.groupName, gu.hash)
+		ci := checkItem{gu: gu, prevTouch: pipe.HGet(ctx, gk, "touched_at")}
 		first := gu.articles[0]
 		maxTP, maxTF, maxST := 0, 0, 0
 		var newestDate int64
@@ -512,23 +540,12 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 		// accumulated ref once per build pass — an unbounded leak. Double the
 		// data TTL so the ref always outlives the data it points at.
 		pipe.Expire(ctx, activeKey(gu.groupName), 2*ttl)
-	}
 
-	// Cheap HLen + meta per touched group; HKeys (which ships every field name)
-	// only runs out-of-band below when HLen says a set could be complete — prod
-	// learned the hard way that pipelining HKeys on every batch OOM-kills Redis.
-	type checkItem struct {
-		gu      *groupUpdate
-		metaCmd *redis.MapStringStringCmd
-		lenCmd  *redis.IntCmd
-	}
-	checks := make([]checkItem, 0, len(groups))
-	for _, gu := range groups {
-		checks = append(checks, checkItem{
-			gu:      gu,
-			metaCmd: pipe.HGetAll(ctx, grpKey(gu.groupName, gu.hash)),
-			lenCmd:  pipe.HLen(ctx, artKey(gu.groupName, gu.hash)),
-		})
+		// Queued after this group's writes, so the completeness check reads
+		// the totals the batch just folded in.
+		ci.metaCmd = pipe.HGetAll(ctx, gk)
+		ci.lenCmd = pipe.HLen(ctx, ak)
+		checks = append(checks, ci)
 	}
 
 	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
@@ -544,6 +561,18 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 
 	for _, ci := range checks {
 		meta := ci.metaCmd.Val()
+		// Judge staleness from the touch BEFORE this batch. metaCmd read back
+		// the touched_at this same pipeline wrote eight commands earlier, so
+		// the eviction below saw age zero on every set, every batch — it
+		// never once fired, and the counter that exists to prove eviction is
+		// working reported 0 because eviction was broken. A set first seen
+		// this batch has no previous touch and falls to created_at (also
+		// written this batch): new sets are never stale, which is the point.
+		if prev := ci.prevTouch.Val(); prev != "" {
+			meta["touched_at"] = prev
+		} else {
+			delete(meta, "touched_at")
+		}
 		length := int(ci.lenCmd.Val())
 		needed := groupNeededParts(meta)
 
@@ -1185,19 +1214,36 @@ func formatPerFileTotals(per map[int]int) string {
 // millions of entries inside one build pass would stall the pass it is meant to
 // help, and progress is durable because removal is idempotent.
 //
+// The cursor persists across calls (r.reapCursor) and resets to 0 only when a
+// circuit completes. That is what makes the per-call budget a SWEEP rather
+// than a re-verification: SSCAN from 0 walks the same deterministic bucket
+// order every time, so a queue deeper than the budget had its head window
+// scanned forever while the millions of entries beyond it were reachable only
+// by the 500-draw lottery this reaper was built to replace.
+//
 // Returns entries scanned and entries removed.
 func (r *redisStaging) reapReadyQueue(ctx context.Context, maxScan int) (scanned, removed int, err error) {
 	if maxScan <= 0 {
 		return 0, 0, nil
 	}
 	r.ensureReadySet(ctx)
-	var cursor uint64
+	r.reapMu.Lock()
+	cursor := r.reapCursor
+	r.reapMu.Unlock()
+	defer func() {
+		// Persist wherever we stopped — budget exhausted mid-circuit resumes
+		// there next pass; a completed circuit stored 0 and starts fresh. On
+		// error the pre-error cursor is kept, so the failed bucket is retried.
+		r.reapMu.Lock()
+		r.reapCursor = cursor
+		r.reapMu.Unlock()
+	}()
 	for scanned < maxScan {
-		var batch []string
-		batch, cursor, err = r.rdb.SScan(ctx, readyKey, cursor, "", 512).Result()
-		if err != nil {
-			return scanned, removed, err
+		batch, next, serr := r.rdb.SScan(ctx, readyKey, cursor, "", 512).Result()
+		if serr != nil {
+			return scanned, removed, serr
 		}
+		cursor = next
 		if len(batch) == 0 && cursor == 0 {
 			break
 		}

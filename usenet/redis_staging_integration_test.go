@@ -662,3 +662,120 @@ func TestSpanExposesABaseCollision(t *testing.T) {
 	}
 	t.Fatal("the collided set never reached the readout")
 }
+
+// The reaper's cursor must survive across calls. SSCAN from 0 walks the same
+// deterministic bucket order every time, so when the queue is deeper than the
+// per-pass budget a restarting reaper re-verifies the same head window forever
+// and never examines the millions of entries beyond it — the production queue
+// shape (7.4M entries, ~20% live) jammed exactly this way: the live survivors
+// filled the window and the sweep removed nothing while fossils beyond it
+// diluted the draw. TestReapReadyQueueIsBounded cannot see this because its
+// fixture is 100% dead — removal itself drives the window forward.
+func TestReapReadyQueueResumesAcrossCalls(t *testing.T) {
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+	ctx := context.Background()
+
+	// 1,000 live entries (metadata present) and 200 dead, against a 500-entry
+	// budget: most of the queue is beyond any single call's window, and the
+	// live entries never leave, so only a persisted cursor can carry the sweep
+	// past them.
+	live := 1000
+	for i := 0; i < live; i++ {
+		e := fmt.Sprintf("a.b.group:live%04d", i)
+		if err := rdb.HSet(ctx, "grp:"+e, "base_subject", "Release "+e).Err(); err != nil {
+			t.Fatal(err)
+		}
+		if err := rdb.SAdd(ctx, readyKey, e).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 200; i++ {
+		if err := rdb.SAdd(ctx, readyKey, fmt.Sprintf("a.b.group:dead%04d", i)).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Six budgeted calls cover the 1,200-entry circuit at least twice with the
+	// cursor persisted; a reaper restarting at 0 spends every call on the same
+	// mostly-live prefix and leaves dead entries beyond it untouched.
+	removed := 0
+	for i := 0; i < 6; i++ {
+		_, rm, err := r.reapReadyQueue(ctx, 500)
+		if err != nil {
+			t.Fatal(err)
+		}
+		removed += rm
+	}
+	if removed != 200 {
+		t.Errorf("removed %d of 200 dead entries across six budgeted calls — "+
+			"the sweep is not resuming past the live prefix", removed)
+	}
+	if n, _ := rdb.SCard(ctx, readyKey).Result(); n != int64(live) {
+		t.Errorf("queue holds %d, want exactly the %d live entries", n, live)
+	}
+}
+
+// Hopeless-set eviction, end to end through stageArticles: a set that stopped
+// growing while far short of its need is deleted when the next straggler
+// touches it. This is the check that was dead in production — the staleness
+// judgment read the touched_at the same pipeline had just written, so age was
+// always zero, no set was ever evicted, and the "evicted" telemetry counter
+// (documented as proof the machinery works) read 0 because the machinery was
+// broken. Continuously-touched base-collision garbage therefore never left,
+// and its TTL refreshed on every touch.
+func TestHopelessEvictionFiresOnStragglerTouch(t *testing.T) {
+	rdb := testRedis(t)
+	ctx := context.Background()
+	evicted := 0
+	r := newRedisStaging(rdb, func(context.Context) int { return 2 },
+		func(n int) { evicted += n }, nil)
+
+	art := func(part int) stagedArticle {
+		return stagedArticle{
+			Group: "a.b.group", BaseSubject: "Collision.Base", Subject: "Collision.Base",
+			MessageID: fmt.Sprintf("<p%d@x>", part), Poster: "p", Bytes: 1000,
+			Posted: time.Now(), PartNum: part, TotalParts: 100, SegTotal: 100,
+		}
+	}
+
+	if _, err := r.stageArticles(ctx, []stagedArticle{art(1)}); err != nil {
+		t.Fatal(err)
+	}
+	hash := groupHashKey("a.b.group", "Collision.Base")
+	gk, ak := grpKey("a.b.group", hash), artKey("a.b.group", hash)
+
+	// A fresh set must never be evicted, however incomplete: large releases
+	// arrive over many batches and judging them at birth deleted them mid-fill
+	// (the ~128-sets-a-minute prod incident).
+	if _, err := r.stageArticles(ctx, []stagedArticle{art(2)}); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := rdb.Exists(ctx, gk, ak).Result(); n != 2 {
+		t.Fatalf("still-growing set was evicted (%d of 2 keys left)", n)
+	}
+	if evicted != 0 {
+		t.Fatalf("onEvict fired %d times for a growing set", evicted)
+	}
+
+	// Backdate the last touch past the staleness bar: the set has now "stopped
+	// growing". The next straggler both re-touches it and must evict it — 3 of
+	// 100 parts is far under the completeness bar.
+	if err := rdb.HSet(ctx, gk, "touched_at", time.Now().Unix()-400).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.stageArticles(ctx, []stagedArticle{art(3)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if n, _ := rdb.Exists(ctx, gk, ak).Result(); n != 0 {
+		t.Errorf("hopeless set still staged (%d of its keys exist) — the eviction "+
+			"judged staleness from the touch this batch just wrote", n)
+	}
+	if member, _ := rdb.SIsMember(ctx, activeKey("a.b.group"), hash).Result(); member {
+		t.Error("evicted set still referenced from active_groups")
+	}
+	if evicted != 1 {
+		t.Errorf("onEvict reported %d, want 1", evicted)
+	}
+}
