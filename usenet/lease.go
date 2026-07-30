@@ -147,6 +147,28 @@ func leaseRenewInterval(ttl time.Duration) time.Duration {
 	return d
 }
 
+// renewalLost decides whether one renewal attempt means the protected work
+// must stop.
+//
+// A definitive answer (the row now belongs to someone else) cancels
+// immediately: a sibling may legitimately own the work from that moment.
+//
+// A transport ERROR is different, and treating it the same was a real defect:
+// the renewer ticks at ttl/3, so after one failed renewal the lease is still
+// valid for two full ticks — yet a single DB blip (connection reset, brief
+// failover, pool exhaustion) cancelled a multi-hour pass and, in the
+// backfill, threw away every fetched-but-unrecorded batch. Errors are
+// tolerated while the LAST SUCCESSFUL renewal still guarantees validity, and
+// only when the unrenewed time reaches two-thirds of the TTL — the margin
+// nearly spent, expiry one tick away — does the work stop, before a sibling
+// could take over.
+func renewalLost(ok bool, err error, sinceLastOK, ttl time.Duration) bool {
+	if err == nil {
+		return !ok
+	}
+	return sinceLastOK >= 2*ttl/3
+}
+
 // withLease runs fn while holding a lease, renewing it in the background so a
 // long pass cannot outlive its own claim. Returns false without running fn when
 // the lease is held elsewhere.
@@ -175,17 +197,22 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 		defer wg.Done()
 		t := time.NewTicker(leaseRenewInterval(ttl))
 		defer t.Stop()
+		lastOK := time.Now() // the claim above just succeeded
 		for {
 			select {
 			case <-renewCtx.Done():
 				return
 			case <-t.C:
-				// A failed renewal is not fatal on its own — the lease may still
-				// be valid — but if it keeps failing the TTL will lapse and
-				// another worker takes over, which is the correct outcome. The
-				// loss cancels workCtx so the protected work stops instead of
-				// running on and overlapping the new owner.
-				if ok, err := p.st.claimLease(renewCtx, scope, key, me, ttl); err != nil || !ok {
+				// Definitive loss cancels workCtx so the protected work stops
+				// instead of running on and overlapping the new owner; a
+				// transient error retries on the next tick while the TTL
+				// margin lasts (see renewalLost).
+				ok, err := p.st.claimLease(renewCtx, scope, key, me, ttl)
+				if err == nil && ok {
+					lastOK = time.Now()
+					continue
+				}
+				if renewalLost(ok, err, time.Since(lastOK), ttl) {
 					if renewCtx.Err() == nil {
 						p.core.Errors.Report(renewCtx, "usenet/lease-renew-lost",
 							fmt.Errorf("%s/%s: renewal lost mid-work (err=%v ok=%v) — cancelling the pass", scope, key, err, ok))
@@ -257,23 +284,40 @@ func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups [
 		defer wg.Done()
 		t := time.NewTicker(leaseRenewInterval(ttl))
 		defer t.Stop()
+		lastOK := time.Now() // the claims above just succeeded
 		for {
 			select {
 			case <-renewCtx.Done():
 				return
 			case <-t.C:
+				// One key DEFINITIVELY lost abandons renewal for the whole set
+				// and cancels the pass — a sibling may now legitimately claim
+				// these groups, so crawling on would overlap it. A transport
+				// error retries the whole set next tick while the TTL margin
+				// lasts (see renewalLost); a DB blip must not cost the pass.
+				var terr error
+				lostKey := ""
 				for _, k := range keys {
-					if ok, err := p.st.claimLease(renewCtx, leaseScopeGroup, k, me, ttl); err != nil || !ok {
-						// One key's loss abandons renewal for the whole set and
-						// cancels the pass — a sibling may now legitimately
-						// claim these groups, so crawling on would overlap it.
-						if renewCtx.Err() == nil {
-							p.core.Errors.Report(renewCtx, "usenet/lease-renew-lost",
-								fmt.Errorf("group lease %s: renewal lost mid-pass (err=%v ok=%v) — cancelling the pass", k, err, ok))
-							cancelPass()
-						}
-						return
+					ok, err := p.st.claimLease(renewCtx, leaseScopeGroup, k, me, ttl)
+					if err != nil {
+						terr = fmt.Errorf("%s: %w", k, err)
+						break
 					}
+					if !ok {
+						lostKey = k
+						break
+					}
+				}
+				switch {
+				case lostKey == "" && terr == nil:
+					lastOK = time.Now()
+				case renewalLost(lostKey == "", terr, time.Since(lastOK), ttl):
+					if renewCtx.Err() == nil {
+						p.core.Errors.Report(renewCtx, "usenet/lease-renew-lost",
+							fmt.Errorf("group lease: renewal lost mid-pass (lost=%q err=%v) — cancelling the pass", lostKey, terr))
+						cancelPass()
+					}
+					return
 				}
 			}
 		}

@@ -1,10 +1,38 @@
 package usenet
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 )
+
+// The renewal-loss policy. Cancelling a pass is expensive — in the backfill it
+// discards every fetched-but-unrecorded batch — so it must happen exactly
+// twice: when the row definitively belongs to someone else, and when errors
+// have eaten the TTL margin and expiry is one tick away. Cancelling on the
+// FIRST transient error (the old behavior) converted every DB blip into a
+// lost multi-hour pass, with two full renewal ticks of retry margin unused.
+func TestRenewalLostPolicy(t *testing.T) {
+	ttl := 15 * time.Minute
+	blip := errors.New("connection reset")
+
+	if !renewalLost(false, nil, time.Second, ttl) {
+		t.Error("a definitive loss (someone else holds the row) must cancel immediately")
+	}
+	if renewalLost(true, blip, time.Second, ttl) {
+		t.Error("one transient error cancelled the pass — the lease is still valid for two ticks")
+	}
+	if renewalLost(true, blip, 2*ttl/3-time.Second, ttl) {
+		t.Error("errors within the TTL margin must keep retrying")
+	}
+	if !renewalLost(true, blip, 2*ttl/3, ttl) {
+		t.Error("errors past two-thirds of the TTL must cancel before the lease lapses under a sibling")
+	}
+	if renewalLost(true, nil, time.Hour, ttl) {
+		t.Error("a successful renewal is never a loss, whatever the clock says")
+	}
+}
 
 // TestGroupLeaseKey: the lease unit is one BACKBONE'S view of one GROUP, because
 // crawl state is keyed (backbone, group_name). Two workers on the same backbone
