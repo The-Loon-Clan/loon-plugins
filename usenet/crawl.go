@@ -130,6 +130,15 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		// ends — indistinguishable from the feature being broken, and it cost a
 		// diagnostic cycle when a poster added 90 seconds into a pass recorded
 		// nothing. Same reasoning as re-resolving the fleet each round below.
+		//
+		// The Config re-read includes the loop's own kill switch
+		// (crawl_no_catchup), the pressure thresholds, and the pool-shaping
+		// knobs. This line is also what lets the per-round fleet re-resolve
+		// below converge on the same pool key the backfill computes from ITS
+		// per-round read — two jobs resolving the same provider from configs of
+		// different ages compute different keys and close each other's pools in
+		// a rebuild ping-pong for the rest of the pass.
+		cfg = p.effective(ctx)
 		p.reloadJunkRules(ctx)
 		p.loadPosterWatch(ctx)
 		// Do not stage into a staging backend that is already full.
@@ -417,7 +426,21 @@ func (p *Plugin) crawlBackbone(ctx context.Context, runs []providerRun, cfg Conf
 	if ctx.Err() != nil && jobCtx.Err() == nil {
 		p.crawlJob.Log("%s: lease lost mid-pass — final sweep skipped; %d group(s) already advanced", bb, advanced)
 	} else {
-		s2, a2 := p.advanceWatermarks(ctx, bb, plans, leftover)
+		sweepCtx := ctx
+		if ctx.Err() != nil {
+			// Shutdown. Recording the partial progress is this sweep's whole
+			// purpose — "a deploy killed the worker and lost the pass" is the
+			// bug it exists to fix — yet it ran on the pass context the
+			// shutdown just cancelled, so every coverage and watermark write
+			// failed with context.Canceled and the progress was lost anyway
+			// (plus one error-ring entry per ok batch in the leftover). The
+			// leases are still held (release runs after this), so a short
+			// fresh context is safe; it mirrors what releaseLease already does.
+			var cancel context.CancelFunc
+			sweepCtx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+		}
+		s2, a2 := p.advanceWatermarks(sweepCtx, bb, plans, leftover)
 		staged += s2
 		advanced += a2
 	}
@@ -563,15 +586,26 @@ func providerLabels(runs []providerRun) string {
 // one worker at a time around the providers so the load spreads evenly instead
 // of filling the first account before touching the second.
 //
-// Bounded by what each pool actually opened: a provider that opened 10 takes
-// 10 workers and no more, and the remainder go to whoever still has room. That
-// is what keeps a small standby account from being handed a third of the work
-// it cannot serve.
+// Bounded by what each pool actually OPENED, not by its resolved budget. This
+// comment always claimed that; the code dealt by r.size, which handed a pool
+// with zero live connections half the workers — each failing its batch in
+// microseconds and pulling the next job off the shared channel, so the dead
+// account starved the healthy one of the very work it couldn't do. A pool
+// that opened less than its budget (account limit, partial open) now takes
+// exactly what it can serve, and the remainder go to whoever has room.
 func assignPools(runs []providerRun, workers int) []*nntp.Pool {
 	out := make([]*nntp.Pool, 0, workers)
 	room := make([]int, len(runs))
 	for i, r := range runs {
 		room[i] = r.size
+		if r.pool != nil {
+			// Target > 0 distinguishes a pool that OPENED (and can say what it
+			// actually holds) from a zero-value one that was never configured;
+			// only the former's live count overrides the resolved budget.
+			if st := r.pool.Stats(); st.Target > 0 && st.Open < room[i] {
+				room[i] = st.Open
+			}
+		}
 	}
 	for len(out) < workers {
 		dealt := false
@@ -632,6 +666,17 @@ func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batc
 	// connections that were never going to exist.
 	workers := batchWorkers(totalConns(runs), len(jobs))
 	assigned := assignPools(runs, workers)
+	if len(assigned) == 0 {
+		// Every pool in the fleet is dead right now (assignPools deals by live
+		// connections). No workers means nobody would ever drain jobCh, so the
+		// feeder below would block forever; return instead — every job is
+		// unfetched, nothing advances, and the next resolve benches the dead
+		// pools and promotes backups.
+		return nil
+	}
+	if workers > len(assigned) {
+		workers = len(assigned)
+	}
 	expected := make(map[string]int, 8)
 	for _, j := range jobs {
 		expected[j.group]++
@@ -731,8 +776,17 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, te
 		return nil
 	})
 	if err != nil {
-		p.reportErr(ctx, "usenet/crawl-fetch",
-			fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
+		// ErrPoolEmpty is a pool-state condition, not a fetch failure: every
+		// batch drawn by a worker on a dead pool fails with it in microseconds,
+		// which flooded the error ring and the host error log with up to
+		// crawl_max_batches identical reports per round. The condition itself
+		// is surfaced where it is actionable — openFleet benches dead pools
+		// and reports usenet/provider-dead once — and the batch still returns
+		// ok=false, so nothing advances past it.
+		if !errors.Is(err, nntp.ErrPoolEmpty) {
+			p.reportErr(ctx, "usenet/crawl-fetch",
+				fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
+		}
 		tel.noteBatchFor(j.group, 0, 0, 0, false)
 		return res // ok stays false — the watermark will not pass this range
 	}

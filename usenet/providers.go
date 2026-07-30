@@ -100,15 +100,33 @@ func (pr provider) effectiveConns(def, workers int) int {
 	return perWorker
 }
 
+// poolSpec is everything about a pool that is decided by config rather than by
+// the provider row: the resolved per-worker size plus the transport bounds
+// that are baked into the pool at construction.
+type poolSpec struct {
+	size        int
+	keepalive   time.Duration
+	dialTimeout time.Duration
+	opTimeout   time.Duration
+}
+
+func specFor(cfg Config, size int) poolSpec {
+	return poolSpec{
+		size:        size,
+		keepalive:   time.Duration(cfg.KeepaliveMin) * time.Minute,
+		dialTimeout: time.Duration(cfg.DialTimeoutSec) * time.Second,
+		opTimeout:   time.Duration(cfg.OpTimeoutSec) * time.Second,
+	}
+}
+
 // poolKey changes whenever anything about how we'd dial changes, so the pool is
-// rebuilt rather than silently kept against stale settings. `size` is the
-// resolved per-worker connection budget for this pass — it moves when the fleet
-// size changes at a term boundary, so the pool is rebuilt to the new budget.
-func (pr provider) poolKey(size int, keepalive time.Duration) string {
-	// keepalive is part of the identity: it is baked into the pool at
-	// construction, so without it here, changing the knob would leave the old
-	// pool running until some unrelated setting forced a reopen.
-	return fmt.Sprintf("%d|%s|%s|%t|%d|%s", pr.ID, pr.addr(), pr.Username, pr.TLS, size, keepalive)
+// rebuilt rather than silently kept against stale settings. Everything in
+// poolSpec is part of the identity because all of it is baked into the pool at
+// construction — without it here, changing a knob would leave the old pool
+// running until some unrelated setting forced a reopen.
+func (pr provider) poolKey(spec poolSpec) string {
+	return fmt.Sprintf("%d|%s|%s|%t|%d|%s|%s|%s",
+		pr.ID, pr.addr(), pr.Username, pr.TLS, spec.size, spec.keepalive, spec.dialTimeout, spec.opTimeout)
 }
 
 // chooseProviders decides who crawls this pass: every healthy active provider,
@@ -172,10 +190,9 @@ type providerPool struct {
 	downUntil time.Time // set when the pool cannot be opened
 }
 
-// providerDownCooldown is how long a provider stays benched after failing to
-// open. Without it a dead provider would be re-dialled every pass, and with a
-// backup configured the fleet would flap between them.
-const providerDownCooldown = 10 * time.Minute
+// The bench cooldown lives in Config (provider_down_cooldown_min): without one
+// a dead provider would be re-dialled every pass, and with a backup configured
+// the fleet would flap between them.
 
 // providers returns the enabled servers, preferred first.
 func (s *PGStore) providers(ctx context.Context) ([]provider, error) {
@@ -237,7 +254,13 @@ func (f *providerFleet) isDown(id int, now time.Time) bool {
 
 // bench marks a provider unusable for the cooldown, so a backup can take over
 // and we stop re-dialling a server that is refusing us.
-func (f *providerFleet) bench(pr provider, now time.Time) {
+//
+// `now` must be read FRESH by the caller, immediately before benching — not
+// captured at pass start. A failed open can stall for minutes against a
+// black-holed host, and benching from the pass-start clock wrote a downUntil
+// that was already in the past: the provider was never effectively benched,
+// isDown reported healthy on the next resolve, and backups never promoted.
+func (f *providerFleet) bench(pr provider, now time.Time, cooldown time.Duration) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	pp := f.pools[pr.ID]
@@ -250,12 +273,12 @@ func (f *providerFleet) bench(pr provider, now time.Time) {
 		pp.pool = nil
 		pp.key = ""
 	}
-	pp.downUntil = now.Add(providerDownCooldown)
+	pp.downUntil = now.Add(cooldown)
 }
 
 // get returns an open pool for the provider, dialling or rebuilding as needed.
-func (f *providerFleet) get(ctx context.Context, pr provider, size int, keepalive time.Duration) (*nntp.Pool, error) {
-	key := pr.poolKey(size, keepalive)
+func (f *providerFleet) get(ctx context.Context, pr provider, spec poolSpec) (*nntp.Pool, error) {
+	key := pr.poolKey(spec)
 
 	f.mu.Lock()
 	pp := f.pools[pr.ID]
@@ -265,7 +288,11 @@ func (f *providerFleet) get(ctx context.Context, pr provider, size int, keepaliv
 		return p, nil
 	}
 	if pp != nil && pp.pool != nil {
-		_ = pp.pool.Close() // settings changed
+		// Settings changed: close BEFORE dialling the replacement, accepting a
+		// brief no-pool window, because under an account cap the old pool's
+		// live connections would 482 the new pool's dials — swap-on-success
+		// deadlocks against exactly the providers the cap knob exists for.
+		_ = pp.pool.Close()
 		pp.pool, pp.key = nil, ""
 	}
 	f.mu.Unlock()
@@ -275,39 +302,65 @@ func (f *providerFleet) get(ctx context.Context, pr provider, size int, keepaliv
 		TLS:         pr.TLS,
 		Username:    pr.Username,
 		Password:    pr.Password,
-		Size:        size,
-		DialTimeout: 30 * time.Second,
-		OpTimeout:   60 * time.Second,
+		Size:        spec.size,
+		DialTimeout: spec.dialTimeout,
+		OpTimeout:   spec.opTimeout,
 		// Probe at the configured interval, and treat a connection as idle
 		// once it has gone one full interval unused — so a pool doing real
 		// work generates no probes at all.
-		KeepaliveInterval: keepalive,
-		KeepaliveIdle:     keepalive,
+		KeepaliveInterval: spec.keepalive,
+		KeepaliveIdle:     spec.keepalive,
 	})
-	if err := pool.Open(ctx); err != nil {
+	// Bound the whole open, not just each dial. Open dials sequentially and a
+	// black-holed host (firewall DROP, dead route, accept-but-silent) costs a
+	// full DialTimeout per slot with no error class to break on — at 50
+	// connections that was 25 minutes of every pass stalled at the fleet head,
+	// in every job, recurring each cooldown lapse. Open only errors when it
+	// opened NOTHING; if the bound trips mid-open on a living-but-slow server
+	// the pool simply comes up partial and TopUp grows it later.
+	octx, cancel := context.WithTimeout(ctx, 2*spec.dialTimeout)
+	err := pool.Open(octx)
+	cancel()
+	if err != nil {
 		return nil, err
 	}
+	return f.install(pr, pool, key), nil
+}
 
+// install publishes a freshly-opened pool under its key, resolving races with
+// concurrent get() calls. Separated from get so the resolution is testable —
+// it is where a pool leak lived.
+//
+// Same key: a concurrent caller (crawl vs backfill both fleeting the same
+// provider) won the dial race while we were connecting; keep theirs and close
+// ours promptly, so the account never holds two full pools.
+//
+// Different key: the concurrent winner dialled under other settings (the crawl
+// runs a round on pass-start config while the backfill re-reads per round; a
+// worker-count change moves effectiveConns). Close what we displace — every
+// pool that leaves the fleet map must be Closed exactly once. The overwritten
+// alternative kept `size` authenticated sockets alive forever via keepalive
+// DATE probes, invisible to snapshotStats, counted against the account cap
+// until process exit. A caller still holding the displaced pool sees its
+// remaining batches fail and re-plan, which is bounded; the leak was not.
+func (f *providerFleet) install(pr provider, pool *nntp.Pool, key string) *nntp.Pool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if pp == nil {
-		pp = f.pools[pr.ID]
-	}
+	pp := f.pools[pr.ID]
 	if pp == nil {
 		pp = &providerPool{prov: pr}
 		f.pools[pr.ID] = pp
 	}
-	if pp.pool != nil && pp.key == key {
-		// A concurrent caller (crawl vs backfill both fleeting the same
-		// provider) won the dial race while we were connecting. Keep theirs;
-		// closing ours promptly is what stops the account seeing two full
-		// pools and the loser's sockets leaking until process exit.
-		_ = pool.Close()
-		return pp.pool, nil
+	if pp.pool != nil {
+		if pp.key == key {
+			_ = pool.Close()
+			return pp.pool
+		}
+		_ = pp.pool.Close()
 	}
 	pp.prov, pp.pool, pp.key = pr, pool, key
 	pp.downUntil = time.Time{}
-	return pool, nil
+	return pool
 }
 
 // providerStat is one provider's live pool state for the admin page.
@@ -348,9 +401,10 @@ func (f *providerFleet) closeAll() {
 }
 
 // activeFleet resolves the providers to use this pass and opens their pools. A
-// provider that fails to open is benched (freeing a backup to replace it) and
-// the pass continues with whoever is left — one dead provider must not stop the
-// others from crawling.
+// provider that fails to open — or whose cached pool turns out to have no live
+// connections left — is benched (freeing a backup to replace it) and the pass
+// continues with whoever is left: one dead provider must not stop the others
+// from crawling.
 func (p *Plugin) activeFleet(ctx context.Context, cfg Config) ([]providerRun, error) {
 	all, err := p.st.providers(ctx)
 	if err != nil {
@@ -359,31 +413,110 @@ func (p *Plugin) activeFleet(ctx context.Context, cfg Config) ([]providerRun, er
 	if len(all) == 0 {
 		return nil, errNoServer
 	}
+	return p.openFleet(ctx, all, cfg)
+}
+
+// openFleet is activeFleet minus the provider load — the seam the fleet
+// lifecycle tests drive with fake servers.
+func (p *Plugin) openFleet(ctx context.Context, all []provider, cfg Config) ([]providerRun, error) {
 	now := time.Now()
 	chosen := chooseProviders(all, func(id int) bool { return p.fleet.isDown(id, now) })
 
 	// The account cap is split across the crawlers sharing this account, using
-	// the same term-stable membership that splits the groups (assign.go). A lone
-	// worker owns the whole cap.
-	workers := p.liveWorkerCount(ctx, cfg)
-	keepalive := time.Duration(cfg.KeepaliveMin) * time.Minute
+	// the same term-stable membership that splits the groups (assign.go). A
+	// lone worker owns the whole cap. Presence is only consulted when a cap
+	// exists — effectiveConns ignores the worker count otherwise, so cap-free
+	// installs skip a database read per resolve.
+	workers := 1
+	if anyAccountCap(all) {
+		workers = p.liveWorkerCount(ctx, cfg)
+	}
 
-	var runs []providerRun
-	for _, pr := range chosen {
-		size := pr.effectiveConns(cfg.Connections, workers)
-		pool, err := p.fleet.get(ctx, pr, size, keepalive)
-		if err != nil {
-			p.fleet.bench(pr, now)
-			p.core.Errors.Report(ctx, "usenet/provider-open",
-				fmt.Errorf("%s: %w", pr.label(), err))
-			continue
+	runs, benched := p.openProviders(ctx, chosen, cfg, workers)
+	if benched {
+		// Something was benched JUST NOW, and benching it is what frees its
+		// backup — but chooseProviders ran on the pre-bench down-state, so the
+		// backup was excluded (nothing was down yet). Without a second look
+		// the pass runs under-strength or aborts entirely while a healthy
+		// backup sits idle until the NEXT pass — and then the cooldown lapses,
+		// the dead active is chosen again, and the cycle repeats forever. One
+		// bounded re-selection, dialling only providers not already running.
+		now = time.Now()
+		rechosen := chooseProviders(all, func(id int) bool { return p.fleet.isDown(id, now) })
+		have := make(map[int]bool, len(runs))
+		for _, r := range runs {
+			have[r.prov.ID] = true
 		}
-		runs = append(runs, providerRun{prov: pr, pool: pool, size: size})
+		var extra []provider
+		for _, pr := range rechosen {
+			if !have[pr.ID] {
+				extra = append(extra, pr)
+			}
+		}
+		if len(extra) > 0 {
+			more, _ := p.openProviders(ctx, extra, cfg, workers)
+			runs = append(runs, more...)
+		}
 	}
 	if len(runs) == 0 {
 		return nil, fmt.Errorf("no usable provider (%d configured)", len(all))
 	}
 	return runs, nil
+}
+
+// openProviders dials one list of providers, benching the ones that fail and
+// reporting whether anything was benched (the signal for a re-selection).
+func (p *Plugin) openProviders(ctx context.Context, chosen []provider, cfg Config, workers int) (runs []providerRun, benched bool) {
+	cooldown := time.Duration(cfg.ProviderDownCooldownMin) * time.Minute
+	for _, pr := range chosen {
+		size := pr.effectiveConns(cfg.Connections, workers)
+		spec := specFor(cfg, size)
+		pool, err := p.fleet.get(ctx, pr, spec)
+		if err != nil {
+			// time.Now(), not a pass-start capture: the open may just have
+			// stalled for minutes, and a stale bench timestamp can already be
+			// expired when written (see bench).
+			p.fleet.bench(pr, time.Now(), cooldown)
+			p.core.Errors.Report(ctx, "usenet/provider-open",
+				fmt.Errorf("%s: %w", pr.label(), err))
+			benched = true
+			continue
+		}
+		// A cached pool can be a corpse: providers reap idle sessions and an
+		// outage kills the rest, and every dead connection is discarded to a
+		// nil slot. get() has no liveness view — a key match returns whatever
+		// is installed — so a provider that died AFTER its pool opened was
+		// re-selected every pass forever: never benched, its backup never
+		// promoted, and its zero-connection pool still dealt a full share of
+		// batch workers that all failed instantly. One TopUp is the cheap
+		// second chance (it refills dead slots, behind its own cooldown);
+		// still zero live connections means the provider is down.
+		if pool.Stats().Open == 0 {
+			tctx, cancel := context.WithTimeout(ctx, 2*spec.dialTimeout)
+			pool.TopUp(tctx)
+			cancel()
+			if pool.Stats().Open == 0 {
+				p.fleet.bench(pr, time.Now(), cooldown)
+				p.core.Errors.Report(ctx, "usenet/provider-dead",
+					fmt.Errorf("%s: no live connections and top-up opened none", pr.label()))
+				benched = true
+				continue
+			}
+		}
+		runs = append(runs, providerRun{prov: pr, pool: pool, size: size})
+	}
+	return runs, benched
+}
+
+// anyAccountCap reports whether any enabled provider splits its connection
+// budget across the worker fleet.
+func anyAccountCap(all []provider) bool {
+	for _, pr := range all {
+		if pr.AccountCap > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // providerRun pairs a provider with its open pool for one pass.

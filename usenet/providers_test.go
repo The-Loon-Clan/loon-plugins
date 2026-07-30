@@ -165,7 +165,8 @@ func TestEffectiveConns(t *testing.T) {
 // so a settings edit rebuilds the pool instead of silently reusing a stale one.
 func TestProviderPoolKey(t *testing.T) {
 	base := provider{ID: 1, Host: "news.example.com", Port: 563, TLS: true, Username: "u", Connections: 10}
-	k := base.poolKey(20, 2*time.Minute)
+	spec := poolSpec{size: 20, keepalive: 2 * time.Minute, dialTimeout: 30 * time.Second, opTimeout: 60 * time.Second}
+	k := base.poolKey(spec)
 
 	for _, mut := range []struct {
 		name string
@@ -177,25 +178,34 @@ func TestProviderPoolKey(t *testing.T) {
 		{"user", func() provider { c := base; c.Username = "v"; return c }()},
 		{"id", func() provider { c := base; c.ID = 2; return c }()},
 	} {
-		if mut.p.poolKey(20, 2*time.Minute) == k {
+		if mut.p.poolKey(spec) == k {
 			t.Errorf("changing %s did not change the pool key", mut.name)
 		}
 	}
 	// The resolved size is part of the key: when the fleet grows and each
 	// worker's budget shrinks at a term boundary, the pool must rebuild.
-	if base.poolKey(21, 2*time.Minute) == k {
+	if base.poolKey(func() poolSpec { c := spec; c.size = 21; return c }()) == k {
 		t.Error("a different resolved size must change the pool key")
 	}
 	// Keepalive is baked into the pool at construction, so changing the knob
 	// must rebuild it — otherwise the setting appears to save and does nothing
 	// until some unrelated edit forces a reopen.
-	if base.poolKey(20, 5*time.Minute) == k {
+	if base.poolKey(func() poolSpec { c := spec; c.keepalive = 5 * time.Minute; return c }()) == k {
 		t.Error("a different keepalive interval must change the pool key")
 	}
-	if base.poolKey(20, 0) == k {
+	if base.poolKey(func() poolSpec { c := spec; c.keepalive = 0; return c }()) == k {
 		t.Error("disabling keepalive must change the pool key")
 	}
-	if base.poolKey(20, 2*time.Minute) != k {
+	// The transport bounds are baked into the pool at construction, exactly
+	// like keepalive: leaving either out of the key means the knob appears to
+	// save and does nothing until an unrelated edit forces a reopen.
+	if base.poolKey(func() poolSpec { c := spec; c.opTimeout = 2 * time.Minute; return c }()) == k {
+		t.Error("a different op timeout must change the pool key")
+	}
+	if base.poolKey(func() poolSpec { c := spec; c.dialTimeout = 10 * time.Second; return c }()) == k {
+		t.Error("a different dial timeout must change the pool key")
+	}
+	if base.poolKey(spec) != k {
 		t.Error("pool key is not stable for identical settings")
 	}
 }
@@ -208,14 +218,14 @@ func TestFleetBenchAndRecover(t *testing.T) {
 	if f.isDown(1, now) {
 		t.Error("a provider with no recorded failure should not be down")
 	}
-	f.bench(p1, now)
+	f.bench(p1, now, 10*time.Minute)
 	if !f.isDown(1, now) {
 		t.Error("a benched provider should be down")
 	}
-	if !f.isDown(1, now.Add(providerDownCooldown-time.Second)) {
+	if !f.isDown(1, now.Add(10*time.Minute-time.Second)) {
 		t.Error("should still be down inside the cooldown")
 	}
-	if f.isDown(1, now.Add(providerDownCooldown+time.Second)) {
+	if f.isDown(1, now.Add(10*time.Minute+time.Second)) {
 		t.Error("should recover after the cooldown — a benched provider must get retried")
 	}
 }

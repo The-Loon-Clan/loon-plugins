@@ -126,6 +126,20 @@ type Config struct {
 	HealthMinAgeHours int `json:"health_min_age_hours"` // propagation guard: skip releases newer than this (default 24)
 	HealthStatChunk   int `json:"health_stat_chunk"`    // segments STATted per connection lease (default 200)
 
+	// NNTP transport bounds. Per-provider behavior lives on the servers table;
+	// these are the plugin-wide dial/operation limits every pool is built with.
+	// DialTimeoutSec bounds one connect+greeting attempt. OpTimeoutSec bounds
+	// one whole command exchange — one GROUP+OVER round — and interacts with
+	// `batch`: a bigger batch on a slow provider legitimately takes longer, and
+	// an OpTimeout below the honest fetch time turns every batch into a
+	// discarded connection and a reconnect storm.
+	DialTimeoutSec int `json:"dial_timeout_sec"` // default 30
+	OpTimeoutSec   int `json:"op_timeout_sec"`   // default 60
+	// ProviderDownCooldownMin is how long a provider stays benched after
+	// failing. Long enough to stop re-dialling a dead server every pass, short
+	// enough that recovery is noticed the same hour.
+	ProviderDownCooldownMin int `json:"provider_down_cooldown_min"` // default 10
+
 	// Backfill back-pressure thresholds (percent of staging pressure). Backfill
 	// pauses at high, resumes below low; the forward crawl is never paused.
 	BackfillPressureHighPct int `json:"backfill_pressure_high_pct"` // default 85
@@ -250,6 +264,15 @@ func (c *Config) applyDefaults() {
 	if c.HealthStatChunk <= 0 {
 		c.HealthStatChunk = 200
 	}
+	if c.DialTimeoutSec <= 0 {
+		c.DialTimeoutSec = 30
+	}
+	if c.OpTimeoutSec <= 0 {
+		c.OpTimeoutSec = 60
+	}
+	if c.ProviderDownCooldownMin <= 0 {
+		c.ProviderDownCooldownMin = 10
+	}
 	if c.BackfillPressureHighPct <= 0 {
 		c.BackfillPressureHighPct = 85
 	}
@@ -300,6 +323,9 @@ func (c *Config) knobFields() map[string]*int {
 		"backfill_pressure_high_pct":    &c.BackfillPressureHighPct,
 		"crawl_pressure_high_pct":       &c.CrawlPressureHighPct,
 		"backfill_pressure_low_pct":     &c.BackfillPressureLowPct,
+		"dial_timeout_sec":              &c.DialTimeoutSec,
+		"op_timeout_sec":                &c.OpTimeoutSec,
+		"provider_down_cooldown_min":    &c.ProviderDownCooldownMin,
 	}
 }
 

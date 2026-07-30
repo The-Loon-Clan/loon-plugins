@@ -5,13 +5,7 @@ import (
 	"testing"
 
 	"github.com/the-loon-clan/loon/core"
-	"github.com/the-loon-clan/loon/nntp"
 )
-
-// A pool with no connections fails acquire immediately — no dial, no network —
-// which drives fetchBatch down its error path and exercises the accounting
-// without a server.
-func deadPool() *nntp.Pool { return nntp.NewPool(nntp.PoolConfig{Addr: "127.0.0.1:1", Size: 0}) }
 
 func trackerPlugin() *Plugin {
 	return &Plugin{
@@ -35,7 +29,7 @@ func TestBackfillBatchesDoNotCountAgainstTheForwardCrawl(t *testing.T) {
 
 	// The forward pass runs its two planned batches.
 	fwd := []batchJob{{group: "a.b.forward", lo: 1, hi: 10}, {group: "a.b.forward", lo: 11, hi: 20}}
-	p.runBatches(context.Background(), []providerRun{{pool: deadPool(), size: 1}}, fwd, Config{}, &p.tel.crawl, nil, nil)
+	p.runBatches(context.Background(), []providerRun{{pool: livePool(t, 1), size: 1}}, fwd, Config{}, &p.tel.crawl, nil, nil)
 
 	// Backfill then runs three of its own.
 	back := []batchJob{
@@ -43,7 +37,7 @@ func TestBackfillBatchesDoNotCountAgainstTheForwardCrawl(t *testing.T) {
 		{group: "a.b.history", lo: 11, hi: 20},
 		{group: "a.b.history", lo: 21, hi: 30},
 	}
-	p.runBatches(context.Background(), []providerRun{{pool: deadPool(), size: 1}}, back, Config{}, &p.tel.backfill, nil, nil)
+	p.runBatches(context.Background(), []providerRun{{pool: livePool(t, 1), size: 1}}, back, Config{}, &p.tel.backfill, nil, nil)
 
 	crawl, _ := p.tel.crawl.snapshot()
 	if crawl.Batches != 2 {
@@ -67,9 +61,9 @@ func TestReadingGroupBelongsToItsOwnPass(t *testing.T) {
 	p.tel.crawl.passStart(1)
 	p.tel.crawl.roundStart()
 
-	p.runBatches(context.Background(), []providerRun{{pool: deadPool(), size: 1}},
+	p.runBatches(context.Background(), []providerRun{{pool: livePool(t, 1), size: 1}},
 		[]batchJob{{group: "a.b.forward", lo: 1, hi: 10}}, Config{}, &p.tel.crawl, nil, nil)
-	p.runBatches(context.Background(), []providerRun{{pool: deadPool(), size: 1}},
+	p.runBatches(context.Background(), []providerRun{{pool: livePool(t, 1), size: 1}},
 		[]batchJob{{group: "a.b.history", lo: 1, hi: 10}}, Config{}, &p.tel.backfill, nil, nil)
 
 	if cur, _ := p.tel.crawl.snapshot(); cur.Reading != "a.b.forward" {
@@ -93,7 +87,7 @@ func TestRunBatchesStopsFeedingWhenOverBudget(t *testing.T) {
 	for i := range jobs {
 		jobs[i] = batchJob{group: "a.b.group", lo: i * 10, hi: i*10 + 9}
 	}
-	runs := []providerRun{{pool: deadPool(), size: 1}}
+	runs := []providerRun{{pool: livePool(t, 1), size: 1}}
 
 	// Pressure permanently over budget: the first probe (after
 	// pressureCheckEvery completed batches) must stop the feeder. onGroup nil,
