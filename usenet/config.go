@@ -86,10 +86,13 @@ type Config struct {
 	// while any CRITICAL group still has history to backfill. See
 	// holdLowTier in provider_state.go for why ordering alone is not enough.
 	HoldLowUntilBackfilled bool `json:"hold_low_until_backfilled"`
-	// ReadyReapPerPass bounds the dead-entry sweep of nzb:ready per build pass.
-	// Default 50000: a full circuit of a multi-million-entry queue takes several
-	// passes, which is the point — the sweep must not cost more than the pass it
-	// is clearing the way for.
+	// ReadyReapPerPass bounds the dead-entry sweep of nzb:ready per build
+	// ROUND (the name predates the round/pass split; the stored key stays for
+	// compatibility). Default 50000: a full circuit of a multi-million-entry
+	// queue takes several rounds, which is the point — the sweep must not cost
+	// more than the round it is clearing the way for. Per round matters: the
+	// cursor persists, so the sweep RATE is this budget times the call
+	// frequency, and a catch-up pass has no round cap.
 	ReadyReapPerPass      int `json:"ready_reap_per_pass"`
 	BackfillBatchesPerRun int `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 25)
 	BackfillIntervalMin   int `json:"backfill_interval_min"`    // backfill cadence (default 5)

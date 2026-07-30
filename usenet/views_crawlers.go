@@ -384,6 +384,15 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 	if err != nil {
 		return "", err
 	}
+	// The summary tiles render from statsTotals — the same estimate source the
+	// 5s poll writes back into their DOM ids — so a figure never flips between
+	// an exact count and a planner estimate five seconds after page load.
+	// Best-effort: on error the tiles show zeros until the first poll corrects
+	// them, which beats blanking the whole page.
+	totals, terr := p.st.statsTotals(ctx)
+	if terr != nil {
+		p.reportErr(ctx, "usenet/crawlers-totals", terr)
+	}
 	// Best-effort: coverage detail is decoration over the watermark bar, and a
 	// ranges query failing should not blank the whole status page.
 	ranges, rerr := p.st.allCoveredRanges(ctx)
@@ -472,14 +481,22 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 			}
 		}
 	}
+	// Distinct group names, not len(stats.Groups): stats() emits one row per
+	// (backbone, group), so the row count double-counts every group a second
+	// backbone carries — the Index Stats card and status.json's active_groups
+	// must agree on what a "group" is.
+	names := map[string]bool{}
+	for _, g := range stats.Groups {
+		names[g.Name] = true
+	}
 	return p.frag("crawlers.html", map[string]any{
-		"Stats": stats, "Groups": groups, "Backbones": backbones,
+		"Stats": stats, "Groups": groups, "Backbones": backbones, "Totals": totals,
 		"Pass":        statsVM(pickPass(tv.CrawlCur, tv.CrawlLast)),
 		"Backfill":    statsVM(pickPass(tv.BackfillCur, tv.BackfillLast)),
 		"Errors":      errorVMs(tv.Errors),
 		"BackfillETA": eta,
 		"Fleet":       p.fleetVMs(ctx, tv.Fleet), "Workers": p.workerVMs(ctx),
-		"IndexStats":  p.indexStatsWithTel(ctx, len(stats.Groups), cs, tv),
+		"IndexStats":  p.indexStatsWithTel(ctx, len(names), cs, tv),
 		"HostSink":    p.cfg.Sink == SinkHost,
 		"RecentNzbs":  recentNzbs,
 		"WorkerStale": tv.Stale, "WorkerLastSeen": fmtTime(tv.UpdatedAt),

@@ -47,14 +47,20 @@ type statHook struct{ store Store }
 func (h statHook) StatsName() string { return "usenet" }
 
 func (h statHook) Stats(ctx context.Context) ([]pluginapi.Stat, error) {
-	st, err := h.store.stats(ctx)
+	// statsTotals, not stats(): the full stats() scans nzbs and articles four
+	// ways for what this hook reduces to three scalars, and sourcing from the
+	// same place as status.json keeps the surfaces agreeing on what "Active
+	// newsgroups" means — active newsgroups, not per-(backbone, group) state
+	// rows, which was the old len(st.Groups) and differed on multi-backbone
+	// installs.
+	st, err := h.store.statsTotals(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return []pluginapi.Stat{
 		{Key: "usenet.nzbs", Label: "NZBs indexed", Value: int64(st.TotalNZBs)},
 		{Key: "usenet.staged", Label: "Articles staged", Value: int64(st.TotalStaged)},
-		{Key: "usenet.groups", Label: "Active newsgroups", Value: int64(len(st.Groups))},
+		{Key: "usenet.groups", Label: "Active newsgroups", Value: int64(st.Groups)},
 	}, nil
 }
 

@@ -36,7 +36,11 @@ Routes:
   host): `GET /admin/plugin/usenet/status.json` — machine-readable crawl status
   (both passes, fleet, workers, staging/build depth, recent errors) for
   monitors and scripts. Carries provider hostnames and error text, so it is
-  admin-gated, not public. Accurate from ANY process: the worker publishes its
+  admin-gated, not public. Note for monitors: since 2026-07 `active_groups`
+  counts active newsgroups (it used to count per-(backbone, group) state rows,
+  so the value dropped on multi-backbone installs at that deploy), and the
+  `total_nzbs`/`staged_articles` figures are planner estimates, not exact
+  counts. Accurate from ANY process: the worker publishes its
   in-memory pass trackers + error ring to the shared settings table every few
   seconds (`worker_telemetry`), so a split web/worker deployment serves live
   numbers too — the Crawlers tab polls this endpoint to tick in place.
@@ -146,11 +150,10 @@ values; these are defaults):
 - `server.*` — seed a provider on first boot if the table is empty.
 - `staging` — `pg` (durable, default) | `redis` (prod's pipeline, needs Redis).
   Redis is the tuned path (inline completeness, hopeless-set eviction, O(1)
-  ready queue, `staging_ttl_hours` knob). The pg backend is CORRECT but not yet
-  perf-complete: `stageArticles` inserts row-at-a-time (no batch INSERT) and
-  `deleteJunkStaged` scans staged titles per sweep — fine at hobby scale,
-  known-slow on a full-feed crawl. Prefer `redis` for production volume until
-  those land.
+  ready queue, `staging_ttl_hours` knob). The pg backend is CORRECT and its
+  hot write path is batched (`stageArticles` inserts through a chunked unnest
+  INSERT), but `deleteJunkStaged` still scans staged titles per sweep — prefer
+  `redis` for production volume until that lands.
 - `sink` — `internal` (own `nzbs` table, default) | `host` (hand releases to the
   host's `ReleaseSink`; requires the host to register the sink + health
   capabilities). A production host pins this to `host`.

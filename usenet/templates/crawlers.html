@@ -92,10 +92,13 @@
     </div>
   </div>
   <div class="card-body">
-    <p class="text-muted small mb-2">
-        {{with .Stats}}<span id="stat-nzbs">{{.TotalNZBs}}</span> NZBs ·
+    {{/* Rendered from statsTotals — the same estimate source the 5s poll
+         writes back into these ids — so the figures never flip between an
+         exact count and a planner estimate five seconds after page load. */}}
+    <p class="text-muted small mb-2" title="Approximate (planner estimates), refreshed every 5s">
+        {{with .Totals}}<span id="stat-nzbs">{{.TotalNZBs}}</span> NZBs ·
         <span id="stat-staged">{{.TotalStaged}}</span> articles staged ·
-        <span id="stat-backlog">{{.TotalBackfillRemaining}}</span> articles left to backfill{{end}}
+        <span id="stat-backlog">{{.BackfillRemaining}}</span> articles left to backfill{{end}}
     </p>
     <div id="pass-body"{{if not .Pass.Any}} style="display:none"{{end}}>
     {{/* The legacy page's live block, lifted 1:1: "Group N / M — <group>" on

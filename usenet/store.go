@@ -94,9 +94,17 @@ func (s *PGStore) statsTotals(ctx context.Context) (indexTotals, error) {
 				table); err != nil {
 				return err
 			}
-			if n < 0 {
-				// Never analyzed: the table is young and small — exact is cheap.
-				if err := tx.GetContext(ctx, &n, `SELECT COUNT(*) FROM `+table); err != nil { // sqllint:allow table is one of two literals passed below
+			if n <= 0 {
+				// No usable estimate. The never-analyzed sentinel is -1 only on
+				// PG 14+; PG 13 (prod) leaves reltuples at 0, where a `n < 0`
+				// guard is dead code and a freshly bulk-loaded table reads as
+				// "0 staged" on the liveness poll until autoanalyze lands. 0 is
+				// also what a genuinely empty table reports, and counting that
+				// is instant — so count, but BOUNDED: this runs on the 5s poll
+				// path, and un-analyzed is exactly when the table might hold a
+				// bulk load. Past the cap the readout briefly shows the cap,
+				// which beats both a false zero and an unbounded scan.
+				if err := tx.GetContext(ctx, &n, `SELECT COUNT(*) FROM (SELECT 1 FROM `+table+` LIMIT 5000000) b`); err != nil { // sqllint:allow table is one of two literals passed below
 					return err
 				}
 			}

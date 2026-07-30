@@ -40,6 +40,10 @@ type StatusReport struct {
 	Providers []ProviderReport `json:"providers"`
 	Workers   []WorkerReport   `json:"workers"`
 
+	// Groups counts ACTIVE NEWSGROUPS. Before 2026-07 it was the row count of
+	// the per-(backbone, group) state join, which double-counted every group a
+	// second backbone carried — on multi-backbone installs the value dropped
+	// at that deploy; re-baseline any external monitor thresholds on it.
 	Groups          int   `json:"active_groups"`
 	StagedArticles  int   `json:"staged_articles"`
 	PendingReleases int   `json:"pending_releases"`

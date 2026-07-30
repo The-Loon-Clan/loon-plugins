@@ -59,6 +59,26 @@ func TestPGStageArticlesBatchInsert(t *testing.T) {
 	if nulls != len(arts)/2 {
 		t.Errorf("%d NULL posted, want %d — zero times must not serialize as a real date", nulls, len(arts)/2)
 	}
+
+	// Intra-statement duplicate: the same message id TWICE inside one call —
+	// the only count semantic the unnest rewrite genuinely changed (the
+	// per-row form gave each duplicate its own statement; now they share one
+	// and the count is that statement's RowsAffected). ON CONFLICT DO NOTHING
+	// resolves the second row against the first within the same command — it
+	// must count once and must not error.
+	dup := []stagedArticle{
+		{Group: "a.b.group", BaseSubject: "Dup.Release", Subject: "Dup.Release (1/2)",
+			MessageID: "<dup@x>", Poster: "p", Bytes: 1, PartNum: 1, TotalParts: 2, SegTotal: 2},
+		{Group: "a.b.group", BaseSubject: "Dup.Release", Subject: "Dup.Release (1/2)",
+			MessageID: "<dup@x>", Poster: "p", Bytes: 1, PartNum: 1, TotalParts: 2, SegTotal: 2},
+	}
+	n, err = s.stageArticles(ctx, dup)
+	if err != nil {
+		t.Fatalf("intra-statement duplicate: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("duplicated id within one call counted %d, want 1", n)
+	}
 }
 
 // The pg pre-filter's multi-file arm, against a real Postgres — this HAVING

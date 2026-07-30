@@ -69,10 +69,14 @@ func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, li
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		// Page first, count only when the page cannot answer the total itself.
 		// The COUNT is a full pass over completed rows (a leading-wildcard
-		// ILIKE defeats the title index), and this runs per API request —
-		// Sonarr/Hydra poll the empty-query RSS form about once a minute. A
-		// short page means offset+len(rows) IS the exact total, which covers
-		// the every-minute poll and most real searches outright.
+		// ILIKE defeats the title index), and this runs per API request. A
+		// short page means offset+len(rows) IS the exact total — which covers
+		// searches whose results fit one page. It does NOT cover the recurring
+		// request: Sonarr/Hydra poll the EMPTY-query RSS form about once a
+		// minute, and any catalog deeper than one page returns a full page
+		// there — that case is answered below from a planner estimate instead,
+		// because its count is the constant "all completed releases", the most
+		// expensive possible value of this query.
 		// sqllint:allow catClause is a literal built from int-only category ids (strconv.Itoa); all values flow through $N
 		if err := tx.SelectContext(ctx, &rows,
 			`SELECT id, title, size, posted_at, group_name,
@@ -86,6 +90,24 @@ func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, li
 		if len(rows) < limit {
 			total = offset + len(rows)
 			return nil
+		}
+		if query == "" && len(cats) == 0 {
+			// Unfiltered full page: total ≈ every completed release. The feed
+			// total is a pagination hint, not an accounting figure, so the
+			// planner's estimate serves; the offset+len floor keeps it
+			// consistent with the page just returned. reltuples counts all
+			// rows regardless of status — close enough for a hint, and the
+			// exact COUNT stays available to every filtered query below.
+			var est int64
+			if err := tx.GetContext(ctx, &est,
+				`SELECT COALESCE((SELECT reltuples::bigint FROM pg_class WHERE oid = to_regclass('nzbs')), 0)`); err != nil {
+				return err
+			}
+			if est > int64(offset+len(rows)) {
+				total = int(est)
+				return nil
+			}
+			// Young or never-analyzed table: fall through to the exact count.
 		}
 		// sqllint:allow catClause is a literal built from int-only category ids (strconv.Itoa); all values flow through $N
 		return tx.GetContext(ctx, &total,

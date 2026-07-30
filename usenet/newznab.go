@@ -180,16 +180,23 @@ func (s *service) newznabFeed(ctx context.Context, req pluginapi.NewznabRequest)
 	if offset < 0 {
 		offset = 0
 	}
-	// An upper clamp too: OFFSET is scan-and-discard, so a client-supplied
+	// An upper cap too: OFFSET is scan-and-discard, so a client-supplied
 	// offset of 10^9 forced Postgres to walk and throw away a billion rows on
-	// a PUBLIC request path. Newznab clients treat a short page as
-	// end-of-results, so capping deep pagination is protocol-clean.
-	if offset > maxFeedOffset {
-		offset = maxFeedOffset
-	}
-	releases, total, err := s.store.feedReleases(ctx, strings.TrimSpace(req.Query), req.Categories, limit, offset)
-	if err != nil {
-		return pluginapi.NewznabResult{}, err
+	// a PUBLIC request path. A request past the cap is answered as PAST THE
+	// END — an empty page, offset echoed back, total implied at the offset —
+	// never clamped down to the cap: a clamped request re-serves the same full
+	// page at the cap with the true total, so a walking client's termination
+	// condition (offset+len >= total) never fires and it re-requests the same
+	// rows forever, re-ingesting duplicates. An empty page ends every client's
+	// walk, no query paid.
+	var releases []pluginapi.Release
+	total := offset
+	if offset <= maxFeedOffset {
+		var err error
+		releases, total, err = s.store.feedReleases(ctx, strings.TrimSpace(req.Query), req.Categories, limit, offset)
+		if err != nil {
+			return pluginapi.NewznabResult{}, err
+		}
 	}
 	items := make([]feedItem, len(releases))
 	for i, r := range releases {
