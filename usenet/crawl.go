@@ -118,6 +118,7 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	// for that worker's groups. drain() resets on flush, so double-flushing
 	// with the builder cannot double-count.
 	defer p.flushFilterHits(ctx)
+	defer p.flushGroupingWatch(ctx)
 	totalStaged := 0
 	// Catch-up loop: when the servers still hold a meaningful forward backlog
 	// after a pass, go again immediately instead of sleeping out the interval —
@@ -197,6 +198,7 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		// deferred pass-end flush cannot double-count what this already wrote.
 		p.flushPosterHits(ctx)
 		p.flushFilterHits(ctx)
+		p.flushGroupingWatch(ctx)
 		if cfg.CrawlNoCatchup || ctx.Err() != nil {
 			break
 		}
@@ -836,7 +838,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, provID int, j 
 	res.maxDate = newestDate(ovs)
 	res.minDate = oldestDate(ovs)
 
-	arts := parseOverviews(ovs, j.group, j.cutoff, p.hits, p.posterWatch, p.posterHits)
+	arts := parseOverviews(ovs, j.group, j.cutoff, p.hits, p.posterWatch, p.posterHits, p.grouping)
 	if len(arts) > 0 {
 		n, err := p.staging.stageArticles(ctx, arts)
 		if err != nil {
@@ -943,8 +945,9 @@ func contiguousEnd(start int, rs []batchResult) (int, time.Time) {
 // parseOverviews turns overview lines into staged articles, dropping ones with
 // no message-id and ones posted before the retention cutoff.
 //
-// hits may be nil (tests): junk counting is observability, not behaviour.
-func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, hits *filterHits, watch *posterWatch, ph *posterHits) []stagedArticle {
+// hits and gw may be nil (tests): junk counting and the grouping watch are
+// observability, not behaviour.
+func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, hits *filterHits, watch *posterWatch, ph *posterHits, gw *groupingWatch) []stagedArticle {
 	out := make([]stagedArticle, 0, len(ovs))
 	for _, ov := range ovs {
 		if ov.MessageId == "" {
@@ -964,13 +967,19 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, 
 			continue
 		}
 		base, pn, tp, seg, fn, tf, fp := parseSubject(subject)
+		// residue = the parser recognised NO counter at all: staged as a 1/1
+		// singleton. A cohort of these sharing a stem is a counter format we
+		// cannot read — the grouping watch counts them.
+		residue := pn == 1 && tp == 1 && !fp
 		if rule := whichJunkRule(base); rule != "" {
+			gw.noteSubject(group, subject, residue, true)
 			hits.note("junk", rule, base)
 			if p, ok := watch.watched(ov.From); ok {
 				ph.note(p, "ingest", rule, subject)
 			}
 			continue // obfuscated random-token post — never index it
 		}
+		gw.noteSubject(group, subject, residue, false)
 		// Record the keeps too. Without them "no rows for this poster" is
 		// ambiguous between "never fetched" and "fetched and all dropped", and
 		// those have opposite fixes.

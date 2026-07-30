@@ -139,6 +139,10 @@ type AssemblerStore interface {
 	recordStagingCensus(ctx context.Context, c stagingCensus) error
 	stagingCensusRows(ctx context.Context, limit int) ([]censusRow, error)
 	pruneStagingCensus(ctx context.Context, keepDays int) (int64, error)
+	// The subject corpus (grouping_watch.go): a rolling sample of raw
+	// subjects for differential parser testing, plus its prune.
+	insertSubjectCorpus(ctx context.Context, rows []corpusRow) error
+	pruneSubjectCorpus(ctx context.Context, keepDays int) (int64, error)
 	groupArticles(ctx context.Context, group, base string) ([]stagedArticle, error)
 	deleteStaged(ctx context.Context, group, base string) error
 	// insertNzb returns the new row's id (0 on a content_hash duplicate) —

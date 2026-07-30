@@ -164,6 +164,27 @@ func (f *filterHits) note(kind, rule, sample string) {
 	}
 }
 
+// noteN is note with an externally-accumulated count — for collectors that
+// batch their own tallies (the ungrouped-stem counter) rather than calling
+// per event.
+func (f *filterHits) noteN(kind, rule string, n int64, sample string) {
+	if f == nil || rule == "" || n <= 0 {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	k := filterHitKey{kind, rule}
+	v := f.hits[k]
+	if v == nil {
+		v = &filterHitVal{}
+		f.hits[k] = v
+	}
+	v.count += n
+	if v.sample == "" {
+		v.sample = truncateSample(sample)
+	}
+}
+
 // drain returns and clears the accumulated hits, so a failed flush loses one
 // pass of counters rather than double-counting them on the next.
 func (f *filterHits) drain() map[filterHitKey]*filterHitVal {

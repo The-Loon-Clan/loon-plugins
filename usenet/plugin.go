@@ -130,6 +130,10 @@ type Plugin struct {
 	posterHits  *posterHits
 	// outcomes accounts for what each build pass did with every candidate set.
 	outcomes *buildOutcomes
+	// grouping accumulates the corpus sample + ungrouped-stem counts at
+	// ingest — the observe-only instruments behind grouping changes
+	// (grouping_watch.go).
+	grouping *groupingWatch
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -157,6 +161,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.posterHits = newPosterHits()
 	p.posterWatch = newPosterWatch(nil) // replaced per pass from the DB
 	p.outcomes = newBuildOutcomes()
+	p.grouping = newGroupingWatch()
 	// Staging backend behind the seam. Limits are read per-call (via effective)
 	// so the admin knobs apply live. nzbs writes always go through pg regardless.
 	staging, err := newStaging(p.cfg.Staging, pg, c.Redis, func(ctx context.Context) (int, int) {
@@ -497,6 +502,15 @@ func (p *Plugin) runPruneLocked(ctx context.Context) {
 	junkNzbs, err := p.st.deleteJunkNzbs(ctx)
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/prune-junk-nzbs", err)
+	}
+	// The diagnostic series stay bounded here too. (The census prune existed
+	// unwired since the table was born — unbounded growth in a diagnostic
+	// table is how diagnostics become the problem they were added to find.)
+	if _, err := p.st.pruneStagingCensus(ctx, 14); err != nil {
+		p.core.Errors.Report(ctx, "usenet/prune-census", err)
+	}
+	if _, err := p.st.pruneSubjectCorpus(ctx, 14); err != nil {
+		p.core.Errors.Report(ctx, "usenet/prune-corpus", err)
 	}
 	kept := "kept forever"
 	if cfg.NZBRetentionDays > 0 {

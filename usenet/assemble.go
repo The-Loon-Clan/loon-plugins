@@ -258,6 +258,12 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			p.outcomes.note(outcomeEmpty, k.Base)
 			continue
 		}
+		// Observe-only: a set whose member subjects carry two distinct episode
+		// markers is probably two releases merged under one base — counted so
+		// the false-merge rate is measurable before any grouping change.
+		if sus, pair := mergeSuspect(arts); sus {
+			p.hits.note("merge_suspect", pair, k.Base)
+		}
 		if !isComplete(arts) {
 			// Not a drop: stays staged for the next round. Counted anyway,
 			// because on a stalled site this is the majority outcome and an
@@ -535,6 +541,9 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 		}
 		if len(arts) == 0 {
 			continue
+		}
+		if sus, pair := mergeSuspect(arts); sus {
+			p.hits.note("merge_suspect", pair, k.Base)
 		}
 		// The same gates every built release passes — salvage must never
 		// resurrect what the build path would drop.

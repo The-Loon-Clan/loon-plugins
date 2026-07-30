@@ -212,3 +212,37 @@ func TestSeedJunkRulesPreservesOperatorState(t *testing.T) {
 		t.Errorf("re-seed did not deploy the fixed pattern (rule = %q) — preserving enabled must not freeze the rule body", rule)
 	}
 }
+
+// The corpus store: batch insert lands rows with their residue flag, and the
+// prune trims by age — the rolling window that keeps a sampled table small
+// however long the install runs.
+func TestSubjectCorpusInsertAndPrune(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+
+	rows := []corpusRow{
+		{group: "a.b.group", subject: "Show { 1 | 100 } yEnc", residue: true},
+		{group: "a.b.group", subject: "Fine Release (1/45) yEnc", residue: false},
+	}
+	if err := s.insertSubjectCorpus(ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+	var n, res int
+	if err := s.db.DB().QueryRow(
+		`SELECT COUNT(*), COUNT(*) FILTER (WHERE residue) FROM `+s.db.Schema()+`.subject_corpus`).
+		Scan(&n, &res); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 || res != 1 {
+		t.Errorf("corpus holds %d rows / %d residues, want 2/1", n, res)
+	}
+
+	if _, err := s.db.DB().Exec(
+		`UPDATE ` + s.db.Schema() + `.subject_corpus SET seen_at = now() - interval '30 days'`); err != nil {
+		t.Fatal(err)
+	}
+	pruned, err := s.pruneSubjectCorpus(ctx, 14)
+	if err != nil || pruned != 2 {
+		t.Errorf("pruned %d (err=%v), want 2 — the rolling window must trim", pruned, err)
+	}
+}
