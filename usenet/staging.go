@@ -96,7 +96,10 @@ type stagingStore interface {
 	// the caller to assemble as broken releases; salvageCap 0 evicts them all.
 	// pg: no-op — the prune horizon ages pg staging out, and the memory
 	// pressure this relieves is a redis phenomenon.
-	sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int) (scanned, evicted int, salvage []groupKey, err error)
+	// margin is the frontier guard: a set is judged dead only when coverage
+	// extends a full batch window beyond BOTH ends of its seen span, so a
+	// release straddling a fetch frontier is never judgeable.
+	sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int, margin int64) (scanned, evicted int, salvage []groupKey, err error)
 }
 
 // candidateStats describes one draw from the ready queue.
@@ -245,6 +248,6 @@ func (s *pgStaging) demoteReady(ctx context.Context, group, base string) (bool, 
 
 // sweepWalkPast is a no-op for pg staging: rows age out on the prune horizon,
 // and the memory ceiling the sweep protects is a redis phenomenon.
-func (s *pgStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int) (int, int, []groupKey, error) {
+func (s *pgStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int, margin int64) (int, int, []groupKey, error) {
 	return 0, 0, nil, nil
 }

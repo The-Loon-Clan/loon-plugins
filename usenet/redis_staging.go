@@ -1041,20 +1041,30 @@ func (r *redisStaging) demoteReady(ctx context.Context, group, base string) (boo
 }
 
 // walkPastDead judges one staged set against fetched coverage: dead means
-// still short of its claimed totals, idle past grace, span known, and every
-// article number in its span already offered by the walk — at which point
-// absence is final and waiting costs memory the pressure gate is protecting.
+// still short of its claimed totals, idle past grace, span known, and the
+// walk demonstrably PAST the set on BOTH sides — at which point absence is
+// final and waiting costs memory the pressure gate is protecting.
 //
-// No margin is applied to the span: coverage is recorded only AFTER a batch's
-// articles are staged (crawl.go stages, then records the range), so a span
-// inside coverage has already received everything the walk found; the grace
-// period covers retried batches and out-of-order parallel fetches.
+// The margin (one batch window each side) is the load-bearing half of that
+// judgment, and its absence was a confirmed data-destroyer: [art_lo, art_hi]
+// spans only the articles already SEEN, and every seen article's batch range
+// is recorded by construction — so a release straddling a fetch frontier
+// (its missing parts in ranges not walked yet) had its seen span vacuously
+// covered, and the check degenerated to "incomplete + idle 15 minutes".
+// Backfill pressure pauses routinely exceed that, and the sweep was evicting
+// the exact boundary sets it was built to protect. Requiring coverage a full
+// batch window beyond both ends makes the frontier case structurally safe:
+// coverage cannot extend past a frontier, so a frontier set is never
+// judgeable — it waits for the walk to actually pass it, or for the TTL.
 //
 // held >= needed spares two populations on purpose: sets that are complete
 // (queued, awaiting the builder) and builder-demoted sets whose stage-time
 // bound is met — completeness is the builder's call, not the sweep's; the
-// demoted fall to the TTL.
-func walkPastDead(meta map[string]string, held int, cov []articleRange, now, graceSec int64) bool {
+// demoted fall to the TTL. Sets whose padded span reaches below the deepest
+// recorded coverage (the bottom of walked history) are likewise spared into
+// the TTL's hands — conservative, and the sweep is an accelerator, not the
+// only drain.
+func walkPastDead(meta map[string]string, held int, cov []articleRange, now, graceSec, margin int64) bool {
 	age, ok := evictionStaleness(meta, now)
 	if !ok || age < graceSec {
 		return false
@@ -1068,7 +1078,14 @@ func walkPastDead(meta map[string]string, held int, cov []articleRange, now, gra
 	if needed <= 0 || held >= needed {
 		return false
 	}
-	return len(gapsBetween(cov, lo, hi)) == 0
+	if margin < 1 {
+		margin = 1
+	}
+	padLo := lo - margin
+	if padLo < 1 {
+		padLo = 1
+	}
+	return len(gapsBetween(cov, padLo, hi+margin)) == 0
 }
 
 // salvageFloor is the completeness ratio below which a dead set is not worth
@@ -1090,8 +1107,9 @@ const salvageFloor = 0.5
 // evicted: up to salvageCap of them return in salvage for the caller to
 // assemble as broken releases (or discard, if their par2 cannot carry them).
 // Candidates past the cap stay staged — the cursor brings them around again.
-// salvageCap 0 disables salvage and everything dead evicts.
-func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int) (scanned, evicted int, salvage []groupKey, err error) {
+// salvageCap 0 disables salvage and everything dead evicts. margin is the
+// frontier guard walkPastDead requires — the caller passes its batch window.
+func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int, margin int64) (scanned, evicted int, salvage []groupKey, err error) {
 	if budget <= 0 || len(cov) == 0 {
 		return 0, 0, nil, nil
 	}
@@ -1157,7 +1175,7 @@ func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]artic
 				continue // meta already gone (TTL mid-flight): the ref sweeps elsewhere
 			}
 			held := int(lens[i].Val())
-			if !walkPastDead(meta, held, cov[group], now, graceSec) {
+			if !walkPastDead(meta, held, cov[group], now, graceSec, margin) {
 				continue
 			}
 			if len(salvage) < salvageCap && meta["base_subject"] != "" {

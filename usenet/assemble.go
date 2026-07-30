@@ -445,8 +445,11 @@ func (p *Plugin) runWalkPastSweep(ctx context.Context, cfg Config) {
 	if cfg.WalkPastNoSalvage {
 		salvageCap = 0
 	}
+	// The margin is the crawl/backfill batch window: "walk-past" must mean the
+	// walk went a full batch beyond the set on both sides, or a frontier set
+	// whose missing parts are simply not fetched yet would judge as dead.
 	scanned, evicted, salvage, err := p.staging.sweepWalkPast(ctx, cov,
-		time.Duration(cfg.WalkPastGraceMin)*time.Minute, cfg.WalkPastSweepPerRound, salvageCap)
+		time.Duration(cfg.WalkPastGraceMin)*time.Minute, cfg.WalkPastSweepPerRound, salvageCap, int64(cfg.Batch))
 	if err != nil {
 		p.reportErr(ctx, "usenet/walk-past-sweep", err)
 	}
@@ -587,6 +590,16 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) {
 // set actually holds versus what it claims, split data/par2 the way the
 // health job splits an NZB (isPar2Subject) — so healthVerdict scores staged
 // sets and stored releases by the same rule.
+//
+// ENTIRELY-missing files count too, and skipping them was a confirmed bug:
+// whole-file absence is the canonical walk-past shape (the last volumes never
+// crawled), and a tally built only from seen files scored such a release
+// HEALTHY when its in-span gaps happened to be par2-only — an unmarked
+// release missing whole data files, served as complete. An unseen file's
+// segment count is unknowable (we never saw a subject claiming it), so it is
+// estimated at the average seen data file and counted as DATA — the
+// conservative direction, since demanding par2 for it can only push the
+// verdict toward broken/dead, never toward healthy.
 func salvageTally(arts []stagedArticle) (total, missingData, par2Claimed, par2Missing int) {
 	type fileState struct {
 		parts    map[int]bool
@@ -594,6 +607,7 @@ func salvageTally(arts []stagedArticle) (total, missingData, par2Claimed, par2Mi
 		par2     bool
 	}
 	files := map[int]*fileState{}
+	totalFiles := 0
 	for _, a := range arts {
 		f := files[a.FileNum]
 		if f == nil {
@@ -607,7 +621,11 @@ func salvageTally(arts []stagedArticle) (total, missingData, par2Claimed, par2Mi
 		if isPar2Subject(a.Subject) {
 			f.par2 = true
 		}
+		if a.FileParts && a.TotalFiles > totalFiles {
+			totalFiles = a.TotalFiles
+		}
 	}
+	seenData, seenDataSegs := 0, 0
 	for _, f := range files {
 		claimed := f.segTotal
 		if claimed < len(f.parts) {
@@ -621,6 +639,24 @@ func salvageTally(arts []stagedArticle) (total, missingData, par2Claimed, par2Mi
 			par2Missing += missing
 		} else {
 			missingData += missing
+			seenData++
+			seenDataSegs += claimed
+		}
+	}
+	if totalFiles > 0 {
+		absent := 0
+		for fn := 1; fn <= totalFiles; fn++ {
+			if files[fn] == nil {
+				absent++
+			}
+		}
+		if absent > 0 {
+			est := 1
+			if seenData > 0 && seenDataSegs/seenData > 1 {
+				est = seenDataSegs / seenData
+			}
+			total += absent * est
+			missingData += absent * est
 		}
 	}
 	return total, missingData, par2Claimed, par2Missing
