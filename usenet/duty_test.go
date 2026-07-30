@@ -1,9 +1,35 @@
 package usenet
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/the-loon-clan/loon/schedule"
 )
+
+// The exact shape Start hands the scheduler, driven through the REAL adapter.
+// loon's RunLoop type-asserts the handle its RegisterJob minted and panics on
+// anything else; the duty wrapper shipped without Unwrap and crash-looped the
+// production worker sub-second at boot, every ~60s, on the first RunLoop call
+// — invisible to a suite that never wired Provision's wrapping to the real
+// scheduler. This test IS that wiring.
+func TestDutyWrappedJobsAreRunLoopCompatible(t *testing.T) {
+	sched := schedule.CoreScheduler(schedule.NewRegistry())
+	d := newDutyTracker()
+	job := d.wrap(jobNameCrawl, sched.RegisterJob(jobNameCrawl, "test").MarkOffPeak())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // registration is the test; the loop should exit immediately
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("RunLoop panicked on the duty-wrapped handle: %v — this exact shape "+
+				"crash-looped the production worker at boot", r)
+		}
+	}()
+	sched.RunLoop(ctx, job, time.Hour, time.Hour, func(context.Context) {})
+}
 
 // The duty percentage is the metric three idle-pipeline incidents (5.9%,
 // 15.7%, and the 92%-idle deadlock) were diagnosed by measuring BY HAND. It

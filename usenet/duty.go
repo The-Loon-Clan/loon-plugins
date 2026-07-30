@@ -150,3 +150,9 @@ func (j dutyJob) MarkOffPeak() core.Job {
 	j.Job.MarkOffPeak()
 	return j
 }
+
+// Unwrap exposes the scheduler-minted handle underneath. RunLoop needs the
+// concrete job its RegisterJob returned and walks Unwrap to find it — without
+// this the first RunLoop call panics the worker at boot, which is exactly how
+// this wrapper shipped its first production incident.
+func (j dutyJob) Unwrap() core.Job { return j.Job }
