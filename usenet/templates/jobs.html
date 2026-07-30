@@ -96,7 +96,8 @@
       One row per build pass. The columns that matter are the deltas: <b>evicted</b> rising means Redis is
       destroying keys to stay under maxmemory — forming releases die before they can complete. <b>Fossils</b>
       are releases that completed, queued, and then expired before the builder drew them. <b>Shed</b> is the
-      plugin's own deliberate hopeless-set eviction (stalled, far-short sets) — expected to move; it is
+      plugin's own deliberate hopeless-set eviction (stalled, far-short sets) and <b>Walk-past</b> its
+      dead-set sweep (span fully fetched, still incomplete — can never complete) — both expected to move; it is
       <b>evicted</b> that must not. <b>Ready</b> far
       above <b>drew</b>, pass after pass, means arrivals outpace the drain.
     </p>
@@ -108,7 +109,7 @@
           <th class="text-end">Live</th><th class="text-end">Fossils</th>
           <th class="text-end">Forming</th>
           <th class="text-end">Memory</th>
-          <th class="text-end">Evicted (+new)</th><th class="text-end">Shed (+new)</th><th class="text-end">Expired (+new)</th>
+          <th class="text-end">Evicted (+new)</th><th class="text-end">Shed (+new)</th><th class="text-end">Walk-past (+new)</th><th class="text-end">Expired (+new)</th>
         </tr></thead>
         <tbody>
         {{range $.Census}}
@@ -122,6 +123,7 @@
             <td class="text-end small">{{if eq .MaxMemoryPolicy "(unavailable)"}}?{{else if lt .MemPct 0.0}}unbounded{{else}}{{printf "%.0f%%" .MemPct}}{{end}}</td>
             <td class="text-end small{{if .EvictedDelta}} text-danger{{end}}">{{.EvictedKeys}}{{if .EvictedDelta}} (+{{.EvictedDelta}}){{end}}</td>
             <td class="text-end small text-muted">{{.HopelessSeen}}{{if .HopelessDelta}} (+{{.HopelessDelta}}){{end}}</td>
+            <td class="text-end small text-muted">{{.WalkPast}}{{if .WalkPastDelta}} (+{{.WalkPastDelta}}){{end}}</td>
             <td class="text-end small text-muted">{{.ExpiredKeys}}{{if .ExpiredDelta}} (+{{.ExpiredDelta}}){{end}}</td>
           </tr>
         {{end}}

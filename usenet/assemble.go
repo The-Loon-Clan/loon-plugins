@@ -120,16 +120,23 @@ func (p *Plugin) buildCatchUp(ctx context.Context) {
 
 func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	p.buildJob.SetRunning()
+	// One effective() read per round keeps every knob live without paying the
+	// settings read per use below.
+	cfg := p.effective(ctx)
 
 	// Per-round on purpose — see buildCatchUp for why hoisting these to the
 	// pass collapsed the fossil-sweep rate and let the worker ignore blacklist
 	// edits for hours.
 	p.reloadBlacklist(ctx)
-	if scanned, removed, err := p.staging.reapReadyQueue(ctx, p.effective(ctx).ReadyReapPerPass); err != nil {
+	if scanned, removed, err := p.staging.reapReadyQueue(ctx, cfg.ReadyReapPerPass); err != nil {
 		p.reportErr(ctx, "usenet/ready-reap", err)
 	} else if removed > 0 {
 		p.buildJob.Log("ready queue: swept %d entr(ies), removed %d dead", scanned, removed)
 	}
+	// The walk-past sweep rides the same round cadence: dead sets holding
+	// staging memory are exactly what keeps the backfill's pressure gate
+	// closed, and clearing them per round is what shortens the pause.
+	p.runWalkPastSweep(ctx, cfg)
 
 	// Make sure last pass's counters are persisted even if that pass died
 	// before its own flush.
@@ -162,7 +169,7 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 		return 0, 0
 	}
 
-	keys, d, err := p.staging.candidateGroups(ctx, p.effective(ctx).BuildDrainPerPass)
+	keys, d, err := p.staging.candidateGroups(ctx, cfg.BuildDrainPerPass)
 	if err != nil {
 		p.buildJob.SetError(err.Error())
 		p.reportErr(ctx, "usenet/build-scan", err)
@@ -408,6 +415,65 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 		pluginapi.EmitEvent(p.core, ctx, pluginapi.EventIngested, built)
 	}
 	return built, drained
+}
+
+// runWalkPastSweep runs one bounded walk-past round: evict staged sets whose
+// whole article span has been fetched yet are still short — they can never
+// complete (walkPastDead), and every hour they wait for the TTL is an hour
+// the pressure gate stays closed against work that CAN complete.
+func (p *Plugin) runWalkPastSweep(ctx context.Context, cfg Config) {
+	if cfg.WalkPastNoEvict {
+		return
+	}
+	cov, err := p.walkPastCoverage(ctx)
+	if err != nil {
+		p.reportErr(ctx, "usenet/walk-past-coverage", err)
+		return
+	}
+	if len(cov) == 0 {
+		return
+	}
+	scanned, evicted, err := p.staging.sweepWalkPast(ctx, cov,
+		time.Duration(cfg.WalkPastGraceMin)*time.Minute, cfg.WalkPastSweepPerRound)
+	if err != nil {
+		p.reportErr(ctx, "usenet/walk-past-sweep", err)
+	}
+	if evicted > 0 {
+		p.tel.noteWalkPast(evicted)
+		p.buildJob.Log("walk-past sweep: evicted %d of %d examined set(s) — span fully fetched, still incomplete, past grace",
+			evicted, scanned)
+	}
+}
+
+// walkPastCoverage assembles the coverage map the sweep judges against:
+// active groups whose fetched ranges live on exactly ONE backbone. Article
+// numbers are per-backbone, and a set's span checked against another
+// backbone's number space is meaningless — multi-backbone groups are skipped
+// (their dead sets fall to the TTL, as everything did before the sweep).
+func (p *Plugin) walkPastCoverage(ctx context.Context) (map[string][]articleRange, error) {
+	ranges, err := p.st.allCoveredRanges(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return judgeableCoverage(ranges), nil
+}
+
+// judgeableCoverage flattens per-(backbone, group) ranges to per-group,
+// dropping any group covered on MORE than one backbone — its sets' spans mix
+// two article-number spaces and cannot be judged.
+func judgeableCoverage(ranges map[coverKey][]articleRange) map[string][]articleRange {
+	byGroup := make(map[string][]articleRange, len(ranges))
+	backbones := map[string]int{}
+	for k, rs := range ranges {
+		backbones[k.group]++
+		byGroup[k.group] = rs
+	}
+	for g, n := range backbones {
+		if n > 1 {
+			delete(byGroup, g)
+		}
+	}
+	return byGroup
 }
 
 // isComplete decides whether a staged (group, base_subject) set is ready to

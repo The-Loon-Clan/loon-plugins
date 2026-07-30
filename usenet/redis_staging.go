@@ -78,6 +78,13 @@ type redisStaging struct {
 	// (its pipeline is idempotent, so the whole-call retry is safe).
 	scriptMu      sync.Mutex
 	scriptsLoaded bool
+
+	// walkMu/walkCursors carry the walk-past sweep's per-group SSCAN positions
+	// across build rounds — same resumption rationale as reapCursor: the
+	// per-round budget only circles the whole population if each round resumes
+	// where the last stopped.
+	walkMu      sync.Mutex
+	walkCursors map[string]uint64
 }
 
 func newRedisStaging(rdb redis.UniversalClient, ttlHours func(context.Context) int, onEvict func(int), report func(context.Context, string, error)) *redisStaging {
@@ -1031,6 +1038,128 @@ func (r *redisStaging) demoteReady(ctx context.Context, group, base string) (boo
 		return e
 	})
 	return n > 0, err
+}
+
+// walkPastDead judges one staged set against fetched coverage: dead means
+// still short of its claimed totals, idle past grace, span known, and every
+// article number in its span already offered by the walk — at which point
+// absence is final and waiting costs memory the pressure gate is protecting.
+//
+// No margin is applied to the span: coverage is recorded only AFTER a batch's
+// articles are staged (crawl.go stages, then records the range), so a span
+// inside coverage has already received everything the walk found; the grace
+// period covers retried batches and out-of-order parallel fetches.
+//
+// held >= needed spares two populations on purpose: sets that are complete
+// (queued, awaiting the builder) and builder-demoted sets whose stage-time
+// bound is met — completeness is the builder's call, not the sweep's; the
+// demoted fall to the TTL.
+func walkPastDead(meta map[string]string, held int, cov []articleRange, now, graceSec int64) bool {
+	age, ok := evictionStaleness(meta, now)
+	if !ok || age < graceSec {
+		return false
+	}
+	lo, _ := strconv.ParseInt(meta["art_lo"], 10, 64)
+	hi, _ := strconv.ParseInt(meta["art_hi"], 10, 64)
+	if lo <= 0 || hi < lo {
+		return false // span unknown (pre-span sets): not judgeable; the TTL handles them
+	}
+	needed := groupNeededParts(meta)
+	if needed <= 0 || held >= needed {
+		return false
+	}
+	return len(gapsBetween(cov, lo, hi)) == 0
+}
+
+// sweepWalkPast examines up to budget staged sets and evicts the walk-past
+// dead (see walkPastDead). cov maps group name → fetched spans; the caller
+// includes only judgeable groups. The budget splits across groups and each
+// group's SSCAN cursor persists (walkCursors), so successive rounds circle
+// every population rather than re-examining one group's head window.
+func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget int) (scanned, evicted int, err error) {
+	if budget <= 0 || len(cov) == 0 {
+		return 0, 0, nil
+	}
+	groups := make([]string, 0, len(cov))
+	for g := range cov {
+		groups = append(groups, g)
+	}
+	sort.Strings(groups)
+	// Even split so one enormous group cannot starve the others' sweeps; the
+	// floor keeps tiny budgets from rounding every group to zero.
+	perGroup := budget / len(groups)
+	if perGroup < 64 {
+		perGroup = 64
+	}
+	now := time.Now().Unix()
+	graceSec := int64(grace / time.Second)
+	var firstErr error
+
+	for _, group := range groups {
+		if scanned >= budget || ctx.Err() != nil {
+			break
+		}
+		r.walkMu.Lock()
+		if r.walkCursors == nil {
+			r.walkCursors = map[string]uint64{}
+		}
+		cursor := r.walkCursors[group]
+		r.walkMu.Unlock()
+
+		hashes, next, serr := r.rdb.SScan(ctx, activeKey(group), cursor, "", int64(perGroup)).Result()
+		if serr != nil && serr != redis.Nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("sscan %s: %w", group, serr)
+			}
+			continue
+		}
+		r.walkMu.Lock()
+		r.walkCursors[group] = next
+		r.walkMu.Unlock()
+		if len(hashes) == 0 {
+			continue
+		}
+		scanned += len(hashes)
+
+		pipe := r.rdb.Pipeline()
+		metas := make([]*redis.MapStringStringCmd, len(hashes))
+		lens := make([]*redis.IntCmd, len(hashes))
+		for i, h := range hashes {
+			metas[i] = pipe.HGetAll(ctx, grpKey(group, h))
+			lens[i] = pipe.HLen(ctx, artKey(group, h))
+		}
+		if _, perr := pipe.Exec(ctx); perr != nil && perr != redis.Nil {
+			if firstErr == nil {
+				firstErr = perr
+			}
+			continue
+		}
+		var doomKeys []string
+		var doomMembers []interface{}
+		for i, h := range hashes {
+			meta := metas[i].Val()
+			if len(meta) == 0 {
+				continue // meta already gone (TTL mid-flight): the ref sweeps elsewhere
+			}
+			if walkPastDead(meta, int(lens[i].Val()), cov[group], now, graceSec) {
+				doomKeys = append(doomKeys, artKey(group, h), grpKey(group, h))
+				doomMembers = append(doomMembers, h)
+			}
+		}
+		if len(doomKeys) > 0 {
+			evPipe := r.rdb.Pipeline()
+			evPipe.Del(ctx, doomKeys...)
+			evPipe.SRem(ctx, activeKey(group), doomMembers...)
+			// Counted only when the pipeline ran, same rule as the hopeless
+			// eviction: this counter proves the sweep is WORKING.
+			if _, perr := evPipe.Exec(ctx); perr == nil {
+				evicted += len(doomMembers)
+			} else if firstErr == nil {
+				firstErr = perr
+			}
+		}
+	}
+	return scanned, evicted, firstErr
 }
 
 // deleteJunkStaged is a no-op in redis mode: junk base_subjects are dropped at

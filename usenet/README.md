@@ -344,11 +344,26 @@ and dilutes itself. Production reached **7,403,408 entries against a 500-entry
 draw, 407 of every 500 already dead**: a completed release had roughly a 1-in-
 15,000 chance of being picked in a pass, and its articles expire after two
 hours. That is not a queue, it is a lottery nobody wins. `reapReadyQueue` SSCANs
-a bounded slice per pass (`ready_reap_per_pass`, default 50,000), pipelines
-EXISTS against each entry's `grp:` metadata, and SRems the dead — the same
-liveness definition `candidateGroups` already used, applied by something that
-runs often enough to matter. Bounded so a multi-million-entry queue is worked
-down over passes instead of stalling the one clearing it.
+a bounded slice per build ROUND (`ready_reap_per_pass`, default 50,000 — the
+key name predates the round/pass split), pipelines EXISTS against each entry's
+`grp:` metadata, and SRems the dead — the same liveness definition
+`candidateGroups` already used, applied by something that runs often enough to
+matter. Bounded, with a cursor that persists across rounds, so a multi-million-
+entry queue is worked down instead of stalling the round clearing it.
+
+Staged sets that can **never complete** are evicted by the **walk-past sweep**
+(same round cadence): a set still short of its claimed totals, idle past
+`walk_past_grace_min` (default 15), whose whole recorded article span
+(`art_lo`/`art_hi`) lies inside the group's fetched coverage
+(`newsgroup_ranges`) has been offered every article it could ever receive —
+absence is final, and every hour it waits for the staging TTL is an hour of
+memory held against the backfill's pressure gate. `walk_past_sweep_per_round`
+(default 2,000) bounds each round's examination with persistent per-group
+cursors; groups covered on more than one backbone are skipped (article numbers
+are per-backbone, so a mixed span cannot be judged); `walk_past_no_evict`
+disables the sweep. Evictions surface as `walk_past` in the telemetry and as
+their own census column — distinct from hopeless shedding, because the two
+remove different populations for different reasons.
 
 Note that `stagingInfo` issues **two single-section INFO calls**, not one
 multi-section call: `INFO memory stats` requires Redis 7.0, and against 6.x it

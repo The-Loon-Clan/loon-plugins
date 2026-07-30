@@ -36,6 +36,7 @@ type stagingCensus struct {
 	MaxMemoryPolicy string
 	PendingSets     int
 	HopelessSeen    int
+	WalkPast        int
 }
 
 // recordStagingCensus appends one sample.
@@ -51,12 +52,12 @@ func (s *PGStore) recordStagingCensus(ctx context.Context, c stagingCensus) erro
 			   (ready_depth, sampled, live_candidates, fossil_dropped,
 			    redis_keys, mem_used_bytes, mem_max_bytes,
 			    evicted_keys, expired_keys, maxmemory_policy,
-			    pending_sets, hopeless_seen)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+			    pending_sets, hopeless_seen, walk_past)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
 			c.ReadyDepth, c.Sampled, c.LiveCandidates, c.FossilDropped,
 			c.RedisKeys, c.MemUsedBytes, c.MemMaxBytes,
 			c.EvictedKeys, c.ExpiredKeys, c.MaxMemoryPolicy,
-			c.PendingSets, c.HopelessSeen)
+			c.PendingSets, c.HopelessSeen, c.WalkPast)
 		return err
 	})
 }
@@ -78,6 +79,7 @@ type censusRow struct {
 	MaxMemoryPolicy string    `db:"maxmemory_policy"`
 	PendingSets     int       `db:"pending_sets"`
 	HopelessSeen    int       `db:"hopeless_seen"`
+	WalkPast        int       `db:"walk_past"`
 
 	// Deltas against the previous sample. Negative means the counter reset
 	// (Redis restarted, or for hopeless a worker restart); reported as 0
@@ -86,6 +88,7 @@ type censusRow struct {
 	EvictedDelta  int64 `db:"evicted_delta"`
 	ExpiredDelta  int64 `db:"expired_delta"`
 	HopelessDelta int64 `db:"hopeless_delta"`
+	WalkPastDelta int64 `db:"walk_past_delta"`
 }
 
 // PendingLabel renders the pending-sets sample, distinguishing "none pending"
@@ -111,10 +114,11 @@ func (s *PGStore) stagingCensusRows(ctx context.Context, limit int) ([]censusRow
 			`SELECT at, ready_depth, sampled, live_candidates, fossil_dropped,
 			        redis_keys, mem_used_bytes, mem_max_bytes,
 			        evicted_keys, expired_keys, maxmemory_policy,
-			        pending_sets, hopeless_seen,
+			        pending_sets, hopeless_seen, walk_past,
 			        GREATEST(evicted_keys - LAG(evicted_keys) OVER (ORDER BY at), 0) AS evicted_delta,
 			        GREATEST(expired_keys - LAG(expired_keys) OVER (ORDER BY at), 0) AS expired_delta,
-			        GREATEST(hopeless_seen - LAG(hopeless_seen) OVER (ORDER BY at), 0) AS hopeless_delta
+			        GREATEST(hopeless_seen - LAG(hopeless_seen) OVER (ORDER BY at), 0) AS hopeless_delta,
+			        GREATEST(walk_past - LAG(walk_past) OVER (ORDER BY at), 0) AS walk_past_delta
 			   FROM staging_census
 			  ORDER BY at DESC
 			  LIMIT $1`, limit)
@@ -190,6 +194,7 @@ func (p *Plugin) takeStagingCensus(ctx context.Context, drawn candidateStats, pe
 		// is a factual-looking claim, not an unmeasured one, and it also
 		// masked the inline eviction being dead code for its entire life.
 		HopelessSeen: int(p.tel.evictedCount()),
+		WalkPast:     int(p.tel.walkPastCount()),
 	}
 	if info, err := p.staging.stagingInfo(ctx); err == nil {
 		c.RedisKeys = info.Keys

@@ -301,6 +301,11 @@ type telemetry struct {
 	// completeness-check disagreement; a steady rate is merged re-posts doing
 	// what merged re-posts do, a climbing rate means the checks drifted.
 	demoted int64
+	// walkPast counts sets evicted by the walk-past sweep — incomplete with
+	// their whole article span already fetched, so they could never complete.
+	// Distinct from `evicted` (hopeless: stalled and far short) because the
+	// two shed different populations for different reasons.
+	walkPast int64
 	// stalledPasses counts consecutive crawl passes that ended in the
 	// "catch-up stalled" break while a large backlog remained. The 2026-07-24
 	// incident (20/20 groups planning zero batches, pass after pass, 575M
@@ -456,6 +461,20 @@ func (t *telemetry) demotedCount() int64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.demoted
+}
+
+// noteWalkPast counts walk-past evictions. Cumulative-since-start like its
+// siblings; readers take deltas.
+func (t *telemetry) noteWalkPast(n int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.walkPast += int64(n)
+}
+
+func (t *telemetry) walkPastCount() int64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.walkPast
 }
 
 // setStalledPasses records the crawl's consecutive-stall streak for telemetry.

@@ -3,6 +3,7 @@ package usenet
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/the-loon-clan/loon/core"
 )
@@ -85,6 +86,16 @@ type stagingStore interface {
 	// from durable rows every pass and has nothing to reap — so the pg
 	// implementation is a no-op. Bounded per call; returns scanned, removed.
 	reapReadyQueue(ctx context.Context, maxScan int) (int, int, error)
+	// sweepWalkPast evicts staged sets that can NEVER complete: still short of
+	// their claimed totals, idle past grace, with their whole article span
+	// inside fetched coverage — the walk has offered every article the set
+	// could receive, so absence is final. cov maps group name → fetched spans;
+	// the caller includes only judgeable groups (exactly one backbone with
+	// recorded ranges — article numbers are per-backbone). Bounded by budget
+	// per call with persistent cursors. pg: no-op — the prune horizon ages pg
+	// staging out, and the memory pressure this relieves is a redis
+	// phenomenon.
+	sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget int) (scanned, evicted int, err error)
 }
 
 // candidateStats describes one draw from the ready queue.
@@ -229,4 +240,10 @@ func (s *pgStaging) reapReadyQueue(ctx context.Context, maxScan int) (int, int, 
 // never happened.
 func (s *pgStaging) demoteReady(ctx context.Context, group, base string) (bool, error) {
 	return false, nil
+}
+
+// sweepWalkPast is a no-op for pg staging: rows age out on the prune horizon,
+// and the memory ceiling the sweep protects is a redis phenomenon.
+func (s *pgStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget int) (int, int, error) {
+	return 0, 0, nil
 }

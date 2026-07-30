@@ -218,6 +218,10 @@
           <label class="d-block small">
             <input type="hidden" name="has_hold_low_until_backfilled" value="1">
             <input type="checkbox" name="hold_low_until_backfilled" {{if .HoldLowUntilBackfilled}}checked{{end}}> Hold LOW-tier groups until CRITICAL backfill finishes (a low group with a huge backlog otherwise consumes the pass budget and the staging memory that the critical group's history needs)
+          </label>
+          <label class="d-block small mb-1">
+            <input type="hidden" name="has_walk_past_no_evict" value="1">
+            <input type="checkbox" name="walk_past_no_evict" {{if .WalkPastNoEvict}}checked{{end}}> Disable walk-past eviction (dead sets — span fully fetched, still incomplete — then wait out the staging TTL instead of being evicted after the grace period, holding memory against the pressure gate)
         </label>
         <div style="margin-top:.5rem">
             <button class="btn btn-primary" type="submit">Save settings</button>

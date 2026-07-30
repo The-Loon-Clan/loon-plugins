@@ -86,6 +86,19 @@ type Config struct {
 	// while any CRITICAL group still has history to backfill. See
 	// holdLowTier in provider_state.go for why ordering alone is not enough.
 	HoldLowUntilBackfilled bool `json:"hold_low_until_backfilled"`
+	// WalkPastNoEvict disables the walk-past sweep (inverted so the zero value
+	// sweeps): a set whose whole article span has been fetched and is still
+	// incomplete can never complete, and every hour it waits for the TTL is an
+	// hour of staging memory held against the pressure gate.
+	WalkPastNoEvict bool `json:"walk_past_no_evict"`
+	// WalkPastGraceMin is how long a set must go without a new article before
+	// the walk-past sweep may judge it (default 15) — covers retried batches
+	// and staging latency at the walk edge.
+	WalkPastGraceMin int `json:"walk_past_grace_min"`
+	// WalkPastSweepPerRound bounds how many staged sets the walk-past sweep
+	// examines per build round (default 2000). The cursor persists, so the
+	// sweep RATE is this budget times the round frequency.
+	WalkPastSweepPerRound int `json:"walk_past_sweep_per_round"`
 	// ReadyReapPerPass bounds the dead-entry sweep of nzb:ready per build
 	// ROUND (the name predates the round/pass split; the stored key stays for
 	// compatibility). Default 50000: a full circuit of a multi-million-entry
@@ -206,6 +219,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.ReadyReapPerPass <= 0 {
 		c.ReadyReapPerPass = 50000
+	}
+	if c.WalkPastGraceMin <= 0 {
+		c.WalkPastGraceMin = 15
+	}
+	if c.WalkPastSweepPerRound <= 0 {
+		c.WalkPastSweepPerRound = 2000
 	}
 	if c.MaxArticlesPerGroup <= 0 {
 		c.MaxArticlesPerGroup = 20000
@@ -342,6 +361,8 @@ func (c *Config) knobFields() map[string]*int {
 		"crawl_max_batches":             &c.CrawlMaxBatches,
 		"max_articles_per_group":        &c.MaxArticlesPerGroup,
 		"ready_reap_per_pass":           &c.ReadyReapPerPass,
+		"walk_past_grace_min":           &c.WalkPastGraceMin,
+		"walk_past_sweep_per_round":     &c.WalkPastSweepPerRound,
 		"backfill_interval_min":         &c.BackfillIntervalMin,
 		"backfill_batches_per_run":      &c.BackfillBatchesPerRun,
 		"staging_max_rows":              &c.StagingMaxRows,
@@ -377,6 +398,7 @@ func (c *Config) boolFields() map[string]*bool {
 		"hold_low_until_backfilled": &c.HoldLowUntilBackfilled,
 		"backfill_no_catchup":       &c.BackfillNoCatchup,
 		"build_no_catchup":          &c.BuildNoCatchup,
+		"walk_past_no_evict":        &c.WalkPastNoEvict,
 	}
 }
 

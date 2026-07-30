@@ -46,6 +46,8 @@ func knobList(cfg Config) []knob {
 		{"max_articles_per_group", "First-pass article cap", cfg.MaxArticlesPerGroup, "cap a new group's initial volume"},
 		{"crawl_pressure_high_pct", "Pause crawling at staging fullness (%)", cfg.CrawlPressureHighPct, "stop staging when the backend is this full — writing into a full Redis evicts sets that are still assembling, destroying completed releases"},
 		{"ready_reap_per_pass", "Ready-queue sweep per build round", cfg.ReadyReapPerPass, "how many queued sets to check for expired data each build round (the sweep resumes where it left off) — the queue is drained by a random sample, so dead entries left in it waste draw slots"},
+		{"walk_past_grace_min", "Walk-past grace (minutes)", cfg.WalkPastGraceMin, "how long a set must go without a new article before the walk-past sweep may judge it dead — covers retried batches and staging latency at the walk edge"},
+		{"walk_past_sweep_per_round", "Walk-past sweep per build round", cfg.WalkPastSweepPerRound, "how many staged sets the dead-set sweep examines each build round (cursors persist, so this times the round rate is the sweep speed)"},
 		{"backfill_interval_min", "Backfill interval (min)", cfg.BackfillIntervalMin, "how often to pull history (applies next cycle)"},
 		{"backfill_batches_per_run", "Backfill batches per run", cfg.BackfillBatchesPerRun, "how much history each backfill pass pulls"},
 		{"staging_prune_hours", "Staging prune horizon (hrs)", cfg.StagingPruneHours, "drop staged articles older than this that never completed into an NZB (default 6)"},
