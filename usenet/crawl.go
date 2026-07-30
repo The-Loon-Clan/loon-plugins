@@ -811,11 +811,24 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, provID int, j 
 		if _, _, _, err := c.Group(j.group); err != nil {
 			return err
 		}
-		got, wb, err := c.Overview(j.lo, j.hi)
+		got, wb, pstats, err := c.OverviewWithStats(j.lo, j.hi)
 		if err != nil {
 			return err
 		}
 		ovs, wire = got, wb
+		// Parse drops are counted, never silent: this batch's range is about
+		// to be recorded as fetched coverage, and with walk-past eviction
+		// treating covered absence as final, a provider quirk that drops
+		// lines here would otherwise become permanent invisible content
+		// loss. The counters surface on the Filters tab beside the junk
+		// tallies; a rising one means a provider is emitting a shape the
+		// parser does not read.
+		if pstats.Dropped() > 0 {
+			p.hits.noteN("parse_dropped", "short_fields", int64(pstats.DroppedFields), j.group)
+			p.hits.noteN("parse_dropped", "bad_number", int64(pstats.DroppedNumber), j.group)
+			p.hits.noteN("parse_dropped", "no_message_id", int64(pstats.DroppedNoID), j.group)
+			p.hits.noteN("parse_dropped", "bad_bytes", int64(pstats.DroppedBytes), j.group)
+		}
 		return nil
 	})
 	if err != nil {
