@@ -285,6 +285,38 @@ func (c *Config) applyDefaults() {
 	if c.Server.Port == 0 {
 		c.Server.Port = 119
 	}
+	c.normalize()
+}
+
+// normalize repairs pressure-knob combinations no gate can operate under. The
+// settings form rejects them loudly (validateKnobs); this is the backstop for
+// values that arrive around the form — config.yml, hand-inserted settings
+// rows, writes from an older binary. Repair rather than refuse, because this
+// runs at effective() time with nobody to show an error to, and a mis-set
+// gate must never be able to disable eviction protection: a percentage past
+// 100 reverts to its default, the high gate is clamped under the ceiling, and
+// low stays strictly below high so the hysteresis stays real. (The crawl's
+// gate is deliberately not ordered against the ceiling here — crawlStopPct
+// clamps it at the point of use.)
+func (c *Config) normalize() {
+	if c.BackfillPressureHighPct > 100 {
+		c.BackfillPressureHighPct = 85
+	}
+	if c.CrawlPressureHighPct > 100 {
+		c.CrawlPressureHighPct = 95
+	}
+	if c.BackfillPressureLowPct > 100 {
+		c.BackfillPressureLowPct = 70
+	}
+	if c.BackfillPressureCeilingPct > 100 {
+		c.BackfillPressureCeilingPct = 92
+	}
+	if c.BackfillPressureHighPct > c.BackfillPressureCeilingPct {
+		c.BackfillPressureHighPct = c.BackfillPressureCeilingPct
+	}
+	if c.BackfillPressureLowPct >= c.BackfillPressureHighPct {
+		c.BackfillPressureLowPct = c.BackfillPressureHighPct - 1
+	}
 }
 
 // knobFields maps admin-editable integer setting keys to the Config field each
@@ -369,6 +401,9 @@ func (c Config) withOverrides(s map[string]string) Config {
 			*dst = raw == "true" || raw == "1" || raw == "on"
 		}
 	}
+	// Stored rows can carry values the form would have refused (hand-inserted,
+	// or saved by a binary from before validation existed).
+	out.normalize()
 	return out
 }
 

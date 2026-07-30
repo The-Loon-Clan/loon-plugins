@@ -195,13 +195,28 @@
             </div>
             {{end}}
         </div>
+        {{/* Every checkbox pairs with a has_<key> marker: an unchecked box
+             posts nothing, and without the marker the save cannot tell
+             "unchecked" from "not on this form" — which once force-reset
+             the un-rendered emergency brakes on every knob save. */}}
         <label style="margin-top:.75rem;display:block">
+            <input type="hidden" name="has_skip_backfill" value="1">
             <input type="checkbox" name="skip_backfill" {{if .SkipBackfill}}checked{{end}}> Skip backfill (new articles only — don't pull history)
         </label>
         <label style="margin-top:.35rem;display:block">
+            <input type="hidden" name="has_crawl_no_catchup" value="1">
             <input type="checkbox" name="crawl_no_catchup" {{if .CrawlNoCatchup}}checked{{end}}> Disable crawl catch-up (sleep the full interval even when the servers hold more new articles)
-          </label>
+        </label>
+        <label style="margin-top:.35rem;display:block">
+            <input type="hidden" name="has_backfill_no_catchup" value="1">
+            <input type="checkbox" name="backfill_no_catchup" {{if .BackfillNoCatchup}}checked{{end}}> Disable backfill catch-up — the in-flight emergency brake: it is re-read every round, so flipping it stops a runaway catch-up pass without waiting for it to end
+        </label>
+        <label style="margin-top:.35rem;display:block">
+            <input type="hidden" name="has_build_no_catchup" value="1">
+            <input type="checkbox" name="build_no_catchup" {{if .BuildNoCatchup}}checked{{end}}> Disable builder catch-up (assemble one bounded pass per interval instead of draining the ready queue continuously)
+        </label>
           <label class="d-block small">
+            <input type="hidden" name="has_hold_low_until_backfilled" value="1">
             <input type="checkbox" name="hold_low_until_backfilled" {{if .HoldLowUntilBackfilled}}checked{{end}}> Hold LOW-tier groups until CRITICAL backfill finishes (a low group with a huge backlog otherwise consumes the pass budget and the staging memory that the critical group's history needs)
         </label>
         <div style="margin-top:.5rem">

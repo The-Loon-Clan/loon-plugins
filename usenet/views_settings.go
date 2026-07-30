@@ -26,7 +26,14 @@ type knob struct {
 }
 
 func (p *Plugin) knobs(ctx context.Context) []knob {
-	cfg := p.effective(ctx)
+	return knobList(p.effective(ctx))
+}
+
+// knobList is knobs() minus the settings read, so tests can assert every
+// knobFields key has a rendered row without a store — the hidden-knob trap
+// (settable via SQL, invisible in the UI) regresses one forgotten line at a
+// time, and this is the line that catches it.
+func knobList(cfg Config) []knob {
 	return []knob{
 		{"connections", "NNTP connections", cfg.Connections, "size of the shared connection pool — how many overview batches are fetched in parallel; keep at or below your provider's per-account limit"},
 		{"keepalive_min", "Connection keepalive (min)", cfg.KeepaliveMin, "how often to probe idle pool connections with a DATE so the provider does not reap them between passes; 0 disables. Set it below your provider's idle timeout"},
@@ -49,12 +56,62 @@ func (p *Plugin) knobs(ctx context.Context) []knob {
 		{"health_recheck_days", "Health re-check after (days)", cfg.HealthRecheckDays, "how long a verdict stands before it is re-tested (default 30)"},
 		{"health_min_age_hours", "Health min age (hrs)", cfg.HealthMinAgeHours, "skip releases newer than this — articles may still be propagating, and checking early wrongly marks new uploads dead (default 24)"},
 		{"health_stat_chunk", "Health STATs per lease", cfg.HealthStatChunk, "segments checked per borrowed connection; smaller returns connections to the crawler more often (default 200)"},
-		{"backfill_pressure_high_pct", "Backfill pause at (% pressure)", cfg.BackfillPressureHighPct, "backfill pauses when staging pressure reaches this percent (default 85); forward crawl never pauses"},
-		{"backfill_pressure_low_pct", "Backfill resume below (% pressure)", cfg.BackfillPressureLowPct, "paused backfill resumes once pressure drops below this percent (default 70)"},
+		{"backfill_pressure_high_pct", "Backfill pause at (% pressure)", cfg.BackfillPressureHighPct, "backfill pauses when staging pressure reaches this percent (default 85), while the builder has a backlog to drain"},
+		{"backfill_pressure_low_pct", "Backfill resume below (% pressure)", cfg.BackfillPressureLowPct, "paused backfill resumes once pressure drops below this percent (default 70) — must stay below the pause threshold or the gate flaps"},
+		{"backfill_pressure_ceiling_pct", "Eviction ceiling (% pressure)", cfg.BackfillPressureCeilingPct, "the hard stop that applies even with nothing to drain (default 92) — past it Redis EVICTS forming sets to make room; also caps the crawl's effective pause threshold"},
+		{"backfill_drain_wait_sec", "Backfill drain wait (sec)", cfg.BackfillDrainWaitSec, "how long a pressure-paused backfill waits for the builder to make room before ending its pass (default 180)"},
 		{"build_drain_per_pass", "Builder sets per pass", cfg.BuildDrainPerPass, "completed sets assembled per build pass (default 500) — raise during backlog recovery"},
 		{"tagfill_interval_min", "Tag fill interval (min)", cfg.TagFillIntervalMin, "tag-fill + recategorize cadence (default 360)"},
 		{"prune_interval_min", "Prune interval (min)", cfg.PruneIntervalMin, "prune cadence (default 1440)"},
+		{"dial_timeout_sec", "NNTP dial timeout (sec)", cfg.DialTimeoutSec, "connect + greeting bound per connection (default 30); one pool open is bounded at twice this, so a dead host costs seconds, not minutes"},
+		{"op_timeout_sec", "NNTP operation timeout (sec)", cfg.OpTimeoutSec, "bound on one whole exchange — one GROUP+OVER round (default 60). Raise together with the batch size on a slow provider, or honest fetches time out and the pool churns reconnects"},
+		{"provider_down_cooldown_min", "Provider bench cooldown (min)", cfg.ProviderDownCooldownMin, "how long a failed provider stays benched before retrying (default 10) — while benched, its backup is promoted"},
+		{"lease_ttl_min", "Lease TTL (min)", cfg.LeaseTTLMin, "how long a claimed group/job lease survives without renewal (default 15): long enough that a slow pass never loses its own claim, short enough that a killed worker's work is retaken promptly"},
+		{"assign_term_min", "Worker term (min)", cfg.AssignTermMin, "multi-worker: the group split is fixed for terms of this length (default 15), so a joiner waits for the boundary instead of reshuffling mid-pass"},
+		{"worker_stale_sec", "Worker staleness (sec)", cfg.WorkerStaleSec, "multi-worker: a crawler missing heartbeats this long drops out of the split (default 90)"},
 	}
+}
+
+// validateKnobs rejects knob combinations no gate can operate under, BEFORE
+// anything persists. `vals` is what the form posted; anything absent or 0
+// keeps its current effective value, so the relationships are checked against
+// what will actually be in force after the save.
+//
+// The percentages matter most: staging pressure caps at 100%, so a gate set
+// past that is unreachable — one extra typed digit (850 for 85) silently
+// disabled eviction protection, and the pause logs kept citing thresholds
+// that could never fire. The ordering rules keep the hysteresis real
+// (low < high) and the eviction ceiling outermost (high ≤ ceiling): with a
+// drainable backlog only the high/low latch gates, so a high above the
+// ceiling would stage straight through the band where Redis evicts.
+func validateKnobs(cur Config, vals map[string]int) string {
+	for _, k := range []string{
+		"crawl_pressure_high_pct", "backfill_pressure_high_pct",
+		"backfill_pressure_low_pct", "backfill_pressure_ceiling_pct",
+	} {
+		if n, ok := vals[k]; ok && n > 100 {
+			return fmt.Sprintf("%s is a percentage: %d can never fire (staging pressure tops out at 100%%), "+
+				"which silently disables that gate", k, n)
+		}
+	}
+	pick := func(key string, cur int) int {
+		if n, ok := vals[key]; ok && n > 0 {
+			return n
+		}
+		return cur
+	}
+	low := pick("backfill_pressure_low_pct", cur.BackfillPressureLowPct)
+	high := pick("backfill_pressure_high_pct", cur.BackfillPressureHighPct)
+	ceiling := pick("backfill_pressure_ceiling_pct", cur.BackfillPressureCeilingPct)
+	if low >= high {
+		return fmt.Sprintf("backfill_pressure_low_pct (%d) must be below backfill_pressure_high_pct (%d) — "+
+			"equal or inverted removes the hysteresis and the gate flaps at the threshold", low, high)
+	}
+	if high > ceiling {
+		return fmt.Sprintf("backfill_pressure_high_pct (%d) cannot exceed backfill_pressure_ceiling_pct (%d) — "+
+			"past the ceiling Redis evicts the sets still assembling", high, ceiling)
+	}
+	return ""
 }
 
 func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string) (template.HTML, error) {
@@ -89,6 +146,8 @@ func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string) (te
 		"Servers": servers, "DefaultConns": p.effective(ctx).Connections,
 		"Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,
 		"CrawlNoCatchup":         p.effective(ctx).CrawlNoCatchup,
+		"BackfillNoCatchup":      p.effective(ctx).BackfillNoCatchup,
+		"BuildNoCatchup":         p.effective(ctx).BuildNoCatchup,
 		"HoldLowUntilBackfilled": p.effective(ctx).HoldLowUntilBackfilled,
 		"Groups":                 groups, "GroupQuery": gq, "Tiers": AllTiers,
 		"GroupTotal": total, "Shown": len(groups),
@@ -319,6 +378,13 @@ func (p *Plugin) actionPurgeInactive(gc *gin.Context) (template.HTML, error) {
 func (p *Plugin) actionSaveKnobs(gc *gin.Context) (template.HTML, error) {
 	ctx := gc.Request.Context()
 	var cfg Config
+
+	// Parse and validate EVERYTHING before persisting anything. The old loop
+	// committed each key in Go-map iteration order and bailed on the first bad
+	// field, leaving a nondeterministic prefix of the form saved underneath an
+	// error flash.
+	ints := map[string]string{}
+	vals := map[string]int{}
 	for key := range cfg.knobFields() {
 		raw := strings.TrimSpace(gc.PostForm(key))
 		if raw == "" {
@@ -331,20 +397,44 @@ func (p *Plugin) actionSaveKnobs(gc *gin.Context) (template.HTML, error) {
 		if err != nil || n < 0 {
 			return settingsRedirect(gc, "err", key+" must be a number ≥ 0")
 		}
+		ints[key], vals[key] = raw, n
+	}
+	if msg := validateKnobs(p.effective(ctx), vals); msg != "" {
+		return settingsRedirect(gc, "err", msg)
+	}
+	bools := postedBools(gc.PostForm, cfg.boolFields())
+
+	for key, raw := range ints {
 		if err := p.st.setSetting(ctx, key, raw); err != nil {
 			return settingsRedirect(gc, "err", err.Error())
 		}
 	}
-	for key := range cfg.boolFields() {
-		val := "false"
-		if v := gc.PostForm(key); v == "on" || v == "true" {
-			val = "true"
-		}
+	for key, val := range bools {
 		if err := p.st.setSetting(ctx, key, val); err != nil {
 			return settingsRedirect(gc, "err", err.Error())
 		}
 	}
 	return settingsRedirect(gc, "msg", "settings saved — applied on each job's next run")
+}
+
+// postedBools collects checkbox states, but only for keys the form DECLARED
+// via a has_<key> marker. An unchecked checkbox posts nothing, so writing
+// "false" for every known bool force-reset the ones the form did not render —
+// which is how every knob save silently flipped backfill_no_catchup (the
+// catch-up loop's own emergency brake) back off while it wasn't in the UI.
+func postedBools(get func(string) string, fields map[string]*bool) map[string]string {
+	out := map[string]string{}
+	for key := range fields {
+		if get("has_"+key) == "" {
+			continue
+		}
+		val := "false"
+		if v := get(key); v == "on" || v == "true" {
+			val = "true"
+		}
+		out[key] = val
+	}
+	return out
 }
 
 func (p *Plugin) actionFetchGroups(gc *gin.Context) (template.HTML, error) {
