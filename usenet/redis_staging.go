@@ -913,6 +913,13 @@ func (r *redisStaging) deleteStagedBatch(ctx context.Context, keys []groupKey) (
 	return done, nil
 }
 
+// readyDepth is a single SCARD — the cheapest question in the pipeline, and
+// the one that distinguishes "the builder is behind" from "there is nothing to
+// build and the memory is half-finished releases".
+func (r *redisStaging) readyDepth(ctx context.Context) (int64, error) {
+	return r.rdb.SCard(ctx, readyKey).Result()
+}
+
 func (r *redisStaging) deleteJunkStaged(ctx context.Context) (int64, error) { return 0, nil }
 
 // prune is a no-op in redis mode: the key TTL + the inline hopeless-eviction

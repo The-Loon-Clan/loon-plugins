@@ -46,6 +46,19 @@ type stagingStore interface {
 	// stagingInfo is the dashboard's staging readout. Each mode fills what it
 	// answers CHEAPLY and leaves the rest zero; nothing here may cost a scan.
 	stagingInfo(ctx context.Context) (stagingInfo, error)
+	// readyDepth is how many COMPLETE sets are waiting to be assembled, in O(1).
+	//
+	// The backfill's pressure gate needs it to tell two very different situations
+	// apart. Staging full with a deep ready queue means the builder is behind and
+	// pausing the fetcher is right. Staging full with an EMPTY ready queue means
+	// the memory is incomplete sets — releases missing segments that only the
+	// fetcher can supply — and pausing then deadlocks: memory cannot fall until
+	// sets complete, sets cannot complete until they are fetched, and the fetcher
+	// is what was stopped.
+	//
+	// Returns -1 when the backend cannot answer cheaply, which callers must read
+	// as "assume a backlog" and fall back to the plain hysteresis.
+	readyDepth(ctx context.Context) (int64, error)
 	// incompleteSets lists the largest staged-but-incomplete releases — the
 	// "which releases are still missing articles" readout. NOT render-path:
 	// the build pass samples it into telemetry (redis mode walks the active
@@ -125,6 +138,13 @@ func (s *pgStaging) prune(ctx context.Context) (int64, error) {
 	_, hours := s.limits(ctx)
 	return s.PGStore.pruneStagedOlderThan(ctx, hours)
 }
+
+// readyDepth is unanswerable cheaply in pg mode: there is no standing ready
+// queue, completeness is computed per draw, and counting it means the same
+// aggregate the draw itself runs. -1 tells the caller to assume a backlog and
+// keep the plain hysteresis, which is exactly the behaviour this mode had before
+// the probe existed.
+func (s *pgStaging) readyDepth(ctx context.Context) (int64, error) { return -1, nil }
 
 func (s *pgStaging) stagingInfo(ctx context.Context) (stagingInfo, error) {
 	n, err := s.PGStore.stagedCount(ctx)

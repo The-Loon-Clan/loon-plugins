@@ -76,6 +76,12 @@ type Config struct {
 	// two jobs run together instead of taking turns — the builder is the only
 	// thing that can relieve the pressure the backfill is blocked on.
 	BackfillDrainWaitSec int `json:"backfill_drain_wait_sec"`
+	// BackfillPressureCeilingPct is the hard stop that applies even when there is
+	// nothing for the builder to drain. Above the normal high-water mark because
+	// in that state pausing achieves nothing — but still short of full, because
+	// at maxmemory Redis EVICTS rather than refusing the write, and the sets it
+	// evicts are the ones still assembling.
+	BackfillPressureCeilingPct int `json:"backfill_pressure_ceiling_pct"`
 	// HoldLowUntilBackfilled stops LOW-tier groups being crawled forward
 	// while any CRITICAL group still has history to backfill. See
 	// holdLowTier in provider_state.go for why ordering alone is not enough.
@@ -165,6 +171,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.BackfillDrainWaitSec <= 0 {
 		c.BackfillDrainWaitSec = 180
+	}
+	if c.BackfillPressureCeilingPct <= 0 {
+		// 92 leaves ~640 MB of an 8 GB ceiling. A round stages on the order of
+		// 25 MB, and pressure is re-read every round, so there is ample margin
+		// to stop before maxmemory.
+		c.BackfillPressureCeilingPct = 92
 	}
 	if c.Batch <= 0 {
 		c.Batch = 3000
@@ -257,36 +269,37 @@ func (c *Config) applyDefaults() {
 // override resolution in sync — no hardcoded operational values.
 func (c *Config) knobFields() map[string]*int {
 	return map[string]*int{
-		"connections":                &c.Connections,
-		"keepalive_min":              &c.KeepaliveMin,
-		"retention_days":             &c.RetentionDays,
-		"nzb_retention_days":         &c.NZBRetentionDays,
-		"crawl_interval_min":         &c.CrawlIntervalMin,
-		"tagfill_interval_min":       &c.TagFillIntervalMin,
-		"prune_interval_min":         &c.PruneIntervalMin,
-		"build_drain_per_pass":       &c.BuildDrainPerPass,
-		"backfill_drain_wait_sec":    &c.BackfillDrainWaitSec,
-		"batch":                      &c.Batch,
-		"max_groups":                 &c.MaxGroups,
-		"crawl_max_batches":          &c.CrawlMaxBatches,
-		"max_articles_per_group":     &c.MaxArticlesPerGroup,
-		"ready_reap_per_pass":        &c.ReadyReapPerPass,
-		"backfill_interval_min":      &c.BackfillIntervalMin,
-		"backfill_batches_per_run":   &c.BackfillBatchesPerRun,
-		"staging_max_rows":           &c.StagingMaxRows,
-		"staging_prune_hours":        &c.StagingPruneHours,
-		"staging_ttl_hours":          &c.StagingTTLHours,
-		"assign_term_min":            &c.AssignTermMin,
-		"worker_stale_sec":           &c.WorkerStaleSec,
-		"lease_ttl_min":              &c.LeaseTTLMin,
-		"health_interval_min":        &c.HealthIntervalMin,
-		"health_batch_size":          &c.HealthBatchSize,
-		"health_recheck_days":        &c.HealthRecheckDays,
-		"health_min_age_hours":       &c.HealthMinAgeHours,
-		"health_stat_chunk":          &c.HealthStatChunk,
-		"backfill_pressure_high_pct": &c.BackfillPressureHighPct,
-		"crawl_pressure_high_pct":    &c.CrawlPressureHighPct,
-		"backfill_pressure_low_pct":  &c.BackfillPressureLowPct,
+		"connections":                   &c.Connections,
+		"keepalive_min":                 &c.KeepaliveMin,
+		"retention_days":                &c.RetentionDays,
+		"nzb_retention_days":            &c.NZBRetentionDays,
+		"crawl_interval_min":            &c.CrawlIntervalMin,
+		"tagfill_interval_min":          &c.TagFillIntervalMin,
+		"prune_interval_min":            &c.PruneIntervalMin,
+		"build_drain_per_pass":          &c.BuildDrainPerPass,
+		"backfill_drain_wait_sec":       &c.BackfillDrainWaitSec,
+		"backfill_pressure_ceiling_pct": &c.BackfillPressureCeilingPct,
+		"batch":                         &c.Batch,
+		"max_groups":                    &c.MaxGroups,
+		"crawl_max_batches":             &c.CrawlMaxBatches,
+		"max_articles_per_group":        &c.MaxArticlesPerGroup,
+		"ready_reap_per_pass":           &c.ReadyReapPerPass,
+		"backfill_interval_min":         &c.BackfillIntervalMin,
+		"backfill_batches_per_run":      &c.BackfillBatchesPerRun,
+		"staging_max_rows":              &c.StagingMaxRows,
+		"staging_prune_hours":           &c.StagingPruneHours,
+		"staging_ttl_hours":             &c.StagingTTLHours,
+		"assign_term_min":               &c.AssignTermMin,
+		"worker_stale_sec":              &c.WorkerStaleSec,
+		"lease_ttl_min":                 &c.LeaseTTLMin,
+		"health_interval_min":           &c.HealthIntervalMin,
+		"health_batch_size":             &c.HealthBatchSize,
+		"health_recheck_days":           &c.HealthRecheckDays,
+		"health_min_age_hours":          &c.HealthMinAgeHours,
+		"health_stat_chunk":             &c.HealthStatChunk,
+		"backfill_pressure_high_pct":    &c.BackfillPressureHighPct,
+		"crawl_pressure_high_pct":       &c.CrawlPressureHighPct,
+		"backfill_pressure_low_pct":     &c.BackfillPressureLowPct,
 	}
 }
 

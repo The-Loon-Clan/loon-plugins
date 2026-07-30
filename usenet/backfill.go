@@ -136,6 +136,31 @@ func (p *Plugin) backfillYields(ctx context.Context, cfg Config) (bool, float64)
 	if err != nil {
 		return false, 0 // unknown pressure is not a reason to stop protecting history
 	}
+
+	// Yielding is only useful if the builder can act on it.
+	//
+	// This gate deadlocked production. Once pressure touched the high-water mark
+	// the hysteresis latched, and it only releases below the LOW mark — but what
+	// fills memory here is mostly INCOMPLETE sets, releases waiting for segments
+	// that nothing except the backfill can fetch. The builder cannot assemble
+	// those, so memory never fell, the latch never cleared, and the fetcher stayed
+	// off. Observed at 74% pressure against an 85% threshold, ready queue at 119,
+	// every job idle 92% of the time and the operator asking why nothing was
+	// working. It was not throttling; it was stuck.
+	//
+	// So the rule is: pause while there is a DRAINABLE backlog, and when there is
+	// nothing to build, keep fetching — because fetching is the only thing that
+	// turns those half-finished sets into releases and frees the memory. The
+	// ceiling still applies, because past it Redis evicts rather than refuses and
+	// that is how 97 million keys were destroyed.
+	if depth, derr := p.staging.readyDepth(ctx); derr == nil && depth == 0 {
+		if pr < float64(cfg.BackfillPressureCeilingPct)/100.0 {
+			p.backfillPaused = false
+			return false, pr
+		}
+		return true, pr
+	}
+
 	switch {
 	case p.backfillPaused && pr >= float64(cfg.BackfillPressureLowPct)/100.0:
 		return true, pr
