@@ -234,6 +234,16 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 		p.reportErr(ctx, "usenet/health-parse", fmt.Errorf("nzb %d: %w", row.ID, err))
 		return "", 0, 0, 0, healthSkipPermanent
 	}
+	return checkSegments(ctx, segs, chunk, func(ids []string) ([]statResult, error) {
+		return p.statBatch(ctx, pool, ids)
+	})
+}
+
+// checkSegments runs the STAT tally over a release's segments and decides the
+// verdict. Split from checkOne with the batch function injected so the
+// transport-failure accounting is testable without a live NNTP pool — the
+// accounting is where this went wrong in production.
+func checkSegments(ctx context.Context, segs releaseSegments, chunk int, stat func(ids []string) ([]statResult, error)) (verdict string, totalSegs, missingData, par2Total int, outcome healthOutcome) {
 	total := len(segs.Data) + len(segs.Par2)
 	if total == 0 {
 		return "", 0, 0, 0, healthSkipPermanent
@@ -247,11 +257,28 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 				return ctx.Err()
 			}
 			end := min(start+chunk, len(ids))
-			res, err := p.statBatch(ctx, pool, ids[start:end])
+			res, err := stat(ids[start:end])
 			if err != nil && (errors.Is(err, nntp.ErrPoolBusy) || errors.Is(err, nntp.ErrPoolEmpty)) {
 				// The crawler needs the connections; stop and try again later
 				// rather than waiting for them.
 				return err
+			}
+			// The chunk's results count even when its connection died partway.
+			// statBatch pre-fills every id statUnknown and classifies the ids
+			// answered before the failure, so the answered ones are real
+			// verdicts (including confirmed-missing 430s) and the unanswered
+			// remainder is exactly the doubt the inconclusive guard below must
+			// see. Discarding a failed chunk counted its segments neither
+			// missing nor unknown while total still included them — a
+			// mostly-unchecked release then sailed past the guard and had a
+			// definitive "healthy" written over a real broken/dead verdict.
+			for _, r := range res {
+				switch r {
+				case statMissing:
+					*missing++
+				case statUnknown:
+					unknown++
+				}
 			}
 			if err != nil {
 				// Transport failure: the pool discarded that connection, and the
@@ -264,15 +291,6 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 				transportFails++
 				if transportFails >= 3 {
 					return err
-				}
-				continue
-			}
-			for _, r := range res {
-				switch r {
-				case statMissing:
-					*missing++
-				case statUnknown:
-					unknown++
 				}
 			}
 		}

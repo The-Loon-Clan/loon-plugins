@@ -1,12 +1,136 @@
 package usenet
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/the-loon-clan/loon/nntp"
 )
+
+// TestCheckSegmentsFoldsFailedChunks pins the module's stated invariant: a
+// mostly-inconclusive check must NEVER overwrite a definitive verdict. When a
+// chunk's connection dies mid-way, statBatch still returns real answers for the
+// ids it reached and statUnknown for the rest — and those unknowns are exactly
+// what the maxInconclusiveRatio guard exists to see. Discarding the failed
+// chunk wholesale counted its segments neither missing nor unknown, so a
+// release where half the segments were never answered got a definitive
+// "healthy" written over a real broken/dead verdict. The corpse-pool pattern
+// (idle sockets die, a later chunk succeeds on a fresh dial) produces exactly
+// that shape, and it happened on prod.
+func TestCheckSegmentsFoldsFailedChunks(t *testing.T) {
+	ids := func(n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = fmt.Sprintf("<%d@x>", i)
+		}
+		return out
+	}
+	transportErr := errors.New("read tcp: connection reset by peer")
+
+	t.Run("failed chunk's unknowns must reach the ratio guard", func(t *testing.T) {
+		// 400 segments, chunk 200. Chunk 1 dies with nothing answered; chunk 2
+		// answers everything present. Half the release was never checked, so
+		// the only defensible outcome is a transient skip.
+		segs := releaseSegments{Data: ids(400)}
+		calls := 0
+		_, _, _, _, outcome := checkSegments(context.Background(), segs, 200,
+			func(chunk []string) ([]statResult, error) {
+				calls++
+				res := make([]statResult, len(chunk))
+				if calls == 1 {
+					for i := range res {
+						res[i] = statUnknown
+					}
+					return res, transportErr
+				}
+				for i := range res {
+					res[i] = statPresent
+				}
+				return res, nil
+			})
+		if outcome == healthWritten {
+			t.Fatal("a check that never answered half the segments produced a definitive verdict — " +
+				"the failed chunk's unknowns were discarded instead of feeding the inconclusive guard")
+		}
+		if outcome != healthSkipTransient {
+			t.Fatalf("outcome = %v, want healthSkipTransient", outcome)
+		}
+	})
+
+	t.Run("answers received before the connection died still count", func(t *testing.T) {
+		// Chunk 1: 190 confirmed missing (430s), then the socket dies with 10
+		// unanswered. Chunk 2: all present. 10/400 unknown is within the ratio,
+		// so a verdict IS written — and it must include the 190 real 430s the
+		// old code threw away with the transport error.
+		segs := releaseSegments{Data: ids(400)}
+		calls := 0
+		verdict, total, missing, _, outcome := checkSegments(context.Background(), segs, 200,
+			func(chunk []string) ([]statResult, error) {
+				calls++
+				res := make([]statResult, len(chunk))
+				if calls == 1 {
+					for i := range res {
+						if i < 190 {
+							res[i] = statMissing
+						} else {
+							res[i] = statUnknown
+						}
+					}
+					return res, transportErr
+				}
+				for i := range res {
+					res[i] = statPresent
+				}
+				return res, nil
+			})
+		if outcome != healthWritten {
+			t.Fatalf("outcome = %v, want healthWritten (10/400 unknown is within the ratio)", outcome)
+		}
+		if missing != 190 {
+			t.Errorf("missing = %d, want the 190 confirmed 430s from the failed chunk", missing)
+		}
+		if total != 400 {
+			t.Errorf("total = %d, want 400", total)
+		}
+		if verdict != healthDead {
+			t.Errorf("verdict = %q, want %q (190 missing, no par2)", verdict, healthDead)
+		}
+	})
+
+	t.Run("three transport failures still abort the release", func(t *testing.T) {
+		segs := releaseSegments{Data: ids(600)}
+		calls := 0
+		_, _, _, _, outcome := checkSegments(context.Background(), segs, 100,
+			func(chunk []string) ([]statResult, error) {
+				calls++
+				res := make([]statResult, len(chunk))
+				for i := range res {
+					res[i] = statUnknown
+				}
+				return res, transportErr
+			})
+		if outcome != healthSkipTransient {
+			t.Fatalf("outcome = %v, want healthSkipTransient (the pool is sick, yield)", outcome)
+		}
+		if calls != 3 {
+			t.Errorf("stat called %d times, want 3 — the corpse-pool bail-out must survive the fix", calls)
+		}
+	})
+
+	t.Run("clean pass still writes", func(t *testing.T) {
+		segs := releaseSegments{Data: ids(300), Par2: ids(50)}
+		verdict, total, missing, par2, outcome := checkSegments(context.Background(), segs, 200,
+			func(chunk []string) ([]statResult, error) {
+				return make([]statResult, len(chunk)), nil // zero value = statPresent
+			})
+		if outcome != healthWritten || verdict != healthHealthy || missing != 0 || total != 350 || par2 != 50 {
+			t.Errorf("clean pass: verdict=%q total=%d missing=%d par2=%d outcome=%v",
+				verdict, total, missing, par2, outcome)
+		}
+	})
+}
 
 // TestHealthVerdict pins the scoring rule: missing data is survivable exactly as
 // far as the SURVIVING par2 blocks can rebuild it.
