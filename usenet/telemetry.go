@@ -296,6 +296,11 @@ type telemetry struct {
 	// evicted counts hopeless sets shed by redis staging since the worker
 	// started — proof the eviction machinery is working, not failing.
 	evicted int64
+	// demoted counts ready-queue entries the builder withdrew because its
+	// verification refused what staging queued as complete. Each one is a
+	// completeness-check disagreement; a steady rate is merged re-posts doing
+	// what merged re-posts do, a climbing rate means the checks drifted.
+	demoted int64
 	// stalledPasses counts consecutive crawl passes that ended in the
 	// "catch-up stalled" break while a large backlog remained. The 2026-07-24
 	// incident (20/20 groups planning zero batches, pass after pass, 575M
@@ -436,6 +441,21 @@ func (t *telemetry) evictedCount() int64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.evicted
+}
+
+// noteDemoted counts ready-queue withdrawals (builder-refused candidates).
+// Cumulative-since-start like the evicted counter, and for the same reason:
+// the interesting reading is the delta between snapshots.
+func (t *telemetry) noteDemoted(n int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.demoted += int64(n)
+}
+
+func (t *telemetry) demotedCount() int64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.demoted
 }
 
 // setStalledPasses records the crawl's consecutive-stall streak for telemetry.

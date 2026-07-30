@@ -779,3 +779,185 @@ func TestHopelessEvictionFiresOnStragglerTouch(t *testing.T) {
 		t.Errorf("onEvict reported %d, want 1", evicted)
 	}
 }
+
+// Meta totals must only ever RISE. Plain HSet made them per-batch maxima: a
+// smaller re-post merged under the same base subject overwrote total_files /
+// seg_total / st:N downward, staging's completeness check then demanded LESS
+// than the builder (which recomputes the max from the loaded articles), the
+// set queued as complete and the builder refused it — forever, re-loading and
+// re-refusing it every pass. 2026-07-30 prod: 157 such sets, ~7 GB pinned,
+// backfill paused against a drain that could never drain.
+func TestStageMetaTotalsNeverRegress(t *testing.T) {
+	ctx := context.Background()
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+
+	art := func(fn, part, segTotal, totalFiles int, id string) stagedArticle {
+		return stagedArticle{
+			Group: "a.b.group", BaseSubject: "Show.S01.REMUX",
+			Subject:   fmt.Sprintf("Show.S01.REMUX [%02d/%02d] (%d/%d)", fn, totalFiles, part, segTotal),
+			MessageID: id, Poster: "p", Bytes: 1000, Posted: time.Now(),
+			PartNum: part, TotalParts: segTotal, SegTotal: segTotal,
+			FileNum: fn, TotalFiles: totalFiles, FileParts: true,
+		}
+	}
+
+	// Batch 1: the larger variant — file 1 claims 3 segments, 2 files total.
+	if _, err := r.stageArticles(ctx, []stagedArticle{
+		art(1, 1, 3, 2, "<big-1-1@x>"),
+		art(1, 2, 3, 2, "<big-1-2@x>"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Batch 2: a smaller re-post under the SAME subject claims file 1 has only
+	// 2 segments; its parts land in the same field slots. Under the old
+	// overwrite, st:1 dropped 3→2 and the set counted complete right here.
+	if _, err := r.stageArticles(ctx, []stagedArticle{
+		art(1, 1, 2, 2, "<small-1-1@x>"),
+		art(1, 2, 2, 2, "<small-1-2@x>"),
+		art(2, 1, 1, 2, "<small-2-1@x>"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	gk := grpKey("a.b.group", groupHashKey("a.b.group", "Show.S01.REMUX"))
+	if st1, _ := rdb.HGet(ctx, gk, "st:1").Result(); st1 != "3" {
+		t.Errorf("st:1 = %q after the smaller re-post, want 3 — totals must never regress", st1)
+	}
+	if n, _ := rdb.SCard(ctx, readyKey).Result(); n != 0 {
+		t.Fatalf("set queued as ready while file 1 is short of its largest claim (%d in queue) — the exact shape of the prod jam", n)
+	}
+
+	// The larger variant's third part arrives: NOW the set is complete by the
+	// same rule the builder applies.
+	if _, err := r.stageArticles(ctx, []stagedArticle{
+		art(1, 3, 3, 2, "<big-1-3@x>"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := rdb.SCard(ctx, readyKey).Result(); n != 1 {
+		t.Fatalf("complete set not queued (%d in queue)", n)
+	}
+	// And the builder AGREES — the invariant the jam broke: staging-complete
+	// must imply builder-complete.
+	arts, err := r.groupArticles(ctx, "a.b.group", "Show.S01.REMUX")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isComplete(arts) {
+		t.Error("staging queued a set the builder's isComplete refuses — the two checks have diverged again")
+	}
+}
+
+// file_parts must be sticky-true, mirroring isComplete's trigger (ANY article
+// with file numbering makes the set multi-file). It used to be whatever
+// article led the latest batch, and one false overwrite dropped a multi-file
+// set to the single-file completeness arm — where a fraction of its articles
+// can satisfy total_parts.
+func TestFilePartsFlagIsSticky(t *testing.T) {
+	ctx := context.Background()
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+
+	if _, err := r.stageArticles(ctx, []stagedArticle{{
+		Group: "a.b.group", BaseSubject: "Multi.Release",
+		Subject: "Multi.Release [01/02] (1/3)", MessageID: "<m1@x>", Poster: "p",
+		Bytes: 1, Posted: time.Now(),
+		PartNum: 1, TotalParts: 3, SegTotal: 3, FileNum: 1, TotalFiles: 2, FileParts: true,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	// A stray unnumbered companion (no file numbering) lands in a later batch.
+	if _, err := r.stageArticles(ctx, []stagedArticle{{
+		Group: "a.b.group", BaseSubject: "Multi.Release",
+		Subject: "Multi.Release (1/5)", MessageID: "<m2@x>", Poster: "p",
+		Bytes: 1, Posted: time.Now(),
+		PartNum: 1, TotalParts: 5, SegTotal: 5,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	gk := grpKey("a.b.group", groupHashKey("a.b.group", "Multi.Release"))
+	if fp, _ := rdb.HGet(ctx, gk, "file_parts").Result(); fp != "true" {
+		t.Errorf("file_parts = %q after a non-file-parts batch, want true — one stray article must not drop "+
+			"a multi-file set to the single-file completeness arm", fp)
+	}
+}
+
+// demoteReady is a withdrawal, not a delete: the entry leaves nzb:ready, the
+// staged articles survive, and a set that later truly completes re-queues
+// itself — the property that makes demoting builder-refused candidates safe.
+func TestDemoteReadyWithdrawsWithoutDestroying(t *testing.T) {
+	ctx := context.Background()
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+
+	stage := func(part int, id string) {
+		t.Helper()
+		if _, err := r.stageArticles(ctx, []stagedArticle{{
+			Group: "a.b.group", BaseSubject: "Two.Parter",
+			Subject:   fmt.Sprintf("Two.Parter (%d/2)", part),
+			MessageID: id, Poster: "p", Bytes: 1, Posted: time.Now(),
+			PartNum: part, TotalParts: 2, SegTotal: 2,
+		}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stage(1, "<tp1@x>")
+	stage(2, "<tp2@x>")
+	if n, _ := rdb.SCard(ctx, readyKey).Result(); n != 1 {
+		t.Fatalf("fixture: complete set not queued (%d)", n)
+	}
+
+	hash := groupHashKey("a.b.group", "Two.Parter")
+	// Simulate the divergence population: an entry in nzb:ready whose articles
+	// no longer satisfy the builder (here a lost field; in prod, merged
+	// re-posts and meta staged before totals were monotonic).
+	if err := rdb.HDel(ctx, artKey("a.b.group", hash), formatFieldKey(0, 2)).Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := r.demoteReady(ctx, "a.b.group", "Two.Parter")
+	if err != nil || !ok {
+		t.Fatalf("demote: ok=%v err=%v, want a removal", ok, err)
+	}
+	if n, _ := rdb.SCard(ctx, readyKey).Result(); n != 0 {
+		t.Fatal("entry still in nzb:ready after demote")
+	}
+	if n, _ := rdb.Exists(ctx, artKey("a.b.group", hash), grpKey("a.b.group", hash)).Result(); n != 2 {
+		t.Fatalf("staged keys destroyed by demote (%d of 2 left)", n)
+	}
+	if ok, err := r.demoteReady(ctx, "a.b.group", "Two.Parter"); err != nil || ok {
+		t.Errorf("re-demote of an absent entry: ok=%v err=%v, want false/nil", ok, err)
+	}
+
+	// The missing part arriving re-queues the set.
+	stage(2, "<tp2b@x>")
+	if n, _ := rdb.SCard(ctx, readyKey).Result(); n != 1 {
+		t.Fatal("re-completed set not re-queued after demotion")
+	}
+}
+
+// A sample that could not be taken must never masquerade as an empty pipeline:
+// "0 forming" during a Redis outage is a false zero in exactly the readout an
+// operator checks when staging is at its ceiling — which is also exactly when
+// Redis is most likely to fail the sample.
+func TestIncompleteSetsSurfacesTotalFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	dead := redis.NewClient(&redis.Options{
+		Addr: "127.0.0.1:1", DialTimeout: 200 * time.Millisecond, MaxRetries: -1,
+	})
+	defer dead.Close()
+	r := newRedisStaging(dead, func(context.Context) int { return 2 }, nil, nil)
+
+	if _, err := r.incompleteSets(ctx, 15, []string{"a.b.group"}); err == nil {
+		t.Error("every group's sample failed and incompleteSets returned a nil error — a Redis outage reads as \"0 forming\"")
+	}
+
+	// An empty group list is NOT an error: with no active groups there is
+	// legitimately nothing in flight.
+	live := testRedis(t)
+	rl := newTestStaging(live)
+	if sets, err := rl.incompleteSets(ctx, 15, nil); err != nil || sets != nil {
+		t.Errorf("empty group list: sets=%v err=%v, want nil/nil", sets, err)
+	}
+}

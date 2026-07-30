@@ -29,6 +29,16 @@ type stagingStore interface {
 	candidateGroups(ctx context.Context, limit int) ([]groupKey, candidateStats, error)
 	groupArticles(ctx context.Context, group, base string) ([]stagedArticle, error)
 	deleteStaged(ctx context.Context, group, base string) error
+	// demoteReady withdraws a set from the ready queue while leaving its
+	// staged articles in place — the builder's move when its verification
+	// refuses a candidate staging queued as complete. Without it a refused
+	// entry has no exit: candidateGroups peeks, deleteStaged only fires on
+	// success or a permanent drop, so the entry is re-drawn and re-refused
+	// forever. Returns whether an entry was actually removed, so the caller
+	// counts real withdrawals only. pg: (false, nil) — there is no standing
+	// queue; the next draw recomputes candidacy from rows and an incomplete
+	// set simply stops qualifying.
+	demoteReady(ctx context.Context, group, base string) (bool, error)
 	// deleteStagedBatch removes many sets in as few round-trips as possible.
 	//
 	// It exists because deleting one set costs one Redis round-trip, and the
@@ -211,4 +221,12 @@ func newStaging(mode StagingMode, pg *PGStore, redisSvc core.RedisService, limit
 // stale entries and nothing to sweep.
 func (s *pgStaging) reapReadyQueue(ctx context.Context, maxScan int) (int, int, error) {
 	return 0, 0, nil
+}
+
+// demoteReady is a no-op for pg staging for the same reason as the reaper:
+// candidacy is recomputed from rows every draw, so an incomplete set stops
+// qualifying by itself. false so the caller does not count a withdrawal that
+// never happened.
+func (s *pgStaging) demoteReady(ctx context.Context, group, base string) (bool, error) {
+	return false, nil
 }

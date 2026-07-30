@@ -89,7 +89,10 @@ type censusRow struct {
 }
 
 // PendingLabel renders the pending-sets sample, distinguishing "none pending"
-// from "the pass died before sampling" (recorded as -1).
+// from "no sample taken" (recorded as -1). The sentinel is process-local: it
+// means this worker has not completed a sample since it started — after a
+// restart the first rows of a pass show "—" until the pass-start sample lands,
+// and a failed sample preserves the previous figure rather than writing 0.
 func (c censusRow) PendingLabel() string {
 	if c.PendingSets < 0 {
 		return "—"

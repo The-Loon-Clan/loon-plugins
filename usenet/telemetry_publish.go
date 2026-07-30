@@ -119,6 +119,10 @@ type workerTelemetry struct {
 	// Evicted counts hopeless sets shed by redis staging since worker start —
 	// the answer to "is eviction failing or filtering".
 	Evicted int64 `json:"evicted,omitempty"`
+	// Demoted counts ready-queue entries the builder withdrew after its
+	// verification refused them — each one a stage-time/build-time
+	// completeness disagreement (merged re-posts, drifted totals).
+	Demoted int64 `json:"demoted,omitempty"`
 	// Census is the last few staging-health samples, newest first. Published
 	// because the readings that matter are DELTAS between build passes, and a
 	// dashboard showing one instant cannot express "evictions are climbing" —
@@ -180,6 +184,7 @@ func (p *Plugin) localTelemetry() workerTelemetry {
 	tv.Jobs, _ = p.jobVMs()
 	tv.Pending = p.tel.pendingSets()
 	tv.Evicted = p.tel.evictedCount()
+	tv.Demoted = p.tel.demotedCount()
 	tv.Schema = newestMigration()
 	tv.CrawlStalledPasses = p.tel.stalled()
 	if p.st != nil {

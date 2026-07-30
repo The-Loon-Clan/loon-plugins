@@ -71,6 +71,13 @@ type redisStaging struct {
 	// 0 again, which merely re-scans — removal is idempotent.
 	reapMu     sync.Mutex
 	reapCursor uint64
+
+	// scriptMu guards the one-time SCRIPT LOAD of metaMaxScript. Not a
+	// promise: a Redis restart or SCRIPT FLUSH empties the server's script
+	// cache and EVALSHA answers NOSCRIPT — stageArticles reloads and re-runs
+	// (its pipeline is idempotent, so the whole-call retry is safe).
+	scriptMu      sync.Mutex
+	scriptsLoaded bool
 }
 
 func newRedisStaging(rdb redis.UniversalClient, ttlHours func(context.Context) int, onEvict func(int), report func(context.Context, string, error)) *redisStaging {
@@ -257,6 +264,59 @@ func isWrongType(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "WRONGTYPE")
 }
 
+// metaMaxScript folds numeric meta fields UPWARD only: each (field, value)
+// pair in ARGV is written iff it exceeds what the hash already holds.
+//
+// It exists because plain HSet made the totals per-BATCH maxima, not per-set:
+// a later batch carrying smaller claims (a smaller re-post merged under the
+// same base subject, a stray header) overwrote total_files / seg_total / st:N
+// downward. Staging's completeness check then demanded LESS than the builder,
+// which judges from the loaded articles and always sees the all-time max — so
+// the set queued as complete, the builder refused it, and the entry sat in
+// nzb:ready being re-loaded and re-refused every pass (2026-07-30: 157 sets,
+// ~7 GB pinned, backfill paused against a drain that could never drain).
+// Written as one atomic script per set so two stagers racing on the same
+// group (forward crawl + backfill) cannot interleave a read-modify-write.
+var metaMaxScript = redis.NewScript(`
+for i = 1, #ARGV, 2 do
+  local cur = tonumber(redis.call('HGET', KEYS[1], ARGV[i]))
+  local v = tonumber(ARGV[i+1])
+  if v and (not cur or v > cur) then
+    redis.call('HSET', KEYS[1], ARGV[i], ARGV[i+1])
+  end
+end
+return 1
+`)
+
+// ensureScripts loads metaMaxScript into the server's script cache once per
+// process, so the EVALSHA calls pipelined by stageArticles resolve. A load
+// failure is left for the pipeline itself to surface (NOSCRIPT → the caller's
+// reload-and-retry path comes back through here with the flag cleared).
+func (r *redisStaging) ensureScripts(ctx context.Context) {
+	r.scriptMu.Lock()
+	defer r.scriptMu.Unlock()
+	if r.scriptsLoaded {
+		return
+	}
+	if err := metaMaxScript.Load(ctx, r.rdb).Err(); err == nil {
+		r.scriptsLoaded = true
+	}
+}
+
+// reloadScripts drops the loaded latch and loads again — the NOSCRIPT
+// recovery path after a Redis restart or SCRIPT FLUSH.
+func (r *redisStaging) reloadScripts(ctx context.Context) {
+	r.scriptMu.Lock()
+	r.scriptsLoaded = false
+	r.scriptMu.Unlock()
+	r.ensureScripts(ctx)
+}
+
+// isNoScript reports EVALSHA's "script not in cache" reply.
+func isNoScript(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "NOSCRIPT")
+}
+
 // stagingTTL resolves the live TTL knob with the historical 2h floor-default.
 func (r *redisStaging) stagingTTL(ctx context.Context) time.Duration {
 	if r.ttlHours != nil {
@@ -400,11 +460,27 @@ func appendEscaped(b []byte, s string) []byte {
 // stageArticles inserts articles + metadata, detects newly-complete sets, and
 // evicts hopeless ones — all on one pipeline round-trip. A set that completes is
 // pushed to nzb:ready for the builder. Lifted from prod's RedisInsertArticles.
+//
+// NOSCRIPT (Redis restarted or its script cache was flushed since
+// ensureScripts ran) reloads and retries the whole call once: the pipeline is
+// idempotent — HSet re-applies the same values, SAdd/Expire/HSetNX and the
+// max-merge script are all re-runnable — so retrying beats failing the batch
+// and paying a full re-fetch of its articles.
 func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) (int, error) {
+	n, err := r.stageArticlesOnce(ctx, arts)
+	if err != nil && isNoScript(err) {
+		r.reloadScripts(ctx)
+		n, err = r.stageArticlesOnce(ctx, arts)
+	}
+	return n, err
+}
+
+func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArticle) (int, error) {
 	if len(arts) == 0 {
 		return 0, nil
 	}
 	r.ensureReadySet(ctx)
+	r.ensureScripts(ctx)
 	ttl := r.stagingTTL(ctx)
 	type groupUpdate struct {
 		hash, groupName, baseSub string
@@ -465,8 +541,8 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 		gk := grpKey(gu.groupName, gu.hash)
 		ak := artKey(gu.groupName, gu.hash)
 		ci := checkItem{gu: gu, prevTouch: pipe.HGet(ctx, gk, "touched_at")}
-		first := gu.articles[0]
 		maxTP, maxTF, maxST := 0, 0, 0
+		anyFP := false
 		var newestDate int64
 		for _, a := range gu.articles {
 			if a.TotalParts > maxTP {
@@ -478,6 +554,9 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 			if a.SegTotal > maxST {
 				maxST = a.SegTotal
 			}
+			if a.FileParts && a.TotalFiles > 0 {
+				anyFP = true
+			}
 			if a.Posted.Unix() > newestDate {
 				newestDate = a.Posted.Unix()
 			}
@@ -485,24 +564,28 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 		pipe.HSet(ctx, gk,
 			"base_subject", gu.baseSub,
 			"group_name", gu.groupName,
-			"file_parts", boolStr(first.FileParts),
-			"total_parts", maxTP,
-			"total_files", maxTF,
-			"seg_total", maxST,
-			"newest_date", newestDate,
 		)
+		// file_parts is STICKY-true, mirroring isComplete's trigger (ANY
+		// article with file numbering makes the set multi-file). It used to be
+		// whatever article happened to lead the latest batch — and one false
+		// overwrite dropped a multi-file set to the single-file arm of the
+		// completeness check, where a fraction of its articles can satisfy
+		// total_parts.
+		if anyFP {
+			pipe.HSet(ctx, gk, "file_parts", "true")
+		} else {
+			pipe.HSetNX(ctx, gk, "file_parts", "false")
+		}
 		// Per-file segment totals, as segFieldKey(fileNum).
 		//
-		// seg_total above is the MAX across the whole set, and a release is one
-		// large media file plus a handful of tiny par2s — so applying that max
-		// to every file demands orders of magnitude more articles than exist.
-		// Production showed a complete set reading have=156,882 need=2,016,196
-		// and never building. assemble.go's isComplete has always tracked this
-		// per file; the Redis port collapsed it to one global value, and only
-		// the per-file numbers can restore the distinction.
-		//
-		// Written per touched file and only ever upward, so a later batch
-		// carrying a larger count for the same file corrects an earlier one.
+		// seg_total (in the max-merge below) is the MAX across the whole set,
+		// and a release is one large media file plus a handful of tiny par2s —
+		// so applying that max to every file demands orders of magnitude more
+		// articles than exist. Production showed a complete set reading
+		// have=156,882 need=2,016,196 and never building. assemble.go's
+		// isComplete has always tracked this per file; the Redis port
+		// collapsed it to one global value, and only the per-file numbers
+		// restore the distinction.
 		perFile := map[int]int{}
 		lo, hi := 0, 0
 		for _, a := range gu.articles {
@@ -521,11 +604,23 @@ func (r *redisStaging) stageArticles(ctx context.Context, arts []stagedArticle) 
 		if lo > 0 {
 			spans = append(spans, spanUpdate{key: gk, lo: lo, hi: hi})
 		}
+		// Every numeric total goes through the max-merge script, never plain
+		// HSet: these fields are what the completeness check trusts, and they
+		// must track the largest claim ANY batch has made — which is exactly
+		// what the builder recomputes from the loaded articles. See
+		// metaMaxScript for the jam the per-batch overwrite caused.
+		maxArgs := []interface{}{
+			"total_parts", maxTP,
+			"total_files", maxTF,
+			"seg_total", maxST,
+			"newest_date", newestDate,
+		}
 		for fn, st := range perFile {
 			if st > 0 {
-				pipe.HSet(ctx, gk, segFieldKey(fn), st)
+				maxArgs = append(maxArgs, segFieldKey(fn), st)
 			}
 		}
+		metaMaxScript.EvalSha(ctx, pipe, []string{gk}, maxArgs...)
 		pipe.HSetNX(ctx, gk, "created_at", now)
 		// touched_at moves on every batch that adds to this set. The eviction
 		// below needs "has it stopped growing", not "how long ago did it start" —
@@ -909,10 +1004,33 @@ func (r *redisStaging) deleteStaged(ctx context.Context, group, base string) err
 	pipe.Del(ctx, grpKey(group, hash))
 	pipe.SRem(ctx, activeKey(group), hash)
 	// Remove it from the work queue too — candidateGroups PEEKS instead of
-	// popping, so this is the one place an entry leaves nzb:ready.
+	// popping, so an entry leaves nzb:ready only here or via demoteReady.
 	pipe.SRem(ctx, readyKey, group+":"+hash)
 	_, err := pipe.Exec(ctx)
 	return err
+}
+
+// demoteReady withdraws one entry from nzb:ready WITHOUT touching its staged
+// articles. The builder calls it on a candidate its verification refuses:
+// staging judged the set complete from its meta, the loaded articles say
+// otherwise (a smaller re-post merged under the same base subject, or totals
+// recorded before they became monotonic). Before this existed such an entry
+// was immortal — deleteStaged on success was the only exit, so a refused set
+// was re-drawn, re-loaded and re-refused every pass while its articles pinned
+// staging memory until the TTL (2026-07-30: 157 sets, ~7 GB, backfill paused
+// against a drain that could never drain).
+//
+// The articles STAY: if the missing parts arrive, the stage-time completeness
+// check re-queues the set; if they never do, the TTL clears the keys and the
+// reaper the stale ref. Returns whether an entry was actually removed.
+func (r *redisStaging) demoteReady(ctx context.Context, group, base string) (bool, error) {
+	var n int64
+	err := r.readyRetry(ctx, func() error {
+		var e error
+		n, e = r.rdb.SRem(ctx, readyKey, group+":"+groupHashKey(group, base)).Result()
+		return e
+	})
+	return n > 0, err
 }
 
 // deleteJunkStaged is a no-op in redis mode: junk base_subjects are dropped at
@@ -1074,20 +1192,33 @@ func (r *redisStaging) incompleteSets(ctx context.Context, limit int, groups []s
 	// sample each, independent of keyspace size.
 	type ref struct{ group, hash string }
 	refs := make([]ref, 0, pendingSampleCap)
+	var firstErr error
 	for _, group := range groups {
 		if len(refs) >= pendingSampleCap {
 			break
 		}
 		hashes, err := r.rdb.SRandMemberN(ctx, activeKey(group), int64(pendingSampleCap-len(refs))).Result()
-		if err != nil {
-			continue // missing set = nothing in flight for this group
+		if err != nil && err != redis.Nil {
+			// Tolerate a single group failing (the others still describe the
+			// pipeline) but REMEMBER it: SRandMemberN on a missing key returns
+			// an empty slice with no error, so this branch only ever fires on
+			// real failures — timeout, LOADING, a dropped connection — never on
+			// "nothing in flight".
+			if firstErr == nil {
+				firstErr = fmt.Errorf("sample %s: %w", group, err)
+			}
+			continue
 		}
 		for _, h := range hashes {
 			refs = append(refs, ref{group: group, hash: h})
 		}
 	}
 	if len(refs) == 0 {
-		return nil, nil
+		// Nothing sampled AND something failed: this is "could not ask", not
+		// "nothing in flight", and the caller must be able to tell them apart —
+		// a Redis outage rendering as a healthy "0 forming" is the exact
+		// misreport class staging_census.go exists to prevent.
+		return nil, firstErr
 	}
 
 	pipe := r.rdb.Pipeline()

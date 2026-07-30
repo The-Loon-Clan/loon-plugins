@@ -21,29 +21,29 @@ import (
 )
 
 // samplePending refreshes the forming-releases readout — the dashboard's
-// "which releases are still missing articles" card. Once per PASS: even the
-// bounded form (one O(1) sample per group plus a pipelined read per sampled
-// set) is far too heavy for the render path, and it was previously paid once
-// per ~500-set round.
+// "which releases are still missing articles" card. Per PASS (start and end),
+// never per round: even the bounded form (one O(1) sample per group plus a
+// pipelined read per sampled set) is far too heavy for the render path, and it
+// was previously paid once per ~500-set round.
+//
+// EVERY failure path returns without touching telemetry. setPending flips the
+// pendingSeen sentinel, and calling it with nil after a failed group-list read
+// or a Redis outage recorded "0 forming" as a fact — a false zero in exactly
+// the readout an operator checks when staging is at its ceiling, which is also
+// exactly when Redis is slow enough to fail the sample. Skipping leaves the
+// previous sample and the -1 "not sampled" sentinel intact.
 func (p *Plugin) samplePending(ctx context.Context) {
-	sets, err := p.staging.incompleteSets(ctx, 15, p.activeGroupNames(ctx))
+	names, err := p.st.activeGroupNames(ctx)
+	if err != nil {
+		p.reportErr(ctx, "usenet/incomplete-sample", err)
+		return
+	}
+	sets, err := p.staging.incompleteSets(ctx, 15, names)
 	if err != nil {
 		p.reportErr(ctx, "usenet/incomplete-sample", err)
 		return
 	}
 	p.tel.setPending(sets)
-}
-
-// activeGroupNames is the group list the pending sample addresses staging
-// with. Best-effort: on error the sample covers nothing this pass, which the
-// census records as not-sampled rather than as an empty pipeline.
-func (p *Plugin) activeGroupNames(ctx context.Context) []string {
-	names, err := p.st.activeGroupNames(ctx)
-	if err != nil {
-		p.reportErr(ctx, "usenet/group-names", err)
-		return nil
-	}
-	return names
 }
 
 // runBuild assembles complete (group, base_subject) sets into NZB files. A set
@@ -79,19 +79,26 @@ func (p *Plugin) runBuild(ctx context.Context) {
 // progress. Incomplete sets stay staged and do not count, which is what stops
 // the loop spinning on a queue that is merely waiting for more articles.
 func (p *Plugin) buildCatchUp(ctx context.Context) {
-	// Per-PASS work happens here, once — not inside the round function.
-	// buildLocked IS the round body, so everything it treated as "once per
-	// pass" ran once per ~500-set round instead: a blacklist rules SELECT plus
-	// full regex recompile, a 50,000-entry ready-queue reap, and the pending
-	// sample, which the code itself calls the most expensive read in the
-	// pipeline. At the round cadence a catch-up pass paid all of it dozens of
-	// times over.
-	p.reloadBlacklist(ctx)
-	if scanned, removed, err := p.staging.reapReadyQueue(ctx, p.effective(ctx).ReadyReapPerPass); err != nil {
-		p.reportErr(ctx, "usenet/ready-reap", err)
-	} else if removed > 0 {
-		p.buildJob.Log("ready queue: swept %d entr(ies), removed %d dead", scanned, removed)
-	}
+	// The pending sample is the ONLY per-pass work here. The blacklist reload
+	// and the ready-queue reap look like pass work too, and a previous change
+	// hoisted them — wrongly, because a catch-up pass has no round cap:
+	//
+	//   - the reap's budget bounds ONE call and its cursor persists, so its
+	//     sweep RATE is budget × calls. Hoisted, a 7M-entry queue's full
+	//     circuit went from ~20 minutes of catch-up to 12+ hours, stalling
+	//     fossil removal during exactly the catch-up it was built for. At
+	//     small queue depths the cursor makes the per-round call nearly free.
+	//   - the blacklist matcher is process-global and prod's admin edits it in
+	//     the WEB process; the worker's only refresh is the reload. Hoisted, a
+	//     rule the operator just added ("applied immediately", says the flash)
+	//     was ignored for the rest of a pass that can run for hours.
+	//
+	// Both live in buildLocked (per round) on purpose. Do not re-hoist.
+	//
+	// The sample runs at the START as well as the end: the census is written
+	// per ROUND, so with only an end-of-pass sample every census row of a
+	// catch-up pass carried the previous pass's pending figure.
+	p.samplePending(ctx)
 	res := runCatchUp(ctx,
 		func() (int, int) { return p.buildLocked(ctx) },
 		func() bool { return p.effective(ctx).BuildNoCatchup },
@@ -114,9 +121,18 @@ func (p *Plugin) buildCatchUp(ctx context.Context) {
 func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	p.buildJob.SetRunning()
 
+	// Per-round on purpose — see buildCatchUp for why hoisting these to the
+	// pass collapsed the fossil-sweep rate and let the worker ignore blacklist
+	// edits for hours.
+	p.reloadBlacklist(ctx)
+	if scanned, removed, err := p.staging.reapReadyQueue(ctx, p.effective(ctx).ReadyReapPerPass); err != nil {
+		p.reportErr(ctx, "usenet/ready-reap", err)
+	} else if removed > 0 {
+		p.buildJob.Log("ready queue: swept %d entr(ies), removed %d dead", scanned, removed)
+	}
+
 	// Make sure last pass's counters are persisted even if that pass died
-	// before its own flush. (Blacklist reload and the ready-queue reap are
-	// per-PASS work and live in buildCatchUp.)
+	// before its own flush.
 	defer p.flushFilterHits(ctx)
 	defer p.flushPosterHits(ctx)
 	// Every branch below names its outcome, so the reasons sum to the
@@ -163,7 +179,7 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	} else if drawn.Starved() {
 		p.buildJob.Log("ready queue: drew %d of %d waiting", drawn.Sampled, drawn.ReadyDepth)
 	}
-	skippedExt, skippedBL := 0, 0
+	skippedExt, skippedBL, demoted := 0, 0, 0
 
 	// STAGE 1 — decide what the subject line alone can decide, before paying for
 	// the articles. Skipped entirely when a poster watch is active: attribution
@@ -236,6 +252,18 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			// because on a stalled site this is the majority outcome and an
 			// unnamed majority is indistinguishable from a leak.
 			p.outcomes.note(outcomeIncomplete, k.Base)
+			// But the READY claim is withdrawn. In redis mode this candidate
+			// came off nzb:ready, meaning staging's completeness check passed
+			// and this verification disagrees — a disagreement no future pass
+			// resolves, so leaving the entry queued re-loads and re-refuses it
+			// every minute while its articles pin staging memory. Demote: the
+			// articles stay, the stage-time check re-queues the set if it ever
+			// truly completes, the TTL clears it if it never does.
+			if ok, err := p.staging.demoteReady(ctx, k.Group, k.Base); err != nil {
+				p.reportErr(ctx, "usenet/build-demote", err)
+			} else if ok {
+				demoted++
+			}
 			continue
 		}
 		// Classification runs in PROD'S order: title extraction, blocked
@@ -352,6 +380,15 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	// their absence was what made a stalled pipeline look like a working one.
 	if fastDropped > 0 {
 		p.buildJob.Log("title pre-filter dropped %d set(s) without loading their articles", fastDropped)
+	}
+	if demoted > 0 {
+		// Every demotion is a stage-time/build-time completeness disagreement;
+		// a climbing rate means the two checks have drifted apart again.
+		p.tel.noteDemoted(demoted)
+		p.buildJob.Log("withdrew %d refused set(s) from the ready queue "+
+			"(queued as complete, failed build verification — mixed re-posts under one subject, "+
+			"or totals staged before they were monotonic); their articles stay until they complete or expire",
+			demoted)
 	}
 	// candidates, not len(keys): splitByTitle shrank keys, and its rejects are
 	// in the junk/blocked-ext totals below — the reasons must sum to the
