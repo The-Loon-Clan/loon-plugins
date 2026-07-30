@@ -1178,9 +1178,15 @@ func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]artic
 			if !walkPastDead(meta, held, cov[group], now, graceSec, margin) {
 				continue
 			}
-			if len(salvage) < salvageCap && meta["base_subject"] != "" {
+			// A salvage-worthy set must NEVER take the doom path just because
+			// this round's cap is full — past the cap it stays staged and the
+			// cursor brings it around again. Only when salvage is disabled
+			// entirely (cap 0) do worthy sets evict with the rest.
+			if salvageCap > 0 && meta["base_subject"] != "" {
 				if needed := groupNeededParts(meta); needed > 0 && float64(held) >= salvageFloor*float64(needed) {
-					salvage = append(salvage, groupKey{Group: group, Base: meta["base_subject"]})
+					if len(salvage) < salvageCap {
+						salvage = append(salvage, groupKey{Group: group, Base: meta["base_subject"]})
+					}
 					continue
 				}
 			}

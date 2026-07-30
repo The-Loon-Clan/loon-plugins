@@ -129,6 +129,15 @@ func TestSalvageTally(t *testing.T) {
 				art(1, 3, 4, 3, "Show [01/03]"), art(1, 4, 4, 3, "Show [01/03]"),
 				art(2, 1, 2, 3, "Show.vol0+1.par2 [03/03]"), art(2, 2, 2, 3, "Show.vol0+1.par2 [03/03]"),
 			}, 10, 4, 2, 0, healthDead},
+		// A mixed bucket (single-file release whose par2 companion shares
+		// FileNum 0) is judged as DATA: attributing its gaps to par2 scored
+		// incomplete single-file releases healthy and stored them unmarked.
+		{"mixed data+par2 bucket: gaps count as missing data, never healthy",
+			[]stagedArticle{
+				{FileNum: 0, PartNum: 1, SegTotal: 4, Subject: "Movie.mkv (1/4)"},
+				{FileNum: 0, PartNum: 2, SegTotal: 4, Subject: "Movie.mkv (2/4)"},
+				{FileNum: 0, PartNum: 3, SegTotal: 4, Subject: "Movie.vol0+1.par2 (1/2)"},
+			}, 4, 1, 0, 0, healthDead},
 		{"whole file missing, ample surviving par2: broken (repair can rebuild a whole file)",
 			[]stagedArticle{
 				art(1, 1, 4, 3, "Show [01/03]"), art(1, 2, 4, 3, "Show [01/03]"),

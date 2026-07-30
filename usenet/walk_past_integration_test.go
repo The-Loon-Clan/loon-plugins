@@ -159,3 +159,49 @@ func TestSweepWalkPastIsBoundedAndConverges(t *testing.T) {
 	left, _ := rdb.SCard(ctx, activeKey(group)).Result()
 	t.Errorf("%d dead sets remain after 20 bounded sweeps — the cursor is not persisting", left)
 }
+
+// Salvage-worthy sets past the per-round cap must stay STAGED for the cursor
+// to bring around again — the confirmed bug had them falling through to the
+// doom pipeline, destroying exactly the high-completeness sets the cap was
+// pacing, at a rate of everything-past-25 per round.
+func TestSweepSalvageOverflowStaysStaged(t *testing.T) {
+	ctx := context.Background()
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+	const group, n = "a.b.group", 6
+
+	for i := 0; i < n; i++ {
+		base := fmt.Sprintf("Worthy.%02d", i)
+		// 3 of 4 parts: dead once covered+stale, and above the salvage floor.
+		var arts []stagedArticle
+		for part := 1; part <= 3; part++ {
+			arts = append(arts, stagedArticle{
+				Group: group, BaseSubject: base,
+				Subject:   fmt.Sprintf("%s (%d/4)", base, part),
+				MessageID: fmt.Sprintf("<%s-%d@x>", base, part),
+				Poster:    "p", Bytes: 1000, Posted: time.Now(),
+				PartNum: part, TotalParts: 4, SegTotal: 4,
+				ArticleNum: 1000 + i*10 + part,
+			})
+		}
+		if _, err := r.stageArticles(ctx, arts); err != nil {
+			t.Fatal(err)
+		}
+		backdate(t, r, group, base, time.Hour)
+	}
+
+	cov := map[string][]articleRange{group: {{Start: 1, End: 5000}}}
+	_, evicted, salvage, err := r.sweepWalkPast(ctx, cov, 15*time.Minute, 10_000, 2, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(salvage) != 2 {
+		t.Errorf("salvage list holds %d, want the cap of 2", len(salvage))
+	}
+	if evicted != 0 {
+		t.Errorf("evicted %d salvage-worthy set(s) — overflow past the cap must stay staged", evicted)
+	}
+	if left, _ := rdb.SCard(ctx, activeKey(group)).Result(); left != n {
+		t.Errorf("%d of %d sets remain staged — the doom pipeline took the overflow", left, n)
+	}
+}

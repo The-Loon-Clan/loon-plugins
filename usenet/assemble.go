@@ -604,7 +604,8 @@ func salvageTally(arts []stagedArticle) (total, missingData, par2Claimed, par2Mi
 	type fileState struct {
 		parts    map[int]bool
 		segTotal int
-		par2     bool
+		par2Seen bool
+		nonPar2  bool
 	}
 	files := map[int]*fileState{}
 	totalFiles := 0
@@ -619,7 +620,9 @@ func salvageTally(arts []stagedArticle) (total, missingData, par2Claimed, par2Mi
 			f.segTotal = a.SegTotal
 		}
 		if isPar2Subject(a.Subject) {
-			f.par2 = true
+			f.par2Seen = true
+		} else {
+			f.nonPar2 = true
 		}
 		if a.FileParts && a.TotalFiles > totalFiles {
 			totalFiles = a.TotalFiles
@@ -634,7 +637,13 @@ func salvageTally(arts []stagedArticle) (total, missingData, par2Claimed, par2Mi
 		}
 		total += claimed
 		missing := claimed - len(f.parts)
-		if f.par2 {
+		// A bucket counts as par2 only when EVERY held article is par2. A
+		// mixed bucket — a single-file release (FileNum 0) whose par2
+		// companion shares its bucket — is judged as data, so its gaps count
+		// as missingData. Pessimistic on purpose, matching parseNzbSegments'
+		// stated bias: attributing a mixed bucket's gaps to par2 scored
+		// incomplete single-file releases healthy and stored them unmarked.
+		if f.par2Seen && !f.nonPar2 {
 			par2Claimed += claimed
 			par2Missing += missing
 		} else {
