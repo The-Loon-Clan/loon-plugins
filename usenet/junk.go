@@ -77,6 +77,14 @@ type junkParams struct {
 	// path. Prod's short_random_token works exactly this way — size-agnostic
 	// since May 2026, but only ever consulted by the assembler.
 	SizedOnly bool `json:"sized_only,omitempty"`
+	// LightInput feeds the rule the LIGHTLY-normalised title (trim +
+	// quote/bracket strip, NO extension strip) — prod's sized section works on
+	// that form; e.g. word_word_hex deliberately tolerates a trailing
+	// extension. Rule DATA, not a hardcoded name list: the eight shipped rules
+	// set it in the seed TSV, and an operator's own rule gets the same input
+	// by setting the same param instead of silently receiving a different
+	// normalisation than the rules it sits beside.
+	LightInput bool `json:"light_input,omitempty"`
 }
 
 func (p junkParams) sized() bool { return p.MinSizeBytes > 0 || p.MaxSizeBytes > 0 }
@@ -167,15 +175,6 @@ var junkHeuristics = map[string]bool{
 	"long_no_space":       true, // sized: 60+ chars, no whitespace, 5+ garbled
 	"chaotic_specials":    true, // sized: 30+ chars, HAS whitespace, 3+ garbled
 	"size_catchall":       true, // sized: everything in a size band is junk
-}
-
-// sizedInputHeuristics and sizedInputRules consume the LIGHTLY-normalised title
-// (trim + quote/bracket strip, NO extension strip) — prod's sized section works
-// on that form; e.g. word_word_hex deliberately tolerates a trailing extension.
-var sizedInputNames = map[string]bool{
-	"word_word_hex": true, "tiny_no_space": true, "short_lowercase_token": true,
-	"long_no_space": true, "chaotic_specials_small": true, "short_random_token": true,
-	"under_1mib": true, "under_5mib": true,
 }
 
 // newJunkMatcher compiles specs. Disabled rules are dropped here so the hot path
@@ -296,7 +295,7 @@ func (m *junkMatcher) match(t, ts string, sizeBytes int64) string {
 			}
 		}
 		in := t
-		if sizedInputNames[r.name] {
+		if r.params.LightInput {
 			in = ts
 		}
 		if r.re != nil {

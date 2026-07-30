@@ -139,14 +139,19 @@ func parseCategoryTag(title string) string {
 
 // blockedExtensions are file types that are never legitimate releases —
 // executables, scripts, shortcuts. A title ending in one is refused at
-// assembly. Prod's list, verbatim.
+// assembly. Prod's list, minus "iso": BD ISOs are ordinary releases on an
+// anime indexer and the subject pipeline deliberately assembles .iso.001
+// splits — blocking the extension here contradicted that pipeline and
+// depended on which split happened to name the title. Operators who don't
+// want ISOs can junk-rule or blacklist them, where the policy is visible
+// and editable.
 var blockedExtensions = map[string]bool{
 	"ade": true, "adp": true, "app": true, "application": true, "appref-ms": true,
 	"asp": true, "aspx": true, "asx": true, "bas": true, "bat": true, "bgi": true,
 	"cab": true, "cer": true, "chm": true, "cmd": true, "cnt": true, "com": true,
 	"cpl": true, "crt": true, "csh": true, "der": true, "diagcab": true, "exe": true,
 	"fxp": true, "gadget": true, "grp": true, "hlp": true, "hpj": true, "hta": true,
-	"htc": true, "inf": true, "ins": true, "iso": true, "isp": true, "its": true,
+	"htc": true, "inf": true, "ins": true, "isp": true, "its": true,
 	"jar": true, "jnlp": true, "js": true, "jse": true, "ksh": true, "lnk": true,
 	"mad": true, "maf": true, "mag": true, "mam": true, "maq": true, "mar": true,
 	"mas": true, "mat": true, "mau": true, "mav": true, "maw": true, "mcf": true,

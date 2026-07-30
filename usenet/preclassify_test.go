@@ -67,7 +67,6 @@ func TestPreClassifyRefusesBlockedExtensions(t *testing.T) {
 		"Some.Release.1080p.exe",
 		"Totally.Legit.Anime.Pack.bat",
 		"setup.msi",
-		"archive.iso",
 	} {
 		title, _, blocked := preClassify(subject)
 		if !blocked {
@@ -75,9 +74,19 @@ func TestPreClassifyRefusesBlockedExtensions(t *testing.T) {
 				"and indexed as a release", subject, title)
 		}
 	}
-	// And an ordinary release must not be caught by the extension check.
-	if _, _, blocked := preClassify("[SubsPlease] Frieren - 12 (1080p) [B4F1A9C2].mkv"); blocked {
-		t.Error("a .mkv release was refused as a blocked extension")
+	// And an ordinary release must not be caught by the extension check —
+	// including BD ISOs, which are normal releases on an anime indexer (the
+	// subject pipeline deliberately assembles .iso.001 splits; blocking the
+	// bare extension contradicted it and depended on which split named the
+	// title). Policy decided 2026-07: allow; operators junk-rule or blacklist
+	// ISOs if unwanted.
+	for _, subject := range []string{
+		"[SubsPlease] Frieren - 12 (1080p) [B4F1A9C2].mkv",
+		"Akira.1988.JPN.Blu-ray.AVC.TrueHD.5.1.REMUX.iso",
+	} {
+		if _, _, blocked := preClassify(subject); blocked {
+			t.Errorf("%q was refused as a blocked extension — it is an ordinary release", subject)
+		}
 	}
 }
 

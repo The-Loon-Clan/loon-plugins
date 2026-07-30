@@ -4,7 +4,9 @@ package usenet
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 )
 
 // The stored half. Everything asserted here is a property of the SQL — the
@@ -96,5 +98,117 @@ func TestRecordBuildOutcomes_EmptyMapIsANoOp(t *testing.T) {
 	}
 	if _, _, ok := outcomeRow(t, s, outcomeBuilt); ok {
 		t.Error("a no-op flush created a row")
+	}
+}
+
+// The outcome ledger's whole point: the reasons must sum to the candidates
+// examined, or a branch was added to buildLocked without accounting for it.
+// build_outcomes.go claimed "the test asserts it" since the ledger was born;
+// this is that test, driven through a real pass over one candidate per major
+// branch. (outcomeSalvaged is deliberately outside this sum — salvage
+// candidates come from the walk-past sweep, not the ready-queue draw.)
+func TestBuildOutcomesSumToCandidates(t *testing.T) {
+	ctx := context.Background()
+	p, staging := buildPassPlugin(t)
+	rdb := staging.rdb
+	const group = "a.b.group"
+
+	stagePair := func(base string) {
+		t.Helper()
+		for i := 1; i <= 2; i++ {
+			if _, err := staging.stageArticles(ctx, []stagedArticle{{
+				Group: group, BaseSubject: base,
+				Subject:   fmt.Sprintf("%s (%d/2)", base, i),
+				MessageID: fmt.Sprintf("<%s-%d@x>", base, i),
+				Poster:    "p", Bytes: 50_000_000, Posted: time.Now(),
+				PartNum: i, TotalParts: 2, SegTotal: 2,
+			}}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// One candidate per branch: buildable, blocked extension (title fast
+	// path), and ready-but-refused (corrupted after queueing → incomplete).
+	stagePair("Kaiju.Show.S01E06.1080p.BluRay.x264-GRP")
+	stagePair("malware.exe")
+	stagePair("Kaiju.Show.S01E07.1080p.BluRay.x264-GRP")
+	if err := rdb.HDel(ctx, artKey(group, groupHashKey(group, "Kaiju.Show.S01E07.1080p.BluRay.x264-GRP")),
+		formatFieldKey(0, 2)).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := rdb.SCard(ctx, readyKey).Result(); n != 3 {
+		t.Fatalf("fixture: %d candidates queued, want 3", n)
+	}
+
+	p.buildLocked(ctx)
+
+	rows := map[string]int{}
+	res, err := p.st.(*PGStore).db.DB().Query(
+		`SELECT reason, SUM(total_count) FROM ` + p.st.(*PGStore).db.Schema() + `.build_outcomes GROUP BY reason`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Close()
+	for res.Next() {
+		var reason string
+		var n int
+		if err := res.Scan(&reason, &n); err != nil {
+			t.Fatal(err)
+		}
+		rows[reason] = n
+	}
+	if rows["built"] != 1 || rows["blocked_ext"] != 1 || rows["incomplete"] != 1 {
+		t.Errorf("outcomes = %v, want built:1 blocked_ext:1 incomplete:1", rows)
+	}
+	sum := 0
+	for reason, n := range rows {
+		if reason == string(outcomeSalvaged) {
+			continue
+		}
+		sum += n
+	}
+	if sum != 3 {
+		t.Errorf("outcome reasons sum to %d for 3 candidates — a buildLocked branch is unaccounted (%v)", sum, rows)
+	}
+}
+
+// Re-seeding must never resurrect what an operator turned off: the upsert
+// updates rule/params/notes (so shipped fixes deploy) while `enabled` is
+// deliberately absent from the SET list. A future "enabled = EXCLUDED.enabled"
+// cleanup would re-enable every locally disabled rule on every boot — this
+// pins the invariant so that cleanup fails loudly instead of shipping.
+func TestSeedJunkRulesPreservesOperatorState(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	specs := []junkRuleSpec{
+		{Name: "seed_a", Kind: "regex", Rule: "^a$", Enabled: true},
+		{Name: "seed_b", Kind: "regex", Rule: "^b$", Enabled: true},
+	}
+	if _, err := s.seedJunkRules(ctx, specs); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.DB().Exec(
+		`UPDATE ` + s.db.Schema() + `.junk_rules SET enabled = FALSE WHERE name = 'seed_a'`); err != nil {
+		t.Fatal(err)
+	}
+
+	// The next deploy re-seeds with a fixed pattern for the disabled rule.
+	specs[0].Rule = "^a2$"
+	if _, err := s.seedJunkRules(ctx, specs); err != nil {
+		t.Fatal(err)
+	}
+
+	var enabled bool
+	var rule string
+	if err := s.db.DB().QueryRow(
+		`SELECT enabled, rule FROM `+s.db.Schema()+`.junk_rules WHERE name = 'seed_a'`).
+		Scan(&enabled, &rule); err != nil {
+		t.Fatal(err)
+	}
+	if enabled {
+		t.Error("re-seed re-enabled a rule the operator disabled")
+	}
+	if rule != "^a2$" {
+		t.Errorf("re-seed did not deploy the fixed pattern (rule = %q) — preserving enabled must not freeze the rule body", rule)
 	}
 }

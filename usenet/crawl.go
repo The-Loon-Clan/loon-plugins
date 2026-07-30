@@ -125,6 +125,17 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	// three ways: progress must be made each round (or a stalled provider would
 	// spin), the off-peak gate is honored between rounds, and the operator can
 	// disable it (crawl_no_catchup).
+	//
+	// DELIBERATELY NOT runCatchUp (which backfill and build share): this loop's
+	// progress signal is the measured BACKLOG delta, not completed batches
+	// (a round that completes batches while the backlog grows is still a
+	// stall); a fleet-wide lease-blocked round retries on a 45s backoff
+	// instead of ending the pass (the post-deploy takeover window); and the
+	// off-peak gate breaks between rounds. Expressing those through
+	// runCatchUp's four signals means stateful closures sharing prevBehind and
+	// blockedRetries — the complexity relocates, nothing simplifies. If this
+	// loop and runCatchUp converge again someday, revisit; until then the
+	// divergence is on purpose.
 	prevBehind := int64(-1)
 	blockedRetries := 0
 	for {

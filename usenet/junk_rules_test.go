@@ -178,3 +178,29 @@ func TestJunkFingerprintDetectsChange(t *testing.T) {
 		}
 	}
 }
+
+// Which normalisation a rule sees is rule DATA (light_input), not a hardcoded
+// name list: an operator's own sized rule gets the same input as the shipped
+// rules it sits beside by setting the same param — previously only eight
+// hardwired shipped names got the light form, silently.
+func TestLightInputSelectsTheUnstrippedTitle(t *testing.T) {
+	mk := func(light bool) *junkMatcher {
+		m, err := newJunkMatcher([]junkRuleSpec{{
+			Name: "op_dat", Kind: "regex", Rule: `^[a-z]+\.dat$`,
+			Params: junkParams{MaxSizeBytes: 1 << 20, LightInput: light}, Enabled: true,
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	// The two forms whichJunkRuleSized derives: full strips the extension,
+	// light keeps it.
+	full, light := "junkfile", "junkfile.dat"
+	if got := mk(true).match(full, light, 512<<10); got != "op_dat" {
+		t.Errorf("light_input rule got %q — it must see the unstripped title", got)
+	}
+	if got := mk(false).match(full, light, 512<<10); got != "" {
+		t.Errorf("non-light rule matched %q — it must see the extension-stripped title", got)
+	}
+}

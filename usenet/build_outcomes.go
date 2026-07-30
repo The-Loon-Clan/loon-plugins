@@ -18,7 +18,10 @@ import (
 //
 // Every branch of buildLocked now names its outcome, so the reasons add up to
 // the candidates examined. That invariant is the point — if they ever fail to,
-// a branch has been added without accounting for it, and the test asserts it.
+// a branch has been added without accounting for it.
+// TestBuildOutcomesSumToCandidates drives a real pass over one candidate per
+// major branch and asserts the sum. (This comment claimed a test existed for
+// a month before one did — the review caught the lie.)
 
 // buildOutcome is the closed set of things that can happen to one candidate
 // set. Typed rather than bare strings because these drive both a stored row and
