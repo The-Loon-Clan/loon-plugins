@@ -187,6 +187,7 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 	if !got {
 		return false
 	}
+	p.leaseAcquireLocal(scope, key)
 
 	workCtx, cancelWork := context.WithCancel(ctx)
 	defer cancelWork()
@@ -227,6 +228,9 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 	defer func() {
 		stop()
 		wg.Wait()
+		if !p.leaseReleaseLocal(scope, key) {
+			return // another in-process holder still works under this row
+		}
 		// Release on a fresh context: ctx may already be cancelled by shutdown,
 		// and a lease left behind would idle that work until it expires.
 		relCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -237,6 +241,46 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 	}()
 
 	fn(workCtx)
+	return true
+}
+
+// In-process lease refcounting.
+//
+// Leases are keyed by workerID(), which is process-wide — and the crawl and
+// backfill DELIBERATELY overlap on group keys in one process (every group with
+// pending backfill is also actively crawled; claimLease is reentrant for our
+// own worker id by design, and the jobs write disjoint state). The hole was on
+// RELEASE: releaseLease deletes by (scope, key, worker_id), job-blind, so the
+// backfill's per-round release deleted lease rows the crawl was still working
+// under, many times across an hours-long pass. Single-worker installs
+// self-healed invisibly (the next renewal re-inserted); in multi-worker mode a
+// sibling claimed the vacated key instantly, and the loser's renewer then
+// cancelled its ENTIRE pass and skipped the partial-advance sweep — chronic
+// cancellations and duplicated fetch spend, recurring every backfill round.
+//
+// The refcount makes release job-aware without changing claim semantics: the
+// DB row is deleted only when the LAST in-process holder releases. Renewal
+// needs no accounting — both holders renewing one row just extends its TTL.
+func (p *Plugin) leaseAcquireLocal(scope, key string) {
+	p.leaseHeldMu.Lock()
+	defer p.leaseHeldMu.Unlock()
+	if p.leaseHeld == nil {
+		p.leaseHeld = map[string]int{}
+	}
+	p.leaseHeld[scope+"|"+key]++
+}
+
+// leaseReleaseLocal reports whether the caller was the last in-process holder
+// — only then may the DB row be deleted.
+func (p *Plugin) leaseReleaseLocal(scope, key string) bool {
+	p.leaseHeldMu.Lock()
+	defer p.leaseHeldMu.Unlock()
+	k := scope + "|" + key
+	if n := p.leaseHeld[k]; n > 1 {
+		p.leaseHeld[k] = n - 1
+		return false
+	}
+	delete(p.leaseHeld, k)
 	return true
 }
 
@@ -270,6 +314,7 @@ func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups [
 		if got {
 			held = append(held, g)
 			keys = append(keys, k)
+			p.leaseAcquireLocal(leaseScopeGroup, k)
 		}
 	}
 	if len(held) == 0 {
@@ -332,6 +377,9 @@ func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups [
 		relCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		for _, k := range keys {
+			if !p.leaseReleaseLocal(leaseScopeGroup, k) {
+				continue // the other job in this process still holds the group
+			}
 			if err := p.st.releaseLease(relCtx, leaseScopeGroup, k, me); err != nil {
 				p.core.Errors.Report(ctx, "usenet/lease-release", err)
 			}

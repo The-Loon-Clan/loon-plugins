@@ -34,6 +34,43 @@ func TestRenewalLostPolicy(t *testing.T) {
 	}
 }
 
+// The in-process refcount that makes lease RELEASE job-aware. Claim is
+// deliberately reentrant per worker id (crawl and backfill overlap on group
+// keys by design), but release deleted the DB row job-blind: the backfill's
+// per-round release deleted rows the crawl still worked under, and in
+// multi-worker mode a sibling claimed the vacated key instantly — chronic
+// mid-pass cancellations. Only the LAST in-process holder may delete.
+func TestLeaseRefcountReleasesOnlyOnLastHolder(t *testing.T) {
+	p := &Plugin{}
+
+	p.leaseAcquireLocal(leaseScopeGroup, "bb|g1") // the crawl's claim
+	p.leaseAcquireLocal(leaseScopeGroup, "bb|g1") // the backfill's reentrant claim
+
+	if p.leaseReleaseLocal(leaseScopeGroup, "bb|g1") {
+		t.Fatal("the first release reported last-holder — the DB row would be deleted " +
+			"under the job still working the group")
+	}
+	if !p.leaseReleaseLocal(leaseScopeGroup, "bb|g1") {
+		t.Fatal("the second release did not report last-holder — the row would leak until TTL")
+	}
+
+	// Distinct keys never interfere.
+	p.leaseAcquireLocal(leaseScopeGroup, "bb|g2")
+	p.leaseAcquireLocal(leaseScopeJob, "bb|g2") // same key text, different scope
+	if !p.leaseReleaseLocal(leaseScopeGroup, "bb|g2") {
+		t.Error("a different scope's hold blocked this scope's release")
+	}
+	if !p.leaseReleaseLocal(leaseScopeJob, "bb|g2") {
+		t.Error("job-scope release after group-scope release did not report last-holder")
+	}
+
+	// An unpaired release (early-return paths) is a safe last-holder answer:
+	// deleting a row we do not hold is a no-op DELETE.
+	if !p.leaseReleaseLocal(leaseScopeGroup, "bb|never-acquired") {
+		t.Error("an untracked key blocked its own release")
+	}
+}
+
 // TestGroupLeaseKey: the lease unit is one BACKBONE'S view of one GROUP, because
 // crawl state is keyed (backbone, group_name). Two workers on the same backbone
 // but different groups must be able to run at once.

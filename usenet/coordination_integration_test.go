@@ -426,3 +426,55 @@ func TestUpsertServerRejectsHostless(t *testing.T) {
 		t.Fatal("expected a hostless provider to be rejected")
 	}
 }
+
+// The crawl and backfill share one workerID and DELIBERATELY overlap on group
+// keys in one process (claimLease is reentrant for our own id). The hole was
+// on release: it deleted the row job-blind, so the backfill's per-round
+// release vacated keys the crawl still worked under — invisible on a single
+// worker (the next renewal re-inserted), chronic in multi-worker mode where a
+// sibling claimed the vacated key instantly and the loser's renewer cancelled
+// its whole pass. The in-process refcount makes the LAST holder the only one
+// whose release touches the database.
+func TestCrossJobReleaseKeepsTheSharedLeaseRow(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	p := &Plugin{st: s, core: &core.Core{Errors: core.NewErrorReporter(core.ErrorAdapter{})}}
+	if err := s.heartbeat(ctx, workerID()); err != nil {
+		t.Fatal(err)
+	}
+	groups := []groupRow{{Name: "alt.binaries.shared"}}
+	const key = "omicron|alt.binaries.shared"
+
+	// Job A (the crawl) claims the group for its hours-long pass.
+	heldA, _, releaseA := p.claimGroupLeases(ctx, "omicron", groups, time.Minute)
+	if len(heldA) != 1 {
+		t.Fatal("crawl-side claim failed")
+	}
+	// Job B (the backfill) claims the SAME group — reentrant by design.
+	heldB, _, releaseB := p.claimGroupLeases(ctx, "omicron", groups, time.Minute)
+	if len(heldB) != 1 {
+		t.Fatal("backfill-side reentrant claim failed")
+	}
+
+	// B's round ends. The row must SURVIVE — A still works under it.
+	releaseB()
+	holders, err := s.leaseHolders(ctx, leaseScopeGroup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if holders[key] != workerID() {
+		t.Fatal("the backfill's release deleted the lease row the crawl still works under — " +
+			"a sibling worker claims the vacated group instantly and the crawl's pass is cancelled")
+	}
+
+	// A finishes: last in-process holder — now the row must go, or the group
+	// idles for the whole TTL after the pass.
+	releaseA()
+	holders, err = s.leaseHolders(ctx, leaseScopeGroup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, still := holders[key]; still {
+		t.Fatal("the final release left the lease row behind")
+	}
+}

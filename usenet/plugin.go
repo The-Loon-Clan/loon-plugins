@@ -72,11 +72,23 @@ type Plugin struct {
 
 	// per-job locks: a manual trigger (admin button / /admin/jobs) must not
 	// overlap a scheduled run of the same job — they share one NNTP connection
-	// and race on watermarks.
+	// and race on watermarks. ALL SIX jobs carry one: prune and tag-fill went
+	// without for a while on the theory that the job lease covered them, but
+	// the lease is reentrant for our own worker id, so a trigger overlapping a
+	// scheduled tick ran two full-catalogue sweeps concurrently (and the first
+	// finisher's release freed the row for a sibling — a third sweep).
 	crawlMu    sync.Mutex
 	backfillMu sync.Mutex
 	buildMu    sync.Mutex
 	healthMu   sync.Mutex
+	pruneMu    sync.Mutex
+	tagMu      sync.Mutex
+
+	// leaseHeldMu/leaseHeld refcount this process's lease holders per
+	// scope|key, so one job's release cannot delete a row the other job still
+	// works under (see lease.go).
+	leaseHeldMu sync.Mutex
+	leaseHeld   map[string]int
 
 	// backfillPaused is the hysteresis latch for staging back-pressure; only
 	// touched inside runBackfill (serialized by backfillMu).
@@ -335,6 +347,14 @@ func (p *Plugin) runTagFill(ctx context.Context) {
 	if ctx == nil {
 		return
 	}
+	// TryLock prologue: see runPrune — the job lease is reentrant in-process
+	// and retagUntagged's shared sweep cursor means two overlapping runs grab
+	// and UPDATE the same 500 rows.
+	if !p.tagMu.TryLock() {
+		p.tagJob.Log("tag fill already running — skipping overlap")
+		return
+	}
+	defer p.tagMu.Unlock()
 	if !p.withLease(ctx, leaseScopeJob, jobNameTagFill, p.leaseTTL(p.effective(ctx)), func(ctx context.Context) {
 		p.runTagFillLocked(ctx)
 	}) {
@@ -432,6 +452,15 @@ func (p *Plugin) runPrune(ctx context.Context) {
 	if ctx == nil {
 		return
 	}
+	// Same TryLock prologue as the other jobs: the cluster-wide lease does NOT
+	// substitute (it is reentrant for our own worker id), so without this a
+	// Jobs-tab click overlapping a scheduled tick ran two full-catalogue
+	// sweeps at once.
+	if !p.pruneMu.TryLock() {
+		p.pruneJob.Log("prune already running — skipping overlap")
+		return
+	}
+	defer p.pruneMu.Unlock()
 	// Not group-scoped, so it must run once across the cluster or two workers
 	// duplicate the sweep.
 	if !p.withLease(ctx, leaseScopeJob, jobNamePrune, p.leaseTTL(p.effective(ctx)), func(ctx context.Context) {
