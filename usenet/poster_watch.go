@@ -35,6 +35,15 @@ func newPosterWatch(patterns []string) *posterWatch {
 	return w
 }
 
+// active reports whether any poster is being traced.
+//
+// The builder consults this to decide whether it may skip loading a set's
+// articles for a title that is obviously junk. Attribution is the entire point
+// of the watch, so when one is active the slower path is taken and nothing is
+// traded away; when the list is empty — the normal state — there is nothing to
+// attribute and the read can be skipped outright.
+func (w *posterWatch) active() bool { return w != nil && len(w.patterns) > 0 }
+
 // watched reports whether this From header is being traced, and returns the
 // PATTERN rather than the raw header as the key.
 //

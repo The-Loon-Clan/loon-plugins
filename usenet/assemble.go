@@ -124,6 +124,30 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 		p.buildJob.Log("ready queue: drew %d of %d waiting", drawn.Sampled, drawn.ReadyDepth)
 	}
 	skippedExt, skippedBL := 0, 0
+
+	// STAGE 1 — decide what the subject line alone can decide, before paying for
+	// the articles. Skipped entirely when a poster watch is active: attribution
+	// needs the articles, and the watch exists to explain why a known poster's
+	// releases did not appear, so it is never traded for throughput.
+	fastDropped := 0
+	kept, rejects := splitByTitle(keys, p.posterWatch.active())
+	keys = kept
+	for _, r := range rejects {
+		if r.blockedExt {
+			skippedExt++
+			p.outcomes.note(outcomeBlockedExt, r.key.Base)
+		} else {
+			p.hits.note("junk", r.junkRule, r.title)
+			p.outcomes.note(outcomeJunk, r.key.Base)
+		}
+		if err := p.staging.deleteStaged(ctx, r.key.Group, r.key.Base); err != nil {
+			p.reportErr(ctx, "usenet/build-delete-staged", err)
+		} else {
+			drained++
+			fastDropped++
+		}
+	}
+
 	for _, k := range keys {
 		if ctx.Err() != nil {
 			break
@@ -260,6 +284,9 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	// The summary now accounts for every candidate, not just the ones that
 	// produced a file: incomplete and duplicate are usually the big two, and
 	// their absence was what made a stalled pipeline look like a working one.
+	if fastDropped > 0 {
+		p.buildJob.Log("title pre-filter dropped %d set(s) without loading their articles", fastDropped)
+	}
 	p.buildJob.Log("built %d of %d candidate set(s) — %d incomplete, %d duplicate, "+
 		"%d junk, %d blacklisted, %d blocked-ext, %d empty, %d error(s)",
 		built, len(keys),
@@ -663,12 +690,39 @@ func firstPoster(arts []stagedArticle) string {
 // category hint (explicit tag, else comic-archive sniff), the junk rule that
 // fired (empty when clean OR when an explicit category tag vouched for the
 // release — prod's bypass), and whether the title names a blocked file type.
-func classifyRelease(base string, arts []stagedArticle) (title, cat, junkRule string, blockedExt bool) {
+// preClassify is everything decidable from the base subject alone — no
+// articles, no Redis read, microseconds.
+//
+// It exists because the builder had the order backwards: it loaded every article
+// in a set (HGETALL plus a JSON unmarshal per segment, measured at 16.2 ms) and
+// only THEN asked whether the title was obviously junk. On this install the
+// answer is usually yes — one sampled pass rejected 500 of 500 — so nearly all
+// of that I/O bought a verdict the subject line had already given for free.
+//
+// The junk check runs with an UNKNOWN size deliberately: whichJunkRule passes 0,
+// and the matcher skips every size-banded rule when the size is unknown. So this
+// can only fire a title-shape rule, and can never reach a verdict the full sized
+// check would disagree with.
+func preClassify(base string) (title, junkRule string, blockedExt bool) {
+
 	title = strings.TrimSpace(strings.ToValidUTF8(extractTitle(base), "\uFFFD"))
 	if title == "" {
 		title = "release"
 	}
 	if hasBlockedExtension(title) {
+		return title, "", true
+	}
+	if parseCategoryTag(title) != "" {
+		// An explicit category tag bypasses the junk engine, as prod's
+		// assembler does.
+		return title, "", false
+	}
+	return title, whichJunkRule(title), false
+}
+
+func classifyRelease(base string, arts []stagedArticle) (title, cat, junkRule string, blockedExt bool) {
+	title, _, blockedExt = preClassify(base)
+	if blockedExt {
 		return title, "", "", true
 	}
 	cat = parseCategoryTag(title)
@@ -830,4 +884,45 @@ func (p *Plugin) notePoster(arts []stagedArticle, reason, sample string) {
 		return
 	}
 	p.posterHits.note(who, "build", reason, sample)
+}
+
+// titleReject is one set the pre-filter turned away, with the verdict needed to
+// account for it.
+type titleReject struct {
+	key        groupKey
+	title      string
+	junkRule   string
+	blockedExt bool
+}
+
+// splitByTitle partitions a draw into sets worth loading and sets already
+// decided, using nothing but their subject lines.
+//
+// Extracted rather than inlined because the two judgements here are the ones
+// worth getting wrong quietly: rejecting a set deletes it from staging without
+// assembling it, and honouring the poster watch is what keeps attribution
+// working when an operator is trying to find out why a known poster's releases
+// never appeared. Neither was reachable by a test while it lived in the middle
+// of a pass that needs Redis, a fleet and a lease to run at all.
+//
+// watchActive short-circuits the whole thing: attribution needs the articles, so
+// when a watch is on, every set takes the slow path and nothing is traded for
+// throughput.
+func splitByTitle(keys []groupKey, watchActive bool) ([]groupKey, []titleReject) {
+	if watchActive {
+		return keys, nil
+	}
+	kept := keys[:0]
+	var rejects []titleReject
+	for _, k := range keys {
+		title, junkRule, blockedExt := preClassify(k.Base)
+		if !blockedExt && junkRule == "" {
+			kept = append(kept, k)
+			continue
+		}
+		rejects = append(rejects, titleReject{
+			key: k, title: title, junkRule: junkRule, blockedExt: blockedExt,
+		})
+	}
+	return kept, rejects
 }
