@@ -96,6 +96,16 @@ type Plugin struct {
 	// Live crawl counters + a short tail of recent errors, for /admin/crawlers
 	// (telemetry.go).
 	tel *telemetry
+	// duty records each job's busy windows via the wrapped job handles, so
+	// the Jobs tab can print a trailing duty percentage (duty.go).
+	duty *dutyTracker
+	// crawlStallStreak counts consecutive crawl passes ending in the
+	// catch-up-stalled break with a large backlog. Only the crawl job touches
+	// it (under crawlMu); telemetry carries a copy for the dashboards.
+	crawlStallStreak int
+	// lastPressureErrAt throttles the backfill's pressure-probe failure
+	// report (backfill job only, so unguarded is fine).
+	lastPressureErrAt time.Time
 
 	// Fingerprint of the junk rules currently compiled into memory, so a reload
 	// only recompiles when they actually changed (junk_store.go).
@@ -134,6 +144,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.cfg.applyDefaults()
 	p.fleet = newProviderFleet()
 	p.tel = newTelemetry()
+	p.duty = newDutyTracker()
 	p.hits = newFilterHits()
 	p.posterHits = newPosterHits()
 	p.posterWatch = newPosterWatch(nil) // replaced per pass from the DB
@@ -216,18 +227,21 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// worker/all: register the six pipeline jobs (all "Usenet "-prefixed so
 	// they never collide with a host's own job names in the shared registry).
 	if c.Process == "worker" || c.Process == "all" {
-		p.crawlJob = c.Scheduler.RegisterJob(jobNameCrawl,
-			"Fetches recent article overviews from active newsgroups").MarkOffPeak()
-		p.backfillJob = c.Scheduler.RegisterJob(jobNameBackfill,
-			"Walks each group's history backward to fill the retention window").MarkOffPeak()
-		p.buildJob = c.Scheduler.RegisterJob(jobNameBuild,
-			"Assembles complete article sets into downloadable NZB files").MarkOffPeak()
-		p.tagJob = c.Scheduler.RegisterJob(jobNameTagFill,
-			"Re-parses quality tags for untagged NZBs and recategorizes default-category releases")
-		p.pruneJob = c.Scheduler.RegisterJob(jobNamePrune,
-			"Sweeps stale staging + junk; deletes old NZBs only when nzb_retention_days is set")
-		p.healthJob = c.Scheduler.RegisterJob(jobNameHealth,
-			"STATs stored NZBs to find releases whose articles have expired").MarkOffPeak()
+		// Every job handle is wrapped for duty accounting (duty.go): busy
+		// windows record themselves at the SetRunning/SetIdle boundary the
+		// jobs already drive, and telemetry publishes a trailing duty%.
+		p.crawlJob = p.duty.wrap(jobNameCrawl, c.Scheduler.RegisterJob(jobNameCrawl,
+			"Fetches recent article overviews from active newsgroups").MarkOffPeak())
+		p.backfillJob = p.duty.wrap(jobNameBackfill, c.Scheduler.RegisterJob(jobNameBackfill,
+			"Walks each group's history backward to fill the retention window").MarkOffPeak())
+		p.buildJob = p.duty.wrap(jobNameBuild, c.Scheduler.RegisterJob(jobNameBuild,
+			"Assembles complete article sets into downloadable NZB files").MarkOffPeak())
+		p.tagJob = p.duty.wrap(jobNameTagFill, c.Scheduler.RegisterJob(jobNameTagFill,
+			"Re-parses quality tags for untagged NZBs and recategorizes default-category releases"))
+		p.pruneJob = p.duty.wrap(jobNamePrune, c.Scheduler.RegisterJob(jobNamePrune,
+			"Sweeps stale staging + junk; deletes old NZBs only when nzb_retention_days is set"))
+		p.healthJob = p.duty.wrap(jobNameHealth, c.Scheduler.RegisterJob(jobNameHealth,
+			"STATs stored NZBs to find releases whose articles have expired").MarkOffPeak())
 		p.crawlJob.SetTrigger(func() { go p.runCrawl(p.ctx) })
 		p.backfillJob.SetTrigger(func() { go p.runBackfill(p.ctx) })
 		p.buildJob.SetTrigger(func() { go p.runBuild(p.ctx) })

@@ -54,6 +54,16 @@ type passStats struct {
 	// BatchesTotal is the planned batch count, known up front from the plan
 	// enumeration — Batches/BatchesTotal is the pass progress bar.
 	BatchesTotal int
+	// PassBatches/PassBatchesTotal are the same counters accumulated across
+	// the WHOLE pass, never reset by roundStart. They exist because every
+	// catch-up pass ENDS on a round that found no work — that is the loop's
+	// exit condition — so passEnd always snapshotted the zeroed terminal
+	// round and "Last pass" read "0 batches" beside millions of articles: the
+	// operator-reported mystery. The round pair keeps feeding the live
+	// progress bar, where a round-scoped denominator is the meaningful one;
+	// these feed the completed-pass readout, where only the total is.
+	PassBatches      int
+	PassBatchesTotal int
 	// These four are PASS-cumulative on purpose: "this pass has fetched 1.6B
 	// articles" is the number an operator wants, and the stats widget derives
 	// its rate from deltas between polls, which needs a monotonic counter.
@@ -169,6 +179,7 @@ func (t *passTracker) noteBatchFor(group string, articles, staged int, wire int6
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cur.Batches++
+	t.cur.PassBatches++
 	if n, tracked := t.groupsLeft[group]; tracked {
 		if n <= 1 {
 			delete(t.groupsLeft, group)
@@ -199,6 +210,7 @@ func (t *passTracker) notePlanned(group string, batches int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cur.BatchesTotal += batches
+	t.cur.PassBatchesTotal += batches
 	if t.groupsLeft == nil {
 		t.groupsLeft = map[string]int{}
 	}
@@ -281,6 +293,13 @@ type telemetry struct {
 	// evicted counts hopeless sets shed by redis staging since the worker
 	// started — proof the eviction machinery is working, not failing.
 	evicted int64
+	// stalledPasses counts consecutive crawl passes that ended in the
+	// "catch-up stalled" break while a large backlog remained. The 2026-07-24
+	// incident (20/20 groups planning zero batches, pass after pass, 575M
+	// articles behind) looked exactly like this and reached nothing but the
+	// scrolling job log — a human reading it was the detector. The crawl
+	// maintains this; the third consecutive stall also raises a report.
+	stalledPasses int
 }
 
 // builtRelease is one crawler-assembled release, exported for the telemetry
@@ -365,6 +384,19 @@ func (t *telemetry) evictedCount() int64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.evicted
+}
+
+// setStalledPasses records the crawl's consecutive-stall streak for telemetry.
+func (t *telemetry) setStalledPasses(n int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.stalledPasses = n
+}
+
+func (t *telemetry) stalled() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.stalledPasses
 }
 
 // setPending replaces the incomplete-sets sample wholesale (one build pass =

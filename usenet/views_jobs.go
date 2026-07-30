@@ -94,7 +94,8 @@ func (p *Plugin) renderJobs(ctx context.Context) (template.HTML, error) {
 	}
 
 	return p.frag("jobs.html", map[string]any{
-		"Jobs":    panes,
+		"Jobs":        panes,
+		"WorkerStale": tv.Stale, "WorkerLastSeen": fmtTime(tv.UpdatedAt),
 		"Builder": builder, "PGStaging": pgStaging,
 		"Pending": tv.Pending, "Evicted": tv.Evicted, "ReadyGroups": ready,
 		"Census": tv.Census, "Schema": tv.Schema,

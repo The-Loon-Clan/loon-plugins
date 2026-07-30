@@ -20,10 +20,15 @@ import (
 // three questions an operator actually has when a crawl looks wrong: is it
 // moving, how fast, and is anything failing.
 type passVM struct {
-	Running                       bool
-	Any                           bool
-	Groups, Batches, Failed       int
-	GroupsDone, BatchesTotal      int
+	Running                  bool
+	Any                      bool
+	Groups, Batches, Failed  int
+	GroupsDone, BatchesTotal int
+	// PassBatches/PassBatchesTotal accumulate across the whole pass. The
+	// round pair above feeds the live bar; these feed the completed-pass
+	// readout — every catch-up pass ends on an empty round, so a card built
+	// from the round pair read "0 batches" beside millions of articles.
+	PassBatches, PassBatchesTotal int
 	Round                         int // catch-up round, 1-based; 0 = none started
 	Pct                           int // completed/planned batches, 0-100
 	Reading                       string
@@ -96,6 +101,7 @@ func statsVM(st passStats) passVM {
 		Running: st.InProgress, Any: true,
 		Groups: st.Groups, Batches: st.Batches, Failed: st.Failed,
 		GroupsDone: st.GroupsDone, BatchesTotal: st.BatchesTotal,
+		PassBatches: st.PassBatches, PassBatchesTotal: st.PassBatchesTotal,
 		Reading:  st.Reading,
 		Articles: st.Articles, Staged: st.Staged, Providers: st.Providers,
 		Wire:     fmtBytes(st.WireBytes),
@@ -339,9 +345,26 @@ type crawlerJobVM struct {
 	Activity string
 	Next     string // next scheduled run (HH:MM:SS) — answers "when will it run"
 	Running  bool
+	// Duty is the job's trailing-hour busy percentage (duty.go) — the number
+	// that separates "runs on schedule and works" from "runs on schedule and
+	// achieves a 6% duty cycle", which three incidents shipped as. Filled on
+	// the worker; rides the telemetry publish to the web process.
+	Duty float64 `json:"duty"`
 	// Logs is the recent job-log tail — the Jobs tab's live logging. Capped
 	// (jobLogTail) because it rides the worker-telemetry publish.
 	Logs []string
+}
+
+// DutyLabel renders the duty percentage, hiding the meaningless zero of a
+// worker that has not completed a window yet.
+func (j crawlerJobVM) DutyLabel() string {
+	if j.Duty <= 0 {
+		return ""
+	}
+	if j.Duty < 1 {
+		return "<1% busy (1h)"
+	}
+	return fmt.Sprintf("%.0f%% busy (1h)", j.Duty)
 }
 
 // jobLogTail bounds how many log lines each job publishes cross-process.
@@ -450,6 +473,7 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		"IndexStats":  p.indexStatsWithTel(ctx, len(stats.Groups), cs, tv),
 		"HostSink":    p.cfg.Sink == SinkHost,
 		"RecentNzbs":  recentNzbs,
+		"WorkerStale": tv.Stale, "WorkerLastSeen": fmtTime(tv.UpdatedAt),
 		"AutoRefresh": running, "Msg": msg, "Err": errMsg,
 	})
 }
@@ -494,6 +518,9 @@ func (p *Plugin) jobVMs() (jobs []crawlerJobVM, anyRunning bool) {
 		}
 		if s.Status == "running" || s.ElapsedSecs > 0 {
 			j.Running, anyRunning = true, true
+		}
+		if p.duty != nil {
+			j.Duty = p.duty.dutyPct(s.Name, dutySpan, time.Now())
 		}
 		jobs = append(jobs, j)
 	}

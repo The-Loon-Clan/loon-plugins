@@ -318,13 +318,13 @@ func TestBackfillPressureHysteresis(t *testing.T) {
 	cfg := Config{BackfillPressureHighPct: 85, BackfillPressureLowPct: 70, BackfillPressureCeilingPct: 92}
 
 	p := &Plugin{staging: fakePressure{pr: 0.77, ready: 500}}
-	if yield, _ := p.backfillYields(context.Background(), cfg); yield {
+	if yield, _, _ := p.backfillYields(context.Background(), cfg); yield {
 		t.Error("yielded at 77% with the gate at 85% — this is what was throttling nothing at all")
 	}
 
 	// Over the high-water mark: stop.
 	p = &Plugin{staging: fakePressure{pr: 0.86, ready: 500}}
-	if yield, _ := p.backfillYields(context.Background(), cfg); !yield {
+	if yield, _, _ := p.backfillYields(context.Background(), cfg); !yield {
 		t.Error("did not yield at 86% with the gate at 85%")
 	}
 	if !p.backfillPaused {
@@ -333,13 +333,13 @@ func TestBackfillPressureHysteresis(t *testing.T) {
 
 	// Latched: between low and high it must STAY paused, or it flaps.
 	p.staging = fakePressure{pr: 0.80, ready: 500}
-	if yield, _ := p.backfillYields(context.Background(), cfg); !yield {
+	if yield, _, _ := p.backfillYields(context.Background(), cfg); !yield {
 		t.Error("resumed at 80% while latched; hysteresis requires falling below 70% first")
 	}
 
 	// Below the low-water mark: resume, and unlatch.
 	p.staging = fakePressure{pr: 0.69, ready: 500}
-	if yield, _ := p.backfillYields(context.Background(), cfg); yield {
+	if yield, _, _ := p.backfillYields(context.Background(), cfg); yield {
 		t.Error("still paused at 69% with the low-water mark at 70%")
 	}
 	if p.backfillPaused {
@@ -347,9 +347,11 @@ func TestBackfillPressureHysteresis(t *testing.T) {
 	}
 
 	// An unreadable backend must not silently stop the backfill: not knowing
-	// the pressure is not a reason to abandon 659 million missing articles.
-	p = &Plugin{staging: fakePressure{err: true, ready: 500}}
-	if yield, _ := p.backfillYields(context.Background(), cfg); yield {
+	// the pressure is not a reason to abandon 659 million missing articles —
+	// but it IS now reported (throttled), so the fixture needs a reporter.
+	p = trackerPlugin()
+	p.staging = fakePressure{err: true, ready: 500}
+	if yield, _, _ := p.backfillYields(context.Background(), cfg); yield {
 		t.Error("an unreadable pressure probe stopped the backfill")
 	}
 }

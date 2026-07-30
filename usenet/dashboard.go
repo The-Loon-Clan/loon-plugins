@@ -63,6 +63,17 @@ type StatusReport struct {
 	// PendingCount is the size of the last incomplete-sets sample.
 	PendingCount int `json:"pending_count"`
 
+	// WorkerLastSeen is when the worker last published telemetry;
+	// WorkerStale means that heartbeat has lapsed and every "running"
+	// claim above is history, not state — the dead-worker case that used
+	// to render as a crawl whose duration climbed forever.
+	WorkerLastSeen time.Time `json:"worker_last_seen"`
+	WorkerStale    bool      `json:"worker_stale"`
+	// CrawlStalledPasses: consecutive crawl passes with zero forward
+	// progress against a large backlog. Non-zero deserves a look; the
+	// third also lands in the error log.
+	CrawlStalledPasses int `json:"crawl_stalled_passes"`
+
 	RecentErrors []ErrorReport `json:"recent_errors"`
 }
 
@@ -73,16 +84,23 @@ type PassReport struct {
 	// GroupsDone / BatchesTotal / Reading are the legacy dashboard's live
 	// progress trio: "Group N / M — <what it is reading>" plus the bar's
 	// denominator (batches/batches_total).
-	GroupsDone   int     `json:"groups_done"`
-	Batches      int     `json:"batches"`
-	BatchesTotal int     `json:"batches_total"`
-	Reading      string  `json:"reading"`
-	Failed       int     `json:"failed_batches"`
-	Articles     int     `json:"articles"`
-	Staged       int     `json:"staged"`
-	WireBytes    int64   `json:"wire_bytes"`
-	DurationSec  float64 `json:"duration_seconds"`
-	ArticlesSec  float64 `json:"articles_per_second"`
+	GroupsDone   int `json:"groups_done"`
+	Batches      int `json:"batches"`
+	BatchesTotal int `json:"batches_total"`
+	// PassBatches/PassBatchesTotal accumulate across the whole pass, and are
+	// what a consumer should read for "how much did this pass do" — batches/
+	// batches_total are ROUND-scoped for the live bar, and a completed pass
+	// always ends on an empty round, so they read ~0 the moment it finishes.
+	// Additive fields: the round pair keeps its name and meaning.
+	PassBatches      int     `json:"pass_batches"`
+	PassBatchesTotal int     `json:"pass_batches_total"`
+	Reading          string  `json:"reading"`
+	Failed           int     `json:"failed_batches"`
+	Articles         int     `json:"articles"`
+	Staged           int     `json:"staged"`
+	WireBytes        int64   `json:"wire_bytes"`
+	DurationSec      float64 `json:"duration_seconds"`
+	ArticlesSec      float64 `json:"articles_per_second"`
 }
 
 type ProviderReport struct {
@@ -126,6 +144,10 @@ type JobReport struct {
 	Activity string `json:"activity"`
 	Next     string `json:"next_run"`
 	Running  bool   `json:"running"`
+	// DutyPct is the trailing-hour busy percentage — "runs on schedule" and
+	// "actually works" are different claims, and only this one tells them
+	// apart from outside.
+	DutyPct float64 `json:"duty_pct"`
 	// Logs is the recent job-log tail (jobLogTail lines) — what the Jobs
 	// tab's per-job panes poll for live logging.
 	Logs []string `json:"logs,omitempty"`
@@ -135,6 +157,7 @@ func passReport(st passStats) PassReport {
 	return PassReport{
 		Running: st.InProgress, Groups: st.Groups, GroupsDone: st.GroupsDone,
 		Batches: st.Batches, BatchesTotal: st.BatchesTotal, Reading: st.Reading,
+		PassBatches: st.PassBatches, PassBatchesTotal: st.PassBatchesTotal,
 		Failed: st.Failed, Articles: st.Articles, Staged: st.Staged,
 		WireBytes:   st.WireBytes,
 		DurationSec: st.Duration().Seconds(),
@@ -193,11 +216,14 @@ func (p *Plugin) status(ctx context.Context) StatusReport {
 	for _, j := range tv.Jobs {
 		rep.Jobs = append(rep.Jobs, JobReport{
 			Name: j.Name, Status: j.Status, Activity: j.Activity,
-			Next: j.Next, Running: j.Running, Logs: j.Logs,
+			Next: j.Next, Running: j.Running, DutyPct: j.Duty, Logs: j.Logs,
 		})
 	}
 	rep.Evicted = tv.Evicted
 	rep.PendingCount = len(tv.Pending)
+	rep.WorkerLastSeen = tv.UpdatedAt
+	rep.WorkerStale = tv.Stale
+	rep.CrawlStalledPasses = tv.CrawlStalledPasses
 	// Redis only: LLEN is O(1); the pg equivalent is a COUNT scan, and nothing
 	// on a poll endpoint may scan a table.
 	if p.cfg.Staging == StagingRedis {

@@ -129,6 +129,17 @@ type workerTelemetry struct {
 	// reports the SITE's git SHA, so a plugin-only deploy is invisible there;
 	// this is the marker that says which plugin code is actually running.
 	Schema string `json:"schema,omitempty"`
+	// CrawlStalledPasses is the crawl's consecutive zero-progress streak
+	// against a large backlog; the third also raises an error report. (Duty
+	// percentages ride inside Jobs — one carrier, so the pair cannot drift.)
+	CrawlStalledPasses int `json:"crawl_stalled_passes,omitempty"`
+
+	// Stale is set by the READ side (telemetryView) when the published
+	// snapshot's heartbeat has lapsed: the worker is gone or wedged, and
+	// whatever this snapshot says about in-progress passes is history, not
+	// state. Never serialized — it is an assessment of the payload, not part
+	// of it.
+	Stale bool `json:"-"`
 }
 
 // pickPass prefers the running pass, falling back to the last completed one,
@@ -160,6 +171,7 @@ func (p *Plugin) localTelemetry() workerTelemetry {
 	tv.Pending = p.tel.pendingSets()
 	tv.Evicted = p.tel.evictedCount()
 	tv.Schema = newestMigration()
+	tv.CrawlStalledPasses = p.tel.stalled()
 	if p.st != nil {
 		// Cheap: an indexed LIMIT read of a table with one row per build pass.
 		if rows, err := p.st.stagingCensusRows(context.Background(), 12); err == nil {
@@ -169,11 +181,28 @@ func (p *Plugin) localTelemetry() workerTelemetry {
 	return tv
 }
 
+// telemetryStaleAfter is how old a published snapshot may be before the read
+// side declares the worker gone. Three missed heartbeats: the publisher
+// force-writes at least every telemetryHeartbeat even when nothing changed,
+// so a fresh UpdatedAt is a liveness signal, not just a change marker.
+const (
+	telemetryHeartbeat  = time.Minute
+	telemetryStaleAfter = 3 * telemetryHeartbeat
+)
+
 // telemetryView returns the telemetry the CURRENT process should render: its
 // own when it runs the jobs (worker / all), the worker-published copy
 // otherwise (web). A missing or unparsable published copy degrades to zero
 // values — the page shows an idle crawler, exactly what it showed before
 // publishing existed.
+//
+// A published copy whose heartbeat has LAPSED is a special case that used to
+// lie: a worker that died mid-pass leaves CrawlCur.InProgress=true behind,
+// passStats.Duration() substitutes time.Now() for running passes, and the
+// dashboard rendered a "crawl in progress" whose duration climbed forever —
+// a dead worker indistinguishable from a busy one. The flags are cleared and
+// Stale is set so every consumer renders what is actually known: the worker
+// has not reported since UpdatedAt.
 func (p *Plugin) telemetryView(ctx context.Context) workerTelemetry {
 	if p.runsJobs {
 		return p.localTelemetry()
@@ -186,7 +215,23 @@ func (p *Plugin) telemetryView(ctx context.Context) workerTelemetry {
 	if raw := s[telemetrySettingKey]; raw != "" {
 		_ = json.Unmarshal([]byte(raw), &tv)
 	}
+	tv.markStaleIfLapsed(time.Now())
 	return tv
+}
+
+// markStaleIfLapsed downgrades a snapshot whose heartbeat has lapsed: the
+// worker is gone, so its in-progress claims are history. Separated from
+// telemetryView so the rule is testable without a settings store.
+func (tv *workerTelemetry) markStaleIfLapsed(now time.Time) {
+	if tv.UpdatedAt.IsZero() || now.Sub(tv.UpdatedAt) <= telemetryStaleAfter {
+		return
+	}
+	tv.Stale = true
+	tv.CrawlCur.InProgress = false
+	tv.BackfillCur.InProgress = false
+	for i := range tv.Jobs {
+		tv.Jobs[i].Running = false
+	}
 }
 
 // publishTelemetry ships the local snapshot every few seconds. Identical
@@ -196,6 +241,7 @@ func (p *Plugin) telemetryView(ctx context.Context) workerTelemetry {
 // mid-flight.
 func (p *Plugin) publishTelemetry(ctx context.Context) {
 	var last, lastTrig string
+	var lastWrite time.Time
 	var readFailed bool
 	tick := time.NewTicker(5 * time.Second)
 	defer tick.Stop()
@@ -224,9 +270,17 @@ func (p *Plugin) publishTelemetry(ctx context.Context) {
 			if err != nil {
 				continue
 			}
-			if s := string(b); s != last {
+			// The heartbeat half of the change check: an unchanged payload is
+			// normally not rewritten (an idle crawler costs zero writes), but
+			// UpdatedAt then froze for as long as the worker idled — making a
+			// stale-snapshot guard on the read side impossible, because a
+			// healthy-idle worker and a dead one looked identical. Forcing one
+			// small write per telemetryHeartbeat makes UpdatedAt a liveness
+			// signal at the cost of one settings UPDATE a minute.
+			if s := string(b); s != last || time.Since(lastWrite) >= telemetryHeartbeat {
 				last = s
 				tv.UpdatedAt = time.Now()
+				lastWrite = tv.UpdatedAt
 				stamped, _ := json.Marshal(tv)
 				if err := p.st.setSetting(ctx, telemetrySettingKey, string(stamped)); err != nil {
 					p.reportErr(ctx, "usenet/telemetry-publish", err)

@@ -2,6 +2,7 @@ package usenet
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -79,10 +80,21 @@ type censusRow struct {
 	HopelessSeen    int       `db:"hopeless_seen"`
 
 	// Deltas against the previous sample. Negative means the counter reset
-	// (Redis restarted); reported as 0 rather than as a nonsensical negative,
-	// because a restart is not "minus four million evictions".
-	EvictedDelta int64 `db:"evicted_delta"`
-	ExpiredDelta int64 `db:"expired_delta"`
+	// (Redis restarted, or for hopeless a worker restart); reported as 0
+	// rather than as a nonsensical negative, because a restart is not "minus
+	// four million evictions".
+	EvictedDelta  int64 `db:"evicted_delta"`
+	ExpiredDelta  int64 `db:"expired_delta"`
+	HopelessDelta int64 `db:"hopeless_delta"`
+}
+
+// PendingLabel renders the pending-sets sample, distinguishing "none pending"
+// from "the pass died before sampling" (recorded as -1).
+func (c censusRow) PendingLabel() string {
+	if c.PendingSets < 0 {
+		return "—"
+	}
+	return strconv.Itoa(c.PendingSets)
 }
 
 // stagingCensusRows returns the most recent samples, newest first.
@@ -98,7 +110,8 @@ func (s *PGStore) stagingCensusRows(ctx context.Context, limit int) ([]censusRow
 			        evicted_keys, expired_keys, maxmemory_policy,
 			        pending_sets, hopeless_seen,
 			        GREATEST(evicted_keys - LAG(evicted_keys) OVER (ORDER BY at), 0) AS evicted_delta,
-			        GREATEST(expired_keys - LAG(expired_keys) OVER (ORDER BY at), 0) AS expired_delta
+			        GREATEST(expired_keys - LAG(expired_keys) OVER (ORDER BY at), 0) AS expired_delta,
+			        GREATEST(hopeless_seen - LAG(hopeless_seen) OVER (ORDER BY at), 0) AS hopeless_delta
 			   FROM staging_census
 			  ORDER BY at DESC
 			  LIMIT $1`, limit)
@@ -168,6 +181,12 @@ func (p *Plugin) takeStagingCensus(ctx context.Context, drawn candidateStats, pe
 		Sampled:        drawn.Sampled,
 		LiveCandidates: drawn.Live,
 		FossilDropped:  drawn.Fossil,
+		// The plugin's own deliberate shedding, cumulative like the Redis
+		// counters so the reader takes deltas. The column existed from the
+		// start but was never assigned — every row read "shed nothing", which
+		// is a factual-looking claim, not an unmeasured one, and it also
+		// masked the inline eviction being dead code for its entire life.
+		HopelessSeen: int(p.tel.evictedCount()),
 	}
 	if info, err := p.staging.stagingInfo(ctx); err == nil {
 		c.RedisKeys = info.Keys
@@ -176,6 +195,18 @@ func (p *Plugin) takeStagingCensus(ctx context.Context, drawn candidateStats, pe
 		c.EvictedKeys = info.EvictedKeys
 		c.ExpiredKeys = info.ExpiredKeys
 		c.MaxMemoryPolicy = info.MaxMemoryPolicy
+	} else {
+		// An INFO failure must not write an all-zero row: zeros render as
+		// "unbounded, never evicting" — indistinguishable from healthy, which
+		// is the exact shape of the Redis 6.2 multi-section-INFO bug that hid
+		// the 97M-key eviction, re-entered through the error path. Keep the
+		// fields stagingInfo filled before it failed, stamp the policy with a
+		// sentinel so the row reads as UNREADABLE rather than unbounded, and
+		// say so where the operator looks for failures. This probe failing is
+		// most likely exactly when the server is at its ceiling and slow.
+		c.RedisKeys = info.Keys
+		c.MaxMemoryPolicy = "(unavailable)"
+		p.reportErr(ctx, "usenet/staging-census-info", err)
 	}
 	// The pass's own sample, passed in — walking the active sets a second time
 	// doubled the cost of the most expensive read in the pipeline. The comment

@@ -182,7 +182,11 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		}
 		behind, err := p.st.forwardBacklog(ctx, cfg.HoldLowUntilBackfilled)
 		if err != nil || behind <= int64(cfg.Batch) {
-			break // caught up (within one batch) — the interval takes over
+			// Caught up (within one batch) — the interval takes over, and a
+			// completed catch-up ends any stall streak.
+			p.crawlStallStreak = 0
+			p.tel.setStalledPasses(0)
+			break
 		}
 		if claimed == 0 {
 			// Every group is lease-held by someone else. Right after a deploy
@@ -207,8 +211,25 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		blockedRetries = 0
 		if prevBehind >= 0 && behind >= prevBehind {
 			p.crawlJob.Log("catch-up stalled at %s article(s) behind — waiting for the next interval", fmtComma(behind))
+			// Escalate a REPEATING stall. One stalled pass is unremarkable —
+			// blocked leases, a provider blip, the interval retries it. The
+			// same stall pass after pass with a large measured backlog is the
+			// 2026-07-24 signature (20/20 groups planning zero batches, 575M
+			// behind), which previously reached nothing but this scrolling log
+			// line and was found by a human reading it. The third consecutive
+			// stall lands one report in the error ring and host error log; the
+			// streak is also published in telemetry and status.json.
+			p.crawlStallStreak++
+			p.tel.setStalledPasses(p.crawlStallStreak)
+			if p.crawlStallStreak == 3 {
+				p.reportErr(ctx, "usenet/crawl-stalled", fmt.Errorf(
+					"3 consecutive passes with zero forward progress and %s article(s) behind — "+
+						"the crawl is running on schedule and achieving nothing", fmtComma(behind)))
+			}
 			break
 		}
+		p.crawlStallStreak = 0
+		p.tel.setStalledPasses(0)
 		prevBehind = behind
 		if !schedule.OffPeakGate() {
 			p.crawlJob.Log("catch-up paused: site is busy (off-peak gate); %s article(s) behind", fmtComma(behind))

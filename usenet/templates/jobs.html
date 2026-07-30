@@ -2,6 +2,12 @@
      Run-now, the live log tail, and the job's own panels (the Builder and
      NZB-health cards moved here from the dashboard). The poller below keeps
      status badges, next-run times, and logs live while this tab is open. */}}
+{{if .WorkerStale}}
+<div class="alert alert-warning py-2 mt-3 mb-0">
+  The worker has not published telemetry since <strong>{{.WorkerLastSeen}}</strong> — it is down or wedged.
+  Everything below is its last report, not live state.
+</div>
+{{end}}
 <div class="card mt-3">
   <div class="card-header">Jobs</div>
   <div class="card-body">
@@ -22,6 +28,7 @@
           {{if $j.Running}}<span data-role="status" class="badge bg-success">running</span>
           {{else}}<span data-role="status" class="badge bg-secondary">{{$j.Status}}</span>{{end}}
           <span class="text-muted small">next run: <span data-role="next">{{if $j.Next}}{{$j.Next}}{{else}}—{{end}}</span></span>
+          {{if $j.DutyLabel}}<span class="text-muted small">{{$j.DutyLabel}}</span>{{end}}
           <form method="post" action="/admin/p/usenet/{{$j.Action}}" class="ms-auto">
             <button class="btn btn-sm btn-outline-primary py-0" type="submit">Run now</button>
           </form>
@@ -78,7 +85,9 @@
     <p class="text-muted small mb-2">
       One row per build pass. The columns that matter are the deltas: <b>evicted</b> rising means Redis is
       destroying keys to stay under maxmemory — forming releases die before they can complete. <b>Fossils</b>
-      are releases that completed, queued, and then expired before the builder drew them. <b>Ready</b> far
+      are releases that completed, queued, and then expired before the builder drew them. <b>Shed</b> is the
+      plugin's own deliberate hopeless-set eviction (stalled, far-short sets) — expected to move; it is
+      <b>evicted</b> that must not. <b>Ready</b> far
       above <b>drew</b>, pass after pass, means arrivals outpace the drain.
     </p>
     <div class="table-responsive">
@@ -89,7 +98,7 @@
           <th class="text-end">Live</th><th class="text-end">Fossils</th>
           <th class="text-end">Forming</th>
           <th class="text-end">Memory</th>
-          <th class="text-end">Evicted (+new)</th><th class="text-end">Expired (+new)</th>
+          <th class="text-end">Evicted (+new)</th><th class="text-end">Shed (+new)</th><th class="text-end">Expired (+new)</th>
         </tr></thead>
         <tbody>
         {{range $.Census}}
@@ -99,9 +108,10 @@
             <td class="text-end small">{{.Sampled}}</td>
             <td class="text-end small">{{.LiveCandidates}}</td>
             <td class="text-end small{{if .FossilDropped}} text-danger{{end}}">{{.FossilDropped}}</td>
-            <td class="text-end small">{{.PendingSets}}</td>
-            <td class="text-end small">{{if lt .MemPct 0.0}}unbounded{{else}}{{printf "%.0f%%" .MemPct}}{{end}}</td>
+            <td class="text-end small">{{.PendingLabel}}</td>
+            <td class="text-end small">{{if eq .MaxMemoryPolicy "(unavailable)"}}?{{else if lt .MemPct 0.0}}unbounded{{else}}{{printf "%.0f%%" .MemPct}}{{end}}</td>
             <td class="text-end small{{if .EvictedDelta}} text-danger{{end}}">{{.EvictedKeys}}{{if .EvictedDelta}} (+{{.EvictedDelta}}){{end}}</td>
+            <td class="text-end small text-muted">{{.HopelessSeen}}{{if .HopelessDelta}} (+{{.HopelessDelta}}){{end}}</td>
             <td class="text-end small text-muted">{{.ExpiredKeys}}{{if .ExpiredDelta}} (+{{.ExpiredDelta}}){{end}}</td>
           </tr>
         {{end}}

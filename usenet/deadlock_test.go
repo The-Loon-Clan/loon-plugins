@@ -28,7 +28,7 @@ func TestBackfillDoesNotDeadlockWithNothingToBuild(t *testing.T) {
 	p := &Plugin{staging: fakePressure{pr: 0.74, ready: 0}}
 	p.backfillPaused = true // latched by an earlier excursion past 85%
 
-	yield, pr := p.backfillYields(context.Background(), cfg)
+	yield, pr, _ := p.backfillYields(context.Background(), cfg)
 	if yield {
 		t.Errorf("backfill still yielding at %.0f%% with an EMPTY ready queue — this is the "+
 			"deadlock: the memory is incomplete sets, only fetching completes them, and the "+
@@ -43,7 +43,7 @@ func TestBackfillDoesNotDeadlockWithNothingToBuild(t *testing.T) {
 	// refusing the write, and what it evicts is the sets still assembling. That
 	// is how 97 million keys were destroyed.
 	p = &Plugin{staging: fakePressure{pr: 0.95, ready: 0}}
-	if yield, _ := p.backfillYields(context.Background(), cfg); !yield {
+	if yield, _, _ := p.backfillYields(context.Background(), cfg); !yield {
 		t.Error("backfill kept fetching past the ceiling with staging nearly full — the next " +
 			"write evicts a half-assembled release")
 	}
@@ -51,7 +51,7 @@ func TestBackfillDoesNotDeadlockWithNothingToBuild(t *testing.T) {
 	// And when there IS something to build, pausing is correct: the builder can
 	// actually reduce the pressure, so yielding to it is not a deadlock.
 	p = &Plugin{staging: fakePressure{pr: 0.86, ready: 50_000}}
-	if yield, _ := p.backfillYields(context.Background(), cfg); !yield {
+	if yield, _, _ := p.backfillYields(context.Background(), cfg); !yield {
 		t.Error("backfill did not yield at 86% with 50,000 sets queued — the builder is behind " +
 			"and fetching more only crowds it out")
 	}
@@ -61,7 +61,7 @@ func TestBackfillDoesNotDeadlockWithNothingToBuild(t *testing.T) {
 	// mistaken for an empty queue.
 	p = &Plugin{staging: fakePressure{pr: 0.74, ready: -1}}
 	p.backfillPaused = true
-	if yield, _ := p.backfillYields(context.Background(), cfg); !yield {
+	if yield, _, _ := p.backfillYields(context.Background(), cfg); !yield {
 		t.Error("an unknown ready depth was treated as an empty queue; pg mode must keep the " +
 			"behaviour it had before the probe existed")
 	}
@@ -77,7 +77,7 @@ func TestBackfillRunsFreelyBelowTheThreshold(t *testing.T) {
 	}
 	for _, ready := range []int64{0, 500, -1} {
 		p := &Plugin{staging: fakePressure{pr: 0.40, ready: ready}}
-		if yield, _ := p.backfillYields(context.Background(), cfg); yield {
+		if yield, _, _ := p.backfillYields(context.Background(), cfg); yield {
 			t.Errorf("ready=%d: yielded at 40%% pressure", ready)
 		}
 	}

@@ -79,6 +79,19 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	// candidates examined — see build_outcomes.go.
 	defer p.flushBuildOutcomes(ctx)
 
+	// The census records FIRST — before the sink resolve and the draw, whose
+	// early returns used to skip it entirely. A sink outage is exactly when
+	// fossils accumulate and Redis fills toward eviction, and it produced NO
+	// census rows for its whole duration; staging_census.go's own header calls
+	// a gap that reads as "nothing happened" worse than no census at all. A
+	// zero draw honestly records that nothing was drawn while stagingInfo
+	// still captures the memory/eviction half — the half that matters during
+	// an outage. pendingSeen -1 = "the pass died before sampling", which the
+	// readout keeps distinct from "none pending".
+	var drawn candidateStats
+	pendingSeen := -1
+	defer func() { p.takeStagingCensus(ctx, drawn, pendingSeen) }()
+
 	// Resolve the sink ONCE for the pass (mirrors resolveHealthBackend): a
 	// host-misconfigured pass fails here with one error instead of flooding the
 	// error log with one per candidate.
@@ -100,20 +113,13 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 		p.buildJob.Log("ready queue: swept %d entr(ies), removed %d dead", scanned, removed)
 	}
 
-	keys, drawn, err := p.staging.candidateGroups(ctx, p.effective(ctx).BuildDrainPerPass)
+	keys, d, err := p.staging.candidateGroups(ctx, p.effective(ctx).BuildDrainPerPass)
 	if err != nil {
 		p.buildJob.SetError(err.Error())
 		p.reportErr(ctx, "usenet/build-scan", err)
 		return 0, 0
 	}
-	// Sample staging health for THIS pass before doing any work with the draw.
-	// Deferred so it still records when the pass returns early — a pass that
-	// died is exactly when the operator most needs the reading.
-	// Sampled once per pass and shared with the census below. Listing staged
-	// sets is the most expensive read in the pipeline, so it happens exactly
-	// once.
-	pendingSeen := 0
-	defer func() { p.takeStagingCensus(ctx, drawn, pendingSeen) }()
+	drawn = d
 	if drawn.Fossil > 0 {
 		// Each fossil is a release that completed, queued itself, and then
 		// expired or was evicted before the builder drew it. Nothing else

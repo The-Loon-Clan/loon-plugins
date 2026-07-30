@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
@@ -248,6 +249,64 @@ func TestJobsRendersPanes(t *testing.T) {
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("jobs page missing %q", want)
+		}
+	}
+}
+
+// TestJobsRendersCensusAndLiveness executes the census block and the
+// worker-staleness banner — template regions no earlier fixture reached.
+// html/template fails at Execute on a missing struct field, and a streamed
+// render that dies mid-page shows only its first rows (a real bug class
+// here), so every field the census table dereferences must be exercised.
+func TestJobsRendersCensusAndLiveness(t *testing.T) {
+	tmpl, err := template.ParseFS(viewFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 7, 29, 14, 12, 3, 0, time.UTC)
+	var buf bytes.Buffer
+	err = tmpl.ExecuteTemplate(&buf, "jobs.html", map[string]any{
+		"Jobs": []jobPaneVM{
+			{crawlerJobVM: crawlerJobVM{Name: "Usenet Crawler", Status: "idle", Duty: 87.2},
+				Slug: "crawler", Short: "Crawler", Action: "run-crawl"},
+			// The census card renders inside the builder pane.
+			{crawlerJobVM: crawlerJobVM{Name: "Usenet Builder", Status: "idle"},
+				Slug: "builder", Short: "Builder", Action: "run-build"},
+		},
+		"PGStaging": false, "ReadyGroups": int64(0), "Evicted": int64(3),
+		"Pending": []pendingSet{},
+		"Builder": BuilderInfo{}, "Health": healthVM{},
+		"Pass": passVM{}, "Backfill": passVM{},
+		"Schema":      "024_staging_census.sql",
+		"WorkerStale": true, "WorkerLastSeen": "14:09:00",
+		"Census": []censusRow{
+			// The healthy shape, plus deltas and the deliberate-shed column.
+			{At: at, ReadyDepth: 120, Sampled: 120, LiveCandidates: 100, FossilDropped: 20,
+				MemUsedBytes: 6 << 30, MemMaxBytes: 8 << 30, MaxMemoryPolicy: "allkeys-lru",
+				EvictedKeys: 1000, EvictedDelta: 40, ExpiredKeys: 500, ExpiredDelta: 5,
+				HopelessSeen: 30, HopelessDelta: 7, PendingSets: 12},
+			// The two ambiguous states the census must render distinctly: an
+			// unreadable INFO (sentinel policy) and a pass that died before
+			// sampling pending (-1).
+			{At: at, MaxMemoryPolicy: "(unavailable)", PendingSets: -1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("render jobs with census: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"maxmemory-policy: allkeys-lru", "plugin schema 024_staging_census.sql",
+		"75%",        // 6/8 GB memory
+		"1000 (+40)", // evicted with delta
+		"30 (+7)",    // shed with delta
+		"?",          // unreadable INFO renders as unknown, never "unbounded"
+		"—",          // died-before-sampling pending marker
+		"87% busy (1h)",
+		"has not published telemetry since <strong>14:09:00</strong>",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("census render missing %q", want)
 		}
 	}
 }

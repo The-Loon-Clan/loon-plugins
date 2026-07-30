@@ -37,9 +37,8 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 		return
 	}
 
-	if yield, pr := p.backfillYields(ctx, cfg); yield {
-		p.backfillJob.Log("backfill paused: staging pressure %.0f%% (high %d%%, resumes below %d%%) — letting the NZB builder drain",
-			pr*100, cfg.BackfillPressureHighPct, cfg.BackfillPressureLowPct)
+	if yield, pr, gate := p.backfillYields(ctx, cfg); yield {
+		p.backfillJob.Log("backfill paused: %s", gateLine(gate, pr, cfg))
 		p.backfillJob.SetIdle(p.nextBackfill(ctx))
 		return
 	}
@@ -132,10 +131,30 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 // a backend hovering at the threshold does not flap. Extracted so the entry
 // check and the per-round check are literally the same code — the crawl loop
 // grew three drifted copies of its pressure comparison exactly this way.
-func (p *Plugin) backfillYields(ctx context.Context, cfg Config) (bool, float64) {
+// The gate names backfillYields reports, so pause logs can say which
+// threshold ACTUALLY fired. The old log always cited high/low even when the
+// ceiling stopped the pass — an operator raising the high knob and seeing no
+// effect had no way to know a different gate was in charge.
+const (
+	gateHigh    = "high"
+	gateCeiling = "ceiling"
+)
+
+func (p *Plugin) backfillYields(ctx context.Context, cfg Config) (bool, float64, string) {
 	pr, err := p.staging.pressure(ctx)
 	if err != nil {
-		return false, 0 // unknown pressure is not a reason to stop protecting history
+		// Fail open — unknown pressure is not a reason to stop protecting
+		// history — but never SILENTLY: this probe erroring while staging
+		// writes still succeed is exactly the Redis 6.2 INFO-incompat shape,
+		// and it disables every pressure gate at once. The crawl's twin
+		// (pauseForStagingPressure) already reports; parity here, throttled
+		// because this runs per round and the local ring does not dedup.
+		if time.Since(p.lastPressureErrAt) > 5*time.Minute {
+			p.lastPressureErrAt = time.Now()
+			p.reportErr(ctx, "usenet/backfill-pressure",
+				fmt.Errorf("pressure unreadable — every backfill gate is effectively OFF: %w", err))
+		}
+		return false, 0, ""
 	}
 
 	// Yielding is only useful if the builder can act on it.
@@ -157,20 +176,31 @@ func (p *Plugin) backfillYields(ctx context.Context, cfg Config) (bool, float64)
 	if depth, derr := p.staging.readyDepth(ctx); derr == nil && depth == 0 {
 		if pr < float64(cfg.BackfillPressureCeilingPct)/100.0 {
 			p.backfillPaused = false
-			return false, pr
+			return false, pr, ""
 		}
-		return true, pr
+		return true, pr, gateCeiling
 	}
 
 	switch {
 	case p.backfillPaused && pr >= float64(cfg.BackfillPressureLowPct)/100.0:
-		return true, pr
+		return true, pr, gateHigh
 	case pr >= float64(cfg.BackfillPressureHighPct)/100.0:
 		p.backfillPaused = true
-		return true, pr
+		return true, pr, gateHigh
 	}
 	p.backfillPaused = false
-	return false, pr
+	return false, pr, ""
+}
+
+// gateLine renders one pause reason for the job log, citing the threshold
+// that actually fired.
+func gateLine(gate string, pr float64, cfg Config) string {
+	if gate == gateCeiling {
+		return fmt.Sprintf("staging pressure %.0f%% is past the eviction ceiling (%d%%) with nothing to drain — "+
+			"past it Redis evicts forming sets", pr*100, cfg.BackfillPressureCeilingPct)
+	}
+	return fmt.Sprintf("staging pressure %.0f%% (high %d%%, resumes below %d%%) — letting the NZB builder drain",
+		pr*100, cfg.BackfillPressureHighPct, cfg.BackfillPressureLowPct)
 }
 
 // backfillProvider closes one provider's gaps. Gaps are per-server: another
@@ -594,10 +624,11 @@ func runCatchUp(ctx context.Context, round func() (int, int), disabled func() bo
 // so a builder that cannot make progress ends the pass rather than holding it
 // open forever, and cancellable so shutdown is never delayed.
 func (p *Plugin) waitForDrain(ctx context.Context, cfg Config) (bool, float64) {
-	yield, pr := p.backfillYields(ctx, cfg)
+	yield, pr, gate := p.backfillYields(ctx, cfg)
 	if !yield {
 		return false, pr
 	}
+	p.backfillJob.Log("backfill waiting: %s", gateLine(gate, pr, cfg))
 	waited := 0
 	for waited < cfg.BackfillDrainWaitSec {
 		// TryLock inside runBuild makes a redundant kick a no-op, so this is
@@ -607,7 +638,7 @@ func (p *Plugin) waitForDrain(ctx context.Context, cfg Config) (bool, float64) {
 			return true, pr // shutdown: stop, do not report a false all-clear
 		}
 		waited += int(drainPollInterval / time.Second)
-		if again, pr2 := p.backfillYields(ctx, cfg); !again {
+		if again, pr2, _ := p.backfillYields(ctx, cfg); !again {
 			p.backfillJob.Log("staging drained to %.0f%% after %ds — resuming backfill", pr2*100, waited)
 			return false, pr2
 		}
