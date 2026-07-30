@@ -165,10 +165,10 @@ func TestCrawlersRendersFleetAndWorkers(t *testing.T) {
 			Staging: stagingInfo{Mode: "redis", Keys: 1200, ReadyGroups: 4, MemUsedBytes: 1 << 30, MemMaxBytes: 8 << 30},
 			MemUsed: "1.0 GB", MemMax: "8.0 GB",
 		},
-		"HostSink":    true,
-		"AutoRefresh": false,
-		"Msg":         "",
-		"Err":         "",
+		"HostSink": true,
+
+		"Msg": "",
+		"Err": "",
 	})
 	if err != nil {
 		t.Fatalf("render: %v", err)
@@ -324,7 +324,7 @@ func TestCrawlersRendersEmpty(t *testing.T) {
 		"Builder": BuilderInfo{}, "Fleet": []providerVM{}, "Workers": []workerVM{},
 		"Health": healthVM{}, "Pass": passVM{}, "Errors": []errorVM{},
 		"PGStaging": true, "RecentNzbs": nil,
-		"AutoRefresh": false, "Msg": "", "Err": "",
+		"Msg": "", "Err": "",
 	})
 	if err != nil {
 		t.Fatalf("render empty: %v", err)
@@ -352,13 +352,12 @@ func TestCrawlersRendersCoverage(t *testing.T) {
 	bbs := []backboneVM{
 		{Name: "omicron", Groups: []crawlerGroupVM{{
 			Name: "alt.binaries.anime", NZBs: 12, Staged: 3,
-			Cover:     pluginapi.CoverageBar{BackPct: 20, HavePct: 70, NewPct: 10, Known: true},
 			Cells:     cellLevels(coverageCells([]articleRange{{Start: 0, End: 40}, {Start: 60, End: 99}}, 0, 99, 8)),
 			Fragments: 2, RemainingFmt: "5,000",
 			FwdAt: "2026-07-22 10:31", BackAt: "2026-01-01 12:11", NewFmt: "409,395,881",
 		}}},
 		{Name: "srv:2", Groups: []crawlerGroupVM{{
-			Name: "alt.binaries.tv", Cover: pluginapi.CoverageBar{Known: false},
+			Name: "alt.binaries.tv", NoCoverage: true,
 		}}},
 	}
 	var groups []crawlerGroupVM
@@ -376,7 +375,7 @@ func TestCrawlersRendersCoverage(t *testing.T) {
 		"RecentNzbs": []recentNZBVM{
 			{Title: "Some.Release", Group: "alt.binaries.anime", Size: "1.2 GB", Created: "12:05"},
 		},
-		"AutoRefresh": false, "Msg": "", "Err": "",
+		"Msg": "", "Err": "",
 	})
 	if err != nil {
 		t.Fatalf("render coverage: %v", err)

@@ -16,7 +16,7 @@ import (
 // The durable NZB output (the nzbs table) is written by PGStore in BOTH modes;
 // only this buffer differs. The method set is exactly the ingest path
 // (stageArticles), the builder's read/drain path (candidateGroups / groupArticles
-// / deleteStaged), maintenance (deleteJunkStaged / prune), and a back-pressure
+// / deleteStaged), maintenance (prune and the sweeps), and a back-pressure
 // signal (pressure). Everything downstream of "here are a set's articles"
 // (isComplete -> buildNZB -> insertNzb) stays backend-agnostic on PGStore.
 type stagingStore interface {
@@ -47,7 +47,6 @@ type stagingStore interface {
 	// deletes — 500 round-trips a pass to discard sets it had already judged in
 	// microseconds. Returns how many were removed.
 	deleteStagedBatch(ctx context.Context, keys []groupKey) (int, error)
-	deleteJunkStaged(ctx context.Context) (int64, error)
 	// prune drops stale staging. pg: DELETE WHERE added_at < now()-horizon;
 	// redis: no-op — the key TTL + inline hopeless-eviction handle it.
 	prune(ctx context.Context) (int64, error)

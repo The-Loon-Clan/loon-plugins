@@ -148,40 +148,6 @@ func (s *PGStore) deleteJunkNzbs(ctx context.Context) (int, error) {
 	return removed, err
 }
 
-// deleteJunkStaged removes staged articles whose base_subject is junk (the
-// backlog from before ingest filtering). Distinct bases are far fewer than
-// rows; deleted in chunks.
-func (s *PGStore) deleteJunkStaged(ctx context.Context) (int64, error) {
-	var deleted int64
-	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		var bases []string
-		if err := tx.SelectContext(ctx, &bases, `SELECT DISTINCT base_subject FROM articles`); err != nil {
-			return err
-		}
-		var junk []string
-		for _, b := range bases {
-			if isJunkTitle(b) {
-				junk = append(junk, b)
-			}
-		}
-		for start := 0; start < len(junk); start += 1000 {
-			end := min(start+1000, len(junk))
-			q, args, err := sqlx.In(`DELETE FROM articles WHERE base_subject IN (?)`, junk[start:end])
-			if err != nil {
-				return err
-			}
-			res, err := tx.ExecContext(ctx, tx.Rebind(q), args...)
-			if err != nil {
-				return err
-			}
-			n, _ := res.RowsAffected()
-			deleted += n
-		}
-		return nil
-	})
-	return deleted, err
-}
-
 // pruneStagedOlderThan drops staged articles past the horizon. The horizon is
 // config-driven (staging_prune_hours, default 6) — pgStaging passes the live
 // value. A non-positive hours falls back to 6 so a bad setting can't disable the

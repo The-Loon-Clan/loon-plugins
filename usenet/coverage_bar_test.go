@@ -68,7 +68,7 @@ func TestCrawlersCoverageStripIsRangeBased(t *testing.T) {
 			"Stats": pluginapi.IndexStats{}, "Jobs": nil, "Builder": BuilderInfo{},
 			"Fleet": nil, "Workers": nil, "Pass": passVM{}, "Backfill": passVM{},
 			"Pending": nil, "Errors": nil, "Health": healthVM{},
-			"IndexStats": indexStatsVM{}, "HostSink": true, "AutoRefresh": false,
+			"IndexStats": indexStatsVM{}, "HostSink": true,
 			"Msg": "", "Err": "",
 			"Backbones": []backboneVM{{Name: "netnews", Groups: []crawlerGroupVM{g}}},
 			"Groups":    []crawlerGroupVM{g},

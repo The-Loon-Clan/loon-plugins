@@ -44,12 +44,10 @@ type StatusReport struct {
 	// the per-(backbone, group) state join, which double-counted every group a
 	// second backbone carried — on multi-backbone installs the value dropped
 	// at that deploy; re-baseline any external monitor thresholds on it.
-	Groups          int   `json:"active_groups"`
-	StagedArticles  int   `json:"staged_articles"`
-	PendingReleases int   `json:"pending_releases"`
-	ReadyReleases   int   `json:"ready_releases"`
-	TotalNZBs       int   `json:"total_nzbs"`
-	BackfillLeft    int64 `json:"backfill_remaining"`
+	Groups         int   `json:"active_groups"`
+	StagedArticles int   `json:"staged_articles"`
+	TotalNZBs      int   `json:"total_nzbs"`
+	BackfillLeft   int64 `json:"backfill_remaining"`
 	// BackfillETASeconds is 0 when there is nothing left or no measured rate.
 	// A zero here means "unknown", never "done" — check backfill_remaining.
 	BackfillETASeconds int64 `json:"backfill_eta_seconds"`

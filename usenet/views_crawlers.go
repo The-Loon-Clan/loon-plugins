@@ -320,7 +320,6 @@ func (p *Plugin) indexStatsVM(ctx context.Context, activeGroups int, cs *plugina
 type crawlerGroupVM struct {
 	Name         string
 	NZBs, Staged int
-	Cover        pluginapi.CoverageBar
 	Cells        []int // per-slice fill level 0..3, drawn over the coverage bar
 	Fragments    int   // contiguous fetched runs; >1 means backfill left holes
 	// CoveredFmt is the share of the server's span we have actually fetched,
@@ -405,8 +404,8 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 	for _, g := range stats.Groups {
 		vm := crawlerGroupVM{
 			Name: g.Name, NZBs: g.NZBs, Staged: g.Staged,
-			Cover: g.Coverage(), BackfillDone: g.BackfillDone,
-			FwdAt: fmtDateTime(g.HighWatermarkDate), BackAt: fmtDateTime(g.BackWatermarkDate),
+			BackfillDone: g.BackfillDone,
+			FwdAt:        fmtDateTime(g.HighWatermarkDate), BackAt: fmtDateTime(g.BackWatermarkDate),
 			LastCrawl: fmtTime(g.LastCrawl),
 		}
 		// "+N new" — what the server holds past our forward watermark; the
@@ -439,24 +438,11 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		groups = append(groups, b.Groups...)
 	}
 	// The merged telemetry (local on the worker, worker-published on web) feeds
-	// the pass card, the error tail, the recently-built list, the job table,
-	// the incomplete-sets sample and the backfill rate — the numbers no shared
-	// table can answer in every mode.
+	// the pass card, the error tail, the recently-built list, the
+	// incomplete-sets sample and the backfill rate — the numbers no shared
+	// table can answer in every mode. (The per-job table lives on the Jobs
+	// tab, views_jobs.go, which does its own worker-vs-web resolution.)
 	tv := p.telemetryView(ctx)
-	jobs, running := p.jobVMs()
-	if !p.runsJobs {
-		// The web registry can only hold HOST jobs that happen to share a
-		// name (a web-side "NZB Tag Fill" once masked the worker's whole job
-		// set here, showing "idle" mid-crawl). The worker's published
-		// snapshots are the only truth on this process — use them
-		// unconditionally.
-		jobs, running = tv.Jobs, false
-		for _, j := range jobs {
-			if j.Running {
-				running = true
-			}
-		}
-	}
 	eta := ""
 	if d, ok := backfillETA(stats.TotalBackfillRemaining, tv.BackfillRate); ok {
 		eta = fmtETA(d)
@@ -500,7 +486,7 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		"HostSink":    p.cfg.Sink == SinkHost,
 		"RecentNzbs":  recentNzbs,
 		"WorkerStale": tv.Stale, "WorkerLastSeen": fmtTime(tv.UpdatedAt),
-		"AutoRefresh": running, "Msg": msg, "Err": errMsg,
+		"Msg": msg, "Err": errMsg,
 	})
 }
 

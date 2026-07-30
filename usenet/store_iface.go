@@ -183,7 +183,7 @@ type LeaseStore interface {
 }
 
 // MaintenanceStore is the nzbs cleanup / retagging surface (off-peak jobs). The
-// staging-side cleanup (deleteJunkStaged / prune) moved to stagingStore (staging.go)
+// staging-side cleanup (prune) moved to stagingStore (staging.go)
 // so it swaps with the backend.
 type MaintenanceStore interface {
 	retagUntagged(ctx context.Context, limit int) (int, error)

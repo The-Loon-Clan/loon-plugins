@@ -1185,9 +1185,6 @@ func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]artic
 	return scanned, evicted, salvage, firstErr
 }
 
-// deleteJunkStaged is a no-op in redis mode: junk base_subjects are dropped at
-// ingest (parseOverviews) and again at build (classifyRelease), and
-// there is no cheap way to scan every staged set — so nothing to sweep here.
 // deleteStagedBatch removes every named set in as few round-trips as it can.
 //
 // deleteStaged issues four commands in one pipeline for ONE set, so a pass that
@@ -1229,8 +1226,6 @@ func (r *redisStaging) deleteStagedBatch(ctx context.Context, keys []groupKey) (
 func (r *redisStaging) readyDepth(ctx context.Context) (int64, error) {
 	return r.rdb.SCard(ctx, readyKey).Result()
 }
-
-func (r *redisStaging) deleteJunkStaged(ctx context.Context) (int64, error) { return 0, nil }
 
 // prune is a no-op in redis mode: the key TTL + the inline hopeless-eviction
 // in stageArticles are the drain (there is no added_at horizon to sweep).
@@ -1431,11 +1426,6 @@ func (r *redisStaging) incompleteSets(ctx context.Context, limit int, groups []s
 		out = out[:limit]
 	}
 	return out, nil
-}
-
-func atoiField(s string) int {
-	n, _ := strconv.Atoi(s)
-	return n
 }
 
 // parseInfoInt pulls an integer field out of a Redis INFO section (CRLF lines

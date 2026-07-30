@@ -172,10 +172,13 @@
 <div class="card mt-3">
     <div class="card-header">Newsgroups</div>
     <div class="card-body">
+    {{/* Legend matches the cells bar below: green intensity is the fetched
+         share of each slice, grey is unfetched (which on an adopted install
+         includes history a previous crawler indexed). */}}
     <div class="cov-legend">
-        <span><span class="dot" style="background:var(--bs-warning)"></span>pending backfill</span>
-        <span><span class="dot" style="background:var(--bs-success)"></span>indexed</span>
-        <span><span class="dot" style="background:var(--bs-info)"></span>new (not yet fetched)</span>
+        <span><span class="dot" style="background:var(--bs-success)"></span>fetched by this crawler</span>
+        <span><span class="dot" style="background:color-mix(in srgb, var(--bs-success) 45%, transparent)"></span>partially fetched slice</span>
+        <span><span class="dot" style="background:rgba(128,128,128,.18)"></span>not fetched</span>
     </div>
     {{if .BackfillETA}}<div class="small text-muted mb-2">Backfill: about <strong>{{.BackfillETA}}</strong> remaining at the current rate ({{.Backfill.Rate}}).</div>{{end}}
     {{if .Groups}}

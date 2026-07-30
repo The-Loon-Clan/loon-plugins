@@ -18,9 +18,11 @@ func TestStatusReportJSONContract(t *testing.T) {
 	if err := json.Unmarshal(b, &got); err != nil {
 		t.Fatal(err)
 	}
+	// pending_releases / ready_releases were REMOVED 2026-07 (deliberately):
+	// neither was ever assigned, so every consumer only ever read a constant 0.
 	for _, field := range []string{
 		"generated_at", "crawl", "backfill", "providers", "workers",
-		"active_groups", "staged_articles", "pending_releases", "ready_releases",
+		"active_groups", "staged_articles",
 		"total_nzbs", "backfill_remaining", "backfill_eta_seconds", "recent_errors",
 		"jobs", "ready_groups", "evicted", "pending_count",
 	} {

@@ -38,9 +38,10 @@ Routes:
   monitors and scripts. Carries provider hostnames and error text, so it is
   admin-gated, not public. Note for monitors: since 2026-07 `active_groups`
   counts active newsgroups (it used to count per-(backbone, group) state rows,
-  so the value dropped on multi-backbone installs at that deploy), and the
+  so the value dropped on multi-backbone installs at that deploy), the
   `total_nzbs`/`staged_articles` figures are planner estimates, not exact
-  counts. Accurate from ANY process: the worker publishes its
+  counts, and the never-assigned `pending_releases`/`ready_releases` fields
+  (constant 0 for their whole life) were removed. Accurate from ANY process: the worker publishes its
   in-memory pass trackers + error ring to the shared settings table every few
   seconds (`worker_telemetry`), so a split web/worker deployment serves live
   numbers too — the Crawlers tab polls this endpoint to tick in place.
@@ -152,8 +153,8 @@ values; these are defaults):
   Redis is the tuned path (inline completeness, hopeless-set eviction, O(1)
   ready queue, `staging_ttl_hours` knob). The pg backend is CORRECT and its
   hot write path is batched (`stageArticles` inserts through a chunked unnest
-  INSERT), but `deleteJunkStaged` still scans staged titles per sweep — prefer
-  `redis` for production volume until that lands.
+  INSERT); prefer `redis` when crawling a full feed, `pg` when durability
+  matters more than throughput.
 - `sink` — `internal` (own `nzbs` table, default) | `host` (hand releases to the
   host's `ReleaseSink`; requires the host to register the sink + health
   capabilities). A production host pins this to `host`.

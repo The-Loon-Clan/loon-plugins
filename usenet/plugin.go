@@ -21,7 +21,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
-	"github.com/the-loon-clan/loon/nntp"
 	"github.com/the-loon-clan/loon/schedule"
 
 	"github.com/the-loon-clan/loon-plugins/pluginapi"
@@ -93,12 +92,6 @@ type Plugin struct {
 	// backfillPaused is the hysteresis latch for staging back-pressure; only
 	// touched inside runBackfill (serialized by backfillMu).
 	backfillPaused bool
-
-	// Shared NNTP connection pool (crawl + backfill). Opened lazily on first
-	// use — see pool.go.
-	poolMu  sync.Mutex
-	pool    *nntp.Pool
-	poolKey string
 
 	// One connection pool per configured provider (providers.go). Article
 	// numbers are per-server, so providers share nothing numeric — only the
@@ -399,7 +392,6 @@ func (p *Plugin) runTagFillLocked(ctx context.Context) {
 }
 
 func (p *Plugin) Stop(ctx context.Context) error {
-	p.closePool()
 	if p.fleet != nil {
 		p.fleet.closeAll()
 	}
@@ -498,21 +490,20 @@ func (p *Plugin) runPruneLocked(ctx context.Context) {
 		p.reportErr(ctx, "usenet/prune-staged", err)
 	}
 	// Sweep junk left over from before ingest filtering (obfuscated random-token
-	// titles that assembled into garbage releases / clog staging).
+	// titles that assembled into garbage releases). Staged junk needs no sweep:
+	// ingest + build filtering never let it accumulate, and the staging age
+	// horizon clears anything that predates them — the old per-tick sweep
+	// full-scanned every distinct staged base_subject to delete nothing.
 	junkNzbs, err := p.st.deleteJunkNzbs(ctx)
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/prune-junk-nzbs", err)
-	}
-	junkStaged, err := p.staging.deleteJunkStaged(ctx)
-	if err != nil {
-		p.core.Errors.Report(ctx, "usenet/prune-junk-staged", err)
 	}
 	kept := "kept forever"
 	if cfg.NZBRetentionDays > 0 {
 		kept = fmt.Sprintf("older than %dd", cfg.NZBRetentionDays)
 	}
-	p.pruneJob.Log("pruned %d NZB(s) (%s) + %d stale staged; swept %d junk NZBs + %d junk staged",
-		n, kept, staged, junkNzbs, junkStaged)
+	p.pruneJob.Log("pruned %d NZB(s) (%s) + %d stale staged; swept %d junk NZBs",
+		n, kept, staged, junkNzbs)
 	p.pruneJob.SetIdle(p.nextPrune(ctx))
 }
 
