@@ -223,6 +223,10 @@
             <input type="hidden" name="has_walk_past_no_evict" value="1">
             <input type="checkbox" name="walk_past_no_evict" {{if .WalkPastNoEvict}}checked{{end}}> Disable walk-past eviction (dead sets — span fully fetched, still incomplete — then wait out the staging TTL instead of being evicted after the grace period, holding memory against the pressure gate)
         </label>
+        <label class="d-block small mb-1">
+            <input type="hidden" name="has_walk_past_no_salvage" value="1">
+            <input type="checkbox" name="walk_past_no_salvage" {{if .WalkPastNoSalvage}}checked{{end}}> Disable broken-release salvage (walk-past-dead sets holding most of their articles are then destroyed instead of being stored marked broken when their surviving par2 could repair the gaps)
+        </label>
         <div style="margin-top:.5rem">
             <button class="btn btn-primary" type="submit">Save settings</button>
             <span class="text-muted small">applied on each job's next run (intervals take effect next cycle)</span>

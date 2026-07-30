@@ -126,6 +126,9 @@ type workerTelemetry struct {
 	// WalkPast counts sets the walk-past sweep evicted: incomplete with their
 	// whole article span already fetched — they could never complete.
 	WalkPast int64 `json:"walk_past,omitempty"`
+	// Salvaged counts walk-past-dead sets assembled anyway — stored broken
+	// (repairable gaps) or normal (par2-only gaps) instead of destroyed.
+	Salvaged int64 `json:"salvaged,omitempty"`
 	// Census is the last few staging-health samples, newest first. Published
 	// because the readings that matter are DELTAS between build passes, and a
 	// dashboard showing one instant cannot express "evictions are climbing" —
@@ -189,6 +192,7 @@ func (p *Plugin) localTelemetry() workerTelemetry {
 	tv.Evicted = p.tel.evictedCount()
 	tv.Demoted = p.tel.demotedCount()
 	tv.WalkPast = p.tel.walkPastCount()
+	tv.Salvaged = p.tel.salvagedCount()
 	tv.Schema = newestMigration()
 	tv.CrawlStalledPasses = p.tel.stalled()
 	if p.st != nil {

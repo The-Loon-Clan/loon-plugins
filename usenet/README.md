@@ -365,6 +365,19 @@ disables the sweep. Evictions surface as `walk_past` in the telemetry and as
 their own census column — distinct from hopeless shedding, because the two
 remove different populations for different reasons.
 
+Dead sets still holding most of their articles are **salvaged, not destroyed**
+(`walk_past_no_salvage` to disable): the sweep hands them back (up to 25 per
+round), and each is scored with the SAME rule the health job applies to stored
+releases — `healthVerdict` over a data/par2 split of its gaps. Gaps covered by
+surviving par2 build into a release stored **marked broken** through the
+health backend (both sink modes, no contract change — a downloader's par2
+repair completes it); par2-only gaps build as a NORMAL release (all data is
+present; only the completeness check was holding it); gaps beyond repair
+evict. Junk, blocked-extension and blacklist gates run first — salvage never
+resurrects what the build path would drop. When a later re-walk completes a
+salvaged release for real, the broken NZB's segment set is a strict subset of
+the new one, which is exactly what `nzb-heal` purges.
+
 Note that `stagingInfo` issues **two single-section INFO calls**, not one
 multi-section call: `INFO memory stats` requires Redis 7.0, and against 6.x it
 returns nothing usable so every memory and eviction field silently reads zero —

@@ -65,3 +65,55 @@ func TestJudgeableCoverageSkipsMultiBackboneGroups(t *testing.T) {
 		t.Error("group covered on two backbones survived — its spans mix number spaces")
 	}
 }
+
+// salvageTally must split a dead set's gaps the way the health job splits a
+// stored NZB (data vs par2 by subject), because healthVerdict scores both by
+// the same rule — a divergence here would salvage what health then condemns.
+func TestSalvageTally(t *testing.T) {
+	art := func(fn, part, segTotal int, subject string) stagedArticle {
+		return stagedArticle{
+			FileNum: fn, PartNum: part, SegTotal: segTotal, Subject: subject,
+			FileParts: true, TotalFiles: 2,
+		}
+	}
+	for _, tc := range []struct {
+		name                                      string
+		arts                                      []stagedArticle
+		total, missData, par2Claimed, par2Missing int
+		verdict                                   string
+	}{
+		{"data gap covered by surviving par2: broken (salvageable)",
+			[]stagedArticle{
+				art(1, 1, 4, "Show [01/02]"), art(1, 2, 4, "Show [01/02]"), art(1, 3, 4, "Show [01/02]"),
+				art(2, 1, 2, "Show.vol0+1.par2 [02/02]"), art(2, 2, 2, "Show.vol0+1.par2 [02/02]"),
+			}, 6, 1, 2, 0, healthBroken},
+		{"data gaps with no par2 at all: dead",
+			[]stagedArticle{
+				art(1, 1, 5, "Show [01/02]"), art(1, 2, 5, "Show [01/02]"), art(1, 3, 5, "Show [01/02]"),
+			}, 5, 2, 0, 0, healthDead},
+		{"par2-only gaps: healthy — every data segment is present",
+			[]stagedArticle{
+				art(1, 1, 2, "Show [01/02]"), art(1, 2, 2, "Show [01/02]"),
+				art(2, 1, 3, "Show.vol0+1.par2 [02/02]"),
+			}, 5, 0, 3, 2, healthHealthy},
+		{"claim below what is held: trust the articles, no phantom gap",
+			[]stagedArticle{
+				art(1, 1, 0, "Show [01/02]"), art(1, 2, 0, "Show [01/02]"),
+			}, 2, 0, 0, 0, healthHealthy},
+		{"gaps in data AND par2: judged against SURVIVING par2 only",
+			[]stagedArticle{
+				art(1, 1, 4, "Show [01/02]"), art(1, 2, 4, "Show [01/02]"),
+				art(2, 1, 4, "Show.vol0+1.par2 [02/02]"),
+			}, 8, 2, 4, 3, healthDead},
+	} {
+		total, missData, p2c, p2m := salvageTally(tc.arts)
+		if total != tc.total || missData != tc.missData || p2c != tc.par2Claimed || p2m != tc.par2Missing {
+			t.Errorf("%s: tally = (%d,%d,%d,%d), want (%d,%d,%d,%d)", tc.name,
+				total, missData, p2c, p2m, tc.total, tc.missData, tc.par2Claimed, tc.par2Missing)
+			continue
+		}
+		if v := healthVerdict(missData, p2c, p2m); v != tc.verdict {
+			t.Errorf("%s: verdict = %q, want %q", tc.name, v, tc.verdict)
+		}
+	}
+}

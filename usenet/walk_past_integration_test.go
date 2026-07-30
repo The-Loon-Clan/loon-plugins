@@ -60,7 +60,7 @@ func TestSweepWalkPastEvictsOnlyTheDead(t *testing.T) {
 	}
 
 	cov := map[string][]articleRange{group: {{Start: 50, End: 300}}}
-	scanned, evicted, err := r.sweepWalkPast(ctx, cov, 15*time.Minute, 10_000)
+	scanned, evicted, _, err := r.sweepWalkPast(ctx, cov, 15*time.Minute, 10_000, 0)
 	if err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestSweepWalkPastIsBoundedAndConverges(t *testing.T) {
 	}
 
 	cov := map[string][]articleRange{group: {{Start: 1, End: 5000}}}
-	_, evicted, err := r.sweepWalkPast(ctx, cov, 15*time.Minute, 100)
+	_, evicted, _, err := r.sweepWalkPast(ctx, cov, 15*time.Minute, 100, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestSweepWalkPastIsBoundedAndConverges(t *testing.T) {
 	}
 
 	for i := 0; i < 20; i++ {
-		if _, _, err := r.sweepWalkPast(ctx, cov, 15*time.Minute, 100); err != nil {
+		if _, _, _, err := r.sweepWalkPast(ctx, cov, 15*time.Minute, 100, 0); err != nil {
 			t.Fatal(err)
 		}
 		if left, _ := rdb.SCard(ctx, activeKey(group)).Result(); left == 0 {

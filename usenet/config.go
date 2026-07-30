@@ -99,6 +99,11 @@ type Config struct {
 	// examines per build round (default 2000). The cursor persists, so the
 	// sweep RATE is this budget times the round frequency.
 	WalkPastSweepPerRound int `json:"walk_past_sweep_per_round"`
+	// WalkPastNoSalvage disables broken-release salvage (inverted so the zero
+	// value salvages): walk-past-dead sets holding most of their articles are
+	// then evicted like the rest instead of being assembled and stored marked
+	// broken (repairable gaps) or normal (par2-only gaps).
+	WalkPastNoSalvage bool `json:"walk_past_no_salvage"`
 	// ReadyReapPerPass bounds the dead-entry sweep of nzb:ready per build
 	// ROUND (the name predates the round/pass split; the stored key stays for
 	// compatibility). Default 50000: a full circuit of a multi-million-entry
@@ -399,6 +404,7 @@ func (c *Config) boolFields() map[string]*bool {
 		"backfill_no_catchup":       &c.BackfillNoCatchup,
 		"build_no_catchup":          &c.BuildNoCatchup,
 		"walk_past_no_evict":        &c.WalkPastNoEvict,
+		"walk_past_no_salvage":      &c.WalkPastNoSalvage,
 	}
 }
 

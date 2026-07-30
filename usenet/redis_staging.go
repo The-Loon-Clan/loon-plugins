@@ -1071,14 +1071,29 @@ func walkPastDead(meta map[string]string, held int, cov []articleRange, now, gra
 	return len(gapsBetween(cov, lo, hi)) == 0
 }
 
+// salvageFloor is the completeness ratio below which a dead set is not worth
+// a salvage look: a set missing half its data is beyond any par2 set ever
+// posted, so loading its articles to confirm that wastes the round's budget.
+// Judged from meta (held/needed), which is exactly the bound the completeness
+// pre-filter already trusts. A constant rather than a knob because it gates a
+// heuristic's PRE-check, not behaviour: the real repairability decision is
+// healthVerdict over the loaded articles.
+const salvageFloor = 0.5
+
 // sweepWalkPast examines up to budget staged sets and evicts the walk-past
 // dead (see walkPastDead). cov maps group name → fetched spans; the caller
 // includes only judgeable groups. The budget splits across groups and each
 // group's SSCAN cursor persists (walkCursors), so successive rounds circle
 // every population rather than re-examining one group's head window.
-func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget int) (scanned, evicted int, err error) {
+//
+// Dead sets holding at least salvageFloor of their claimed articles are NOT
+// evicted: up to salvageCap of them return in salvage for the caller to
+// assemble as broken releases (or discard, if their par2 cannot carry them).
+// Candidates past the cap stay staged — the cursor brings them around again.
+// salvageCap 0 disables salvage and everything dead evicts.
+func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int) (scanned, evicted int, salvage []groupKey, err error) {
 	if budget <= 0 || len(cov) == 0 {
-		return 0, 0, nil
+		return 0, 0, nil, nil
 	}
 	groups := make([]string, 0, len(cov))
 	for g := range cov {
@@ -1141,10 +1156,18 @@ func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]artic
 			if len(meta) == 0 {
 				continue // meta already gone (TTL mid-flight): the ref sweeps elsewhere
 			}
-			if walkPastDead(meta, int(lens[i].Val()), cov[group], now, graceSec) {
-				doomKeys = append(doomKeys, artKey(group, h), grpKey(group, h))
-				doomMembers = append(doomMembers, h)
+			held := int(lens[i].Val())
+			if !walkPastDead(meta, held, cov[group], now, graceSec) {
+				continue
 			}
+			if len(salvage) < salvageCap && meta["base_subject"] != "" {
+				if needed := groupNeededParts(meta); needed > 0 && float64(held) >= salvageFloor*float64(needed) {
+					salvage = append(salvage, groupKey{Group: group, Base: meta["base_subject"]})
+					continue
+				}
+			}
+			doomKeys = append(doomKeys, artKey(group, h), grpKey(group, h))
+			doomMembers = append(doomMembers, h)
 		}
 		if len(doomKeys) > 0 {
 			evPipe := r.rdb.Pipeline()
@@ -1159,7 +1182,7 @@ func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]artic
 			}
 		}
 	}
-	return scanned, evicted, firstErr
+	return scanned, evicted, salvage, firstErr
 }
 
 // deleteJunkStaged is a no-op in redis mode: junk base_subjects are dropped at

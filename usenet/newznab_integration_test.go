@@ -41,7 +41,7 @@ func TestNewznabContract(t *testing.T) {
 		{Title: "Plain.Release.1080p", Filename: "plain.nzb", Size: 2 << 20, Group: "alt.binaries.anime",
 			ContentHash: "hash-plain-0002", Posted: time.Now(), Data: gz.Bytes(), CategoryID: 5070},
 	} {
-		if ok, err := s.insertNzb(ctx, n); err != nil || !ok {
+		if _, ok, err := s.insertNzb(ctx, n); err != nil || !ok {
 			t.Fatalf("seed %d: ok=%v err=%v", i, ok, err)
 		}
 	}

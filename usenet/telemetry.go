@@ -306,6 +306,9 @@ type telemetry struct {
 	// Distinct from `evicted` (hopeless: stalled and far short) because the
 	// two shed different populations for different reasons.
 	walkPast int64
+	// salvaged counts walk-past-dead sets assembled anyway (broken-but-
+	// repairable, or par2-only gaps) instead of destroyed.
+	salvaged int64
 	// stalledPasses counts consecutive crawl passes that ended in the
 	// "catch-up stalled" break while a large backlog remained. The 2026-07-24
 	// incident (20/20 groups planning zero batches, pass after pass, 575M
@@ -475,6 +478,19 @@ func (t *telemetry) walkPastCount() int64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.walkPast
+}
+
+// noteSalvaged counts salvage builds. Cumulative-since-start like its siblings.
+func (t *telemetry) noteSalvaged(n int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.salvaged += int64(n)
+}
+
+func (t *telemetry) salvagedCount() int64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.salvaged
 }
 
 // setStalledPasses records the crawl's consecutive-stall streak for telemetry.

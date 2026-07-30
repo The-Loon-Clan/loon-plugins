@@ -141,7 +141,9 @@ type AssemblerStore interface {
 	pruneStagingCensus(ctx context.Context, keepDays int) (int64, error)
 	groupArticles(ctx context.Context, group, base string) ([]stagedArticle, error)
 	deleteStaged(ctx context.Context, group, base string) error
-	insertNzb(ctx context.Context, n nzbRow) (bool, error)
+	// insertNzb returns the new row's id (0 on a content_hash duplicate) —
+	// the salvage path hands it to the health backend for its verdict.
+	insertNzb(ctx context.Context, n nzbRow) (int64, bool, error)
 	stageArticles(ctx context.Context, arts []stagedArticle) (int, error)
 }
 

@@ -48,6 +48,11 @@ const (
 	outcomeBlockedExt buildOutcome = "blocked_ext"
 	outcomeBlacklist  buildOutcome = "blacklist"
 	outcomeJunk       buildOutcome = "junk"
+	// outcomeSalvaged — a walk-past-dead set assembled anyway: its data gaps
+	// are within what its surviving par2 can rebuild (stored marked broken),
+	// or its gaps were par2-only (stored as a normal release). The set is
+	// dropped from staging either way; see salvageSets.
+	outcomeSalvaged buildOutcome = "salvaged"
 	// The error outcomes. Each leaves the set staged for a later pass except
 	// where noted in buildLocked, so a persistent one means a set that will be
 	// retried forever — worth seeing as a rising count rather than as a stream

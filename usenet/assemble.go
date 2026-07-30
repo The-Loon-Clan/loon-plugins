@@ -345,7 +345,7 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			SizeBytes:   size, PostedAt: posted,
 			NZBGz: gz, Segments: len(arts), CategoryHint: cat,
 		}
-		created, err := sink.store(ctx, rel)
+		_, created, err := sink.store(ctx, rel)
 		if err != nil {
 			p.outcomes.note(outcomeStoreError, k.Base)
 			p.notePoster(arts, "store-error", title)
@@ -417,10 +417,18 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	return built, drained
 }
 
+// salvageCapPerRound bounds how many salvage candidates one round assembles.
+// Each costs a full article load plus an NZB build, so an unbounded burst
+// (first sweep after a deploy over an aged population) would stall the round;
+// the cursor brings the rest around on later rounds. A constant because it
+// paces a recovery path, not a policy — the policy knob is walk_past_no_salvage.
+const salvageCapPerRound = 25
+
 // runWalkPastSweep runs one bounded walk-past round: evict staged sets whose
 // whole article span has been fetched yet are still short — they can never
 // complete (walkPastDead), and every hour they wait for the TTL is an hour
-// the pressure gate stays closed against work that CAN complete.
+// the pressure gate stays closed against work that CAN complete. Dead sets
+// worth keeping go to salvageSets instead of the void.
 func (p *Plugin) runWalkPastSweep(ctx context.Context, cfg Config) {
 	if cfg.WalkPastNoEvict {
 		return
@@ -433,8 +441,12 @@ func (p *Plugin) runWalkPastSweep(ctx context.Context, cfg Config) {
 	if len(cov) == 0 {
 		return
 	}
-	scanned, evicted, err := p.staging.sweepWalkPast(ctx, cov,
-		time.Duration(cfg.WalkPastGraceMin)*time.Minute, cfg.WalkPastSweepPerRound)
+	salvageCap := salvageCapPerRound
+	if cfg.WalkPastNoSalvage {
+		salvageCap = 0
+	}
+	scanned, evicted, salvage, err := p.staging.sweepWalkPast(ctx, cov,
+		time.Duration(cfg.WalkPastGraceMin)*time.Minute, cfg.WalkPastSweepPerRound, salvageCap)
 	if err != nil {
 		p.reportErr(ctx, "usenet/walk-past-sweep", err)
 	}
@@ -443,6 +455,175 @@ func (p *Plugin) runWalkPastSweep(ctx context.Context, cfg Config) {
 		p.buildJob.Log("walk-past sweep: evicted %d of %d examined set(s) — span fully fetched, still incomplete, past grace",
 			evicted, scanned)
 	}
+	p.salvageSets(ctx, salvage)
+}
+
+// salvageSets assembles walk-past-dead sets that still hold most of their
+// articles — the operator's "save them as broken NZB files" path. Each
+// candidate is scored with the SAME rule the health job applies to stored
+// releases (healthVerdict): data gaps covered by surviving par2 make a BROKEN
+// release worth serving (a downloader can repair it); gaps beyond the par2
+// are dead and evict. par2-only gaps score healthy — all the data exists —
+// and store as a normal release the completeness check alone was holding.
+//
+// Broken releases are marked through the health backend, the same seam the
+// health job writes, so they land in the existing health UI in both sink
+// modes with no contract change. When a later re-walk completes the release
+// for real, the broken NZB's segment set is a strict subset of the new one —
+// exactly what nzb-heal purges.
+//
+// A resolve or store failure leaves candidates staged: the sweep cursor
+// brings them around again, and the TTL is the backstop — never evict a
+// salvageable set just because a backend was briefly down.
+func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) {
+	if len(keys) == 0 {
+		return
+	}
+	sink, err := p.resolveSink()
+	if err != nil {
+		p.reportErr(ctx, "usenet/salvage-sink", err)
+		return
+	}
+	hb, err := p.resolveHealthBackend()
+	if err != nil {
+		p.reportErr(ctx, "usenet/salvage-health", err)
+		return
+	}
+	salvaged, dead, junked := 0, 0, 0
+	for _, k := range keys {
+		if ctx.Err() != nil {
+			break
+		}
+		arts, err := p.staging.groupArticles(ctx, k.Group, k.Base)
+		if err != nil {
+			p.reportErr(ctx, "usenet/salvage-load", err)
+			continue
+		}
+		if len(arts) == 0 {
+			continue
+		}
+		// The same gates every built release passes — salvage must never
+		// resurrect what the build path would drop.
+		title, cat, junkRule, blockedExt := classifyRelease(k.Base, arts)
+		blPattern := whichBlacklistRule(release{
+			Subject: k.Base, Title: title,
+			Poster: firstPoster(arts), Group: k.Group,
+		})
+		if blockedExt || junkRule != "" || blPattern != "" {
+			if junkRule != "" {
+				p.hits.note("junk", junkRule, k.Base)
+			}
+			if blPattern != "" {
+				p.hits.note("blacklist", blPattern, k.Base)
+			}
+			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
+				p.reportErr(ctx, "usenet/salvage-delete", err)
+			} else {
+				junked++
+			}
+			continue
+		}
+		total, missData, par2Claimed, par2Missing := salvageTally(arts)
+		verdict := healthVerdict(missData, par2Claimed, par2Missing)
+		if verdict == healthDead {
+			// Gaps beyond what the surviving par2 can rebuild: not worth a row.
+			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
+				p.reportErr(ctx, "usenet/salvage-delete", err)
+			} else {
+				dead++
+				p.tel.noteWalkPast(1)
+			}
+			continue
+		}
+		xmlBytes, err := buildNZB(arts)
+		if err != nil {
+			p.reportErr(ctx, "usenet/salvage-xml", fmt.Errorf("%s/%s: %w", k.Group, k.Base, err))
+			continue
+		}
+		gz, err := gzipBytes(xmlBytes)
+		if err != nil {
+			p.reportErr(ctx, "usenet/salvage-gzip", err)
+			continue
+		}
+		size, posted := summarize(arts)
+		id, created, err := sink.store(ctx, pluginapi.AssembledRelease{
+			Title: title, BaseSubject: k.Base, Group: k.Group,
+			Poster:      firstPoster(arts),
+			ContentHash: contentHashArticles(arts),
+			SizeBytes:   size, PostedAt: posted,
+			NZBGz: gz, Segments: len(arts), CategoryHint: cat,
+		})
+		if err != nil {
+			// Transient sink failure: stay staged, the cursor retries.
+			p.reportErr(ctx, "usenet/salvage-store", fmt.Errorf("%s: %w", title, err))
+			continue
+		}
+		if created && verdict == healthBroken {
+			// The verdict write must be loud on failure: a broken release
+			// stored unmarked serves as complete. (The healthy case — par2-only
+			// gaps — stays unmarked on purpose: all data is present, and the
+			// health job will confirm from the live server on its cadence.)
+			if err := hb.setVerdict(ctx, id, healthBroken, total, missData, par2Claimed); err != nil {
+				p.reportErr(ctx, "usenet/salvage-verdict", fmt.Errorf("nzb %d stored but not marked broken: %w", id, err))
+			}
+		}
+		if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
+			p.reportErr(ctx, "usenet/salvage-delete", err)
+		}
+		p.outcomes.note(outcomeSalvaged, k.Base)
+		if created {
+			salvaged++
+			p.tel.noteSalvaged(1)
+			p.tel.noteBuilt(title, k.Group, size)
+		}
+	}
+	if salvaged+dead+junked > 0 {
+		p.buildJob.Log("salvage: %d broken/partial release(s) stored, %d beyond par2 repair evicted, %d junk dropped",
+			salvaged, dead, junked)
+	}
+}
+
+// salvageTally mirrors isComplete's per-file grouping to count what a dead
+// set actually holds versus what it claims, split data/par2 the way the
+// health job splits an NZB (isPar2Subject) — so healthVerdict scores staged
+// sets and stored releases by the same rule.
+func salvageTally(arts []stagedArticle) (total, missingData, par2Claimed, par2Missing int) {
+	type fileState struct {
+		parts    map[int]bool
+		segTotal int
+		par2     bool
+	}
+	files := map[int]*fileState{}
+	for _, a := range arts {
+		f := files[a.FileNum]
+		if f == nil {
+			f = &fileState{parts: map[int]bool{}}
+			files[a.FileNum] = f
+		}
+		f.parts[a.PartNum] = true
+		if a.SegTotal > f.segTotal {
+			f.segTotal = a.SegTotal
+		}
+		if isPar2Subject(a.Subject) {
+			f.par2 = true
+		}
+	}
+	for _, f := range files {
+		claimed := f.segTotal
+		if claimed < len(f.parts) {
+			// A claim below what we hold (unparsed totals): trust the articles.
+			claimed = len(f.parts)
+		}
+		total += claimed
+		missing := claimed - len(f.parts)
+		if f.par2 {
+			par2Claimed += claimed
+			par2Missing += missing
+		} else {
+			missingData += missing
+		}
+	}
+	return total, missingData, par2Claimed, par2Missing
 }
 
 // walkPastCoverage assembles the coverage map the sweep judges against:
@@ -820,28 +1001,35 @@ type nzbRow struct {
 	CategoryID  int
 }
 
-func (s *PGStore) insertNzb(ctx context.Context, n nzbRow) (bool, error) {
+func (s *PGStore) insertNzb(ctx context.Context, n nzbRow) (int64, bool, error) {
+	var id int64
 	inserted := false
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		var posted sql.NullTime
 		if !n.Posted.IsZero() {
 			posted = sql.NullTime{Time: n.Posted, Valid: true}
 		}
-		res, err := tx.ExecContext(ctx,
+		// RETURNING id emits no row on a conflict, so ErrNoRows IS the
+		// duplicate signal — the salvage path needs the id to hand the health
+		// backend its verdict.
+		err := tx.QueryRowContext(ctx,
 			`INSERT INTO nzbs (title, filename, size, status, group_name, content_hash, posted_at,
 			                   nzb_data, nzb_data_bytes, resolution, source, video_codec, audio, language, category_id)
 			 VALUES ($1,$2,$3,'completed',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-			 ON CONFLICT (content_hash) DO NOTHING`,
+			 ON CONFLICT (content_hash) DO NOTHING
+			 RETURNING id`,
 			n.Title, n.Filename, n.Size, n.Group, n.ContentHash, posted, n.Data, len(n.Data),
-			n.Tags.Resolution, n.Tags.Source, n.Tags.Codec, n.Tags.Audio, n.Tags.Language, n.CategoryID)
+			n.Tags.Resolution, n.Tags.Source, n.Tags.Codec, n.Tags.Audio, n.Tags.Language, n.CategoryID).Scan(&id)
+		if err == sql.ErrNoRows {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
-		c, _ := res.RowsAffected()
-		inserted = c > 0
+		inserted = true
 		return nil
 	})
-	return inserted, err
+	return id, inserted, err
 }
 
 // deleteStagedBatch removes many sets in one statement rather than one
@@ -971,12 +1159,15 @@ func classifyRelease(base string, arts []stagedArticle) (title, cat, junkRule st
 // resolveSink) rather than per release, so a host-misconfigured pass fails with
 // a single error instead of one per candidate.
 type releaseSink interface {
-	store(ctx context.Context, rel pluginapi.AssembledRelease) (created bool, err error)
+	// store returns the stored release's id so the salvage path can hand it
+	// to the health backend; the normal build path ignores it. id is 0 when
+	// created is false (duplicate).
+	store(ctx context.Context, rel pluginapi.AssembledRelease) (id int64, created bool, err error)
 }
 
 type internalSink struct{ p *Plugin }
 
-func (s internalSink) store(ctx context.Context, rel pluginapi.AssembledRelease) (bool, error) {
+func (s internalSink) store(ctx context.Context, rel pluginapi.AssembledRelease) (int64, bool, error) {
 	return s.p.st.insertNzb(ctx, nzbRow{
 		Title: rel.Title, Filename: safeFilename(rel.Title) + ".nzb",
 		Size: rel.SizeBytes, Group: rel.Group, ContentHash: rel.ContentHash,
@@ -987,9 +1178,8 @@ func (s internalSink) store(ctx context.Context, rel pluginapi.AssembledRelease)
 
 type hostSink struct{ sink pluginapi.ReleaseSink }
 
-func (s hostSink) store(ctx context.Context, rel pluginapi.AssembledRelease) (bool, error) {
-	_, created, err := s.sink.IngestAssembled(ctx, rel)
-	return created, err
+func (s hostSink) store(ctx context.Context, rel pluginapi.AssembledRelease) (int64, bool, error) {
+	return s.sink.IngestAssembled(ctx, rel)
 }
 
 // resolveSink mirrors resolveHealthBackend: host mode without the capability

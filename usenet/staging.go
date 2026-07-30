@@ -92,10 +92,12 @@ type stagingStore interface {
 	// could receive, so absence is final. cov maps group name → fetched spans;
 	// the caller includes only judgeable groups (exactly one backbone with
 	// recorded ranges — article numbers are per-backbone). Bounded by budget
-	// per call with persistent cursors. pg: no-op — the prune horizon ages pg
-	// staging out, and the memory pressure this relieves is a redis
-	// phenomenon.
-	sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget int) (scanned, evicted int, err error)
+	// per call with persistent cursors. Dead sets holding at least half their
+	// claimed articles are returned (up to salvageCap) instead of evicted, for
+	// the caller to assemble as broken releases; salvageCap 0 evicts them all.
+	// pg: no-op — the prune horizon ages pg staging out, and the memory
+	// pressure this relieves is a redis phenomenon.
+	sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int) (scanned, evicted int, salvage []groupKey, err error)
 }
 
 // candidateStats describes one draw from the ready queue.
@@ -244,6 +246,6 @@ func (s *pgStaging) demoteReady(ctx context.Context, group, base string) (bool, 
 
 // sweepWalkPast is a no-op for pg staging: rows age out on the prune horizon,
 // and the memory ceiling the sweep protects is a redis phenomenon.
-func (s *pgStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget int) (int, int, error) {
-	return 0, 0, nil
+func (s *pgStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int) (int, int, []groupKey, error) {
+	return 0, 0, nil, nil
 }
