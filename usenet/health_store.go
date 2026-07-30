@@ -6,10 +6,15 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// healthRow is one release due a check, with its stored NZB blob.
+// healthRow is one release due a check, with its stored NZB blob. Total is
+// the release's RECORDED total segment count (0 = unknown) — the check folds
+// max(0, Total - segments listed in the NZB) into missing data, which is what
+// keeps a salvaged release's broken verdict durable: its blob lists only the
+// segments that were ever fetched, and every one of those still exists.
 type healthRow struct {
-	ID   int64
-	Data []byte
+	ID    int64
+	Data  []byte
+	Total int
 }
 
 // nzbsNeedingHealthCheck returns releases due a check: never-checked first, then
@@ -33,13 +38,14 @@ func (s *PGStore) nzbsNeedingHealthCheck(ctx context.Context, limit, recheckDays
 		minAgeHours = 0
 	}
 	type row struct {
-		ID   int64  `db:"id"`
-		Data []byte `db:"nzb_data"`
+		ID    int64  `db:"id"`
+		Data  []byte `db:"nzb_data"`
+		Total int    `db:"total_segments"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.SelectContext(ctx, &rows,
-			`SELECT id, nzb_data
+			`SELECT id, nzb_data, COALESCE(total_segments, 0) AS total_segments
 			   FROM nzbs
 			  WHERE status = 'completed'
 			    AND nzb_data IS NOT NULL
@@ -55,7 +61,7 @@ func (s *PGStore) nzbsNeedingHealthCheck(ctx context.Context, limit, recheckDays
 	}
 	out := make([]healthRow, len(rows))
 	for i, r := range rows {
-		out[i] = healthRow{ID: r.ID, Data: r.Data}
+		out[i] = healthRow{ID: r.ID, Data: r.Data, Total: r.Total}
 	}
 	return out, nil
 }

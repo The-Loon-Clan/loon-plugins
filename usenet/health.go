@@ -234,7 +234,7 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 		p.reportErr(ctx, "usenet/health-parse", fmt.Errorf("nzb %d: %w", row.ID, err))
 		return "", 0, 0, 0, healthSkipPermanent
 	}
-	return checkSegments(ctx, segs, chunk, func(ids []string) ([]statResult, error) {
+	return checkSegments(ctx, segs, chunk, row.Total, func(ids []string) ([]statResult, error) {
 		return p.statBatch(ctx, pool, ids)
 	})
 }
@@ -243,10 +243,25 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 // verdict. Split from checkOne with the batch function injected so the
 // transport-failure accounting is testable without a live NNTP pool — the
 // accounting is where this went wrong in production.
-func checkSegments(ctx context.Context, segs releaseSegments, chunk int, stat func(ids []string) ([]statResult, error)) (verdict string, totalSegs, missingData, par2Total int, outcome healthOutcome) {
+//
+// claimedTotal is the release's RECORDED segment count (0 = unknown). When it
+// exceeds what the NZB lists, the difference is missing DATA by definition:
+// a salvaged release's blob lists only the segments that were ever fetched,
+// every one of which still exists on the server, so a listed-segments-only
+// tally would flip its broken verdict to healthy on the first recheck —
+// erasing the one mark that keeps an incomplete release from serving as
+// complete. The baseline keeps the verdict honest until nzb-heal replaces
+// the row with a genuinely complete copy (whose claimed total matches its
+// listing again).
+func checkSegments(ctx context.Context, segs releaseSegments, chunk, claimedTotal int, stat func(ids []string) ([]statResult, error)) (verdict string, totalSegs, missingData, par2Total int, outcome healthOutcome) {
 	total := len(segs.Data) + len(segs.Par2)
 	if total == 0 {
 		return "", 0, 0, 0, healthSkipPermanent
+	}
+	baseline := 0
+	if claimedTotal > total {
+		baseline = claimedTotal - total
+		total = claimedTotal
 	}
 
 	var missData, missPar2, unknown int
@@ -303,10 +318,13 @@ func checkSegments(ctx context.Context, segs releaseSegments, chunk int, stat fu
 		return "", 0, 0, 0, healthSkipTransient
 	}
 
-	// Too much doubt: keep whatever verdict this release already had.
-	if float64(unknown)/float64(total) > maxInconclusiveRatio {
+	// Too much doubt: keep whatever verdict this release already had. The
+	// baseline is excluded from the doubt ratio — those segments are KNOWN
+	// missing, not unanswered.
+	if float64(unknown)/float64(total-baseline) > maxInconclusiveRatio {
 		return "", 0, 0, 0, healthSkipTransient
 	}
+	missData += baseline
 	return healthVerdict(missData, len(segs.Par2), missPar2), total, missData, len(segs.Par2), healthWritten
 }
 
@@ -342,7 +360,7 @@ func (b hostHealth) candidates(ctx context.Context, limit, recheckDays, minAgeHo
 	}
 	rows := make([]healthRow, len(cands))
 	for i, c := range cands {
-		rows[i] = healthRow{ID: c.ID, Data: c.NZBGz}
+		rows[i] = healthRow{ID: c.ID, Data: c.NZBGz, Total: c.TotalSegments}
 	}
 	return rows, nil
 }

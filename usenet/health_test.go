@@ -35,7 +35,7 @@ func TestCheckSegmentsFoldsFailedChunks(t *testing.T) {
 		// the only defensible outcome is a transient skip.
 		segs := releaseSegments{Data: ids(400)}
 		calls := 0
-		_, _, _, _, outcome := checkSegments(context.Background(), segs, 200,
+		_, _, _, _, outcome := checkSegments(context.Background(), segs, 200, 0,
 			func(chunk []string) ([]statResult, error) {
 				calls++
 				res := make([]statResult, len(chunk))
@@ -66,7 +66,7 @@ func TestCheckSegmentsFoldsFailedChunks(t *testing.T) {
 		// old code threw away with the transport error.
 		segs := releaseSegments{Data: ids(400)}
 		calls := 0
-		verdict, total, missing, _, outcome := checkSegments(context.Background(), segs, 200,
+		verdict, total, missing, _, outcome := checkSegments(context.Background(), segs, 200, 0,
 			func(chunk []string) ([]statResult, error) {
 				calls++
 				res := make([]statResult, len(chunk))
@@ -102,7 +102,7 @@ func TestCheckSegmentsFoldsFailedChunks(t *testing.T) {
 	t.Run("three transport failures still abort the release", func(t *testing.T) {
 		segs := releaseSegments{Data: ids(600)}
 		calls := 0
-		_, _, _, _, outcome := checkSegments(context.Background(), segs, 100,
+		_, _, _, _, outcome := checkSegments(context.Background(), segs, 100, 0,
 			func(chunk []string) ([]statResult, error) {
 				calls++
 				res := make([]statResult, len(chunk))
@@ -121,7 +121,7 @@ func TestCheckSegmentsFoldsFailedChunks(t *testing.T) {
 
 	t.Run("clean pass still writes", func(t *testing.T) {
 		segs := releaseSegments{Data: ids(300), Par2: ids(50)}
-		verdict, total, missing, par2, outcome := checkSegments(context.Background(), segs, 200,
+		verdict, total, missing, par2, outcome := checkSegments(context.Background(), segs, 200, 0,
 			func(chunk []string) ([]statResult, error) {
 				return make([]statResult, len(chunk)), nil // zero value = statPresent
 			})
@@ -323,4 +323,43 @@ func TestHealthOutcomeSemantics(t *testing.T) {
 	// Transient = bad luck; the row is left alone so it is retried promptly.
 	// This test documents the contract the sweep loop relies on; the loop's
 	// branches are asserted by the switch in runHealthCheck.
+}
+
+// A salvaged release's NZB lists only the segments that were ever fetched —
+// every one of which still exists on the server — so a listed-segments-only
+// tally flipped its broken verdict to healthy on the first routine recheck,
+// erasing the one mark that keeps an incomplete release from serving as
+// complete. The recorded claimed total is the antidote: the shortfall counts
+// as missing data before scoring, and only nzb-heal replacing the row with a
+// complete copy (claimed == listed again) releases it.
+func TestCheckSegmentsClaimedTotalKeepsBrokenDurable(t *testing.T) {
+	mkIDs := func(prefix string, n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = fmt.Sprintf("<%s-%d@x>", prefix, i)
+		}
+		return out
+	}
+	segs := releaseSegments{Data: mkIDs("d", 30), Par2: mkIDs("p", 10)}
+	allPresent := func(batch []string) ([]statResult, error) {
+		return make([]statResult, len(batch)), nil // zero value = statPresent
+	}
+
+	// 40 listed, 45 claimed: 5 never-fetched data segments outstanding, and
+	// the 10 surviving par2 can rebuild them — broken, never healthy.
+	verdict, total, missing, _, outcome := checkSegments(context.Background(), segs, 200, 45, allPresent)
+	if outcome != healthWritten || verdict != healthBroken || missing != 5 || total != 45 {
+		t.Errorf("claimed 45 / listed 40, all present: verdict=%q total=%d missing=%d outcome=%v, want broken/45/5/written",
+			verdict, total, missing, outcome)
+	}
+
+	// Claimed 60: 20 outstanding, beyond the 10 par2 — dead.
+	if verdict, _, _, _, _ := checkSegments(context.Background(), segs, 200, 60, allPresent); verdict != healthDead {
+		t.Errorf("claimed 60 / listed 40: verdict=%q, want %q", verdict, healthDead)
+	}
+
+	// A normal release (claimed == listed): no baseline, healthy as before.
+	if verdict, _, _, _, _ := checkSegments(context.Background(), segs, 200, 40, allPresent); verdict != healthHealthy {
+		t.Errorf("claimed == listed, all present: verdict=%q, want %q", verdict, healthHealthy)
+	}
 }

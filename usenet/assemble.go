@@ -561,15 +561,28 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) {
 			p.reportErr(ctx, "usenet/salvage-store", fmt.Errorf("%s: %w", title, err))
 			continue
 		}
-		if created && verdict == healthBroken {
-			// The verdict write must be loud on failure: a broken release
-			// stored unmarked serves as complete. (The healthy case — par2-only
-			// gaps — stays unmarked on purpose: all data is present, and the
-			// health job will confirm from the live server on its cadence.)
+		if verdict == healthBroken {
+			// The broken mark is the whole point — an unmarked broken release
+			// serves as complete — so it is written BEFORE staging is deleted,
+			// regardless of created: a duplicate here means a previous salvage
+			// attempt stored the row and died before marking it, and the sink
+			// returns the existing id exactly so this retry can finish the
+			// job. A failed write leaves the set staged and the cursor retries
+			// the whole store+verdict pair; total includes the never-fetched
+			// segments, which is also what keeps the verdict durable across
+			// health rechecks (see checkSegments' claimedTotal).
+			if id <= 0 {
+				p.reportErr(ctx, "usenet/salvage-verdict", fmt.Errorf(
+					"%s: sink returned no id (created=%v) — release may be stored unmarked; leaving staged to retry", title, created))
+				continue
+			}
 			if err := hb.setVerdict(ctx, id, healthBroken, total, missData, par2Claimed); err != nil {
 				p.reportErr(ctx, "usenet/salvage-verdict", fmt.Errorf("nzb %d stored but not marked broken: %w", id, err))
+				continue
 			}
 		}
+		// (The healthy case — par2-only gaps — stays unmarked on purpose: all
+		// data is present, and the health job confirms from the live server.)
 		if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
 			p.reportErr(ctx, "usenet/salvage-delete", err)
 		}
@@ -1066,7 +1079,15 @@ func (s *PGStore) insertNzb(ctx context.Context, n nzbRow) (int64, bool, error) 
 			n.Title, n.Filename, n.Size, n.Group, n.ContentHash, posted, n.Data, len(n.Data),
 			n.Tags.Resolution, n.Tags.Source, n.Tags.Codec, n.Tags.Audio, n.Tags.Language, n.CategoryID).Scan(&id)
 		if err == sql.ErrNoRows {
-			return nil
+			// Duplicate: resolve the EXISTING row's id, so a salvage retry
+			// that stored on a previous, interrupted attempt can still write
+			// its broken verdict instead of leaving the row unmarked forever.
+			serr := tx.QueryRowContext(ctx,
+				`SELECT id FROM nzbs WHERE content_hash = $1`, n.ContentHash).Scan(&id)
+			if serr == sql.ErrNoRows {
+				return nil // deleted between conflict and lookup: id stays 0
+			}
+			return serr
 		}
 		if err != nil {
 			return err

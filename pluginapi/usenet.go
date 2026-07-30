@@ -370,10 +370,14 @@ type AssembledRelease struct {
 // ReleaseSink stores an assembled release in the host's NZB domain.
 //
 // Contract:
-//   - success is (id > 0, true, nil) — the id is INFORMATIONAL (the current
-//     plugin ignores it; return your row id or 0);
-//   - (_, false, nil) means the release was a DUPLICATE — the plugin clears its
-//     staging and moves on;
+//   - success is (id > 0, true, nil) — the id must be the REAL row id: the
+//     plugin's salvage path hands it to the health store to mark a broken
+//     release, and an unmarked broken release serves as complete;
+//   - (id, false, nil) means the release was a DUPLICATE — the plugin clears
+//     its staging and moves on. Return the EXISTING row's id when you can
+//     resolve it (by ContentHash): a salvage retry that stored the row on a
+//     previous, interrupted attempt uses it to finish the broken-mark; 0 is
+//     tolerated but leaves that row unmarked;
 //   - a non-nil error means the host could not store it — the plugin leaves the
 //     set staged and retries on a later pass, so a transient host failure never
 //     loses a release. Dedup on ContentHash is what makes that retry safe.
@@ -404,6 +408,14 @@ const UsenetHealthStoreName = "usenet.healthstore"
 type HealthCandidate struct {
 	ID    int64
 	NZBGz []byte // gzipped NZB XML
+	// TotalSegments is the release's RECORDED total segment count (0 =
+	// unknown). Load-bearing for salvaged releases: their NZB lists only the
+	// segments that were ever fetched, every one of which exists on the
+	// server — so a checker that counts only listed segments would upgrade a
+	// broken release to healthy on its first recheck. When the recorded total
+	// exceeds what the NZB lists, the difference is missing data by
+	// definition, and the checker folds it in before scoring.
+	TotalSegments int
 }
 
 // ReleaseHealthStore is the host's side of health checking: pick candidates,
