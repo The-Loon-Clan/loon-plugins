@@ -110,6 +110,13 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	p.tel.crawl.passStart(len(runs))
 	defer p.tel.crawl.passEnd()
 	defer p.flushPosterHits(ctx)
+	// Filter hits flush here too, not only in the build pass: buildLocked only
+	// runs on the worker holding the cluster-wide build lease, so a worker
+	// that never wins it accumulated ingest junk tallies in RAM forever and
+	// lost them on restart — the /admin filter-hits page silently undercounted
+	// for that worker's groups. drain() resets on flush, so double-flushing
+	// with the builder cannot double-count.
+	defer p.flushFilterHits(ctx)
 	totalStaged := 0
 	// Catch-up loop: when the servers still hold a meaningful forward backlog
 	// after a pass, go again immediately instead of sleeping out the interval —
@@ -177,6 +184,7 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		// accumulating the rows they are waiting for. drain() resets, so the
 		// deferred pass-end flush cannot double-count what this already wrote.
 		p.flushPosterHits(ctx)
+		p.flushFilterHits(ctx)
 		if cfg.CrawlNoCatchup || ctx.Err() != nil {
 			break
 		}
@@ -614,8 +622,8 @@ func providerLabels(runs []providerRun) string {
 // account starved the healthy one of the very work it couldn't do. A pool
 // that opened less than its budget (account limit, partial open) now takes
 // exactly what it can serve, and the remainder go to whoever has room.
-func assignPools(runs []providerRun, workers int) []*nntp.Pool {
-	out := make([]*nntp.Pool, 0, workers)
+func assignPools(runs []providerRun, workers int) []providerRun {
+	out := make([]providerRun, 0, workers)
 	room := make([]int, len(runs))
 	for i, r := range runs {
 		room[i] = r.size
@@ -630,11 +638,11 @@ func assignPools(runs []providerRun, workers int) []*nntp.Pool {
 	}
 	for len(out) < workers {
 		dealt := false
-		for i, r := range runs {
+		for i := range runs {
 			if room[i] <= 0 {
 				continue
 			}
-			out = append(out, r.pool)
+			out = append(out, runs[i])
 			room[i]--
 			dealt = true
 			if len(out) == workers {
@@ -718,12 +726,12 @@ func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batc
 
 	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ {
-		pool := assigned[w]
+		run := assigned[w]
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for j := range jobCh {
-				resCh <- p.fetchBatch(ctx, pool, j, tel)
+				resCh <- p.fetchBatch(ctx, run.pool, run.prov.ID, j, tel)
 			}
 		}()
 	}
@@ -774,7 +782,7 @@ func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batc
 // the numerator was counting two jobs, the denominator one. It also put the
 // backfill's newsgroup in the forward pass's "reading" field, so the live view
 // named a group the forward crawl was not on.
-func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, tel *passTracker) batchResult {
+func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, provID int, j batchJob, tel *passTracker) batchResult {
 	res := batchResult{group: j.group, lo: j.lo, hi: j.hi}
 	if ctx.Err() != nil {
 		return res
@@ -809,6 +817,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, te
 				fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
 		}
 		tel.noteBatchFor(j.group, 0, 0, 0, false)
+		p.tel.noteProviderBatch(provID, 0, 0, 0, false)
 		return res // ok stays false — the watermark will not pass this range
 	}
 	res.articles, res.wire = len(ovs), wire
@@ -825,12 +834,14 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, j batchJob, te
 			p.reportErr(ctx, "usenet/crawl-stage",
 				fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
 			tel.noteBatchFor(j.group, res.articles, 0, wire, false)
+			p.tel.noteProviderBatch(provID, 0, 0, 0, false)
 			return res
 		}
 		res.staged = n
 	}
 	res.ok = true
 	tel.noteBatchFor(j.group, res.articles, res.staged, wire, true)
+	p.tel.noteProviderBatch(provID, res.articles, res.staged, wire, true)
 	// Per-group pacing: some providers rate limit per group, and some groups are
 	// not worth saturating the pool for. Applied after the connection is back in
 	// the pool, so throttling this group frees capacity for others rather than

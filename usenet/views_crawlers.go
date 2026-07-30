@@ -143,6 +143,11 @@ type providerVM struct {
 	Name, Host, Backbone, Role string
 	Enabled, Down, Dialled     bool
 	Open, Target, Busy         int
+	// Fetch volume since worker start — the readout that separates a slow
+	// account from a busy one (pool state cannot; every connection reads
+	// busy during a pass either way).
+	Articles int
+	Fetched  string // fmtBytes(WireBytes)
 	// Configured is the per-worker pool size saved on the row (0 = default).
 	// Shown next to the LIVE target when they differ: a pool only re-dials at
 	// the next pass, and "I changed it but it still says 10" is exactly the
@@ -178,6 +183,10 @@ func (p *Plugin) fleetVMs(ctx context.Context, published map[int]providerStat) [
 			vm.Dialled = true
 			vm.Open, vm.Target, vm.Busy = st.Open, st.Target, st.Busy
 			vm.Resets, vm.Down = st.Resets, st.Down
+			vm.Articles = st.Articles
+			if st.WireBytes > 0 {
+				vm.Fetched = fmtBytes(st.WireBytes)
+			}
 		}
 		out[i] = vm
 	}

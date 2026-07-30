@@ -125,6 +125,12 @@ func TestOpenFleetBenchesTheDeadAndPromotesTheBackupSamePass(t *testing.T) {
 	if !p.fleet.isDown(1, time.Now()) {
 		t.Error("the dead active was not benched")
 	}
+	// Churn continuity: the outage discarded a connection (one reset), and the
+	// bench closed the pool. The reset count must survive into the snapshot —
+	// the rebuild-zeroes-the-gauge bug made the heaviest churn look cleanest.
+	if p.fleet.snapshotStats(time.Now())[1].Resets < 1 {
+		t.Error("the dead pool's reset count was zeroed by the bench — churn continuity lost")
+	}
 }
 
 // A pool that OPENED and then lost every connection takes no batch workers.
@@ -149,8 +155,8 @@ func TestAssignPoolsSkipsPoolsWithNoLiveConnections(t *testing.T) {
 	dead := providerRun{pool: deadPool, size: 50, prov: provider{Name: "dead"}}
 
 	got := assignPools([]providerRun{dead, healthy}, 10)
-	for _, p := range got {
-		if p == deadPool {
+	for _, w := range got {
+		if w.pool == deadPool {
 			t.Fatal("a worker was dealt to a pool with zero live connections")
 		}
 	}

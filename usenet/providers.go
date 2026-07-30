@@ -188,6 +188,20 @@ type providerPool struct {
 	pool      *nntp.Pool
 	key       string
 	downUntil time.Time // set when the pool cannot be opened
+	// resetsBase banks the reset counts of every PREVIOUS pool this provider
+	// had. The live counter is on *nntp.Pool, so each rebuild (key change,
+	// bench, install race) restarted the dashboard's one churn gauge at zero
+	// — the pathologies that involve the heaviest churn made the churn signal
+	// look best. Folded in before every close; snapshotStats reports base+live.
+	resetsBase int64
+}
+
+// foldResetsLocked banks the live pool's reset count before it is closed.
+// Callers hold f.mu.
+func foldResetsLocked(pp *providerPool) {
+	if pp != nil && pp.pool != nil {
+		pp.resetsBase += pp.pool.Stats().Resets
+	}
 }
 
 // The bench cooldown lives in Config (provider_down_cooldown_min): without one
@@ -269,6 +283,7 @@ func (f *providerFleet) bench(pr provider, now time.Time, cooldown time.Duration
 		f.pools[pr.ID] = pp
 	}
 	if pp.pool != nil {
+		foldResetsLocked(pp)
 		_ = pp.pool.Close()
 		pp.pool = nil
 		pp.key = ""
@@ -292,6 +307,7 @@ func (f *providerFleet) get(ctx context.Context, pr provider, spec poolSpec) (*n
 		// brief no-pool window, because under an account cap the old pool's
 		// live connections would 482 the new pool's dials — swap-on-success
 		// deadlocks against exactly the providers the cap knob exists for.
+		foldResetsLocked(pp)
 		_ = pp.pool.Close()
 		pp.pool, pp.key = nil, ""
 	}
@@ -353,9 +369,10 @@ func (f *providerFleet) install(pr provider, pool *nntp.Pool, key string) *nntp.
 	}
 	if pp.pool != nil {
 		if pp.key == key {
-			_ = pool.Close()
+			_ = pool.Close() // fresh loser: it served nothing, no resets to bank
 			return pp.pool
 		}
+		foldResetsLocked(pp)
 		_ = pp.pool.Close()
 	}
 	pp.prov, pp.pool, pp.key = pr, pool, key
@@ -363,11 +380,17 @@ func (f *providerFleet) install(pr provider, pool *nntp.Pool, key string) *nntp.
 	return pool
 }
 
-// providerStat is one provider's live pool state for the admin page.
+// providerStat is one provider's live pool state for the admin page, plus its
+// fetch volume since worker start (overlaid from telemetry at publish time —
+// pool state alone cannot tell a slow account from a busy one).
 type providerStat struct {
 	Open, Target, Busy int
 	Resets             int64
 	Down               bool
+	Articles           int
+	Staged             int
+	WireBytes          int64
+	FailedBatches      int
 }
 
 // snapshotStats reports pool health per provider id. Only providers that have
@@ -377,10 +400,11 @@ func (f *providerFleet) snapshotStats(now time.Time) map[int]providerStat {
 	defer f.mu.Unlock()
 	out := make(map[int]providerStat, len(f.pools))
 	for id, pp := range f.pools {
-		st := providerStat{Down: now.Before(pp.downUntil)}
+		st := providerStat{Down: now.Before(pp.downUntil), Resets: pp.resetsBase}
 		if pp.pool != nil {
 			ps := pp.pool.Stats()
-			st.Open, st.Target, st.Busy, st.Resets = ps.Open, ps.Target, ps.Busy, ps.Resets
+			st.Open, st.Target, st.Busy = ps.Open, ps.Target, ps.Busy
+			st.Resets += ps.Resets
 		}
 		out[id] = st
 	}
@@ -393,6 +417,7 @@ func (f *providerFleet) closeAll() {
 	defer f.mu.Unlock()
 	for _, pp := range f.pools {
 		if pp.pool != nil {
+			foldResetsLocked(pp)
 			_ = pp.pool.Close()
 			pp.pool = nil
 			pp.key = ""

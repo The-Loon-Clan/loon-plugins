@@ -118,6 +118,9 @@ type Plugin struct {
 	// lastPressureErrAt throttles the backfill's pressure-probe failure
 	// report (backfill job only, so unguarded is fine).
 	lastPressureErrAt time.Time
+	// backfillProvLogAt throttles backfillProvider's per-round narration to
+	// the catch-up summary's 30s cadence (backfill job only).
+	backfillProvLogAt time.Time
 
 	// Fingerprint of the junk rules currently compiled into memory, so a reload
 	// only recompiles when they actually changed (junk_store.go).

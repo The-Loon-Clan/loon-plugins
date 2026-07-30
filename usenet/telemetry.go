@@ -300,6 +300,8 @@ type telemetry struct {
 	// scrolling job log — a human reading it was the detector. The crawl
 	// maintains this; the third consecutive stall also raises a report.
 	stalledPasses int
+	// prov attributes fetch volume per provider id (see provTally).
+	prov map[int]*provTally
 }
 
 // builtRelease is one crawler-assembled release, exported for the telemetry
@@ -370,6 +372,53 @@ func (p pendingSet) Missing() int {
 		return 0
 	}
 	return p.Need - p.Have
+}
+
+// provTally is one provider's fetch volume since worker start. Pool state
+// (open/resets) never answered "which account is slow": during a pass every
+// pool's connections read busy regardless, so an account serving overviews at
+// a third the speed halved a backbone's effective rate for days with nothing
+// attributing the drop. Cumulative-since-start like the evicted counter —
+// readers take deltas.
+type provTally struct {
+	Articles  int   `json:"articles"`
+	Staged    int   `json:"staged"`
+	WireBytes int64 `json:"wire_bytes"`
+	Failed    int   `json:"failed"`
+}
+
+// noteProviderBatch attributes one fetched batch to its provider.
+func (t *telemetry) noteProviderBatch(id int, articles, staged int, wire int64, ok bool) {
+	if id <= 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.prov == nil {
+		t.prov = map[int]*provTally{}
+	}
+	pt := t.prov[id]
+	if pt == nil {
+		pt = &provTally{}
+		t.prov[id] = pt
+	}
+	if !ok {
+		pt.Failed++
+		return
+	}
+	pt.Articles += articles
+	pt.Staged += staged
+	pt.WireBytes += wire
+}
+
+func (t *telemetry) providerTallies() map[int]provTally {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make(map[int]provTally, len(t.prov))
+	for id, pt := range t.prov {
+		out[id] = *pt
+	}
+	return out
 }
 
 // noteEvicted counts hopeless-set evictions (wired into redis staging as a

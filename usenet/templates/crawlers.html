@@ -34,7 +34,7 @@
              Configured is shown when it differs from the live target, because
              a pool only re-dials at the next pass and "I changed it but it
              still says 10" was a real confusion. */}}
-        <span data-role="pconns" class="text-muted small">{{if .Dialled}}{{.Open}} / {{.Target}} connections{{if and .Configured (ne .Configured .Target)}} (cfg {{.Configured}}){{end}}{{if .Busy}} &middot; {{.Busy}} busy{{end}}{{if .Resets}} &middot; {{.Resets}} resets{{end}}{{else}}not dialled yet{{end}}</span>
+        <span data-role="pconns" class="text-muted small">{{if .Dialled}}{{.Open}} / {{.Target}} connections{{if and .Configured (ne .Configured .Target)}} (cfg {{.Configured}}){{end}}{{if .Busy}} &middot; {{.Busy}} busy{{end}}{{if .Resets}} &middot; {{.Resets}} resets{{end}}{{if .Articles}} &middot; {{.Articles}} fetched{{if .Fetched}} ({{.Fetched}}){{end}}{{end}}{{else}}not dialled yet{{end}}</span>
         <a class="ms-auto text-muted text-decoration-none" href="/admin/p/usenet#providers" title="edit providers">&#9998;</a>
       </div>
       {{end}}

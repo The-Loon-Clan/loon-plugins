@@ -118,6 +118,13 @@ type ProviderReport struct {
 	Open    int  `json:"open"`
 	Target  int  `json:"target"`
 	Busy    int  `json:"busy"`
+	// Fetch volume since worker start, per account. Deltas between polls are
+	// the per-provider rate — the number that catches a degraded account on a
+	// shared backbone.
+	Articles      int   `json:"articles"`
+	Staged        int   `json:"staged"`
+	WireBytes     int64 `json:"wire_bytes"`
+	FailedBatches int   `json:"failed_batches"`
 	// Resets counts pool rebuilds. It is the signal that separates "the
 	// provider is slow" from "the pool is thrashing": a climbing Resets with
 	// steady Open/Target means connections are being torn down and re-dialled
@@ -203,6 +210,8 @@ func (p *Plugin) status(ctx context.Context) StatusReport {
 				r.Dialled = true
 				r.Down, r.Open, r.Target = st.Down, st.Open, st.Target
 				r.Busy, r.Resets = st.Busy, st.Resets
+				r.Articles, r.Staged = st.Articles, st.Staged
+				r.WireBytes, r.FailedBatches = st.WireBytes, st.FailedBatches
 			}
 			rep.Providers = append(rep.Providers, r)
 		}

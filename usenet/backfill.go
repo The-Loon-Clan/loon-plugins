@@ -310,13 +310,28 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 		// for hours showed a batch count with nothing to measure it against.
 		p.tel.backfill.notePlanned(used[i].g.Name, used[i].taken)
 	}
+	// Per-round narration is throttled to the same 30s cadence as the
+	// catch-up summary. These lines fire once per provider per ROUND, and a
+	// healthy catch-up runs ~25-batch rounds in a couple of seconds — the
+	// 100-line job ring held barely a minute of history, and the lines that
+	// explain WHY something happened (pressure stops, lease losses, pass
+	// boundaries) were pushed out almost immediately. The all-failed line
+	// below stays unthrottled: it is rare and load-bearing.
+	verbose := time.Since(p.backfillProvLogAt) >= 30*time.Second
+	if verbose {
+		p.backfillProvLogAt = time.Now()
+	}
 	if len(jobs) == 0 {
-		p.backfillJob.Log("%s: nothing to do this pass", run.prov.label())
+		if verbose {
+			p.backfillJob.Log("%s: nothing to do this pass", run.prov.label())
+		}
 		return 0, 0
 	}
 
-	p.backfillJob.Log("%s: backfilling %d group(s), %d batch(es) over %d connection(s)…",
-		run.prov.label(), len(targets), len(jobs), run.size)
+	if verbose {
+		p.backfillJob.Log("%s: backfilling %d group(s), %d batch(es) over %d connection(s)…",
+			run.prov.label(), len(targets), len(jobs), run.size)
+	}
 	targetNames := make([]string, 0, len(targets))
 	for name := range targets {
 		targetNames = append(targetNames, name)
@@ -354,9 +369,11 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 		p.backfillJob.Log("%s: every one of %d batch(es) failed — ending catch-up rather than replanning the same work",
 			run.prov.label(), len(jobs))
 	}
-	st := pool.Stats()
-	p.backfillJob.Log("%s: %d historical article(s) staged from %d/%d batch(es) (conns %d/%d, resets %d)",
-		run.prov.label(), staged, completed, len(jobs), st.Open, st.Target, st.Resets)
+	if verbose {
+		st := pool.Stats()
+		p.backfillJob.Log("%s: %d historical article(s) staged from %d/%d batch(es) (conns %d/%d, resets %d)",
+			run.prov.label(), staged, completed, len(jobs), st.Open, st.Target, st.Resets)
+	}
 	return staged, completed
 }
 

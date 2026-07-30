@@ -18,14 +18,20 @@ func (a activitySurface) Activity(ctx context.Context) (pluginapi.CrawlActivity,
 }
 
 // activityFrom picks the pass the widget should describe — a running crawl
-// first, then a running backfill, then the last finished crawl — and maps it
-// to the public shape.
+// first, then a running backfill, then whichever pass FINISHED most recently.
+// The idle fallback used to be hardwired to the last crawl, and during a
+// months-long continuous backfill on 5-minute intervals the public widget
+// sawtoothed: the backfill's large pass-cumulative counters, then a snap down
+// to the last forward crawl's small ones at every pass boundary, then back up
+// — which reads as the crawler losing work.
 func activityFrom(tv workerTelemetry) pluginapi.CrawlActivity {
 	ps, backfill := tv.CrawlCur, false
 	switch {
 	case tv.CrawlCur.InProgress:
 	case tv.BackfillCur.InProgress:
 		ps, backfill = tv.BackfillCur, true
+	case tv.BackfillLast.Finished.After(tv.CrawlLast.Finished):
+		ps, backfill = tv.BackfillLast, true
 	default:
 		ps = tv.CrawlLast
 	}

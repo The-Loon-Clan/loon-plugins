@@ -70,8 +70,8 @@ func TestAssignPools(t *testing.T) {
 		t.Fatalf("want 100 assignments, got %d", len(got))
 	}
 	countA, countB := 0, 0
-	for _, p := range got {
-		switch p {
+	for _, w := range got {
+		switch w.pool {
 		case a.pool:
 			countA++
 		case b.pool:
@@ -83,7 +83,7 @@ func TestAssignPools(t *testing.T) {
 	if countA != 50 || countB != 50 {
 		t.Errorf("uneven split: a=%d b=%d, want 50/50", countA, countB)
 	}
-	if got[0] != a.pool || got[1] != b.pool {
+	if got[0].pool != a.pool || got[1].pool != b.pool {
 		t.Error("must alternate from the first worker, not fill one pool first")
 	}
 
@@ -92,7 +92,7 @@ func TestAssignPools(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("want 4, got %d", len(got))
 	}
-	if got[0] != a.pool || got[1] != b.pool || got[2] != a.pool || got[3] != b.pool {
+	if got[0].pool != a.pool || got[1].pool != b.pool || got[2].pool != a.pool || got[3].pool != b.pool {
 		t.Error("a short pass must still alternate across accounts")
 	}
 
@@ -101,8 +101,8 @@ func TestAssignPools(t *testing.T) {
 	small := run("small", "bb", 2)
 	got = assignPools([]providerRun{a, small}, 10)
 	countSmall := 0
-	for _, p := range got {
-		if p == small.pool {
+	for _, w := range got {
+		if w.pool == small.pool {
 			countSmall++
 		}
 	}

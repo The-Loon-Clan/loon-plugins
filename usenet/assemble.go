@@ -137,7 +137,22 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	// needs the articles, and the watch exists to explain why a known poster's
 	// releases did not appear, so it is never traded for throughput.
 	fastDropped := 0
-	kept, rejects := splitByTitle(keys, p.posterWatch.active())
+	// candidates is the honest denominator for the pass summary: len(keys)
+	// AFTER splitByTitle has removed the fast-dropped rejects made the log
+	// read "built 0 of 0 — 500 junk" on a junk-heavy pass, reasons exceeding
+	// the total without bound.
+	candidates := len(keys)
+	watchActive := p.posterWatch.active()
+	if watchActive {
+		// The watch disables the title fast path BY DESIGN (attribution needs
+		// the articles) — but silently: one watched poster turned microsecond
+		// rejects into a full ~16ms article load per junk set, collapsing the
+		// drain rate exactly while an operator investigates a backlog, with
+		// nothing anywhere saying why. Announce the trade where they look.
+		p.buildJob.Log("poster watch active (%d pattern(s)): title fast-path off — every set takes the full article load",
+			p.posterWatch.count())
+	}
+	kept, rejects := splitByTitle(keys, watchActive)
 	keys = kept
 	if len(rejects) > 0 {
 		// Account for every reject first, then remove them in one go. Deleting
@@ -305,9 +320,12 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	if fastDropped > 0 {
 		p.buildJob.Log("title pre-filter dropped %d set(s) without loading their articles", fastDropped)
 	}
+	// candidates, not len(keys): splitByTitle shrank keys, and its rejects are
+	// in the junk/blocked-ext totals below — the reasons must sum to the
+	// denominator or the line is unreadable ("built 0 of 0 — 500 junk").
 	p.buildJob.Log("built %d of %d candidate set(s) — %d incomplete, %d duplicate, "+
 		"%d junk, %d blacklisted, %d blocked-ext, %d empty, %d error(s)",
-		built, len(keys),
+		built, candidates,
 		p.outcomes.total(outcomeIncomplete), p.outcomes.total(outcomeDuplicate),
 		p.outcomes.total(outcomeJunk), skippedBL, skippedExt,
 		p.outcomes.total(outcomeEmpty),

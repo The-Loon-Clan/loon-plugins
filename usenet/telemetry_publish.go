@@ -164,6 +164,16 @@ func (p *Plugin) localTelemetry() workerTelemetry {
 	tv.Built = p.tel.recentBuilt()
 	if p.fleet != nil {
 		if stats := p.fleet.snapshotStats(time.Now()); len(stats) > 0 {
+			// Overlay each provider's fetch volume: open/busy/resets say how a
+			// pool is shaped, the tallies say what it actually DELIVERS — the
+			// only readout that catches an account serving at a third the speed
+			// of its backbone sibling.
+			for id, t := range p.tel.providerTallies() {
+				st := stats[id]
+				st.Articles, st.Staged = t.Articles, t.Staged
+				st.WireBytes, st.FailedBatches = t.WireBytes, t.Failed
+				stats[id] = st
+			}
 			tv.Fleet = stats
 		}
 	}

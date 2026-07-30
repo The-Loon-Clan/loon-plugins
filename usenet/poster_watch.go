@@ -44,6 +44,14 @@ func newPosterWatch(patterns []string) *posterWatch {
 // attribute and the read can be skipped outright.
 func (w *posterWatch) active() bool { return w != nil && len(w.patterns) > 0 }
 
+// count is the pattern total, for the pass-log line that announces the trade.
+func (w *posterWatch) count() int {
+	if w == nil {
+		return 0
+	}
+	return len(w.patterns)
+}
+
 // watched reports whether this From header is being traced, and returns the
 // PATTERN rather than the raw header as the key.
 //

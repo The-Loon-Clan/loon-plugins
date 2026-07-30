@@ -168,6 +168,10 @@
       From header, so <code>tsukihime</code> catches
       <code>TsukiHime &lt;usenet.bot@tsukihime.org&gt;</code>. Counts accumulate from
       the next crawl pass onward.
+      <strong>While any watch is active the builder's title fast-path is off</strong> —
+      attribution needs the articles, so every junk set pays a full load (~16ms each
+      instead of microseconds). Remove watches you are done with; the build log says
+      when this trade is in effect.
     </p>
     <form method="post" action="/admin/p/usenet/poster-watch" class="d-flex mb-3" style="gap:.5rem;flex-wrap:wrap">
       <input class="form-control form-control-sm" type="text" name="pattern"
