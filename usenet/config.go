@@ -360,3 +360,19 @@ func shouldPauseForPressure(pressure float64, highPct int) bool {
 	}
 	return pressure >= float64(highPct)/100.0
 }
+
+// crawlStopPct is the forward crawl's EFFECTIVE pause threshold: its own high
+// gate, clamped to the eviction ceiling. The crawl gate deliberately sits
+// above the backfill's (95 vs 85) so new articles win the last of the room —
+// but the default 95 also sat above the 92% ceiling that exists because past
+// it Redis EVICTS rather than refuses, and what it evicts is the forming
+// sets. The crawl was allowed to begin staging inside the exact band the
+// backfill treats as a hard stop even with nothing to drain. Clamping keeps
+// the crawl-beats-backfill ordering (92 is still above 85) while making the
+// ceiling mean what its name says for every writer.
+func (c Config) crawlStopPct() int {
+	if c.BackfillPressureCeilingPct > 0 && c.CrawlPressureHighPct > c.BackfillPressureCeilingPct {
+		return c.BackfillPressureCeilingPct
+	}
+	return c.CrawlPressureHighPct
+}

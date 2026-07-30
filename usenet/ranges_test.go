@@ -499,3 +499,27 @@ func TestBuildCatchUpCountsDrainedNotBuilt(t *testing.T) {
 		t.Errorf("built=%d drained=%d, want both counted", res.Staged, res.Batches)
 	}
 }
+
+// The backfill's progress signal is batches COMPLETED, never planned. Planned
+// work is a fixed point for an all-failing provider — a failed batch records
+// no coverage, so the next round re-derives the identical gaps and plans the
+// identical jobs, and a loop fed planned counts spins forever with the job
+// stuck Running and the error ring flooding once per batch per round. Only
+// r.ok batches (fetched AND staged, coverage recorded) shrink future rounds.
+func TestCompletedBatchesCountsOnlyRecordedWork(t *testing.T) {
+	all := []batchResult{
+		{ok: true, staged: 100},
+		{ok: true, staged: 0}, // empty history still records its range: progress
+		{ok: false},           // fetch or stage failed: replanned next round
+		{ok: false},
+	}
+	if got := completedBatches(all); got != 2 {
+		t.Errorf("completedBatches = %d, want 2 — failed batches must not count", got)
+	}
+	if got := completedBatches([]batchResult{{ok: false}, {ok: false}}); got != 0 {
+		t.Errorf("all-failing round = %d, want 0 — this is what ends the pass instead of spinning", got)
+	}
+	if got := completedBatches(nil); got != 0 {
+		t.Errorf("no results = %d, want 0", got)
+	}
+}

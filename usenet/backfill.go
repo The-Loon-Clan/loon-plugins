@@ -73,9 +73,10 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 	// at 85% and staging was at 77%, so the job simply ran out of budget and
 	// went home. Bigger batches would only make each nap longer.
 	//
-	// Guarded the same three ways as the crawl loop: a round that stages nothing
-	// ends the pass (or a stalled provider would spin), pressure is re-checked
-	// every round rather than once at entry, and the operator can switch it off.
+	// Guarded the same three ways as the crawl loop: a round that COMPLETES no
+	// batches ends the pass (planned-but-failing work must not count, or a dead
+	// provider spins the loop forever), pressure is re-checked every round
+	// rather than once at entry, and the operator can switch it off.
 	lastLog := time.Now()
 	res := runCatchUp(ctx,
 		func() (int, int) {
@@ -296,7 +297,10 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	// runBatches returns every result.
 	// Counting happens inside fetchBatch against the tracker passed here; a
 	// second pass over the results would double every backfill batch.
-	results := p.runBatches(ctx, []providerRun{run}, jobs, cfg, &p.tel.backfill, nil)
+	// nil overBudget: a backfill round is backfill_batches_per_run (~25)
+	// batches, far below one pressureCheckEvery interval — its per-round
+	// pressure gate in runCatchUp is the right granularity already.
+	results := p.runBatches(ctx, []providerRun{run}, jobs, cfg, &p.tel.backfill, nil, nil)
 
 	// On lease loss the coverage writes are skipped, not just doomed to fail:
 	// a sibling may own these groups now, and coverage-IS-state means the
@@ -307,10 +311,36 @@ func (p *Plugin) backfillProvider(ctx context.Context, run providerRun, cfg Conf
 	}
 	staged = p.recordBackfill(ctx, bb, targets, results, cfg)
 
+	// The progress signal is batches COMPLETED, not planned. A failed batch
+	// records no coverage, so the next round re-derives the identical gaps and
+	// plans the identical jobs — planned work is a fixed point for a dead or
+	// auth-broken provider, or a group the server 411s, and returning it once
+	// spun the catch-up loop forever: the job showed Running indefinitely,
+	// SetIdle was unreachable, and every round flooded the error ring with one
+	// fetch error per batch. Completed work genuinely shrinks on an all-failing
+	// round (to zero), which is exactly the stop condition runCatchUp needs.
+	completed := completedBatches(results)
+	if completed == 0 && len(jobs) > 0 && ctx.Err() == nil {
+		p.backfillJob.Log("%s: every one of %d batch(es) failed — ending catch-up rather than replanning the same work",
+			run.prov.label(), len(jobs))
+	}
 	st := pool.Stats()
-	p.backfillJob.Log("%s: %d historical article(s) staged from %d batch(es) (conns %d/%d, resets %d)",
-		run.prov.label(), staged, len(jobs), st.Open, st.Target, st.Resets)
-	return staged, len(jobs)
+	p.backfillJob.Log("%s: %d historical article(s) staged from %d/%d batch(es) (conns %d/%d, resets %d)",
+		run.prov.label(), staged, completed, len(jobs), st.Open, st.Target, st.Resets)
+	return staged, completed
+}
+
+// completedBatches counts the results whose fetch AND stage both succeeded —
+// the only definition of progress that terminates: ok batches record coverage,
+// so the next round's gap derivation genuinely shrinks.
+func completedBatches(results []batchResult) int {
+	n := 0
+	for _, r := range results {
+		if r.ok {
+			n++
+		}
+	}
+	return n
 }
 
 // nextBackfill is the displayed next-run for the backfill job. Reads the
@@ -510,8 +540,12 @@ type catchUpResult struct {
 
 // runCatchUp repeats rounds while there is work to do and staging has room.
 //
-// round reports (articles staged, BATCHES RUN). Batches is the progress signal:
-// staging nothing while covering ground is normal and must not end the pass.
+// round reports (articles staged, BATCHES COMPLETED). Completed batches are
+// the progress signal, and both halves of that are load-bearing: staging
+// nothing while covering ground is normal and must not end the pass (most
+// deep history is empty on the server), while PLANNED batches must not count
+// — a failed batch records nothing, so an all-failing provider re-plans the
+// identical work every round and planned-count never reaches zero.
 func runCatchUp(ctx context.Context, round func() (int, int), disabled func() bool,
 	yields func() (bool, float64), afterRound func(rounds, batches, staged int)) catchUpResult {
 	var res catchUpResult
@@ -529,8 +563,10 @@ func runCatchUp(ctx context.Context, round func() (int, int), disabled func() bo
 		case disabled != nil && disabled():
 			res.StoppedBy = stopDisabled
 		case batches == 0:
-			// No batches anywhere: caught up to the retention horizon, or every
-			// group is lease-held by a sibling worker.
+			// No batches COMPLETED anywhere: caught up to the retention horizon,
+			// every group lease-held by a sibling worker — or every planned batch
+			// failed, in which case the per-provider log has already said so and
+			// re-planning the identical work would spin forever.
 			res.StoppedBy = stopNoWork
 		default:
 			if y, pr := yields(); y {

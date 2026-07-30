@@ -28,6 +28,37 @@ func TestCrawlYieldsLaterThanBackfill(t *testing.T) {
 	}
 }
 
+// The crawl's EFFECTIVE stop is clamped to the eviction ceiling. The raw
+// default (95) sits above the ceiling (92) that exists because past it Redis
+// evicts rather than refuses — the crawl was permitted to begin staging inside
+// the exact band the backfill treats as a hard stop. The clamp must preserve
+// the crawl-beats-backfill ordering: effective stop still above the backfill
+// high gate, so the crawl keeps the last of the room.
+func TestCrawlStopClampsToTheEvictionCeiling(t *testing.T) {
+	var c Config
+	c.applyDefaults()
+
+	if got := c.crawlStopPct(); got != c.BackfillPressureCeilingPct {
+		t.Errorf("default crawl stop = %d%%, want the ceiling %d%% — the crawl may not "+
+			"stage inside the eviction band", got, c.BackfillPressureCeilingPct)
+	}
+	if c.crawlStopPct() <= c.BackfillPressureHighPct {
+		t.Errorf("clamped crawl stop %d%% fell to or below the backfill gate %d%% — "+
+			"the crawl no longer wins the last of the room", c.crawlStopPct(), c.BackfillPressureHighPct)
+	}
+
+	// An operator running the crawl gate BELOW the ceiling keeps their number.
+	c.CrawlPressureHighPct = 80
+	if got := c.crawlStopPct(); got != 80 {
+		t.Errorf("crawl gate 80 with ceiling %d: stop = %d, want 80", c.BackfillPressureCeilingPct, got)
+	}
+	// No ceiling configured (pg staging): the crawl gate stands alone.
+	c.CrawlPressureHighPct, c.BackfillPressureCeilingPct = 95, 0
+	if got := c.crawlStopPct(); got != 95 {
+		t.Errorf("ceiling 0: stop = %d, want the raw crawl gate 95", got)
+	}
+}
+
 // The decision itself, as the round loop makes it. Pinned as a table because
 // the boundary matters: production sat at 99.8%, so a gate that only fired at a
 // hard 100%% would have watched 640 releases a minute be destroyed and done
@@ -93,6 +124,11 @@ func TestCrawlRoundConsultsThePressureGate(t *testing.T) {
 	}{
 		{"healthy backend crawls", stubStaging{pressureVal: 0.40}, false},
 		{"full backend pauses", stubStaging{pressureVal: 0.998}, true},
+		// Inside the eviction band: above the ceiling (92), below the raw
+		// crawl gate (95). The gate must consult the CLAMPED stop — a gate
+		// wired to the raw pct crawls straight through the band where Redis
+		// evicts forming sets to make room.
+		{"eviction band pauses via the clamp", stubStaging{pressureVal: 0.93}, true},
 		// Fail OPEN: an unreadable gauge must not idle the crawler.
 		{"unreadable pressure keeps crawling", stubStaging{pressureErr: errStubPressure}, false},
 		// No staging wired at all (tests, boot ordering) must not panic.

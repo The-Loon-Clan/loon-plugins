@@ -149,7 +149,7 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		if pause, pr := p.pauseForStagingPressure(ctx, cfg); pause {
 			p.crawlJob.Log("crawl paused: staging %.0f%% full (>= %d%%) — storing now would evict "+
 				"sets that are still assembling; watermarks held so nothing is skipped",
-				pr*100, cfg.CrawlPressureHighPct)
+				pr*100, cfg.crawlStopPct())
 			p.crawlJob.SetIdle(p.nextCrawl(ctx))
 			return
 		}
@@ -372,6 +372,22 @@ func (p *Plugin) crawlBackbone(ctx context.Context, runs []providerRun, cfg Conf
 	p.crawlJob.Log("%s: crawling %d group(s), %d batch(es) over %d connection(s) on %s…",
 		bb, len(plans), len(jobs), totalConns(runs), providerLabels(runs))
 	staged, advanced := 0, 0
+	// Mid-round pressure probe: the entry gate at the top of the catch-up loop
+	// re-checks once per ROUND, and a round here is up to crawl_max_batches —
+	// hours of staging with nothing watching the ceiling in between. When the
+	// probe trips, runBatches stops feeding new batches; the fetched contiguous
+	// prefix still advances below and the rest re-plans next round, where the
+	// entry gate sees the same pressure and pauses the pass properly.
+	pressureStopped := false
+	overBudget := func() bool {
+		pause, pr := p.pauseForStagingPressure(ctx, cfg)
+		if pause && !pressureStopped {
+			pressureStopped = true
+			p.crawlJob.Log("%s: staging pressure %.0f%% crossed %d%% mid-round — no new batches fed; "+
+				"fetched work still lands and the rest re-plans next round", bb, pr*100, cfg.crawlStopPct())
+		}
+		return pause
+	}
 	leftover := p.runBatches(ctx, runs, jobs, cfg, &p.tel.crawl, func(name string, rs []batchResult) {
 		plan := plans[name]
 		if plan == nil {
@@ -392,7 +408,7 @@ func (p *Plugin) crawlBackbone(ctx context.Context, runs []providerRun, cfg Conf
 			p.crawlJob.Log("%s/%s: group complete — watermark advanced, %d article(s) staged",
 				bb, name, s)
 		}
-	})
+	}, overBudget)
 
 	// 3. Final sweep: partial credit for groups a cancelled pass left
 	// incomplete — their contiguous prefix still advances. NOT on lease loss:
@@ -600,7 +616,14 @@ func batchWorkers(conns, jobs int) int {
 	return w
 }
 
-func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batchJob, cfg Config, tel *passTracker, onGroup func(group string, rs []batchResult)) []batchResult {
+// pressureCheckEvery is how many COMPLETED batches pass between overBudget
+// probes inside runBatches. Granularity, not policy: at the default batch size
+// one interval is ~300k article numbers (~90 MB of staging worst-case), small
+// against the ~640 MB between the eviction ceiling and maxmemory, and one
+// cheap probe per interval. The thresholds themselves stay in Config.
+const pressureCheckEvery = 100
+
+func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batchJob, cfg Config, tel *passTracker, onGroup func(group string, rs []batchResult), overBudget func() bool) []batchResult {
 	// The budget is the sum of what THIS pass's pools actually opened
 	// (providerRun.size), not the site-wide setting. They differ the moment a
 	// second crawler host joins: the account cap is split across the fleet, so
@@ -616,6 +639,16 @@ func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batc
 
 	jobCh := make(chan batchJob)
 	resCh := make(chan batchResult, len(jobs)) // buffered: workers never block on send
+	// Closed when overBudget trips: the feeder stops handing out NEW work while
+	// everything in flight completes normally. Unfed jobs simply never produce
+	// results, and both callers survive that by design — the crawl's watermark
+	// only advances through a group's contiguous fetched prefix, so unfetched
+	// batches roll into the next round losslessly. This check exists because a
+	// crawl round is bounded by crawl_max_batches (default 20,000) PER BACKBONE
+	// between the loop's per-round pressure gates: one catch-up round could
+	// stage gigabytes past the eviction ceiling, and at maxmemory Redis evicts
+	// the forming sets — the 97M-key incident — while every write "succeeds".
+	stopFeed := make(chan struct{})
 
 	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ {
@@ -629,19 +662,29 @@ func (p *Plugin) runBatches(ctx context.Context, runs []providerRun, jobs []batc
 		}()
 	}
 	go func() {
+	feed:
 		for _, j := range jobs {
-			if ctx.Err() != nil {
-				break
+			select {
+			case jobCh <- j:
+			case <-stopFeed:
+				break feed
+			case <-ctx.Done():
+				break feed
 			}
-			jobCh <- j
 		}
 		close(jobCh)
 		wg.Wait()
 		close(resCh)
 	}()
 
+	completed, stopped := 0, false
 	byGroup := make(map[string][]batchResult, len(expected))
 	for r := range resCh {
+		completed++
+		if overBudget != nil && !stopped && completed%pressureCheckEvery == 0 && overBudget() {
+			stopped = true
+			close(stopFeed)
+		}
 		byGroup[r.group] = append(byGroup[r.group], r)
 		if onGroup != nil && len(byGroup[r.group]) == expected[r.group] {
 			onGroup(r.group, byGroup[r.group])
@@ -969,5 +1012,5 @@ func (p *Plugin) pauseForStagingPressure(ctx context.Context, cfg Config) (bool,
 		p.reportErr(ctx, "usenet/crawl-pressure", err)
 		return false, 0
 	}
-	return shouldPauseForPressure(pr, cfg.CrawlPressureHighPct), pr
+	return shouldPauseForPressure(pr, cfg.crawlStopPct()), pr
 }

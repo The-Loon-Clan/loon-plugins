@@ -35,7 +35,7 @@ func TestBackfillBatchesDoNotCountAgainstTheForwardCrawl(t *testing.T) {
 
 	// The forward pass runs its two planned batches.
 	fwd := []batchJob{{group: "a.b.forward", lo: 1, hi: 10}, {group: "a.b.forward", lo: 11, hi: 20}}
-	p.runBatches(context.Background(), []providerRun{{pool: deadPool(), size: 1}}, fwd, Config{}, &p.tel.crawl, nil)
+	p.runBatches(context.Background(), []providerRun{{pool: deadPool(), size: 1}}, fwd, Config{}, &p.tel.crawl, nil, nil)
 
 	// Backfill then runs three of its own.
 	back := []batchJob{
@@ -43,7 +43,7 @@ func TestBackfillBatchesDoNotCountAgainstTheForwardCrawl(t *testing.T) {
 		{group: "a.b.history", lo: 11, hi: 20},
 		{group: "a.b.history", lo: 21, hi: 30},
 	}
-	p.runBatches(context.Background(), []providerRun{{pool: deadPool(), size: 1}}, back, Config{}, &p.tel.backfill, nil)
+	p.runBatches(context.Background(), []providerRun{{pool: deadPool(), size: 1}}, back, Config{}, &p.tel.backfill, nil, nil)
 
 	crawl, _ := p.tel.crawl.snapshot()
 	if crawl.Batches != 2 {
@@ -68,11 +68,57 @@ func TestReadingGroupBelongsToItsOwnPass(t *testing.T) {
 	p.tel.crawl.roundStart()
 
 	p.runBatches(context.Background(), []providerRun{{pool: deadPool(), size: 1}},
-		[]batchJob{{group: "a.b.forward", lo: 1, hi: 10}}, Config{}, &p.tel.crawl, nil)
+		[]batchJob{{group: "a.b.forward", lo: 1, hi: 10}}, Config{}, &p.tel.crawl, nil, nil)
 	p.runBatches(context.Background(), []providerRun{{pool: deadPool(), size: 1}},
-		[]batchJob{{group: "a.b.history", lo: 1, hi: 10}}, Config{}, &p.tel.backfill, nil)
+		[]batchJob{{group: "a.b.history", lo: 1, hi: 10}}, Config{}, &p.tel.backfill, nil, nil)
 
 	if cur, _ := p.tel.crawl.snapshot(); cur.Reading != "a.b.forward" {
 		t.Errorf("forward pass reports reading %q, want a.b.forward", cur.Reading)
+	}
+}
+
+// The mid-round pressure stop. A crawl round is bounded by crawl_max_batches
+// (default 20,000) per backbone, and before this hook the only pressure check
+// lived at the top of the catch-up loop — one round could stage gigabytes past
+// the eviction ceiling with nothing watching, and at maxmemory Redis evicts
+// the forming sets while every write "succeeds" (the 97M-key incident). When
+// overBudget trips, the feeder must stop handing out new jobs while in-flight
+// work completes; unfed jobs produce no results and roll into the next round.
+func TestRunBatchesStopsFeedingWhenOverBudget(t *testing.T) {
+	p := trackerPlugin()
+	p.tel.crawl.passStart(1)
+	p.tel.crawl.roundStart()
+
+	jobs := make([]batchJob, 3*pressureCheckEvery)
+	for i := range jobs {
+		jobs[i] = batchJob{group: "a.b.group", lo: i * 10, hi: i*10 + 9}
+	}
+	runs := []providerRun{{pool: deadPool(), size: 1}}
+
+	// Pressure permanently over budget: the first probe (after
+	// pressureCheckEvery completed batches) must stop the feeder. onGroup nil,
+	// so everything fetched comes back as leftover.
+	probes := 0
+	got := p.runBatches(context.Background(), runs, jobs, Config{}, &p.tel.crawl, nil,
+		func() bool { probes++; return true })
+	if len(got) >= len(jobs) {
+		t.Errorf("all %d batches ran despite pressure over budget from the start — "+
+			"the feeder never stopped", len(got))
+	}
+	if len(got) < pressureCheckEvery {
+		t.Errorf("only %d batches completed, want at least the %d that precede the first probe",
+			len(got), pressureCheckEvery)
+	}
+	if probes == 0 {
+		t.Fatal("overBudget was never consulted")
+	}
+
+	// And a healthy round is untouched: every batch runs.
+	p.tel.crawl.roundStart()
+	got = p.runBatches(context.Background(), runs, jobs, Config{}, &p.tel.crawl, nil,
+		func() bool { return false })
+	if len(got) != len(jobs) {
+		t.Errorf("healthy round completed %d of %d batches — the stop machinery "+
+			"interfered with normal feeding", len(got), len(jobs))
 	}
 }
