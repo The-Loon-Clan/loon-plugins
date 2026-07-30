@@ -205,3 +205,62 @@ func TestSweepSalvageOverflowStaysStaged(t *testing.T) {
 		t.Errorf("%d of %d sets remain staged — the doom pipeline took the overflow", left, n)
 	}
 }
+
+// A skewed population must not waste the budget: the per-group split is a
+// fairness floor, not a cap, and leftover budget keeps circling the groups
+// that still have members — one group holding nearly everything otherwise
+// swept at budget/len(groups) per round while the rest evaporated.
+func TestSweepBudgetRedistributesAcrossSkewedGroups(t *testing.T) {
+	ctx := context.Background()
+	rdb := testRedis(t)
+	r := newTestStaging(rdb)
+
+	seed := func(group string, n int) {
+		t.Helper()
+		arts := make([]stagedArticle, n)
+		for i := range arts {
+			base := fmt.Sprintf("%s.Dead.%03d", group, i)
+			arts[i] = stagedArticle{
+				Group: group, BaseSubject: base,
+				Subject:   base + " (1/2)",
+				MessageID: fmt.Sprintf("<%s@x>", base),
+				Poster:    "p", Bytes: 1000, Posted: time.Now(),
+				PartNum: 1, TotalParts: 2, SegTotal: 2,
+				ArticleNum: 1000 + i,
+			}
+		}
+		if _, err := r.stageArticles(ctx, arts); err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < n; i++ {
+			backdate(t, r, group, fmt.Sprintf("%s.Dead.%03d", group, i), time.Hour)
+		}
+	}
+	seed("a.b.heavy", 300)
+	seed("a.b.light", 10)
+
+	cov := map[string][]articleRange{
+		"a.b.heavy": {{Start: 1, End: 5000}},
+		"a.b.light": {{Start: 1, End: 5000}},
+	}
+	scanned, evicted, _, err := r.sweepWalkPast(ctx, cov, 15*time.Minute, 200, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The even split alone is 100 per group; light holds 10, so a
+	// non-redistributing sweep tops out around 110. Redistribution keeps
+	// working the heavy group with the leftover.
+	if scanned < 150 {
+		t.Errorf("scanned %d of a 200 budget over a skewed population — leftover budget is not redistributed", scanned)
+	}
+	if evicted < 150 {
+		t.Errorf("evicted %d — the redistributed budget must actually judge what it scans", evicted)
+	}
+	// And the rotation advances so the next round starts from the other group.
+	r.walkMu.Lock()
+	rot := r.walkRotate
+	r.walkMu.Unlock()
+	if rot != 1 {
+		t.Errorf("walkRotate = %d after one sweep, want 1 — the starting group must rotate across rounds", rot)
+	}
+}

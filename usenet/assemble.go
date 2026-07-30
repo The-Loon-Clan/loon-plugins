@@ -135,8 +135,12 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	}
 	// The walk-past sweep rides the same round cadence: dead sets holding
 	// staging memory are exactly what keeps the backfill's pressure gate
-	// closed, and clearing them per round is what shortens the pause.
-	p.runWalkPastSweep(ctx, cfg)
+	// closed, and clearing them per round is what shortens the pause. Its
+	// evictions count as DRAIN progress below — a round that builds nothing
+	// but sheds a full sweep budget of dead sets is relieving pressure, and
+	// ending the catch-up then would leave the sweep at one budget per
+	// 15-minute interval during exactly the regime it exists for.
+	drained += p.runWalkPastSweep(ctx, cfg)
 
 	// Make sure last pass's counters are persisted even if that pass died
 	// before its own flush.
@@ -429,17 +433,17 @@ const salvageCapPerRound = 25
 // complete (walkPastDead), and every hour they wait for the TTL is an hour
 // the pressure gate stays closed against work that CAN complete. Dead sets
 // worth keeping go to salvageSets instead of the void.
-func (p *Plugin) runWalkPastSweep(ctx context.Context, cfg Config) {
+func (p *Plugin) runWalkPastSweep(ctx context.Context, cfg Config) (removed int) {
 	if cfg.WalkPastNoEvict {
-		return
+		return 0
 	}
 	cov, err := p.walkPastCoverage(ctx)
 	if err != nil {
 		p.reportErr(ctx, "usenet/walk-past-coverage", err)
-		return
+		return 0
 	}
 	if len(cov) == 0 {
-		return
+		return 0
 	}
 	salvageCap := salvageCapPerRound
 	if cfg.WalkPastNoSalvage {
@@ -458,7 +462,7 @@ func (p *Plugin) runWalkPastSweep(ctx context.Context, cfg Config) {
 		p.buildJob.Log("walk-past sweep: evicted %d of %d examined set(s) — span fully fetched, still incomplete, past grace",
 			evicted, scanned)
 	}
-	p.salvageSets(ctx, salvage)
+	return evicted + p.salvageSets(ctx, salvage)
 }
 
 // salvageSets assembles walk-past-dead sets that still hold most of their
@@ -478,21 +482,48 @@ func (p *Plugin) runWalkPastSweep(ctx context.Context, cfg Config) {
 // A resolve or store failure leaves candidates staged: the sweep cursor
 // brings them around again, and the TTL is the backstop — never evict a
 // salvageable set just because a backend was briefly down.
-func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) {
+//
+// Returns how many sets it REMOVED from staging (stored, evicted, or
+// junked) — drain progress for the catch-up loop, same currency as the
+// builder's own drain count.
+func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int) {
 	if len(keys) == 0 {
-		return
+		return 0
 	}
 	sink, err := p.resolveSink()
 	if err != nil {
 		p.reportErr(ctx, "usenet/salvage-sink", err)
-		return
+		return 0
 	}
 	hb, err := p.resolveHealthBackend()
 	if err != nil {
 		p.reportErr(ctx, "usenet/salvage-health", err)
-		return
+		return 0
 	}
 	salvaged, dead, junked := 0, 0, 0
+	// The same free title judgment the build path runs first: a junk-titled
+	// dead set costs microseconds here versus a full article load below, and
+	// it must not occupy one of the round's capped salvage slots. The batched
+	// delete matches the build path's junk drain.
+	kept, rejects := splitByTitle(keys, p.posterWatch.active())
+	keys = kept
+	if len(rejects) > 0 {
+		doomed := make([]groupKey, 0, len(rejects))
+		for _, r := range rejects {
+			if r.blockedExt {
+				p.outcomes.note(outcomeBlockedExt, r.key.Base)
+			} else {
+				p.hits.note("junk", r.junkRule, r.title)
+				p.outcomes.note(outcomeJunk, r.key.Base)
+			}
+			doomed = append(doomed, r.key)
+		}
+		removed, err := p.staging.deleteStagedBatch(ctx, doomed)
+		if err != nil {
+			p.reportErr(ctx, "usenet/salvage-delete", err)
+		}
+		junked += removed
+	}
 	for _, k := range keys {
 		if ctx.Err() != nil {
 			break
@@ -597,6 +628,7 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) {
 		p.buildJob.Log("salvage: %d broken/partial release(s) stored, %d beyond par2 repair evicted, %d junk dropped",
 			salvaged, dead, junked)
 	}
+	return salvaged + dead + junked
 }
 
 // salvageTally mirrors isComplete's per-file grouping to count what a dead

@@ -82,9 +82,12 @@ type redisStaging struct {
 	// walkMu/walkCursors carry the walk-past sweep's per-group SSCAN positions
 	// across build rounds — same resumption rationale as reapCursor: the
 	// per-round budget only circles the whole population if each round resumes
-	// where the last stopped.
+	// where the last stopped. walkRotate staggers which group each round
+	// starts from, so the budget break never lands on the same alphabetical
+	// prefix every time.
 	walkMu      sync.Mutex
 	walkCursors map[string]uint64
+	walkRotate  int
 }
 
 func newRedisStaging(rdb redis.UniversalClient, ttlHours func(context.Context) int, onEvict func(int), report func(context.Context, string, error)) *redisStaging {
@@ -1128,82 +1131,111 @@ func (r *redisStaging) sweepWalkPast(ctx context.Context, cov map[string][]artic
 	graceSec := int64(grace / time.Second)
 	var firstErr error
 
-	for _, group := range groups {
-		if scanned >= budget || ctx.Err() != nil {
-			break
-		}
-		r.walkMu.Lock()
-		if r.walkCursors == nil {
-			r.walkCursors = map[string]uint64{}
-		}
-		cursor := r.walkCursors[group]
-		r.walkMu.Unlock()
+	r.walkMu.Lock()
+	if r.walkCursors == nil {
+		r.walkCursors = map[string]uint64{}
+	}
+	// Rotate the starting group across rounds: with a fixed sorted order the
+	// budget break always landed on the same alphabetical prefix, so a
+	// late-alphabet group behind a few heavy ones was swept rarely or never.
+	rot := r.walkRotate % len(groups)
+	r.walkRotate++
+	r.walkMu.Unlock()
+	groups = append(groups[rot:], groups[:rot]...)
 
-		hashes, next, serr := r.rdb.SScan(ctx, activeKey(group), cursor, "", int64(perGroup)).Result()
-		if serr != nil && serr != redis.Nil {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("sscan %s: %w", group, serr)
+	// The outer loop redistributes leftover budget: a skewed population (one
+	// group holding nearly everything) otherwise swept at perGroup per round
+	// while the rest of the budget evaporated. wrapped marks a group whose
+	// SSCAN cursor completed a full circuit THIS call — re-reading it inside
+	// the same round would re-examine members already judged.
+	wrapped := make(map[string]bool, len(groups))
+	for scanned < budget && ctx.Err() == nil {
+		progress := false
+		for _, group := range groups {
+			if scanned >= budget || ctx.Err() != nil {
+				break
 			}
-			continue
-		}
-		r.walkMu.Lock()
-		r.walkCursors[group] = next
-		r.walkMu.Unlock()
-		if len(hashes) == 0 {
-			continue
-		}
-		scanned += len(hashes)
-
-		pipe := r.rdb.Pipeline()
-		metas := make([]*redis.MapStringStringCmd, len(hashes))
-		lens := make([]*redis.IntCmd, len(hashes))
-		for i, h := range hashes {
-			metas[i] = pipe.HGetAll(ctx, grpKey(group, h))
-			lens[i] = pipe.HLen(ctx, artKey(group, h))
-		}
-		if _, perr := pipe.Exec(ctx); perr != nil && perr != redis.Nil {
-			if firstErr == nil {
-				firstErr = perr
-			}
-			continue
-		}
-		var doomKeys []string
-		var doomMembers []interface{}
-		for i, h := range hashes {
-			meta := metas[i].Val()
-			if len(meta) == 0 {
-				continue // meta already gone (TTL mid-flight): the ref sweeps elsewhere
-			}
-			held := int(lens[i].Val())
-			if !walkPastDead(meta, held, cov[group], now, graceSec, margin) {
+			if wrapped[group] {
 				continue
 			}
-			// A salvage-worthy set must NEVER take the doom path just because
-			// this round's cap is full — past the cap it stays staged and the
-			// cursor brings it around again. Only when salvage is disabled
-			// entirely (cap 0) do worthy sets evict with the rest.
-			if salvageCap > 0 && meta["base_subject"] != "" {
-				if needed := groupNeededParts(meta); needed > 0 && float64(held) >= salvageFloor*float64(needed) {
-					if len(salvage) < salvageCap {
-						salvage = append(salvage, groupKey{Group: group, Base: meta["base_subject"]})
-					}
+			r.walkMu.Lock()
+			cursor := r.walkCursors[group]
+			r.walkMu.Unlock()
+
+			hashes, next, serr := r.rdb.SScan(ctx, activeKey(group), cursor, "", int64(perGroup)).Result()
+			if serr != nil && serr != redis.Nil {
+				if firstErr == nil {
+					firstErr = fmt.Errorf("sscan %s: %w", group, serr)
+				}
+				wrapped[group] = true // don't retry a failing group this round
+				continue
+			}
+			r.walkMu.Lock()
+			r.walkCursors[group] = next
+			r.walkMu.Unlock()
+			if next == 0 {
+				wrapped[group] = true
+			}
+			if len(hashes) == 0 {
+				continue
+			}
+			progress = true
+			scanned += len(hashes)
+
+			pipe := r.rdb.Pipeline()
+			metas := make([]*redis.MapStringStringCmd, len(hashes))
+			lens := make([]*redis.IntCmd, len(hashes))
+			for i, h := range hashes {
+				metas[i] = pipe.HGetAll(ctx, grpKey(group, h))
+				lens[i] = pipe.HLen(ctx, artKey(group, h))
+			}
+			if _, perr := pipe.Exec(ctx); perr != nil && perr != redis.Nil {
+				if firstErr == nil {
+					firstErr = perr
+				}
+				continue
+			}
+			var doomKeys []string
+			var doomMembers []interface{}
+			for i, h := range hashes {
+				meta := metas[i].Val()
+				if len(meta) == 0 {
+					continue // meta already gone (TTL mid-flight): the ref sweeps elsewhere
+				}
+				held := int(lens[i].Val())
+				if !walkPastDead(meta, held, cov[group], now, graceSec, margin) {
 					continue
 				}
+				// A salvage-worthy set must NEVER take the doom path just because
+				// this round's cap is full — past the cap it stays staged and the
+				// cursor brings it around again. Only when salvage is disabled
+				// entirely (cap 0) do worthy sets evict with the rest.
+				if salvageCap > 0 && meta["base_subject"] != "" {
+					if needed := groupNeededParts(meta); needed > 0 && float64(held) >= salvageFloor*float64(needed) {
+						if len(salvage) < salvageCap {
+							salvage = append(salvage, groupKey{Group: group, Base: meta["base_subject"]})
+						}
+						continue
+					}
+				}
+				doomKeys = append(doomKeys, artKey(group, h), grpKey(group, h))
+				doomMembers = append(doomMembers, h)
 			}
-			doomKeys = append(doomKeys, artKey(group, h), grpKey(group, h))
-			doomMembers = append(doomMembers, h)
+			if len(doomKeys) > 0 {
+				evPipe := r.rdb.Pipeline()
+				evPipe.Del(ctx, doomKeys...)
+				evPipe.SRem(ctx, activeKey(group), doomMembers...)
+				// Counted only when the pipeline ran, same rule as the hopeless
+				// eviction: this counter proves the sweep is WORKING.
+				if _, perr := evPipe.Exec(ctx); perr == nil {
+					evicted += len(doomMembers)
+				} else if firstErr == nil {
+					firstErr = perr
+				}
+			}
 		}
-		if len(doomKeys) > 0 {
-			evPipe := r.rdb.Pipeline()
-			evPipe.Del(ctx, doomKeys...)
-			evPipe.SRem(ctx, activeKey(group), doomMembers...)
-			// Counted only when the pipeline ran, same rule as the hopeless
-			// eviction: this counter proves the sweep is WORKING.
-			if _, perr := evPipe.Exec(ctx); perr == nil {
-				evicted += len(doomMembers)
-			} else if firstErr == nil {
-				firstErr = perr
-			}
+		if !progress {
+			break
 		}
 	}
 	return scanned, evicted, salvage, firstErr
