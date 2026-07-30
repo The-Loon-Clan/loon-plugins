@@ -354,11 +354,12 @@ func (p *Plugin) recordBackfill(ctx context.Context, backbone string, targets ma
 
 		// Reached this group's retention horizon: everything below is older still.
 		cutoff := groupRow{Name: name, RetentionDays: g.RetentionDays}.cutoff(cfg)
-		if !oldest.IsZero() && oldest.Before(cutoff) {
+		if horizonReached(rs, cutoff) {
 			if err := p.st.markBackfillDoneForBackbone(ctx, backbone, name); err != nil {
 				p.reportErr(ctx, "usenet/backfill-done", err)
 			}
-			p.backfillJob.Log("%s: reached the retention horizon (oldest %s)", name, oldest.Format("2006-01-02"))
+			p.backfillJob.Log("%s: reached the retention horizon (a whole batch older than %s)",
+				name, cutoff.Format("2006-01-02"))
 			continue
 		}
 
@@ -381,6 +382,42 @@ func (p *Plugin) recordBackfill(ctx context.Context, backbone string, targets ma
 		}
 	}
 	return staged
+}
+
+// horizonReached decides whether one group's pass proved its history is
+// exhausted down to the retention cutoff. Marking a group backfill_done is the
+// most consequential silent write in the pipeline — nothing resets it
+// automatically, and the only recovery re-walks the group's entire history
+// against a paying provider — so both rules here are load-bearing:
+//
+// A batch counts as past the horizon only when its NEWEST article is older
+// than the cutoff. The previous rule used the pass's oldest article, which is
+// poster-controlled boundary data: one forged or broken ancient Date header
+// anywhere in one 3,000-article batch marked the whole group done and
+// permanently stranded everything below the back watermark. A whole batch
+// being old requires the poster to have forged every date in it. (The forward
+// crawl's contiguousEnd stamps watermarks from maxDate for the same reason.)
+//
+// And the shortcut only fires when EVERY batch in the group's pass succeeded.
+// A failed batch leaves its span unrecorded — recordBackfill's contract is
+// that the next pass re-derives the gap and retries — but that contract only
+// holds while the group stays open. Marking done past a failed batch orphans
+// its gap forever, invisibly, behind a log line that reads as success.
+//
+// A pass of empty batches (deep history where every article has expired)
+// reaches the horizon through the other path: its ranges are recorded, the
+// gaps shrink, and the gaps==0 branch marks the group done.
+func horizonReached(rs []batchResult, cutoff time.Time) bool {
+	past := false
+	for _, r := range rs {
+		if !r.ok {
+			return false
+		}
+		if !r.maxDate.IsZero() && r.maxDate.Before(cutoff) {
+			past = true
+		}
+	}
+	return past
 }
 
 // candidate is one group's planned batches for a pass.
