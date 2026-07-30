@@ -737,6 +737,14 @@ func isGroupComplete(meta map[string]string, fields []string) bool {
 		// maximum meant only the largest file could ever qualify, so a release
 		// of one media file plus a dozen par2s counted 1 complete file out of
 		// 13 and stayed pending until it expired.
+		//
+		// The two isComplete rules apply here too, for the same reasons: a
+		// file short of its own total blocks the set (the builder would emit
+		// its bucket truncated), and only files numbered 1..totalFiles count
+		// toward the poster's total — the file-0 bucket ([00/N] headers,
+		// unnumbered companions) once made a set "complete" while its last
+		// real file was still being crawled, and this check runs at STAGE
+		// time, queueing the set at the exact moment the hole opened.
 		per := perFileSegTotals(meta)
 		completeFiles := 0
 		for fn, count := range fileSegs {
@@ -748,7 +756,10 @@ func isGroupComplete(meta map[string]string, fields []string) bool {
 				// TTL.
 				need = segTotal
 			}
-			if count >= need {
+			if count < need {
+				return false
+			}
+			if fn >= 1 && fn <= totalFiles {
 				completeFiles++
 			}
 		}

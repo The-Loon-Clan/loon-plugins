@@ -358,9 +358,27 @@ func isComplete(arts []stagedArticle) bool {
 				f.segTotal = a.SegTotal
 			}
 		}
+		// Two rules, and the range check is the load-bearing one. Only files
+		// numbered 1..totalFiles count toward the poster's own total: a
+		// "[00/14]" header post or an unnumbered par2 companion lands in the
+		// file-0 bucket, and counting it meant complete = 14 the moment files
+		// 0..13 were in — the NZB was emitted, the set deleted, and the
+		// watermark moved on while file 14 was still being crawled. The last
+		// volume of the release was permanently lost and the broken NZB served
+		// as "completed". The forward crawl stages in posting order with a
+		// build after every pass, so the window was hit routinely.
+		//
+		// And EVERY seen file must have all its segments, whatever its number:
+		// buildNZB emits every bucket it has, so assembling around a
+		// half-fetched companion would ship a truncated file. A set held back
+		// here stays staged and is reconsidered once the missing articles
+		// arrive; if they never do, staging's age horizon sheds it.
 		complete := 0
-		for _, f := range files {
-			if f.segTotal > 0 && len(f.parts) >= f.segTotal {
+		for fn, f := range files {
+			if f.segTotal <= 0 || len(f.parts) < f.segTotal {
+				return false
+			}
+			if fn >= 1 && fn <= totalFiles {
 				complete++
 			}
 		}
@@ -569,11 +587,18 @@ func (s *PGStore) candidateGroups(ctx context.Context, limit int) ([]groupKey, c
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		// The multi-file arm counts only file numbers >= 1: a "[00/N]" header
+		// post or an unnumbered companion sits at file_num 0 and counting it
+		// satisfied MAX(total_files) one real file early. This is a cheap
+		// PRE-filter — isComplete re-verifies per file on the loaded articles
+		// — so it may stay optimistic (a set passed here and refused there
+		// just waits), but it must not be optimistic in a way that admits
+		// every [0/N]-companioned set the moment its last file starts.
 		return tx.SelectContext(ctx, &rows,
 			`SELECT group_name, base_subject FROM articles
 			 GROUP BY group_name, base_subject
 			 HAVING (bool_or(file_parts) = FALSE AND COUNT(DISTINCT part_num) >= MAX(total_parts))
-			     OR (bool_or(file_parts) = TRUE  AND COUNT(DISTINCT file_num) >= MAX(total_files))
+			     OR (bool_or(file_parts) = TRUE  AND COUNT(DISTINCT file_num) FILTER (WHERE file_num >= 1) >= MAX(total_files))
 			 LIMIT $1`, limit)
 	})
 	if err != nil {
@@ -877,10 +902,14 @@ func (s *PGStore) builderInfo(ctx context.Context, limit int) (BuilderInfo, erro
 		}
 		// One GROUP BY over staging; the derived per-release "have/need units"
 		// mirrors candidateGroups (files for multi-file, parts otherwise).
+		// have mirrors candidateGroups' pre-filter, including its file_num >= 1
+		// clause — the file-0 bucket ([00/N] headers, unnumbered companions)
+		// is not one of the poster's N files, and counting it showed sets as
+		// ready one file before the builder would take them.
 		const setsCTE = `
 			WITH sets AS (
 			  SELECT bool_or(file_parts) AS multi,
-			         CASE WHEN bool_or(file_parts) THEN COUNT(DISTINCT file_num) ELSE COUNT(DISTINCT part_num) END AS have,
+			         CASE WHEN bool_or(file_parts) THEN COUNT(DISTINCT file_num) FILTER (WHERE file_num >= 1) ELSE COUNT(DISTINCT part_num) END AS have,
 			         CASE WHEN bool_or(file_parts) THEN MAX(total_files)          ELSE MAX(total_parts)          END AS need,
 			         base_subject, COUNT(*) AS segs
 			  FROM articles GROUP BY group_name, base_subject

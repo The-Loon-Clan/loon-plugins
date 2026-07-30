@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -30,6 +31,21 @@ func metaAndFields(arts []stagedArticle) (map[string]string, []string) {
 		"total_parts": strconv.Itoa(maxTP),
 		"total_files": strconv.Itoa(maxTF),
 		"seg_total":   strconv.Itoa(maxST),
+	}
+	// Per-file segment totals, exactly as stageArticles writes them (st:N,
+	// only when positive). Without these the fixture models only pre-upgrade
+	// sets — see TestCompletenessDivergence_PreUpgradeSets, which strips them
+	// back off deliberately.
+	per := map[int]int{}
+	for _, a := range arts {
+		if a.SegTotal > per[a.FileNum] {
+			per[a.FileNum] = a.SegTotal
+		}
+	}
+	for fn, st := range per {
+		if st > 0 {
+			meta[segFieldKey(fn)] = strconv.Itoa(st)
+		}
 	}
 	fields := make([]string, 0, len(arts))
 	for _, a := range arts {
@@ -79,6 +95,31 @@ func TestCompletenessParity(t *testing.T) {
 		{"multi-file complete uniform", multi(2, []int{2, 2}, []int{2, 2}), true},
 		{"multi-file incomplete", multi(2, []int{2, 1}, []int{2, 2}), false},
 		{"multi-file missing a file", multi(2, []int{2}, []int{2}), false},
+		// The file-0 hole. A "[00/14]"-style header post (or an unnumbered
+		// par2 companion) lands in the file-0 bucket; counting it toward
+		// total_files assembled the release one file early — the NZB shipped
+		// without its last-posted volume, permanently, while the crawl
+		// watermark moved past the missing articles. File 0 must neither
+		// count toward the poster's total nor, while incomplete, let the set
+		// assemble around it.
+		{"file-0 header present, last real file missing",
+			append(multi(3, []int{2, 2}, []int{2, 2}), // files 1,2 of 3 complete
+				stagedArticle{FileParts: true, TotalFiles: 3, FileNum: 0, PartNum: 1, SegTotal: 1}),
+			false},
+		{"file-0 header present, all real files complete",
+			append(multi(3, []int{2, 2, 2}, []int{2, 2, 2}),
+				stagedArticle{FileParts: true, TotalFiles: 3, FileNum: 0, PartNum: 1, SegTotal: 1}),
+			true},
+		{"unnumbered companion still short blocks assembly",
+			append(multi(2, []int{2, 2}, []int{2, 2}),
+				// an unnumbered par2: no [i/j] marker, so FileNum 0 and its own
+				// (1/3) segment counter — only one of its parts has arrived
+				stagedArticle{FileNum: 0, PartNum: 1, TotalParts: 3, SegTotal: 3}),
+			false},
+		{"file number above the poster's total never counts",
+			append(multi(2, []int{2}, []int{2}), // file 1 of 2 complete, file 2 absent
+				stagedArticle{FileParts: true, TotalFiles: 2, FileNum: 3, PartNum: 1, SegTotal: 1}),
+			false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -95,17 +136,18 @@ func TestCompletenessParity(t *testing.T) {
 	}
 }
 
-// TestCompletenessDivergence_HeterogeneousSegTotals documents a REAL, deliberate
-// difference carried over from prod: for multi-file releases whose files have
-// DIFFERENT segment counts, prod's Redis check compares every file against one
-// global max seg_total, while the builder's isComplete uses each file's own
-// segTotal. So Redis is STRICTER.
+// TestCompletenessDivergence_PreUpgradeSets pins the one place the two
+// implementations still deliberately disagree: sets staged before per-file
+// totals (st:N) existed. With no per-file figure available, isGroupComplete
+// falls back to judging every file against the global max seg_total, which for
+// heterogeneous files (one media file, small par2s) is STRICTER than the
+// builder's per-file rule.
 //
-// This is safe in that direction — a set Redis queues always passes the builder's
-// re-check, so nothing is assembled prematurely. The cost is that such a set is
-// never queued in redis mode and sits until its 2h TTL. Preserved deliberately
-// (prod behaves this way today); if we ever fix it, fix prod first, then re-lift.
-func TestCompletenessDivergence_HeterogeneousSegTotals(t *testing.T) {
+// Safe in that direction — a set Redis under-queues just sits until its TTL,
+// never assembled prematurely — and these sets age out within the staging TTL,
+// so the fallback is not worth more machinery. If this test starts passing the
+// isGroupComplete branch, the fallback changed and this comment is stale.
+func TestCompletenessDivergence_PreUpgradeSets(t *testing.T) {
 	// file 1: 2 of 2 segments; file 2: 3 of 3 segments. Both files are genuinely
 	// complete, but the global max seg_total is 3.
 	arts := multi(2, []int{2, 3}, []int{2, 3})
@@ -114,10 +156,16 @@ func TestCompletenessDivergence_HeterogeneousSegTotals(t *testing.T) {
 		t.Fatal("isComplete: expected the set to be complete (per-file seg totals)")
 	}
 	meta, fields := metaAndFields(arts)
+	// Model a pre-upgrade set: staged before stageArticles wrote st:N.
+	for k := range meta {
+		if strings.HasPrefix(k, "st:") {
+			delete(meta, k)
+		}
+	}
 	if isGroupComplete(meta, fields) {
-		t.Fatal("isGroupComplete: expected the known stricter behavior (global seg_total) " +
-			"to report incomplete — if this now passes, prod's rule changed and the " +
-			"lift needs re-checking")
+		t.Fatal("isGroupComplete: expected the pre-upgrade fallback (global seg_total) " +
+			"to report incomplete — if this now passes, the fallback rule changed and " +
+			"the divergence comment needs re-checking")
 	}
 }
 
