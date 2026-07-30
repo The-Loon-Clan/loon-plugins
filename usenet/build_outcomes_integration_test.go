@@ -246,3 +246,24 @@ func TestSubjectCorpusInsertAndPrune(t *testing.T) {
 		t.Errorf("pruned %d (err=%v), want 2 — the rolling window must trim", pruned, err)
 	}
 }
+
+// The resolutions store in isolation: batch insert with watermarks attached,
+// and the prune.
+func TestSetResolutionsStore(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	rows := []setResolution{{group: "a.b.g", kind: "built", artLo: 100, artHi: 200, held: 40}}
+	marks := map[string]groupMarks{"a.b.g": {Back: 50, High: 900}}
+	if err := s.insertSetResolutions(ctx, rows, marks); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	var n int
+	if err := s.db.DB().QueryRow(`SELECT COUNT(*) FROM ` + s.db.Schema() +
+		`.set_resolutions WHERE kind='built' AND art_lo=100 AND back_watermark=50 AND high_watermark=900`).
+		Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("stored %d matching rows, want 1", n)
+	}
+}

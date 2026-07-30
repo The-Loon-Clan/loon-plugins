@@ -30,6 +30,8 @@ func buildPassPlugin(t *testing.T) (*Plugin, *redisStaging) {
 		posterHits:  newPosterHits(),
 		posterWatch: newPosterWatch(nil),
 		outcomes:    newBuildOutcomes(),
+		grouping:    newGroupingWatch(),
+		resolutions: newResolutionLog(),
 		buildJob:    sched.RegisterJob("build-test", ""),
 	}
 	p.cfg.applyDefaults()

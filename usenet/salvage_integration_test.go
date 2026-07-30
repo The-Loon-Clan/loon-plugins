@@ -192,3 +192,75 @@ func TestSalvageStoresDataCompleteAsNormal(t *testing.T) {
 		t.Error("stored set still staged")
 	}
 }
+
+// Every resolved set leaves a completion-distance record — the measured
+// basis the position-based staging window will be derived from. Driven
+// through the real paths: a build records 'built', a salvage 'salvaged',
+// a beyond-repair judgment 'salvage_dead', each with its article span and
+// the group's watermarks attached at flush.
+func TestResolutionsRecordBuildAndSalvage(t *testing.T) {
+	ctx := context.Background()
+	p, staging := buildPassPlugin(t)
+	st := p.st.(*PGStore)
+	const group = "a.b.group"
+
+	// Watermarks the flush should snapshot.
+	if _, err := st.db.DB().Exec(`INSERT INTO ` + st.db.Schema() +
+		`.newsgroup_state (backbone, group_name, high_watermark, back_watermark) VALUES ('b1', 'a.b.group', 90000, 40000)
+		 ON CONFLICT DO NOTHING`); err != nil {
+		t.Fatal(err)
+	}
+	seedCoverage(t, st, group, 1, 100000)
+
+	// One buildable set (completes and builds normally).
+	for i := 1; i <= 2; i++ {
+		if _, err := staging.stageArticles(ctx, []stagedArticle{{
+			Group: group, BaseSubject: "Kaiju.Show.S01E08.1080p.BluRay.x264-GRP",
+			Subject:   fmt.Sprintf("Kaiju.Show.S01E08.1080p.BluRay.x264-GRP (%d/2)", i),
+			MessageID: fmt.Sprintf("<r8-%d@x>", i), Poster: "p", Bytes: 50_000_000,
+			Posted:  time.Now(),
+			PartNum: i, TotalParts: 2, SegTotal: 2, ArticleNum: 50000 + i,
+		}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// One salvageable dead set and one beyond-repair dead set.
+	stageSalvageSet(t, staging, group, "Rescue.Show.S01E09.1080p.BluRay.x264-GRP", 3, 4, 2, 2)
+	backdate(t, staging, group, "Rescue.Show.S01E09.1080p.BluRay.x264-GRP", time.Hour)
+	stageSalvageSet(t, staging, group, "Gone.Show.S01E10.1080p.BluRay.x264-GRP", 3, 5, 0, 0)
+	backdate(t, staging, group, "Gone.Show.S01E10.1080p.BluRay.x264-GRP", time.Hour)
+
+	p.buildLocked(ctx)
+
+	type resRow struct {
+		kind           string
+		lo, back, high int64
+	}
+	var got []resRow
+	res, err := st.db.DB().Query(`SELECT kind, art_lo, back_watermark, high_watermark FROM ` +
+		st.db.Schema() + `.set_resolutions ORDER BY kind`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Close()
+	for res.Next() {
+		var r resRow
+		if err := res.Scan(&r.kind, &r.lo, &r.back, &r.high); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, r)
+	}
+	kinds := map[string]int{}
+	for _, r := range got {
+		kinds[r.kind]++
+		if r.lo <= 0 {
+			t.Errorf("%s recorded without a span (art_lo=%d)", r.kind, r.lo)
+		}
+		if r.back != 40000 || r.high != 90000 {
+			t.Errorf("%s recorded watermarks (%d,%d), want (40000,90000)", r.kind, r.back, r.high)
+		}
+	}
+	if kinds["built"] != 1 || kinds["salvaged"] != 1 || kinds["salvage_dead"] != 1 {
+		t.Errorf("resolutions = %v (rows: %+v), want built:1 salvaged:1 salvage_dead:1", kinds, got)
+	}
+}

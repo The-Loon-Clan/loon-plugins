@@ -146,6 +146,7 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 	// before its own flush.
 	defer p.flushFilterHits(ctx)
 	defer p.flushPosterHits(ctx)
+	defer p.flushResolutions(ctx)
 	// Every branch below names its outcome, so the reasons sum to the
 	// candidates examined — see build_outcomes.go.
 	defer p.flushBuildOutcomes(ctx)
@@ -333,6 +334,8 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			}
 			continue
 		}
+		// Span read BEFORE the post-store delete destroys the meta it lives on.
+		spanLo, spanHi, _ := p.staging.setSpan(ctx, k.Group, k.Base)
 		xmlBytes, err := buildNZB(arts)
 		if err != nil {
 			p.outcomes.note(outcomeXMLError, k.Base)
@@ -390,6 +393,7 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			// plugin table records this, and the host table mixes in agent
 			// uploads — the ring is what the crawlers page shows.
 			p.tel.noteBuilt(title, k.Group, size)
+			p.resolutions.note(k.Group, "built", len(arts), spanLo, spanHi)
 		}
 	}
 	// The summary now accounts for every candidate, not just the ones that
@@ -568,6 +572,8 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 		}
 		total, missData, par2Claimed, par2Missing := salvageTally(arts)
 		verdict := healthVerdict(missData, par2Claimed, par2Missing)
+		// Span read BEFORE any delete destroys the meta it lives on.
+		spanLo, spanHi, _ := p.staging.setSpan(ctx, k.Group, k.Base)
 		if verdict == healthDead {
 			// Gaps beyond what the surviving par2 can rebuild: not worth a row.
 			if err := p.staging.deleteStaged(ctx, k.Group, k.Base); err != nil {
@@ -575,6 +581,7 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			} else {
 				dead++
 				p.tel.noteWalkPast(1)
+				p.resolutions.note(k.Group, "salvage_dead", len(arts), spanLo, spanHi)
 			}
 			continue
 		}
@@ -627,6 +634,7 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			p.reportErr(ctx, "usenet/salvage-delete", err)
 		}
 		p.outcomes.note(outcomeSalvaged, k.Base)
+		p.resolutions.note(k.Group, "salvaged", len(arts), spanLo, spanHi)
 		if created {
 			salvaged++
 			p.tel.noteSalvaged(1)

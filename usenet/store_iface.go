@@ -143,6 +143,11 @@ type AssemblerStore interface {
 	// subjects for differential parser testing, plus its prune.
 	insertSubjectCorpus(ctx context.Context, rows []corpusRow) error
 	pruneSubjectCorpus(ctx context.Context, keepDays int) (int64, error)
+	// Completion-distance instrumentation (resolutions.go): the measured
+	// basis for the position-based staging window.
+	groupWatermarks(ctx context.Context, groups []string) (map[string]groupMarks, error)
+	insertSetResolutions(ctx context.Context, rows []setResolution, marks map[string]groupMarks) error
+	pruneSetResolutions(ctx context.Context, keepDays int) (int64, error)
 	groupArticles(ctx context.Context, group, base string) ([]stagedArticle, error)
 	deleteStaged(ctx context.Context, group, base string) error
 	// insertNzb returns the new row's id (0 on a content_hash duplicate) —

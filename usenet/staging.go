@@ -100,6 +100,12 @@ type stagingStore interface {
 	// extends a full batch window beyond BOTH ends of its seen span, so a
 	// release straddling a fetch frontier is never judgeable.
 	sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int, margin int64) (scanned, evicted int, salvage []groupKey, err error)
+	// setSpan reads a staged set's recorded article-number span (0,0 when
+	// unknown). Redis folds spans into the set meta at stage time; pg staging
+	// never stored article numbers, so it answers 0s — completion-distance
+	// instrumentation is a redis-mode measurement, like the walk-past sweep
+	// it feeds.
+	setSpan(ctx context.Context, group, base string) (lo, hi int64, err error)
 }
 
 // candidateStats describes one draw from the ready queue.
@@ -250,4 +256,9 @@ func (s *pgStaging) demoteReady(ctx context.Context, group, base string) (bool, 
 // and the memory ceiling the sweep protects is a redis phenomenon.
 func (s *pgStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleRange, grace time.Duration, budget, salvageCap int, margin int64) (int, int, []groupKey, error) {
 	return 0, 0, nil, nil
+}
+
+// setSpan is unknowable in pg staging: article numbers were never stored.
+func (s *pgStaging) setSpan(ctx context.Context, group, base string) (int64, int64, error) {
+	return 0, 0, nil
 }

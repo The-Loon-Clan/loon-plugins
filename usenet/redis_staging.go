@@ -1033,6 +1033,20 @@ func (r *redisStaging) deleteStaged(ctx context.Context, group, base string) err
 // The articles STAY: if the missing parts arrive, the stage-time completeness
 // check re-queues the set; if they never do, the TTL clears the keys and the
 // reaper the stale ref. Returns whether an entry was actually removed.
+// setSpan reads the art_lo/art_hi the span fold recorded on the set's meta.
+func (r *redisStaging) setSpan(ctx context.Context, group, base string) (int64, int64, error) {
+	vals, err := r.rdb.HMGet(ctx, grpKey(group, groupHashKey(group, base)), "art_lo", "art_hi").Result()
+	if err != nil || len(vals) != 2 {
+		return 0, 0, err
+	}
+	toInt := func(v interface{}) int64 {
+		s, _ := v.(string)
+		n, _ := strconv.ParseInt(s, 10, 64)
+		return n
+	}
+	return toInt(vals[0]), toInt(vals[1]), nil
+}
+
 func (r *redisStaging) demoteReady(ctx context.Context, group, base string) (bool, error) {
 	var n int64
 	err := r.readyRetry(ctx, func() error {
