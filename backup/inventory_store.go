@@ -57,6 +57,42 @@ type inventoryStore interface {
 	// serverVersion records what wrote the dump; pg_restore across a major
 	// version is a decision, not a detail.
 	serverVersion(ctx context.Context) (string, error)
+
+	// The admin view's reads, and the puller's ack.
+	recordAck(ctx context.Context, gen int64, source string, packs, bytes int64) error
+	latestAcks(ctx context.Context) ([]ackRow, error)
+	recentGenerations(ctx context.Context, limit int) ([]genRow, error)
+	suspects(ctx context.Context, limit int) ([]suspectRow, error)
+}
+
+// ackRow is one backup target's most recent completeness claim.
+type ackRow struct {
+	Source     string    `db:"source"`
+	Generation int64     `db:"generation"`
+	AckedAt    time.Time `db:"acked_at"`
+	Packs      int64     `db:"packs"`
+	Bytes      int64     `db:"bytes"`
+}
+
+// genRow is one index pass as the admin page shows it.
+type genRow struct {
+	ID        int64        `db:"id"`
+	StartedAt time.Time    `db:"started_at"`
+	SealedAt  sql.NullTime `db:"sealed_at"`
+	Files     int64        `db:"files"`
+	Bytes     int64        `db:"bytes"`
+	Hashed    int64        `db:"hashed"`
+	Error     string       `db:"error"`
+}
+
+// suspectRow is one file the index distrusts.
+type suspectRow struct {
+	Path      string    `db:"path"`
+	Class     string    `db:"class"`
+	Reason    string    `db:"reason"`
+	Detail    string    `db:"detail"`
+	SeenCount int64     `db:"seen_count"`
+	LastSeen  time.Time `db:"last_seen"`
 }
 
 // tableStat is one relation's shape at dump time.
@@ -359,4 +395,56 @@ func (s *PGStore) serverVersion(ctx context.Context) (string, error) {
 		return tx.QueryRowContext(ctx, `SHOW server_version`).Scan(&v)
 	})
 	return v, err
+}
+
+// recordAck stores a puller's completeness claim. Upsert: a re-pull of the
+// same generation refreshes the time rather than accumulating rows.
+func (s *PGStore) recordAck(ctx context.Context, gen int64, source string, packs, bytes int64) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`INSERT INTO acks (generation, source, packs, bytes)
+			 VALUES ($1, $2, $3::bigint, $4::bigint)
+			 ON CONFLICT (generation, source) DO UPDATE
+			    SET acked_at = now(), packs = EXCLUDED.packs, bytes = EXCLUDED.bytes`,
+			gen, source, packs, bytes)
+		return err
+	})
+}
+
+// latestAcks is the newest ack per source — one line per backup target, which
+// is what makes a target that stopped reporting visible.
+func (s *PGStore) latestAcks(ctx context.Context) ([]ackRow, error) {
+	var out []ackRow
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &out,
+			`SELECT DISTINCT ON (source) source, generation, acked_at, packs, bytes
+			   FROM acks ORDER BY source, acked_at DESC`)
+	})
+	return out, err
+}
+
+// recentGenerations is the index's own history, newest first. Unsealed rows are
+// included deliberately: a run of them is a pass that keeps dying, which is
+// invisible if the view only shows successes.
+func (s *PGStore) recentGenerations(ctx context.Context, limit int) ([]genRow, error) {
+	var out []genRow
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &out,
+			`SELECT id, started_at, sealed_at, coalesce(files,0) AS files,
+			        coalesce(bytes,0) AS bytes, coalesce(hashed,0) AS hashed,
+			        coalesce(error,'') AS error
+			   FROM generations ORDER BY id DESC LIMIT $1`, limit)
+	})
+	return out, err
+}
+
+// suspects lists what the index currently distrusts.
+func (s *PGStore) suspects(ctx context.Context, limit int) ([]suspectRow, error) {
+	var out []suspectRow
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &out,
+			`SELECT path, class, reason, coalesce(detail,'') AS detail, seen_count, last_seen
+			   FROM suspect ORDER BY last_seen DESC LIMIT $1`, limit)
+	})
+	return out, err
 }

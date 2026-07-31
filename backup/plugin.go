@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"html/template"
 	"sync"
 	"time"
 
@@ -64,6 +65,8 @@ type Plugin struct {
 	dumpMu  sync.Mutex
 	st      inventoryStore
 	core    *core.Core
+	// tmpl backs the admin page (views.go), parsed in the web process only.
+	tmpl *template.Template
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -71,8 +74,11 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "backup",
 		Version:     "0.1.0",
 		Description: "Weekly backup: zips persistent static-asset directories and dumps the PostgreSQL database, with retention pruning.",
-		// Worker-only: no routes, just the scheduled loop.
-		Processes:  []string{"worker"},
+		// web too, for the admin page. The jobs stay worker-side — see
+		// Provision, which gates on Process; without that gate the web process
+		// would register three jobs it never runs (a Run button and a next_run
+		// that nothing honours) and Start would launch a second set of loops.
+		Processes:  []string{"web", "worker"},
 		Migrations: migrations,
 	}
 }
@@ -90,6 +96,19 @@ func (p *Plugin) Provision(c *core.Core) error {
 
 	p.core = c
 	p.st = NewPGStore(c.Storage.SchemaDB("backup"))
+
+	// web/all: the admin page. Read-only over the same store the worker
+	// writes, so it needs nothing else staged.
+	if c.Process == "web" || c.Process == "all" {
+		if err := p.registerViews(c); err != nil {
+			return err
+		}
+	}
+	if c.Process == "web" {
+		// Jobs and the pack server belong to the worker. Returning here keeps
+		// the web process from registering either.
+		return nil
+	}
 
 	p.indexJob = schedule.RegisterJob("Backup Index",
 		"Walks the asset directories and records every file's size and content hash")

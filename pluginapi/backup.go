@@ -58,4 +58,26 @@ type BackupPacks interface {
 	// which is how a dropped transfer resumes — packs are byte-deterministic,
 	// so an offset means the same thing on every attempt.
 	WritePack(ctx context.Context, w io.Writer, gen int64, id string, skip int64) error
+	// Ack records that a puller holds a complete, verified copy of a
+	// generation.
+	//
+	// Without it the server can only say what is AVAILABLE to pull, and the
+	// question an operator actually has — "is my backup happening?" — has no
+	// answer on the site at all. A backup that silently stopped a month ago
+	// looks exactly like one that ran last night.
+	//
+	// The claim is the puller's, and the server records it as such: it means
+	// "a puller reported this", not "the server verified it". The puller only
+	// sends it after every pack's length and CRC checked out.
+	Ack(ctx context.Context, a BackupAck) error
+}
+
+// BackupAck is a puller's report that it holds a generation completely.
+type BackupAck struct {
+	Generation int64 `json:"generation"`
+	Packs      int64 `json:"packs"`
+	Bytes      int64 `json:"bytes"`
+	// Source names the puller, so several backup targets can be distinguished
+	// (and so one going quiet is visible rather than masked by another).
+	Source string `json:"source"`
 }

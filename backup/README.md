@@ -15,15 +15,25 @@ is protecting — and the pack pipeline is what replaced it.
 
 ## Surface
 
-No HTTP routes of its own. It publishes the pack server as a capability
-(`pluginapi.BackupPacksName`) and the **host** mounts it wherever its own
-authentication already lives — on this site, the tailnet-only worker ops
-listener:
+One admin page (`SlotAdminPage`, slug `backup`, filed under Operations) and no
+routes of its own. The page answers, in this order: **is anything actually
+taking the backup** (the acks), what a puller would be handed, per-class
+coverage against the previous generation, published database dumps, index
+history, and suspect files.
+
+The pack server is published as a capability (`pluginapi.BackupPacksName`) and
+the **host** mounts it wherever its own authentication already lives — on this
+site, the tailnet-only worker ops listener:
 
 ```
-GET /ops/backup/manifest            generation + pack list (id, class, bytes)
-GET /ops/backup/pack/{id}?gen=N     the pack, Accept-Ranges + Range for resume
+GET  /ops/backup/manifest            generation + pack list (id, class, bytes)
+GET  /ops/backup/pack/{id}?gen=N     the pack, Accept-Ranges + Range for resume
+POST /ops/backup/ack                 a puller reports holding a generation
 ```
+
+The ack is the only write. Without it this plugin can report what is
+*available* to pull and nothing about whether anything pulls it — and a backup
+that stopped a month ago looks exactly like one that ran last night.
 
 Jobs (all worker-side, all visible in `/admin/jobs`):
 
@@ -33,11 +43,15 @@ Jobs (all worker-side, all visible in `/admin/jobs`):
 | **Backup Database** | weekly | `pg_dump -Fd -j4` into a dated directory inside the `db-dumps` class. |
 | **Backup** | weekly | The legacy archive: zips classes + `pg_dump` into `<BackupDir>/YYYY-MM-DD_HHMMSS/`. |
 
-Process kinds (`Metadata.Processes`): `worker`.
+Process kinds (`Metadata.Processes`): `web`, `worker`. Provision gates on
+`c.Process`: the page registers web-side, the jobs and the pack capability
+worker-side. Without that gate the web process would register three jobs it
+never runs — a Run button and a `next_run` nothing honours — and `Start` would
+launch a second set of loops.
 
 ## Data
 
-Owns the **`backup` Postgres schema** (migration `001_inventory.sql`):
+Owns the **`backup` Postgres schema** (migrations `001`–`002`):
 
 - `generations` — one row per index pass: `started_at`, `sealed_at`, file/byte
   totals, how many were rehashed, and an error. An **unsealed** row is a pass
@@ -51,6 +65,9 @@ Owns the **`backup` Postgres schema** (migration `001_inventory.sql`):
 - `suspect` — files that looked wrong (a size change with no mtime change, a
   torn write), with a first/last-seen and a count, so a recurring one is
   visible rather than a one-line log that scrolled away.
+- `acks` — one row per (generation, source): what a puller reported taking
+  away, and the only record in this schema of anything that left the building
+  (migration `002`).
 
 Reads no other schema. Writes files only under the class directories and
 `DBDumpDir`.
@@ -97,9 +114,10 @@ file.
 ## Hooks & Callbacks
 
 - Host hooks SET: (none).
-- Extensions PUBLISHED: `pluginapi.BackupPacksName` — `Manifest(ctx)` and
-  `WritePack(ctx, w, gen, id, skip)`. Registered in `Provision`, not `Start`,
-  because the host wires its routes immediately after `Boot`.
+- Extensions PUBLISHED: `pluginapi.BackupPacksName` — `Manifest(ctx)`,
+  `WritePack(ctx, w, gen, id, skip)` and `Ack(ctx, a)`. Registered in
+  `Provision`, not `Start`, because the host wires its routes immediately after
+  `Boot`. Worker-side only.
 - Extensions CONSUMED: (none).
 
 ## Lifecycle
@@ -158,6 +176,7 @@ by construction.
 - `pack.go` — pack composition and the STORED-zip writer.
 - `dbdump.go` — `pg_dump -Fd`, atomic dated publish, local retention.
 - `jobs.go` — the legacy archive job (zip + dump + prune).
+- `views.go` + `templates/backup.html` — the admin page.
 - `stat_unix.go` / `stat_other.go` — `ctime`/`inode` per platform.
 
 ## Testing

@@ -1,0 +1,194 @@
+{{/* The backup page. Ordered by how badly a wrong answer hurts: whether
+     anything is TAKING the backup comes first, because that is the failure
+     that hides. */}}
+
+<div class="card mb-3">
+    <div class="card-header">Off-site copies</div>
+    <div class="card-body">
+        {{if .NoAck}}
+            <div class="alert mb-2" style="border-color:var(--danger);color:var(--danger)">
+                <strong>No puller has ever reported a complete copy.</strong>
+                Everything below describes what this server would hand over — not
+                what anything has taken. A backup nothing collects is not a backup.
+            </div>
+            <p class="text-muted small mb-0">
+                The puller acks a generation only after every pack's length and CRC
+                verified. If a puller is running, check its logs; if one is not, this
+                site has no off-site copy.
+            </p>
+        {{else}}
+            <div class="table-responsive">
+                <table class="table table-dark table-sm align-middle mb-2">
+                    <thead><tr><th>Target</th><th>Generation</th><th>Packs</th><th>Size</th><th>Last complete copy</th></tr></thead>
+                    <tbody>
+                    {{range .Acks}}
+                        <tr>
+                            <td><strong>{{if .Source}}{{.Source}}{{else}}(unnamed){{end}}</strong></td>
+                            <td>{{.Generation}}</td>
+                            <td>{{num .Packs}}</td>
+                            <td>{{bytes .Bytes}}</td>
+                            <td>{{ago .AckedAt}} <span class="text-muted small">{{.AckedAt.Format "2006-01-02 15:04"}}</span></td>
+                        </tr>
+                    {{end}}
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-muted small mb-0">
+                {{if .AckLag}}The newest sealed generation is {{.AckLag}} ahead of the last one
+                collected — normal while the index runs more often than the pull.{{else}}
+                The newest sealed generation has been collected.{{end}}
+                A target's claim means "a puller reported this", not "this server verified it".
+            </p>
+        {{end}}
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">Coverage by class</div>
+    <div class="card-body">
+        {{if .HasSealed}}
+        <p class="text-muted small">
+            Generation <strong>{{.Latest.ID}}</strong>, sealed {{ago .Latest.SealedAt.Time}} —
+            {{num .Latest.Files}} file(s), {{bytes .Latest.Bytes}}, {{num .Latest.Hashed}} re-hashed this pass.
+            {{if .PackCount}}A puller would fetch {{num .PackCount}} pack(s), {{bytes .PackBytes}}.{{end}}
+            Classes are listed in the order they are indexed and served: irreplaceable first, so an
+            interrupted pass or pull keeps what cannot be re-fetched.
+        </p>
+        <div class="table-responsive">
+            <table class="table table-dark table-sm align-middle">
+                <thead><tr><th>Class</th><th class="text-end">Files</th><th class="text-end">Change</th><th class="text-end">Size</th><th class="text-end">Packs</th><th></th></tr></thead>
+                <tbody>
+                {{range .Classes}}
+                    <tr>
+                        <td><strong>{{.Class}}</strong></td>
+                        <td class="text-end">{{num .Files}}</td>
+                        <td class="text-end">
+                            {{if .PrevKnown}}
+                                {{if gt .Delta 0}}<span style="color:var(--success)">+{{num .Delta}}</span>
+                                {{else if lt .Delta 0}}<span style="color:var(--danger)">{{num .Delta}}</span>
+                                {{else}}<span class="text-muted">—</span>{{end}}
+                            {{else}}<span class="text-muted">new</span>{{end}}
+                        </td>
+                        <td class="text-end">{{bytes .Bytes}}</td>
+                        <td class="text-end">{{if .Packs}}{{num .Packs}}{{else}}<span class="text-muted">—</span>{{end}}</td>
+                        <td>
+                            {{if .Empty}}<span style="color:var(--warning)">empty — confirm this is genuinely empty and not an unmounted volume</span>{{end}}
+                            {{if .Rotates}}<span class="text-muted small">rotates</span>{{end}}
+                        </td>
+                    </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small mb-0">
+            A class losing more than {{.ShrinkPct}}% of its files makes the pass refuse to seal —
+            a missing bind mount is indistinguishable from an empty class, and the refusal turns
+            silent loss into a loud alert. Classes marked <em>rotates</em> replace their contents by
+            design and are checked only for going to zero.
+        </p>
+        {{else}}
+            <p class="text-muted mb-0">No generation has sealed yet. The index job runs daily; trigger it from Jobs to start one now.</p>
+        {{end}}
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">Database dumps <span class="text-muted small">{{.DumpDir}}</span></div>
+    <div class="card-body">
+        {{if .Dumps}}
+        <div class="table-responsive">
+            <table class="table table-dark table-sm align-middle mb-2">
+                <thead><tr><th>Dump</th><th class="text-end">Files</th><th class="text-end">Size</th><th class="text-end">Tables</th><th>Postgres</th></tr></thead>
+                <tbody>
+                {{range .Dumps}}
+                    <tr>
+                        <td><strong>{{.Stamp}}</strong> {{if .Newest}}<span class="text-muted small">newest</span>{{end}}</td>
+                        <td class="text-end">{{.Files}}</td>
+                        <td class="text-end">{{bytes .Bytes}}</td>
+                        <td class="text-end">{{if .Tables}}{{.Tables}}{{else}}<span class="text-muted">—</span>{{end}}</td>
+                        <td class="text-muted small">{{if .Version}}{{.Version}}{{else}}—{{end}}</td>
+                    </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small mb-0">
+            Dumps are ordinary files in an ordinary class, so they are indexed, packed and pulled like
+            everything else. Each carries a manifest of every table's row count at dump time — that file
+            is what a restore is checked against, because <code>pg_restore</code> will exit 0 having
+            created every table and filled none.
+        </p>
+        {{else}}
+            <p class="text-muted mb-0">
+                No database dump published yet.{{if not .DumpDir}} <strong>No dump directory is configured</strong>, so the
+                database is not in the backup at all.{{else}} The Backup Database job runs weekly.{{end}}
+            </p>
+        {{end}}
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">Index history</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-dark table-sm align-middle mb-2">
+                <thead><tr><th>Gen</th><th>Started</th><th>Sealed</th><th class="text-end">Files</th><th class="text-end">Size</th><th class="text-end">Re-hashed</th><th></th></tr></thead>
+                <tbody>
+                {{range .Generations}}
+                    <tr>
+                        <td><strong>{{.ID}}</strong></td>
+                        <td class="text-muted small">{{.StartedAt.Format "01-02 15:04"}}</td>
+                        <td class="text-muted small">
+                            {{if .SealedAt.Valid}}{{.SealedAt.Time.Format "01-02 15:04"}}
+                            {{else}}<span style="color:var(--warning)">unsealed</span>{{end}}
+                        </td>
+                        <td class="text-end">{{num .Files}}</td>
+                        <td class="text-end">{{bytes .Bytes}}</td>
+                        <td class="text-end">{{num .Hashed}}</td>
+                        <td>{{if .Error}}<span style="color:var(--danger)">{{.Error}}</span>{{end}}</td>
+                    </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small mb-0">
+            An unsealed row is a pass that did not finish — usually a deploy restarting the worker
+            mid-walk, which is harmless because only sealed generations are ever served or compared
+            against. A <em>run</em> of them is a pass that keeps dying. One file in
+            {{.RehashDenom}} is re-read every pass regardless of its stat, so the whole corpus is
+            re-verified roughly weekly; that is what catches bit rot and a torn write whose mtime
+            never moved again.
+        </p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Suspect files</div>
+    <div class="card-body">
+        {{if .Suspects}}
+        <div class="table-responsive">
+            <table class="table table-dark table-sm align-middle mb-2">
+                <thead><tr><th>Path</th><th>Class</th><th>Why</th><th class="text-end">Seen</th><th>Last</th></tr></thead>
+                <tbody>
+                {{range .Suspects}}
+                    <tr>
+                        <td class="small">{{.Path}}</td>
+                        <td class="text-muted small">{{.Class}}</td>
+                        <td class="small">{{.Reason}}{{if .Detail}} <span class="text-muted">{{.Detail}}</span>{{end}}</td>
+                        <td class="text-end">{{num .SeenCount}}</td>
+                        <td class="text-muted small">{{ago .LastSeen}}</td>
+                    </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small mb-0">
+            These are files whose content changed in a way the stat gate could not explain — most often
+            a writer that truncated in place. They are re-verified every pass and clear themselves once
+            they read consistently.
+        </p>
+        {{else}}
+            <p class="text-muted mb-0">Nothing flagged. Files whose content changes in a way the stat gate cannot explain appear here.</p>
+        {{end}}
+    </div>
+</div>

@@ -309,3 +309,7 @@ func (s packServer) Manifest(ctx context.Context) (lpapi.BackupManifest, error) 
 func (s packServer) WritePack(ctx context.Context, w io.Writer, gen int64, id string, skip int64) error {
 	return s.p.StreamPack(ctx, w, gen, id, skip)
 }
+
+func (s packServer) Ack(ctx context.Context, a lpapi.BackupAck) error {
+	return s.p.st.recordAck(ctx, a.Generation, a.Source, a.Packs, a.Bytes)
+}
