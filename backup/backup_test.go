@@ -600,3 +600,47 @@ func TestProvisionWithoutDepsDisablesThePageButFailsTheWorker(t *testing.T) {
 		t.Error("worker Provision succeeded without deps — a backup that cannot run must refuse loudly")
 	}
 }
+
+// Start must launch nothing in a process that registered no jobs.
+//
+// Regression test for a boot crash. Adding "web" to Metadata.Processes for the
+// admin page meant Provision returns early there, leaving every *JobInfo nil —
+// and Start still iterated loops(), handing ServiceLoop a nil job whose first
+// call is IsPaused:
+//
+//	panic: invalid memory address or nil pointer dereference
+//	  schedule.(*JobInfo).IsPaused ← schedule.ServiceLoop ← backup.Start
+//
+// The web process died on boot. Nothing in the plugin's own tests could see
+// it, because they all construct a Plugin with jobs already registered — it
+// took booting the real image to surface it.
+func TestStartLaunchesNothingWithoutRegisteredJobs(t *testing.T) {
+	saved := deps
+	deps = nil
+	t.Cleanup(func() { deps = saved })
+
+	web := &Plugin{}
+	if err := web.Provision(&core.Core{Process: "web", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}); err != nil {
+		t.Fatalf("web Provision: %v", err)
+	}
+	if web.indexJob != nil || web.job != nil || web.dumpJob != nil {
+		t.Fatal("the web process registered jobs — it must not")
+	}
+	// The bug: this call panicked instead of returning.
+	if err := web.Start(context.Background()); err != nil {
+		t.Fatalf("Start on a jobless plugin returned %v, want nil", err)
+	}
+
+	// And every loop a REGISTERED plugin declares must carry a non-nil job,
+	// so the guard above is the only way a nil can reach ServiceLoop.
+	full := &Plugin{
+		job:      schedule.RegisterJob("Backup start-guard archive "+t.Name(), ""),
+		indexJob: schedule.RegisterJob("Backup start-guard index "+t.Name(), ""),
+		dumpJob:  schedule.RegisterJob("Backup start-guard dump "+t.Name(), ""),
+	}
+	for i, l := range full.loops() {
+		if l.job == nil {
+			t.Errorf("loop %d declares a nil job", i)
+		}
+	}
+}

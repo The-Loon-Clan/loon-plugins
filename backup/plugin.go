@@ -191,6 +191,19 @@ func (p *Plugin) loops() []scheduledJob {
 }
 
 func (p *Plugin) Start(ctx context.Context) error {
+	// No jobs registered means this is the WEB process, where Provision
+	// returns after the admin page and deliberately registers none. Launching
+	// loops anyway hands ServiceLoop a nil *JobInfo, and the first thing it
+	// does with one is call IsPaused on it:
+	//
+	//   panic: runtime error: invalid memory address or nil pointer dereference
+	//     schedule.(*JobInfo).IsPaused ← schedule.ServiceLoop ← backup.Start
+	//
+	// which killed the web process on boot. Adding "web" to Processes for the
+	// page is what created the shape; this is the other half of that change.
+	if p.indexJob == nil {
+		return nil
+	}
 	// Bare ServiceLoop: the host installs the off-peak / interval-override /
 	// CPU / panic hooks globally.
 	for _, l := range p.loops() {
