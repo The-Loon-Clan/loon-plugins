@@ -192,7 +192,18 @@ func (p *Plugin) dumpLines() []dumpLine {
 	return out
 }
 
-func fmtBytes2(b int64) string {
+func fmtBytes2(v any) string {
+	var b int64
+	switch t := v.(type) {
+	case int:
+		b = int64(t)
+	case int32:
+		b = int64(t)
+	case int64:
+		b = t
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 	const unit = 1024
 	if b < unit {
 		return fmt.Sprintf("%d B", b)
@@ -205,7 +216,25 @@ func fmtBytes2(b int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
-func fmtNum(n int64) string {
+// fmtNum and fmtBytes2 take any, not int64.
+//
+// html/template fails the ENTIRE render on an argument type mismatch, so a
+// single `{{num .Packs}}` against an int field — where every neighbouring
+// field happened to be an int64 — turned the whole page into "this page failed
+// to render", with the real cause only in a log. Accepting both is worth more
+// than the type precision, because the cost of being wrong is the page.
+func fmtNum(v any) string {
+	var n int64
+	switch t := v.(type) {
+	case int:
+		n = int64(t)
+	case int32:
+		n = int64(t)
+	case int64:
+		n = t
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 	s := fmt.Sprintf("%d", n)
 	if len(s) <= 3 {
 		return s
