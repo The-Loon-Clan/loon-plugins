@@ -23,7 +23,7 @@ func TestShrinkGateCatchesACollapsedClass(t *testing.T) {
 		"mascots":     {},
 		"covers":      {Files: 16_800, Bytes: 2 << 30},
 		"screenshots": {Files: 253_512, Bytes: 117 << 30},
-	}, maxClassShrinkPct)
+	}, maxClassShrinkPct, nil)
 	if len(got) != 1 || got[0].Class != "mascots" {
 		t.Fatalf("a class going 40 files -> 0 must be reported, got %+v", got)
 	}
@@ -37,7 +37,7 @@ func TestShrinkGateCatchesACollapsedClass(t *testing.T) {
 		"mascots":     {Files: 39, Bytes: 4 << 20}, // one deleted
 		"covers":      {Files: 16_795, Bytes: 2 << 30},
 		"screenshots": {Files: 253_500, Bytes: 117 << 30},
-	}, maxClassShrinkPct); len(got) != 0 {
+	}, maxClassShrinkPct, nil); len(got) != 0 {
 		t.Errorf("normal deletions tripped the gate: %+v", got)
 	}
 
@@ -46,19 +46,51 @@ func TestShrinkGateCatchesACollapsedClass(t *testing.T) {
 		"mascots":     {Files: 41},
 		"covers":      {Files: 17_000},
 		"screenshots": {Files: 260_000},
-	}, maxClassShrinkPct); len(got) != 0 {
+	}, maxClassShrinkPct, nil); len(got) != 0 {
 		t.Errorf("growth reported as shrink: %+v", got)
+	}
+}
+
+// A rotating class replaces its contents on a cycle: the database dump
+// publishes a new dated directory each week and prunes the oldest, so it sheds
+// a whole dump's worth of files BY DESIGN. Under the percentage rule that
+// eventually quarantines a healthy generation — and the gate refuses the whole
+// generation, so one rotating class would stop every other class from being
+// backed up. It still has to catch the failure the gate exists for.
+func TestShrinkGateExemptsRotatingClassesExceptCollapse(t *testing.T) {
+	rotating := map[string]bool{"db-dumps": true}
+	prev := map[string]classTotal{"db-dumps": {Files: 300, Bytes: 40 << 30}}
+
+	// The designed case: an old dump pruned, halving the class.
+	if got := detectShrink(prev, map[string]classTotal{
+		"db-dumps": {Files: 150, Bytes: 20 << 30},
+	}, maxClassShrinkPct, rotating); len(got) != 0 {
+		t.Errorf("routine dump rotation quarantined the generation: %+v", got)
+	}
+
+	// The case that still matters: the mount is gone.
+	got := detectShrink(prev, map[string]classTotal{
+		"db-dumps": {},
+	}, maxClassShrinkPct, rotating)
+	if len(got) != 1 || got[0].Class != "db-dumps" || got[0].PctDropped != 100 {
+		t.Fatalf("a rotating class going 300 files -> 0 is a missing mount and must be caught, got %+v", got)
+	}
+
+	// The exemption must be scoped to the named class and nothing else.
+	if got := detectShrink(map[string]classTotal{"covers": {Files: 300}},
+		map[string]classTotal{"covers": {Files: 150}}, maxClassShrinkPct, rotating); len(got) != 1 {
+		t.Errorf("the exemption leaked to a non-rotating class: %+v", got)
 	}
 }
 
 // A brand-new class has no previous total, and must not be treated as having
 // collapsed from nothing — the first run would otherwise never seal.
 func TestShrinkGateIgnoresNewAndEmptyClasses(t *testing.T) {
-	if got := detectShrink(nil, map[string]classTotal{"covers": {Files: 10}}, maxClassShrinkPct); len(got) != 0 {
+	if got := detectShrink(nil, map[string]classTotal{"covers": {Files: 10}}, maxClassShrinkPct, nil); len(got) != 0 {
 		t.Errorf("first run reported a shrink: %+v", got)
 	}
 	prev := map[string]classTotal{"mascots": {Files: 0}}
-	if got := detectShrink(prev, map[string]classTotal{"mascots": {Files: 0}}, maxClassShrinkPct); len(got) != 0 {
+	if got := detectShrink(prev, map[string]classTotal{"mascots": {Files: 0}}, maxClassShrinkPct, nil); len(got) != 0 {
 		t.Errorf("an empty class that stayed empty reported a shrink: %+v", got)
 	}
 }

@@ -43,6 +43,21 @@ type ConfigStore interface {
 	// GetBackupKeepCount returns how many dated runs to retain; <= 0 disables
 	// pruning entirely.
 	GetBackupKeepCount(ctx context.Context) int
+	// GetBackupDBExcludeTableData names tables whose ROWS the dump skips while
+	// still dumping their schema — request logs, caches, job history. On this
+	// install that is ~3.9 GB off every dump at zero correctness risk, which
+	// is a better saving than any incremental scheme could offer and cannot be
+	// wrong in the way one could.
+	//
+	// A setting rather than a Go constant on purpose: which tables are
+	// disposable is an operational judgement that changes as the schema does,
+	// and it must be answerable without a deploy.
+	GetBackupDBExcludeTableData(ctx context.Context) []string
+	// GetBackupDBKeep returns how many published dumps stay on PRODUCTION's
+	// disk. Not a backup-retention knob — the array holds the real history —
+	// just how much local headroom the dump is allowed. <= 0 means the
+	// built-in default.
+	GetBackupDBKeep(ctx context.Context) int
 }
 
 // Deps are the host-provided seams, staged before core.Boot in the worker.
@@ -79,6 +94,18 @@ type Deps struct {
 	// overlay filesystem it is wiped on every recreate, which turns the whole
 	// job into theatre: it runs, it logs success, and it protects nothing.
 	BackupDir string
+	// DBDumpDir is where `pg_dump -Fd` writes its dated directories.
+	//
+	// Empty means the database is NOT in the backup — the job says so on every
+	// run rather than failing, because an install without a dump volume is a
+	// configuration, not a fault.
+	//
+	// It MUST be a bind mount, for the BackupDir reason, and the host MUST
+	// also register it as an AssetClass: writing the dump is only half the
+	// job, and the half that makes it a backup is the index walking it into a
+	// generation like any other file. A dump directory that is not a class is
+	// a 20 GB file nobody ever fetches.
+	DBDumpDir string
 }
 
 var deps *Deps

@@ -63,7 +63,7 @@ func (p *Plugin) runIndex(ctx context.Context) {
 	// Compare AFTER sealing the row but BEFORE anything downstream treats it as
 	// authoritative. A quarantined generation stays on disk for diagnosis; what
 	// it must never do is license a retention pass to delete older packs.
-	if shrunk := detectShrink(prev, res.PerClass, maxClassShrinkPct); len(shrunk) > 0 {
+	if shrunk := detectShrink(prev, res.PerClass, maxClassShrinkPct, rotatingClasses(deps.Classes)); len(shrunk) > 0 {
 		for _, s := range shrunk {
 			p.indexJob.Log("REFUSING to trust this generation: class %s went from %d files to %d (-%.0f%%). "+
 				"A class collapsing usually means a missing bind mount, not a deletion — "+

@@ -153,12 +153,18 @@ func TestPreflight(t *testing.T) {
 }
 
 type stubConfig struct {
-	mode string
-	keep int
+	mode    string
+	keep    int
+	exclude []string
+	dbKeep  int
 }
 
 func (s stubConfig) GetBackupMode(context.Context) string   { return s.mode }
 func (s stubConfig) GetBackupKeepCount(context.Context) int { return s.keep }
+func (s stubConfig) GetBackupDBExcludeTableData(context.Context) []string {
+	return s.exclude
+}
+func (s stubConfig) GetBackupDBKeep(context.Context) int { return s.dbKeep }
 
 // prune must only ever touch its own dated folders: BackupDir is a bind mount
 // an operator may keep other things in.
@@ -521,6 +527,7 @@ func TestEveryRegisteredJobIsScheduled(t *testing.T) {
 	p := &Plugin{
 		job:      schedule.RegisterJob("Backup test archive "+t.Name(), ""),
 		indexJob: schedule.RegisterJob("Backup test index "+t.Name(), ""),
+		dumpJob:  schedule.RegisterJob("Backup test dump "+t.Name(), ""),
 	}
 
 	scheduled := map[*schedule.JobInfo]scheduledJob{}
@@ -540,6 +547,7 @@ func TestEveryRegisteredJobIsScheduled(t *testing.T) {
 	}{
 		{"archive", p.job},
 		{"index", p.indexJob},
+		{"database dump", p.dumpJob},
 	} {
 		l, ok := scheduled[want.job]
 		if !ok {

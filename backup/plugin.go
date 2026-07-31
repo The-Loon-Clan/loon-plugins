@@ -32,6 +32,15 @@ const (
 	// gate does the work and hashing is the exception. Daily keeps the window
 	// in which an in-place overwrite can hide down to a day.
 	indexIntervalMin = 24 * 60
+	// The database dump is weekly: it is a full dump every time (the update
+	// rate makes an incremental impossible — see dbdump.go), so its cost is
+	// the whole database each run, and daily would move ~20 GB a day across
+	// the wire for a corpus that a week-old copy restores just as correctly.
+	dbDumpIntervalMin = 7 * 24 * 60
+	// Parallel dump workers. Four is pg_dump's sweet spot on this box and the
+	// number the restore side mirrors (pg_restore -j 4); higher mostly buys
+	// contention with the live site, which is running while this dumps.
+	dbDumpJobs = 4
 )
 
 // Plugin owns the single backup job. The mutex keeps a manual /admin/jobs
@@ -47,8 +56,14 @@ type Plugin struct {
 	// enough to run daily, the full archive is not.
 	indexJob *schedule.JobInfo
 	indexMu  sync.Mutex
-	st       inventoryStore
-	core     *core.Core
+	// dumpJob writes the database into the asset tree as ordinary files, so
+	// the pull pipeline carries it with no transport code of its own
+	// (dbdump.go). Its own mutex: a manual trigger racing the weekly loop
+	// would run two pg_dumps against the live database at once.
+	dumpJob *schedule.JobInfo
+	dumpMu  sync.Mutex
+	st      inventoryStore
+	core    *core.Core
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -87,6 +102,11 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// The trigger forces: an operator pressing Run in /admin/jobs means "now",
 	// not "now unless a recent backup exists".
 	p.job.SetTrigger(func() { go p.runForced(context.Background()) })
+
+	p.dumpJob = schedule.RegisterJob("Backup Database",
+		"Dumps PostgreSQL into the asset tree so the pull pipeline carries it")
+	p.dumpJob.IntervalMin = dbDumpIntervalMin
+	p.dumpJob.SetTrigger(func() { go p.runDBDump(context.Background()) })
 
 	// Publish the pack server so the host can mount HTTP routes over it
 	// without importing this package. Registered here rather than in Start
@@ -127,6 +147,12 @@ func (p *Plugin) loops() []scheduledJob {
 		// what bounds the window in which an in-place overwrite can hide — so
 		// it waits minutes rather than an hour.
 		{p.indexJob, 10 * time.Minute, time.Duration(indexIntervalMin) * time.Minute, p.runIndex},
+		// The dump waits longer than the archive: it is the heaviest thing this
+		// plugin does to the live database, and a box that just booted is
+		// already busy. Ninety minutes also puts it AFTER the first index, so
+		// a fresh dump is picked up by the following day's pass rather than
+		// sitting unindexed for a week.
+		{p.dumpJob, 90 * time.Minute, time.Duration(dbDumpIntervalMin) * time.Minute, p.runDBDump},
 	}
 }
 

@@ -51,6 +51,19 @@ type AssetClass struct {
 	//
 	// The host sets this: only it knows what it can rebuild.
 	Regenerable bool
+	// Rotates marks a class whose contents are REPLACED on a cycle rather than
+	// accumulated — the database dump publishes a new dated directory each
+	// week and prunes the oldest.
+	//
+	// It exists for the shrink gate. That gate refuses to seal a GENERATION
+	// (not a class) when any class loses more than a few percent of its files,
+	// because the alternative is a missing bind mount ageing out the only
+	// copy. A rotating class sheds a whole dump's worth of files by design, so
+	// under the percentage rule it would eventually quarantine a healthy
+	// generation and stop the entire backup advancing. Rotating classes are
+	// checked against the signature that actually matters instead: had files,
+	// now has none.
+	Rotates bool
 }
 
 // fileRow is one indexed file.
@@ -461,7 +474,7 @@ type shrinkReport struct {
 // files, and once older generations age out the only copy is gone — with every
 // step reporting success. A class that collapses must stop the pipeline, not
 // flow through it.
-func detectShrink(prev, cur map[string]classTotal, maxDropPct float64) []shrinkReport {
+func detectShrink(prev, cur map[string]classTotal, maxDropPct float64, rotating map[string]bool) []shrinkReport {
 	var out []shrinkReport
 	for class, was := range prev {
 		if was.Files == 0 {
@@ -472,6 +485,22 @@ func detectShrink(prev, cur map[string]classTotal, maxDropPct float64) []shrinkR
 			continue
 		}
 		dropped := 100 * float64(was.Files-now.Files) / float64(was.Files)
+		// A ROTATING class replaces its contents on purpose — the database
+		// dump publishes a new directory and prunes the oldest, so it sheds a
+		// whole dump's worth of files as designed and a percentage gate would
+		// eventually quarantine a perfectly good generation (and with it every
+		// other class, since the gate refuses the generation, not the class).
+		// The signature that still matters is the one the gate exists for: a
+		// class that had files and now has NONE is a missing bind mount, and
+		// no rotation produces that.
+		if rotating[class] {
+			if now.Files == 0 {
+				out = append(out, shrinkReport{
+					Class: class, WasFiles: was.Files, NowFiles: 0, PctDropped: 100,
+				})
+			}
+			continue
+		}
 		if dropped > maxDropPct {
 			out = append(out, shrinkReport{
 				Class: class, WasFiles: was.Files, NowFiles: now.Files, PctDropped: dropped,
@@ -479,6 +508,17 @@ func detectShrink(prev, cur map[string]classTotal, maxDropPct float64) []shrinkR
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].PctDropped > out[j].PctDropped })
+	return out
+}
+
+// rotatingClasses is the shrink gate's exemption set — see AssetClass.Rotates.
+func rotatingClasses(classes []AssetClass) map[string]bool {
+	out := map[string]bool{}
+	for _, c := range classes {
+		if c.Rotates {
+			out[c.Slug] = true
+		}
+	}
 	return out
 }
 

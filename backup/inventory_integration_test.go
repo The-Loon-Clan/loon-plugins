@@ -236,7 +236,7 @@ func TestClassTotalsFeedTheShrinkGate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	shrunk := detectShrink(prev, res.PerClass, maxClassShrinkPct)
+	shrunk := detectShrink(prev, res.PerClass, maxClassShrinkPct, nil)
 	if len(shrunk) != 1 || shrunk[0].Class != "mascots" {
 		t.Fatalf("an emptied class did not trip the shrink gate: %+v", shrunk)
 	}
