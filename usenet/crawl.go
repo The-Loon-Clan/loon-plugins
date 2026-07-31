@@ -962,6 +962,21 @@ func contiguousEnd(start int, rs []batchResult) (int, time.Time) {
 // observability, not behaviour.
 func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, hits *filterHits, watch *posterWatch, ph *posterHits, gw *groupingWatch) []stagedArticle {
 	out := make([]stagedArticle, 0, len(ovs))
+	// The junk verdict, memoised on the BASE subject for this batch.
+	//
+	// Every article of a multi-part post shares one base subject — a 100-part
+	// release means the same string judged a hundred times, and each judgement
+	// walks 25 rules of which one (software_warez, a 49-branch case-insensitive
+	// alternation) measured 84% of the engine's cost while matching nothing.
+	// A profile put parseOverviews at 70% of the worker's CPU with the junk
+	// engine 42% of the whole process; this collapses that by the average part
+	// count.
+	//
+	// Safe because the verdict is a pure function of the base subject: the rule
+	// set is immutable while a batch runs (reloads swap the matcher wholesale
+	// between build rounds), so two identical bases cannot legitimately differ.
+	// Scoped to one call, so a reload is picked up by the next batch.
+	junkOf := make(map[string]string, len(ovs)/8+1)
 	for _, ov := range ovs {
 		if ov.MessageId == "" {
 			continue
@@ -984,7 +999,12 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, 
 		// singleton. A cohort of these sharing a stem is a counter format we
 		// cannot read — the grouping watch counts them.
 		residue := pn == 1 && tp == 1 && !fp
-		if rule := whichJunkRule(base); rule != "" {
+		rule, seen := junkOf[base]
+		if !seen {
+			rule = whichJunkRule(base)
+			junkOf[base] = rule
+		}
+		if rule != "" {
 			gw.noteSubject(group, subject, residue, true)
 			hits.note("junk", rule, base)
 			if p, ok := watch.watched(ov.From); ok {

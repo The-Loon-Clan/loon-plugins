@@ -96,6 +96,11 @@ type compiledRule struct {
 	re        *regexp.Regexp // nil for heuristics
 	heuristic string         // "" for regex rules
 	params    junkParams
+	// gate is a literal pre-filter derived from the pattern: a cheap
+	// strings.Contains that can only ever skip a regex which was going to
+	// decline anyway. See junk_prefilter.go — the junk engine was 42% of the
+	// worker's CPU, nearly all of it automaton work proving non-matches.
+	gate literalGate
 }
 
 // junkMatcher is an immutable compiled rule set. Replace it wholesale; never
@@ -191,7 +196,10 @@ func newJunkMatcher(specs []junkRuleSpec) (*junkMatcher, error) {
 			if err != nil {
 				return nil, fmt.Errorf("junk rule %q: %w", s.Name, err)
 			}
-			m.rules = append(m.rules, compiledRule{name: s.Name, re: re, params: s.Params})
+			m.rules = append(m.rules, compiledRule{
+				name: s.Name, re: re, params: s.Params,
+				gate: buildLiteralGate(s.Rule),
+			})
 		case "heuristic":
 			if !junkHeuristics[s.Rule] {
 				return nil, fmt.Errorf("junk rule %q: unknown heuristic %q", s.Name, s.Rule)
@@ -299,6 +307,13 @@ func (m *junkMatcher) match(t, ts string, sizeBytes int64) string {
 			in = ts
 		}
 		if r.re != nil {
+			// Cheap literal gate first: proven-necessary substring, so a miss
+			// here is a miss the automaton would have taken far longer to
+			// reach. An unprovable pattern gets an empty gate that passes
+			// everything, so behaviour is unchanged by construction.
+			if !r.gate.pass(in) {
+				continue
+			}
 			if r.re.MatchString(in) && gatesPass(in, r.params) {
 				return r.name
 			}
