@@ -17,27 +17,43 @@
                 site has no off-site copy.
             </p>
         {{else}}
-            <div class="table-responsive">
-                <table class="table table-dark table-sm align-middle mb-2">
-                    <thead><tr><th>Target</th><th>Generation</th><th>Packs</th><th>Size</th><th>Last complete copy</th></tr></thead>
-                    <tbody>
-                    {{range .Acks}}
-                        <tr>
-                            <td><strong>{{if .Source}}{{.Source}}{{else}}(unnamed){{end}}</strong></td>
-                            <td>{{.Generation}}</td>
-                            <td>{{num .Packs}}</td>
-                            <td>{{bytes .Bytes}}</td>
-                            <td>{{ago .AckedAt}} <span class="text-muted small">{{.AckedAt.Format "2006-01-02 15:04"}}</span></td>
-                        </tr>
-                    {{end}}
-                    </tbody>
-                </table>
-            </div>
+            {{range .Acks}}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-baseline mb-1">
+                        <div>
+                            <strong>{{if .Source}}{{.Source}}{{else}}(unnamed){{end}}</strong>
+                            {{if .Known}}
+                                <span class="text-muted">— complete until</span>
+                                <strong>{{.CompleteUntil}}</strong>
+                            {{else}}
+                                <span class="text-muted">— generation {{.Generation}} (no longer in the index)</span>
+                            {{end}}
+                        </div>
+                        <div>
+                            <strong {{if .Current}}style="color:var(--success)"{{else if lt .Pct 90}}style="color:var(--warning)"{{end}}>{{.Pct}}%</strong>
+                        </div>
+                    </div>
+                    <div class="progress" style="height:14px;background:var(--bg-elevated,#222)">
+                        <div class="progress-bar{{if not .Current}} bg-warning{{end}}"
+                             role="progressbar" style="width:{{.Pct}}%"
+                             aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <div class="text-muted small mt-1">
+                        {{bytes .HeldBytes}} of {{bytes .TotalBytes}} ·
+                        generation {{.Generation}}{{if .GensBehind}} ({{.GensBehind}} behind){{end}} ·
+                        {{num .Packs}} pack(s) ·
+                        reported {{ago .AckedAt}}
+                        {{if .BytesBehind}}<br>Since that copy: +{{num .FilesBehind}} file(s), +{{bytes .BytesBehind}} not yet collected.{{end}}
+                    </div>
+                </div>
+            {{end}}
             <p class="text-muted small mb-0">
-                {{if .AckLag}}The newest sealed generation is {{.AckLag}} ahead of the last one
-                collected — normal while the index runs more often than the pull.{{else}}
-                The newest sealed generation has been collected.{{end}}
-                A target's claim means "a puller reported this", not "this server verified it".
+                <strong>Complete until</strong> is when the newest fully-collected generation was
+                sealed: everything on disk at that moment is off-site, and anything written since
+                is not. The bar is coverage of the current inventory by that copy, not transfer
+                progress — a target can be 99% covered and still have a large fetch pending when
+                pack identities churn. A target's claim means "a puller reported this", not "this
+                server verified it".
             </p>
         {{end}}
     </div>

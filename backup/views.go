@@ -52,6 +52,28 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	})
 }
 
+// ackLine is one backup target's claim, turned into the sentence an operator
+// actually wants: "complete until X", and how far the world has moved since.
+//
+// The percentage is content bytes of the acked generation over content bytes
+// of the newest sealed one — both single indexed row reads, because this is a
+// render path and a render path must never scan. It is deliberately a COVERAGE
+// figure ("how much of what exists is in the last complete copy") rather than a
+// transfer figure ("how much is left to move"): the two differ whenever pack
+// identities churn, and the one that matters for a backup is coverage.
+type ackLine struct {
+	ackRow
+	CompleteUntil string
+	Pct           int
+	HeldBytes     int64
+	TotalBytes    int64
+	GensBehind    int64
+	FilesBehind   int64
+	BytesBehind   int64
+	Current       bool
+	Known         bool // the acked generation's row still exists
+}
+
 type classLine struct {
 	Class     string
 	Files     int64
@@ -80,7 +102,6 @@ func (p *Plugin) renderBackup(ctx context.Context) (template.HTML, error) {
 	if err != nil {
 		return "", err
 	}
-	vm["Acks"] = acks
 	vm["NoAck"] = len(acks) == 0
 
 	gens, err := p.st.recentGenerations(ctx, 8)
@@ -97,15 +118,17 @@ func (p *Plugin) renderBackup(ctx context.Context) (template.HTML, error) {
 	}
 	vm["Latest"] = latest
 	vm["HasSealed"] = latest.ID != 0
+
 	// An ack older than the newest sealed generation is not a failure — the
-	// puller runs daily and the index hourly — but the LAG is the number that
-	// tells an operator how much of today is not yet off-site.
+	// index runs daily and the pull follows it — but how far behind it is, and
+	// what "complete until" actually means in wall-clock terms, is the whole
+	// question. Two O(1) row reads per target answers it.
+	ackLines := make([]ackLine, 0, len(acks))
 	for _, a := range acks {
-		if latest.ID > 0 && a.Generation < latest.ID {
-			vm["AckLag"] = latest.ID - a.Generation
-			break
-		}
+		meta, err := p.st.generationMeta(ctx, a.Generation)
+		ackLines = append(ackLines, ackCoverage(a, latest, meta, err == nil && meta.SealedAt != ""))
 	}
+	vm["Acks"] = ackLines
 
 	// Per-class coverage, with the previous sealed generation as the baseline
 	// so a class that lost files is visible without reading two tables.
@@ -264,4 +287,48 @@ func fmtAgo(t time.Time) string {
 	default:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
+}
+
+// ackCoverage turns one target's claim into the bar.
+//
+// Every clamp here is load-bearing, because this widget's job is to be
+// believed: a bar reading 103% is embarrassing, and one reading 100% while a
+// third of the corpus is uncollected is dangerous. So a target holding a
+// generation newer than the newest sealed one (it acked mid-index) reads 100
+// rather than over, "behind" figures never go negative when the inventory
+// SHRANK between the two generations, and a generation whose row has aged out
+// of the index reports Known=false instead of a confidently wrong 0%.
+func ackCoverage(a ackRow, latest genRow, meta genMeta, metaOK bool) ackLine {
+	l := ackLine{ackRow: a, TotalBytes: latest.Bytes, HeldBytes: a.Bytes}
+	if metaOK {
+		l.Known = true
+		l.CompleteUntil, l.HeldBytes = meta.SealedAt, meta.Bytes
+		l.FilesBehind = maxInt64(latest.Files-meta.Files, 0)
+		l.BytesBehind = maxInt64(latest.Bytes-meta.Bytes, 0)
+	}
+	l.GensBehind = maxInt64(latest.ID-a.Generation, 0)
+	l.Current = latest.ID > 0 && a.Generation >= latest.ID
+	switch {
+	case l.TotalBytes > 0:
+		l.Pct = int(min64(100*l.HeldBytes/l.TotalBytes, 100))
+	case l.Current:
+		// Nothing indexed yet but the target holds what exists: vacuously
+		// complete, and better shown as such than as a 0% that reads as loss.
+		l.Pct = 100
+	}
+	return l
+}
+
+func maxInt64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }
