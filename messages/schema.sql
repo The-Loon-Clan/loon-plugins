@@ -95,3 +95,9 @@ CREATE TABLE IF NOT EXISTS message_reads (
     read_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (message_id, user_id)
 );
+
+-- Per-viewer dismissal, added later on the origin site (migration 67). The
+-- store's visibility filter reads it (`COALESCE(mr.dismissed, false) = false`),
+-- so a host that creates message_reads without this column gets an inbox that
+-- errors rather than one that merely ignores dismissals.
+ALTER TABLE message_reads ADD COLUMN IF NOT EXISTS dismissed BOOLEAN NOT NULL DEFAULT false;

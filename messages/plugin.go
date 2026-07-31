@@ -37,7 +37,10 @@ func init() {
 // schema, and BaseData is the host's page chrome. Everything else — auth,
 // users, notifications, entitlements, error reporting — comes from core.
 type Deps struct {
-	// Store backs both halves of the inbox. Required.
+	// Store is OPTIONAL: leave it nil and Provision builds a PGStore over
+	// core.Storage.DB(), which is what a host with the schema wants. Supply
+	// one to point the plugin at a different backing — a MemStore for a demo,
+	// or an adapter over a host's existing repositories.
 	Store Store
 
 	// BaseData merges the host's page chrome (signed-in user, nav counts,
@@ -99,17 +102,25 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if deps == nil {
 		return fmt.Errorf("messages: SetDeps was not called before core.Boot — wire it in main()")
 	}
-	if deps.Store == nil {
-		return fmt.Errorf("messages: Deps.Store is required")
-	}
 	if deps.BaseData == nil {
 		// Not optional: without the host's chrome these pages render as though
 		// nobody is signed in, which looks like a broken session rather than a
 		// missing seam.
 		return fmt.Errorf("messages: Deps.BaseData is required — it supplies the host's page chrome")
 	}
+	// Default the store to Postgres over the host's handle, the same way the
+	// forum plugin does. A host that has the schema (see schema.sql) wires
+	// nothing; one that wants a different backing supplies Deps.Store.
+	store := deps.Store
+	if store == nil {
+		db := c.Storage.DB()
+		if db == nil {
+			return fmt.Errorf("messages: Core.Storage.DB() is nil and no Deps.Store was supplied")
+		}
+		store = NewPGStore(db)
+	}
 	p.handlers = &Handlers{
-		store: deps.Store, auth: c.Auth, users: c.Users,
+		store: store, auth: c.Auth, users: c.Users,
 		notify: c.Notifications, errs: c.Errors, ents: c.Entitlements,
 	}
 

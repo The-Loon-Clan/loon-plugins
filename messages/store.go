@@ -31,8 +31,14 @@ type Store interface {
 
 	// CreateDMMessage inserts one message, bumps the thread's
 	// last_message_at, and clears the RECIPIENT's soft delete so a re-opened
-	// conversation reappears in their inbox. The sender's read_at is stamped
-	// at insert so "unread for me" excludes their own messages.
+	// conversation reappears in their inbox.
+	//
+	// read_at is left NULL. A viewer's own messages are excluded from their
+	// unread count by the sender_id predicate, NOT by stamping read_at at
+	// insert — there is one row per message rather than one per side, so a
+	// stamp would mark it read for the recipient too. (The origin site's
+	// interface doc claimed the stamp; the SQL never did it, and porting the
+	// claim into an in-memory store is how the discrepancy surfaced.)
 	CreateDMMessage(ctx context.Context, threadID int64, senderID int, body string) (int64, error)
 
 	// ListDMThreadsForUser returns the viewer's conversations newest-first,
