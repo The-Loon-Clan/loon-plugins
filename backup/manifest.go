@@ -119,6 +119,41 @@ func (p *Plugin) BuildManifest(ctx context.Context) (Manifest, error) {
 	return g.man, nil
 }
 
+// sortPacksByPriority puts the manifest in the order a puller should fetch it:
+// the host's class order first, then name and id so the manifest stays
+// byte-stable for a given generation.
+//
+// The rank is the entire point. This sort used to key on the class NAME, which
+// silently threw away the priority the plan loop had just established — "site"
+// sorts after "screenshots", so 14 files of user-uploaded artwork that exists
+// nowhere else were served LAST, behind 1,901 packs and 126 GB of regenerable
+// frames. A first pull cut short at 80% would have held every screenshot and
+// none of the irreplaceable art: precisely backwards, and the opposite of what
+// this file, the puller and the design document all claimed. Found on the first
+// real pull, 2026-07-30, because the art was missing from the array.
+func sortPacksByPriority(packs []PackInfo, classRank map[string]int) {
+	// An undeclared class (a stale row, a renamed slug) must sort LAST, not
+	// first. A bare map lookup returns 0 for a miss, which is the rank of the
+	// MOST irreplaceable class — so an unknown class would quietly jump ahead
+	// of the artwork this ordering exists to protect.
+	rank := func(class string) int {
+		if r, ok := classRank[class]; ok {
+			return r
+		}
+		return len(classRank)
+	}
+	sort.Slice(packs, func(i, j int) bool {
+		ri, rj := rank(packs[i].Class), rank(packs[j].Class)
+		if ri != rj {
+			return ri < rj
+		}
+		if packs[i].Class != packs[j].Class {
+			return packs[i].Class < packs[j].Class
+		}
+		return packs[i].ID < packs[j].ID
+	})
+}
+
 // plansFor returns a generation's packs, building them once.
 func (p *Plugin) plansFor(ctx context.Context, gen int64) (*genPlans, error) {
 	packCache.mu.Lock()
@@ -144,7 +179,9 @@ func (p *Plugin) plansFor(ctx context.Context, gen int64) (*genPlans, error) {
 	// does for the index: the cheap irreplaceable classes go first, so a puller
 	// cut off part-way has the artwork that exists nowhere else rather than a
 	// prefix of the screenshots.
+	classRank := map[string]int{}
 	for _, c := range orderedClasses(deps.Classes) {
+		classRank[c.Slug] = len(classRank)
 		rows, err := p.st.filesForGen(ctx, gen, c.Slug)
 		if err != nil {
 			return nil, fmt.Errorf("files for %s: %w", c.Slug, err)
@@ -158,12 +195,7 @@ func (p *Plugin) plansFor(ctx context.Context, gen int64) (*genPlans, error) {
 			})
 		}
 	}
-	sort.Slice(man.Packs, func(i, j int) bool {
-		if man.Packs[i].Class != man.Packs[j].Class {
-			return man.Packs[i].Class < man.Packs[j].Class
-		}
-		return man.Packs[i].ID < man.Packs[j].ID
-	})
+	sortPacksByPriority(man.Packs, classRank)
 
 	g := &genPlans{plans: plans, man: man}
 	packCache.byGen[gen] = g

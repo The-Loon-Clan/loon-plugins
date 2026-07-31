@@ -46,6 +46,25 @@ type inventoryStore interface {
 	// is what the packs are planned from.
 	filesForGen(ctx context.Context, gen int64, class string) ([]fileRow, error)
 	generationMeta(ctx context.Context, gen int64) (genMeta, error)
+
+	// tableStats is what a restore is checked AGAINST. A dump's own bytes
+	// prove only that a file was written; comparing a restored database's
+	// tables to the shape the source had is what distinguishes a real backup
+	// from a well-formed empty one. Estimates (reltuples) on purpose — exact
+	// counts would scan every table on the production box, and the failure
+	// being caught is "this table came back empty", not "off by three rows".
+	tableStats(ctx context.Context) ([]tableStat, error)
+	// serverVersion records what wrote the dump; pg_restore across a major
+	// version is a decision, not a detail.
+	serverVersion(ctx context.Context) (string, error)
+}
+
+// tableStat is one relation's shape at dump time.
+type tableStat struct {
+	Schema string `db:"sch" json:"schema"`
+	Table  string `db:"tbl" json:"table"`
+	Rows   int64  `db:"rows" json:"rows_estimate"`
+	Bytes  int64  `db:"bytes" json:"bytes"`
 }
 
 // genMeta is a sealed generation's headline numbers, for the manifest.
@@ -308,4 +327,36 @@ func (s *PGStore) generationMeta(ctx context.Context, gen int64) (genMeta, error
 			   FROM generations WHERE id = $1`, gen).Scan(&m.SealedAt, &m.Files, &m.Bytes)
 	})
 	return m, err
+}
+
+// tableStats reads every ordinary table's row estimate and size.
+//
+// pg_class.reltuples, not COUNT(*): this runs on the production box while the
+// site is serving, and scanning a 26 GB table to write a number into a backup
+// manifest would be a self-inflicted outage. A -1 (never analysed) is stored as
+// 0 — an unknown row count must not read as a factual one.
+func (s *PGStore) tableStats(ctx context.Context) ([]tableStat, error) {
+	var out []tableStat
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &out,
+			`SELECT n.nspname AS sch,
+			        c.relname  AS tbl,
+			        GREATEST(c.reltuples, 0)::bigint       AS rows,
+			        pg_total_relation_size(c.oid)::bigint  AS bytes
+			   FROM pg_class c
+			   JOIN pg_namespace n ON n.oid = c.relnamespace
+			  WHERE c.relkind = 'r'
+			    AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+			    AND n.nspname NOT LIKE 'pg_toast%'
+			  ORDER BY n.nspname, c.relname`)
+	})
+	return out, err
+}
+
+func (s *PGStore) serverVersion(ctx context.Context) (string, error) {
+	var v string
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.QueryRowContext(ctx, `SHOW server_version`).Scan(&v)
+	})
+	return v, err
 }

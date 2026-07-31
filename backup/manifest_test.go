@@ -263,3 +263,80 @@ func TestMemberPathsCannotEscapeTheRoot(t *testing.T) {
 		t.Error("writePack followed a traversing member path")
 	}
 }
+
+// The manifest's ORDER is a safety property, not a cosmetic one: a first pull
+// of this corpus runs for hours, and whatever it has when it stops is the
+// backup. So the irreplaceable classes must be served first.
+//
+// This sort used to key on the class NAME, which threw away the priority the
+// plan loop had just built — "site" sorts after "screenshots", so 14 files of
+// user-uploaded artwork with no upstream anywhere were served LAST, behind
+// 1,901 packs and 126 GB of regenerable frames. Nothing failed; the array
+// simply did not contain the art. Found on the first real pull, 2026-07-30.
+func TestManifestServesIrreplaceableClassesFirst(t *testing.T) {
+	// The host's order: irreplaceable (10), database (20), re-fetchable (50),
+	// regenerable (90) — collapsed to rank by orderedClasses.
+	rank := map[string]int{
+		"site": 0, "avatars": 1, "posters": 2,
+		"db-dumps":   3,
+		"covers":     4,
+		"screenshot": 5,
+	}
+	packs := []PackInfo{
+		{ID: "aaa", Class: "screenshot"},
+		{ID: "bbb", Class: "covers"},
+		{ID: "ccc", Class: "site"},
+		{ID: "ddd", Class: "db-dumps"},
+		{ID: "eee", Class: "screenshot"},
+		{ID: "fff", Class: "avatars"},
+	}
+	sortPacksByPriority(packs, rank)
+
+	got := make([]string, len(packs))
+	for i, p := range packs {
+		got[i] = p.Class
+	}
+	want := []string{"site", "avatars", "db-dumps", "covers", "screenshot", "screenshot"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("pack order = %v, want %v — an interrupted pull keeps what came first", got, want)
+		}
+	}
+	// The name is NOT the key: "site" must beat "screenshot" despite sorting
+	// after it alphabetically. That is the exact inversion this pins.
+	if packs[0].Class != "site" {
+		t.Error("alphabetical ordering is back: the irreplaceable class is not first")
+	}
+	// Within a class the id still orders, so a generation's manifest is stable
+	// and a resumed pull sees the same sequence it planned against.
+	if packs[4].ID != "aaa" || packs[5].ID != "eee" {
+		t.Errorf("within-class order is not by id: %v, %v", packs[4].ID, packs[5].ID)
+	}
+}
+
+// A class the host never declared (a stale row, a renamed slug) ranks 0 in a
+// map lookup and would jump the queue ahead of the real irreplaceable classes.
+// It must not outrank them silently.
+func TestUnknownClassDoesNotOutrankDeclaredOnes(t *testing.T) {
+	rank := map[string]int{"site": 0, "screenshots": 1}
+	packs := []PackInfo{{ID: "a", Class: "screenshots"}, {ID: "b", Class: "site"}, {ID: "c", Class: "ghost"}}
+	sortPacksByPriority(packs, rank)
+	if packs[0].Class != "site" {
+		t.Errorf("order = %v…, want the declared irreplaceable class first", packs[0].Class)
+	}
+	if packs[2].Class != "ghost" {
+		t.Errorf("an undeclared class sorted at position %d — a map miss returns 0, "+
+			"which is the rank of the MOST irreplaceable class, so an unknown slug "+
+			"would jump ahead of the artwork this ordering protects",
+			indexOfClass(packs, "ghost"))
+	}
+}
+
+func indexOfClass(packs []PackInfo, class string) int {
+	for i, p := range packs {
+		if p.Class == class {
+			return i
+		}
+	}
+	return -1
+}

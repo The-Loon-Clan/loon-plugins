@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -128,6 +129,18 @@ func (p *Plugin) runDBDump(ctx context.Context) {
 		return
 	}
 
+	// The manifest is what a restore is CHECKED against. Written after the
+	// rename so it describes a published dump, and best-effort: failing the
+	// whole dump because its self-description could not be written would be
+	// the tail wagging the dog.
+	if err := p.writeDumpManifest(ctx, final, stamp, excl); err != nil {
+		p.dumpJob.Log("dump manifest not written (%v) — the dump is fine, but a restore "+
+			"drill has nothing to check completeness against", err)
+		if p.core != nil && p.core.Errors != nil {
+			p.core.Errors.Report(ctx, "backup/db-dump-manifest", err)
+		}
+	}
+
 	files, bytes := dirTotals(final)
 	p.dumpJob.Log("dumped %s in %d file(s) to %s in %s%s",
 		humanBytes(bytes), files, stamp, time.Since(started).Round(time.Second),
@@ -140,6 +153,60 @@ func (p *Plugin) runDBDump(ctx context.Context) {
 	// puller fetches it. Say so, because "dump succeeded" reads as "safe".
 	p.dumpJob.Log("dump published — it becomes a backup once the index seals a generation and the puller fetches it")
 	p.dumpJob.SetIdle(time.Now().Add(time.Duration(dbDumpIntervalMin) * time.Minute))
+}
+
+// dumpManifest travels inside the dump directory, so it is packed, pulled and
+// restored with the data it describes rather than living in a database the
+// reader may not have.
+type dumpManifest struct {
+	Stamp         string      `json:"stamp"`
+	Database      string      `json:"database"`
+	ServerVersion string      `json:"server_version"`
+	Format        string      `json:"format"`
+	ParallelJobs  int         `json:"parallel_jobs"`
+	DataExcluded  []string    `json:"data_excluded"`
+	Tables        []tableStat `json:"tables"`
+	// RestoreWith is here for the human who finds this directory in five years
+	// with no access to any of this repository.
+	RestoreWith string `json:"restore_with"`
+}
+
+// dumpManifestName is read by indexer-tools/backup_drill.py. Renaming it breaks
+// the drill, which is the only thing that ever proves these dumps restore.
+const dumpManifestName = "dump-manifest.json"
+
+func (p *Plugin) writeDumpManifest(ctx context.Context, dir, stamp string, excl []string) error {
+	m := dumpManifest{
+		Stamp:        stamp,
+		Database:     deps.DB.DBName,
+		Format:       "directory (pg_dump -Fd)",
+		ParallelJobs: dbDumpJobs,
+		DataExcluded: excl,
+		RestoreWith:  "pg_restore -j 4 --no-owner --no-privileges -d <target> <this directory>",
+	}
+	if v, err := p.st.serverVersion(ctx); err == nil {
+		m.ServerVersion = v
+	}
+	// Row estimates are the point of the file: a restored database whose nzbs
+	// table holds 400k rows against a recorded 430k is fine, and one holding
+	// zero is a catastrophe wearing a successful exit code.
+	stats, err := p.st.tableStats(ctx)
+	if err != nil {
+		return fmt.Errorf("table stats: %w", err)
+	}
+	m.Tables = stats
+
+	blob, err := json.MarshalIndent(m, "", " ")
+	if err != nil {
+		return err
+	}
+	// Temp + rename inside the published directory: a half-written manifest
+	// would be indexed and packed exactly like a good one.
+	tmp := filepath.Join(dir, "."+dumpManifestName+".tmp")
+	if err := os.WriteFile(tmp, blob, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(dir, dumpManifestName))
 }
 
 func (p *Plugin) dumpFailed(err error) {
