@@ -114,6 +114,15 @@ type Config struct {
 	ReadyReapPerPass      int `json:"ready_reap_per_pass"`
 	BackfillBatchesPerRun int `json:"backfill_batches_per_run"` // cap backward batches per backfill pass, across all groups (default 25)
 	BackfillIntervalMin   int `json:"backfill_interval_min"`    // backfill cadence (default 5)
+	// DiagKeepDays is the rolling window for the observe-only diagnostic
+	// series: staging_census, subject_corpus, set_resolutions.
+	//
+	// A knob because their volume is driven by the CRAWLER's behaviour, not by
+	// ours: set_resolutions took 1,070 rows/minute while the walk-past sweep
+	// cleared a backlog (settling to ~120), and the next reset will burst
+	// again. At 195 bytes a row that is the difference between half a gigabyte
+	// and several, and the fix must not require a deploy. Default 14 days.
+	DiagKeepDays int `json:"diag_keep_days"`
 
 	// Staging backend (README.md). Boot config, not a live knob:
 	// switching backends at runtime would strand staged data.
@@ -221,6 +230,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.CrawlMaxBatches <= 0 {
 		c.CrawlMaxBatches = 20000
+	}
+	if c.DiagKeepDays <= 0 {
+		c.DiagKeepDays = 14
 	}
 	if c.ReadyReapPerPass <= 0 {
 		c.ReadyReapPerPass = 50000
@@ -366,6 +378,7 @@ func (c *Config) knobFields() map[string]*int {
 		"crawl_max_batches":             &c.CrawlMaxBatches,
 		"max_articles_per_group":        &c.MaxArticlesPerGroup,
 		"ready_reap_per_pass":           &c.ReadyReapPerPass,
+		"diag_keep_days":                &c.DiagKeepDays,
 		"walk_past_grace_min":           &c.WalkPastGraceMin,
 		"walk_past_sweep_per_round":     &c.WalkPastSweepPerRound,
 		"backfill_interval_min":         &c.BackfillIntervalMin,

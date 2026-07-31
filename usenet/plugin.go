@@ -537,13 +537,13 @@ func (p *Plugin) runPruneLocked(ctx context.Context) {
 	// The diagnostic series stay bounded here too. (The census prune existed
 	// unwired since the table was born — unbounded growth in a diagnostic
 	// table is how diagnostics become the problem they were added to find.)
-	if _, err := p.st.pruneStagingCensus(ctx, 14); err != nil {
+	if _, err := p.st.pruneStagingCensus(ctx, cfg.DiagKeepDays); err != nil {
 		p.core.Errors.Report(ctx, "usenet/prune-census", err)
 	}
-	if _, err := p.st.pruneSubjectCorpus(ctx, 14); err != nil {
+	if _, err := p.st.pruneSubjectCorpus(ctx, cfg.DiagKeepDays); err != nil {
 		p.core.Errors.Report(ctx, "usenet/prune-corpus", err)
 	}
-	if _, err := p.st.pruneSetResolutions(ctx, 14); err != nil {
+	if _, err := p.st.pruneSetResolutions(ctx, cfg.DiagKeepDays); err != nil {
 		p.core.Errors.Report(ctx, "usenet/prune-resolutions", err)
 	}
 	kept := "kept forever"
