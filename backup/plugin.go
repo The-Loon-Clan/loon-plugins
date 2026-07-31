@@ -84,14 +84,29 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
-	if deps == nil || deps.Config == nil {
-		return fmt.Errorf("backup: SetDeps not called (Config) before core.Boot — wire it in the worker block")
-	}
-	if deps.BackupDir == "" {
-		return fmt.Errorf("backup: SetDeps missing BackupDir")
-	}
-	if deps.DB.DBName == "" {
-		return fmt.Errorf("backup: SetDeps missing DB connection (DBName empty) — pg_dump has nothing to target")
+	// Missing deps are fatal where this plugin BACKS UP and merely disabling
+	// where it only DISPLAYS.
+	//
+	// Both halves are the lesson from one deploy: the page was added, "web"
+	// joined Processes, and the host staged SetDeps in its worker block only —
+	// so every web process hit the refusal below and the whole site failed to
+	// boot. A backup that cannot run must be loud, but an admin page that
+	// cannot render has no business taking the site down with it.
+	if deps == nil || deps.Config == nil || deps.BackupDir == "" || deps.DB.DBName == "" {
+		if c.Process == "web" {
+			c.Logger.Info("backup: SetDeps not staged in this process — the admin page is " +
+				"unavailable here; stage it in the SHARED section of the host's wiring, " +
+				"not the worker block")
+			return nil
+		}
+		switch {
+		case deps == nil || deps.Config == nil:
+			return fmt.Errorf("backup: SetDeps not called (Config) before core.Boot — stage it in the host's shared wiring")
+		case deps.BackupDir == "":
+			return fmt.Errorf("backup: SetDeps missing BackupDir")
+		default:
+			return fmt.Errorf("backup: SetDeps missing DB connection (DBName empty) — pg_dump has nothing to target")
+		}
 	}
 
 	p.core = c

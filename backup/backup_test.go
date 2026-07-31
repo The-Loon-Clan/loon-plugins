@@ -3,11 +3,14 @@ package backup
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/the-loon-clan/loon/core"
 	"github.com/the-loon-clan/loon/schedule"
 	"time"
 )
@@ -571,5 +574,29 @@ func TestEveryRegisteredJobIsScheduled(t *testing.T) {
 				"the delay must not exceed the interval or the first run is late for no reason",
 				want.name, l.bootDelay, l.interval)
 		}
+	}
+}
+
+// A missing SetDeps must be fatal where this plugin BACKS UP and merely
+// disabling where it only DISPLAYS.
+//
+// This is a regression test for a site outage. The admin page was added, "web"
+// joined Metadata.Processes, and the host staged SetDeps in its worker block
+// only — so every web process hit Provision's refusal and the whole site
+// failed to boot on deploy. A backup that cannot run must be loud; an admin
+// page that cannot render must not take the site down with it.
+func TestProvisionWithoutDepsDisablesThePageButFailsTheWorker(t *testing.T) {
+	saved := deps
+	deps = nil
+	t.Cleanup(func() { deps = saved })
+
+	web := &Plugin{}
+	if err := web.Provision(&core.Core{Process: "web", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}); err != nil {
+		t.Fatalf("web Provision returned %v — an unconfigured admin page must not fail boot", err)
+	}
+
+	worker := &Plugin{}
+	if err := worker.Provision(&core.Core{Process: "worker"}); err == nil {
+		t.Error("worker Provision succeeded without deps — a backup that cannot run must refuse loudly")
 	}
 }
