@@ -76,6 +76,10 @@ Process kinds (`Metadata.Processes`): `web`, `worker`, `api`.
 - **api**: registers the index + newznab capabilities — no jobs, no admin
   surface.
 
+See [PIPELINE.md](PIPELINE.md) for the article flow end to end — buffers,
+cadences, measured timings, and where the cost actually sits. Read it before
+changing the crawl or build path.
+
 ## Data
 
 Owns the **`usenet` Postgres schema** (loon scopes `search_path` to it;
