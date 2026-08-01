@@ -268,3 +268,42 @@ func TestPruneDropsStaleDiagnosticsOnly(t *testing.T) {
 		t.Errorf("prune kept the wrong stems: %+v", live.Rows)
 	}
 }
+
+// Prod lost whole passes of counters to this: a Usenet subject with a byte
+// that is not valid UTF-8 reaches a text column, Postgres refuses the value,
+// and because the flush is ONE batched statement every count in it goes too.
+//
+//	pq: invalid byte sequence for encoding "UTF8": 0xe1 0x6e 0x61
+//
+// A real database is the only place this can be proven: the driver sends the
+// bytes untouched and the rejection happens server-side, so no mock sees it.
+func TestFilterHitsSurviveInvalidUTF8(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	const bad = "Espa\xf1a - Cancio\xe1n.mkv"
+	f := newFilterHits()
+	f.note("junk", "long_alnum_run", bad)
+	// Subject-derived text in the RULE column — the instrument counters do
+	// exactly this, so the key must survive as well as the sample.
+	f.noteN("ungrouped", "stem-"+bad, 42, bad)
+
+	if err := s.recordFilterHits(ctx, f.drain()); err != nil {
+		t.Fatalf("flush rejected: %v", err)
+	}
+
+	rules, err := s.ruleHitRows(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rules) != 1 || rules[0].TotalCount != 1 {
+		t.Errorf("rule counter lost: %+v", rules)
+	}
+	diag, err := s.diagnosticHits(ctx, "", 25, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diag.TotalRows != 1 || diag.TotalHits != 42 {
+		t.Errorf("instrument counter lost: %d row(s), %d hit(s)", diag.TotalRows, diag.TotalHits)
+	}
+}

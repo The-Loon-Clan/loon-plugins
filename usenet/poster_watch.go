@@ -105,17 +105,20 @@ func (p *posterHits) note(poster, stage, reason, sample string) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	k := posterHitKey{poster, stage, reason}
+	// Poster and sample both come straight off article headers, which are
+	// arbitrary bytes — and the poster is a KEY column here. See pgSafeText:
+	// one invalid byte fails the batched flush and loses the pass.
+	k := posterHitKey{pgSafeText(poster), stage, reason}
 	v := p.hits[k]
 	if v == nil {
 		// Keep the FIRST sample of a pass, matching filterHits: a stable sample
 		// means an operator refreshing the page is not chasing a moving target.
-		p.hits[k] = &posterHitVal{count: 1, sample: sample}
+		p.hits[k] = &posterHitVal{count: 1, sample: truncateSample(sample)}
 		return
 	}
 	v.count++
 	if v.sample == "" {
-		v.sample = sample
+		v.sample = truncateSample(sample)
 	}
 }
 

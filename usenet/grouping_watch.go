@@ -171,7 +171,13 @@ func (s *PGStore) insertSubjectCorpus(ctx context.Context, rows []corpusRow) err
 	subjects := make([]string, len(rows))
 	residues := make([]bool, len(rows))
 	for i, r := range rows {
-		groups[i], subjects[i], residues[i] = r.group, r.subject, r.residue
+		// Sanitised here rather than at capture: the corpus exists to hold RAW
+		// subjects for differential parser testing, so the in-memory copy the
+		// parser sees must stay untouched. Postgres will not take invalid
+		// UTF-8 at all, and one bad byte fails the whole batch — so the choice
+		// is a sanitised sample or no sample, and a corpus row with a
+		// replacement char still tells you the grammar it came from.
+		groups[i], subjects[i], residues[i] = r.group, pgSafeText(r.subject), r.residue
 	}
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		_, err := tx.ExecContext(ctx,

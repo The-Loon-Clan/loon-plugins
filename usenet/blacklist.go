@@ -152,7 +152,11 @@ func (f *filterHits) note(kind, rule, sample string) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	k := filterHitKey{kind, rule}
+	// The rule is sanitised too, not just the sample. For a RULE it is a fixed
+	// identifier, but the instrument counters put subject-derived text in this
+	// column — an ungrouped stem, a merge-suspect token pair — and that is
+	// arbitrary Usenet bytes reaching a Postgres key column.
+	k := filterHitKey{kind, pgSafeText(rule)}
 	v := f.hits[k]
 	if v == nil {
 		v = &filterHitVal{}
@@ -173,7 +177,11 @@ func (f *filterHits) noteN(kind, rule string, n int64, sample string) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	k := filterHitKey{kind, rule}
+	// The rule is sanitised too, not just the sample. For a RULE it is a fixed
+	// identifier, but the instrument counters put subject-derived text in this
+	// column — an ungrouped stem, a merge-suspect token pair — and that is
+	// arbitrary Usenet bytes reaching a Postgres key column.
+	k := filterHitKey{kind, pgSafeText(rule)}
 	v := f.hits[k]
 	if v == nil {
 		v = &filterHitVal{}
@@ -203,16 +211,40 @@ func (f *filterHits) drain() map[filterHitKey]*filterHitVal {
 // to measure, and the page only ever shows a line of it.
 func truncateSample(s string) string {
 	const max = 200
-	s = strings.TrimSpace(s)
+	s = strings.TrimSpace(pgSafeText(s))
 	if len(s) <= max {
 		return s
 	}
-	// Trim to a rune boundary so the stored sample is still valid UTF-8.
+	// Trim to a rune boundary so the truncation does not split a rune.
 	cut := max
 	for cut > 0 && !isUTF8Start(s[cut]) {
 		cut--
 	}
 	return s[:cut] + "…"
+}
+
+// pgSafeText makes a string storable in a Postgres text column.
+//
+// Usenet subjects are arbitrary bytes. RFC 2047 decoding produces valid UTF-8
+// only when the header declared its charset honestly, and plenty do not — a
+// Latin-1 body labelled UTF-8, or raw 8-bit with no encoded-word at all.
+// Postgres rejects such a value outright, and because the counters flush as
+// ONE batched statement, a single bad byte in a single sample loses the whole
+// pass's counts:
+//
+//	pq: invalid byte sequence for encoding "UTF8": 0xe1 0x6e 0x61
+//
+// Observed in production on 2026-08-01 against filter_hits and
+// subject_corpus. The samples are diagnostic garnish; the counts are the data,
+// and they were being discarded to preserve bytes nobody can read anyway.
+//
+// NUL is stripped rather than replaced: it is valid UTF-8 and still cannot go
+// in a text column, and it never carries meaning in a subject line.
+func pgSafeText(s string) string {
+	if i := strings.IndexByte(s, 0); i >= 0 {
+		s = strings.ReplaceAll(s, "\x00", "")
+	}
+	return strings.ToValidUTF8(s, "�")
 }
 
 func isUTF8Start(b byte) bool { return b&0xC0 != 0x80 }
