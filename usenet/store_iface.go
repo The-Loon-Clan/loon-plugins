@@ -68,6 +68,9 @@ type GroupStore interface {
 	setPosterWatch(ctx context.Context, pattern, note string, enabled bool) error
 	deletePosterWatch(ctx context.Context, pattern string) error
 	posterHitRows(ctx context.Context, limit int) ([]posterHitRow, error)
+	// posterWatchRows is the full read: patterns alone cannot round-trip a
+	// watch, and disabling one has to be exactly undoable.
+	posterWatchRows(ctx context.Context) ([]posterWatchRow, error)
 	recordPosterHits(ctx context.Context, hits map[posterHitKey]*posterHitVal) error
 	moveGroup(ctx context.Context, name string, delta int) error
 	deleteGroup(ctx context.Context, name string) error
@@ -122,6 +125,10 @@ type BlacklistStore interface {
 	// rows. Same accumulate-then-upsert discipline as recordFilterHits, for the
 	// same reason: a write per candidate set would cost more than the assembly.
 	recordBuildOutcomes(ctx context.Context, out map[buildOutcome]*outcomeVal) error
+	// titleRejectableTotals prices the poster watch: how many sets a build pass
+	// dropped for a reason the title alone could have decided, and therefore
+	// paid a staged-article load for while the fast path was disabled.
+	titleRejectableTotals(ctx context.Context, days int) (int64, error)
 	// The counters split by population, not by table: rules are bounded and
 	// read whole; instrument observations are unbounded and read a page at a
 	// time. See blacklist_store.go for why they cannot share one read.

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // Accounting for what the build pass does with each staged release set.
@@ -181,4 +182,47 @@ func (p *Plugin) flushBuildOutcomes(ctx context.Context) {
 	if err := p.st.recordBuildOutcomes(ctx, out); err != nil {
 		p.reportErr(ctx, "usenet/build-outcomes", err)
 	}
+}
+
+// titleRejectableTotals counts the sets a build pass dropped for a reason the
+// TITLE alone could have decided — junk, blacklist, blocked extension — over
+// the last keepDays.
+//
+// It exists to price one specific trade. The builder rejects those sets from
+// their subject in microseconds, but only when the title fast path is enabled,
+// and ANY active poster watch disables it: attribution needs the articles, so
+// every candidate pays a full staged-article load first. This number times that
+// load is what the watch is costing, and without it the trade is invisible.
+func (s *PGStore) titleRejectableTotals(ctx context.Context, days int) (int64, error) {
+	if days <= 0 {
+		days = 7
+	}
+	var n int64
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.GetContext(ctx, &n,
+			`SELECT COALESCE(SUM(total_count), 0) FROM build_outcomes
+			  WHERE reason = ANY($1) AND day >= (now() - make_interval(days => $2))::date`,
+			pq.Array([]string{
+				string(outcomeJunk), string(outcomeBlacklist), string(outcomeBlockedExt),
+			}), days)
+	})
+	return n, err
+}
+
+// posterWatchRow is one watch as stored — pattern, its note, and whether it is
+// live. The patterns-only read cannot round-trip a watch, and an optimization
+// that disables one has to be able to put it back exactly.
+type posterWatchRow struct {
+	Pattern string `db:"pattern"`
+	Note    string `db:"note"`
+	Enabled bool   `db:"enabled"`
+}
+
+func (s *PGStore) posterWatchRows(ctx context.Context) ([]posterWatchRow, error) {
+	var out []posterWatchRow
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &out,
+			`SELECT pattern, note, enabled FROM poster_watch ORDER BY pattern`)
+	})
+	return out, err
 }
