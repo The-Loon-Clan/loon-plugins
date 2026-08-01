@@ -220,6 +220,11 @@
             a large cohort sharing one stem is a counter format worth teaching it.
             <em>merge_suspect</em> is the opposite worry: distinct episode markers that
             landed in ONE set, which would merge two releases.
+            <em>size_estimate</em> is a histogram, not a stem list: it buckets how far a
+            single-article size guess would have been from the true release size
+            (<code>actual / estimate</code>). It measures whether the sized junk rules could
+            safely run at ingest instead of after every article is loaded. Buckets above
+            <code>1.0</code> are under-estimates — the direction that would junk a real release.
         </p>
         <div class="mb-2">
             <a class="btn btn-sm py-0 {{if .Diag.Kind}}btn-outline-secondary{{else}}btn-primary{{end}}"

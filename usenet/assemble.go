@@ -284,6 +284,11 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			}
 			continue
 		}
+		// Measure what a single-article size estimate WOULD have got wrong for
+		// this set. Free here — both the estimate's inputs and the true size
+		// are already loaded — and it is the evidence the ingest-time sized
+		// gate needs before it can be trusted (size_estimate.go).
+		p.noteSizeEstimate(arts, k.Base)
 		// Classification runs in PROD'S order: title extraction, blocked
 		// extensions, the operator blacklist, then the sized junk check — which
 		// an explicit category tag bypasses, exactly as prod's assembler does.

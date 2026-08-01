@@ -148,6 +148,26 @@ That is enough to run the sized rules one stage earlier, moving the 99.97%
 rejection from the end of the pipeline to the beginning — before the Redis
 write, before the ready queue, before the 16 ms load.
 
+### Phase 1 (shipped 2026-08-01): measure the error, decide nothing
+
+The margin below has to come from data, and the data was already on the build
+path: by the time a set is classified, both the estimate's inputs (each
+article's `:bytes` and claimed part count) and the true summed size are in
+memory. So the first change computes the estimate the ingest path *could* have
+made and buckets `actual / estimate`. No ingest change, no staging change, no
+risk, and nothing decided on it yet.
+
+It takes the **least** per-article estimate for the set, not the mean: at
+ingest any single article can be the one that trips a sized rule, so the risk
+is set by the article that under-states the release the most. A mean would
+describe an estimator the ingest path cannot implement — it never sees the set,
+only one article at a time.
+
+The histogram lands in `filter_hits` under `kind = 'size_estimate'` and renders
+in the Filters tab's diagnostics card. Buckets above `1.0` are the
+under-estimates — the direction that would junk a real release. Phase 2 sets
+`safeSizeMargin` above the observed upper tail and only then gates on it.
+
 **It must be introduced as an estimate, not a measurement.** A subject claiming
 `(1/100)` whose first article is unusually small or large skews the figure, and
 a false junk verdict at ingest is unrecoverable — the article is never staged,
