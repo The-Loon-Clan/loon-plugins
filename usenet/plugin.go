@@ -212,6 +212,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return err
 	}
 
+	// Optimizations, discovered by the "<plugin>.optimizer" suffix. Registered
+	// in every process because Inspect is read-only and useful wherever the
+	// admin page renders; Apply reaches the same store either way.
+	if err := c.Register("usenet"+pluginapi.OptimizerSuffix, optimizer{p: p}); err != nil {
+		return err
+	}
+
 	// web/all/api: publish the READ capabilities — the public site pages AND the
 	// standalone api process both serve search / browse / Newznab / download.
 	if c.Process == "web" || c.Process == "all" || c.Process == "api" {
