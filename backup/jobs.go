@@ -102,6 +102,20 @@ func (p *Plugin) doRun(ctx context.Context, force bool) {
 		}
 	}
 
+	// Retention BEFORE the pre-flight, and unconditionally.
+	//
+	// It also runs at the end of a successful pass, which used to be the only
+	// place it ran — and that made it unreachable in the one condition where
+	// it matters. A pre-flight refusal returns below, so on a box too full to
+	// back up, the old archives holding the disk were never trimmed: no room →
+	// skip → no prune → still no room, permanently. Prod sat in that state
+	// from 2026-07-04, holding four incomplete archives it could not act on.
+	//
+	// Pruning first also means the pre-flight measures the disk as it will be,
+	// not as it was, so freeing an old archive can be what lets this run
+	// proceed at all.
+	p.prune(job.Log, deps.Config.GetBackupKeepCount(ctx))
+
 	// Free-disk pre-flight. This job writes a full copy of everything it
 	// protects onto local disk before anything else can happen — so on a
 	// volume without room it does not merely fail, it fills the disk and the
@@ -173,10 +187,10 @@ func (p *Plugin) doRun(ctx context.Context, force bool) {
 		job.Log("database.sql.gz written (%s)", fmtFileSize(fi))
 	}
 
-	// Retention: prune the oldest dated folders so backups don't accumulate
-	// forever (the original disk-space leak — there was no cleanup). Runs even
-	// on a failed pass, so an incomplete folder is still subject to retention
-	// and cannot leak disk.
+	// Retention again, now that this pass has added a folder: the pass above
+	// brings the count down to keep, this brings it back down after the new
+	// one. Still runs on a FAILED pass, so a half-written folder is subject to
+	// retention like any other and cannot leak disk.
 	p.prune(job.Log, deps.Config.GetBackupKeepCount(ctx))
 
 	if len(failures) > 0 {

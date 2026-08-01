@@ -644,3 +644,48 @@ func TestStartLaunchesNothingWithoutRegisteredJobs(t *testing.T) {
 		}
 	}
 }
+
+// Retention must survive a pre-flight refusal.
+//
+// It used to run only at the END of a pass, so a box too full to back up never
+// trimmed the old archives holding the disk: no room -> skip -> no prune ->
+// still no room, forever. Prod sat in exactly that state from 2026-07-04,
+// holding four incomplete archives it had no way to act on. This is the test
+// that would have caught it.
+func TestRetentionRunsEvenWhenThePreflightRefuses(t *testing.T) {
+	stamps := []string{
+		"2026-01-01_000000", "2026-02-01_000000",
+		"2026-03-01_000000", "2026-04-01_000000",
+	}
+	dir := seedBackupDir(t, true, stamps...)
+	assets := t.TempDir()
+	deps = &Deps{
+		BackupDir: dir,
+		Classes:   []AssetClass{{Slug: "covers", Dir: assets}},
+		// keep 2, and 1 byte free against a 10 GB database: the pre-flight
+		// cannot pass, which is the whole point.
+		Config:   stubConfig{mode: "full", keep: 2},
+		FreeDisk: func(context.Context) (int64, error) { return 1, nil },
+		DBSize:   func(context.Context) (int64, error) { return 10 << 30, nil },
+	}
+	t.Cleanup(func() { deps = nil })
+
+	p := &Plugin{job: schedule.RegisterJob("Backup test "+t.Name(), "")}
+	p.doRun(context.Background(), true)
+
+	// No new folder: the pre-flight did refuse, or this test proves nothing.
+	for _, gone := range stamps[:2] {
+		if _, err := os.Stat(filepath.Join(dir, gone)); !os.IsNotExist(err) {
+			t.Errorf("%s survived a refused pass — retention is still gated on backing up", gone)
+		}
+	}
+	for _, kept := range stamps[2:] {
+		if _, err := os.Stat(filepath.Join(dir, kept)); err != nil {
+			t.Errorf("%s was pruned; keep=2 must retain the newest two", kept)
+		}
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 2 {
+		t.Errorf("%d folder(s) left, want 2 — a refused pass must not create one", len(entries))
+	}
+}
