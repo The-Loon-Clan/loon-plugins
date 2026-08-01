@@ -29,28 +29,47 @@ import "fmt"
 // needs no ingest change, no staging change, and takes no risk. The margin for
 // the real gate comes out of the resulting distribution rather than a guess.
 
-// worstCaseEstimate returns the LEAST of the per-article estimates for a set,
-// with the article count that produced it.
+// worstCaseEstimate returns the LEAST per-article estimate for a set, computed
+// two ways, with the count of articles that could contribute.
 //
 // The least, not the mean: at ingest any single article can be the one that
 // triggers a sized rule, so the risk is set by the article that under-states
 // the release the most. Averaging would describe an estimator the ingest path
 // cannot implement — it sees one article at a time, not the set.
 //
-// Articles with no claimed part count contribute nothing: a subject the parser
-// could not read a total from would not be estimated at ingest either.
-func worstCaseEstimate(arts []stagedArticle) (est int64, usable int) {
+// perFile is `bytes * claimed parts`. whole additionally multiplies by the
+// claimed FILE count where the subject carries one.
+//
+// Both are measured because the first day of data said the difference matters
+// enormously. `bytes * parts` was right within 5% for 98.7% of sets and
+// under-stated the rest by MORE than 16x — 42,088 of them. A subject's
+// "(1/100)" counts parts within one FILE, so for a multi-file release the
+// naive figure describes one file and misses the release by roughly the file
+// count. Which is fatal for the intended use: a sized rule fires BELOW its
+// cap, so an under-estimate is what junks a real release, and no fixed margin
+// covers a tail that open-ended.
+func worstCaseEstimate(arts []stagedArticle) (perFile, whole int64, usable int) {
 	for _, a := range arts {
 		if a.Bytes <= 0 || a.TotalParts <= 0 {
 			continue
 		}
-		e := a.Bytes * int64(a.TotalParts)
 		usable++
-		if est == 0 || e < est {
-			est = e
+		e := a.Bytes * int64(a.TotalParts)
+		if perFile == 0 || e < perFile {
+			perFile = e
+		}
+		// FileParts distinguishes a FILE counter from a part counter; without
+		// it the marker means something else and multiplying would invent
+		// size. A single-file release keeps the same figure either way.
+		w := e
+		if a.FileParts && a.TotalFiles > 1 {
+			w = e * int64(a.TotalFiles)
+		}
+		if whole == 0 || w < whole {
+			whole = w
 		}
 	}
-	return est, usable
+	return perFile, whole, usable
 }
 
 // estimateBuckets are the ratio boundaries of actual/estimate, ascending.
@@ -77,21 +96,26 @@ func estimateBucket(actual, est int64) string {
 	return fmt.Sprintf("%02d_over_%g", len(estimateBuckets)+1, estimateBuckets[len(estimateBuckets)-1])
 }
 
-// noteSizeEstimate records how wrong a single-article estimate would have been
-// for one set, bucketed by ratio.
+// noteSizeEstimate records how wrong each estimator would have been for one
+// set, bucketed by ratio, under both kinds.
 //
 // Called on the build path with the articles already in memory, so it costs a
 // multiply per article against a ~16 ms load. It counts EVERY set it sees,
 // including the ones about to be junked: those are precisely the sets an
 // ingest-time gate would reject, so their error is the error that matters.
+//
+// Two counters rather than one because the choice between the estimators has
+// to be made from data. The first day's naive figures had a 1.29% tail beyond
+// 16x, and a gate cannot ship until one of these has a bounded one.
 func (p *Plugin) noteSizeEstimate(arts []stagedArticle, base string) {
-	est, usable := worstCaseEstimate(arts)
+	perFile, whole, usable := worstCaseEstimate(arts)
 	if usable == 0 {
 		p.hits.noteN("size_estimate", "00_unusable", 1, base)
 		return
 	}
 	actual, _ := summarize(arts)
-	p.hits.noteN("size_estimate", estimateBucket(actual, est), 1, base)
+	p.hits.noteN("size_estimate", estimateBucket(actual, perFile), 1, base)
+	p.hits.noteN("size_estimate_files", estimateBucket(actual, whole), 1, base)
 }
 
 // safeSizeMargin is the factor a sized rule's cap must exceed the estimate by

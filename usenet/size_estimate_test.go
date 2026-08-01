@@ -6,6 +6,13 @@ func art(bytes int64, total int) stagedArticle {
 	return stagedArticle{Bytes: bytes, TotalParts: total}
 }
 
+// multiFileArt carries a FILE counter, which is what the naive estimator
+// misses: "(1/100)" counts parts within one file, so a 20-file release is
+// ~20x what bytes*parts describes.
+func multiFileArt(bytes int64, parts, files int) stagedArticle {
+	return stagedArticle{Bytes: bytes, TotalParts: parts, TotalFiles: files, FileParts: true}
+}
+
 // The estimate must take the LEAST per-article figure, not the mean. At ingest
 // any single article can be the one that trips a sized rule, so the set's risk
 // is set by the article that under-states it the most. A mean would describe
@@ -13,12 +20,16 @@ func art(bytes int64, total int) stagedArticle {
 func TestWorstCaseTakesTheLeastArticleEstimate(t *testing.T) {
 	// A set of 10 parts whose articles vary: 1 MB, 1 MB, and a 100 KB tail.
 	arts := []stagedArticle{art(1<<20, 10), art(1<<20, 10), art(100<<10, 10)}
-	est, usable := worstCaseEstimate(arts)
+	est, whole, usable := worstCaseEstimate(arts)
 	if usable != 3 {
 		t.Fatalf("usable = %d, want 3", usable)
 	}
 	if want := int64(100 << 10 * 10); est != want {
 		t.Errorf("est = %d, want the smallest article's %d", est, want)
+	}
+	// No file counter on these, so both estimators agree.
+	if whole != est {
+		t.Errorf("whole = %d, want the same %d without a file marker", whole, est)
 	}
 }
 
@@ -26,7 +37,7 @@ func TestWorstCaseTakesTheLeastArticleEstimate(t *testing.T) {
 // at ingest either, so it must not drag the estimate to zero.
 func TestArticlesWithoutAPartCountAreIgnored(t *testing.T) {
 	arts := []stagedArticle{art(500, 0), art(1000, 4), art(0, 4)}
-	est, usable := worstCaseEstimate(arts)
+	est, _, usable := worstCaseEstimate(arts)
 	if usable != 1 {
 		t.Errorf("usable = %d, want 1 (only the complete article)", usable)
 	}
@@ -34,10 +45,10 @@ func TestArticlesWithoutAPartCountAreIgnored(t *testing.T) {
 		t.Errorf("est = %d, want 4000", est)
 	}
 	// A set where nothing is usable reports so rather than claiming zero bytes.
-	if est, usable := worstCaseEstimate([]stagedArticle{art(0, 0)}); est != 0 || usable != 0 {
+	if est, _, usable := worstCaseEstimate([]stagedArticle{art(0, 0)}); est != 0 || usable != 0 {
 		t.Errorf("unusable set = %d/%d, want 0/0", est, usable)
 	}
-	if est, usable := worstCaseEstimate(nil); est != 0 || usable != 0 {
+	if est, _, usable := worstCaseEstimate(nil); est != 0 || usable != 0 {
 		t.Errorf("empty set = %d/%d, want 0/0", est, usable)
 	}
 }
@@ -100,5 +111,51 @@ func TestMarginProtectsAgainstUnderEstimates(t *testing.T) {
 	// A genuinely tiny release still clears the gate, or the gate is useless.
 	if est := int64(50_000); est*safeSizeMargin >= cap790K {
 		t.Errorf("margin %d rejects even a clearly-tiny release", safeSizeMargin)
+	}
+}
+
+// The finding that killed the first design, as a test.
+//
+// A subject's "(1/100)" counts parts within one FILE. For a 20-file release
+// the naive figure describes one file and misses the release by ~20x — and
+// since a sized rule fires BELOW its cap, under-stating is exactly what would
+// junk a real release. Production put 1.29% of sets past 16x this way.
+func TestFileCounterIsWhatTheNaiveEstimateMisses(t *testing.T) {
+	// 20 files, 10 parts each, 1 MB per article: one file is 10 MB, the
+	// release is 200 MB.
+	arts := []stagedArticle{multiFileArt(1<<20, 10, 20), multiFileArt(1<<20, 10, 20)}
+	perFile, whole, usable := worstCaseEstimate(arts)
+	if usable != 2 {
+		t.Fatalf("usable = %d", usable)
+	}
+	if perFile != 10<<20 {
+		t.Errorf("per-file estimate = %d, want one file's 10 MiB", perFile)
+	}
+	if whole != 200<<20 {
+		t.Errorf("whole-release estimate = %d, want 200 MiB", whole)
+	}
+	// Against a true 200 MiB, the naive estimate lands in the fatal tail while
+	// the file-aware one is exact.
+	const actual = 200 << 20
+	if got := estimateBucket(actual, perFile); got != "11_under_16" && got != "12_over_16" {
+		t.Errorf("naive estimate bucketed as %q, expected the dangerous tail", got)
+	}
+	if got := estimateBucket(actual, whole); got != "04_under_1.05" {
+		t.Errorf("file-aware estimate bucketed as %q, want a near-exact bucket", got)
+	}
+}
+
+// A file marker of 1, or none at all, must not change the figure — otherwise
+// the file-aware estimator would differ from the naive one on the 98.7% of
+// sets the naive one already gets right.
+func TestSingleFileReleasesAreUnaffected(t *testing.T) {
+	for _, a := range []stagedArticle{
+		multiFileArt(1<<20, 10, 1),
+		{Bytes: 1 << 20, TotalParts: 10, TotalFiles: 20, FileParts: false}, // not a file counter
+	} {
+		perFile, whole, _ := worstCaseEstimate([]stagedArticle{a})
+		if perFile != whole {
+			t.Errorf("%+v: estimators diverged (%d vs %d) without a real file counter", a, perFile, whole)
+		}
 	}
 }
