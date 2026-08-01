@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // seedJunkRules upserts the shipped rules. It deliberately does NOT overwrite
@@ -157,4 +159,79 @@ func (p *Plugin) reloadJunkRules(ctx context.Context) {
 	}
 	setJunkMatcher(m)
 	p.crawlJob.Log("junk rules reloaded: %d active", len(m.rules))
+}
+
+// junkRuleStat is one rule as the order editor shows it: where it sits, what
+// it has caught, and the sample that proves what "caught" means here.
+type junkRuleStat struct {
+	Position   int       `db:"position"`
+	Name       string    `db:"name"`
+	Kind       string    `db:"kind"`
+	Enabled    bool      `db:"enabled"`
+	Source     string    `db:"source"`
+	Hits       int64     `db:"hits"`
+	LastSample string    `db:"last_sample"`
+	LastSeen   time.Time `db:"last_seen_at"`
+}
+
+// junkRuleStats lists every rule in EVALUATION order with its lifetime hit
+// count joined from filter_hits.
+//
+// Evaluation order is the whole point of the readout. `match` returns on the
+// first rule that fires, and on this corpus ~96% of ingested articles are
+// junk — so a high-volume rule sitting late means almost every article pays
+// for everything above it first. That was measurably the case: a rule catching
+// 3.5 billion articles ran thirteenth, behind one costing 81% of the engine's
+// CPU for 0.3% of the catches.
+func (s *PGStore) junkRuleStats(ctx context.Context) ([]junkRuleStat, error) {
+	var out []junkRuleStat
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &out, `
+			SELECT r.position, r.name, r.kind, r.enabled, r.source,
+			       COALESCE(f.total_count, 0)                  AS hits,
+			       COALESCE(f.last_sample, '')                 AS last_sample,
+			       COALESCE(f.last_seen_at, 'epoch'::timestamptz) AS last_seen_at
+			  FROM junk_rules r
+			  LEFT JOIN filter_hits f ON f.kind = 'junk' AND f.rule = r.name
+			 ORDER BY r.position, r.name`)
+	})
+	return out, err
+}
+
+// setJunkRulePositions rewrites the evaluation order in one transaction.
+//
+// All-or-nothing on purpose: a partial reorder can leave two rules sharing a
+// position, and the loader's tie-break is then the rule NAME — an ordering
+// nobody chose and nobody can see. The caller passes the complete desired
+// order, so a concurrent edit loses cleanly rather than interleaving.
+func (s *PGStore) setJunkRulePositions(ctx context.Context, order map[string]int) error {
+	if len(order) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(order))
+	positions := make([]int, 0, len(order))
+	for n, p := range order {
+		names = append(names, n)
+		positions = append(positions, p)
+	}
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			UPDATE junk_rules AS r
+			   SET position = v.position, updated_at = now()
+			  FROM (SELECT unnest($1::text[]) AS name, unnest($2::int[]) AS position) AS v
+			 WHERE r.name = v.name`,
+			pq.Array(names), pq.Array(positions))
+		return err
+	})
+}
+
+// setJunkRuleEnabled toggles one rule. Disabling is how an operator retires a
+// rule that has stopped earning its cost without deleting the row and losing
+// its hit history.
+func (s *PGStore) setJunkRuleEnabled(ctx context.Context, name string, enabled bool) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`UPDATE junk_rules SET enabled = $2, updated_at = now() WHERE name = $1`, name, enabled)
+		return err
+	})
 }

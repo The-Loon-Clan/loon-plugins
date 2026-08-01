@@ -184,7 +184,18 @@ that scales to it.
 | Rewrite `software_warez` as a substring set | it is 81% of the junk engine and matches nothing | contained |
 | Literal pre-filter on rules | shipped; only 2 rules are provably gateable | shipped |
 
-Rule **order** is deliberately not on this list. `match` already returns on the
+Rule **order** is now editable from the Filters tab (`/admin/p/usenet#filters`),
+which lists every rule in evaluation order with its lifetime hits, share and
+*drift* — how far it sits from where its catch rate would put it. Positive
+drift is the expensive direction. The bulk "apply recommended order" is
+type-to-confirm and advisory rather than automatic, for two reasons: lifetime
+hit counts describe the past, and order decides which rule is CREDITED in
+`filter_hits` when two rules both match, so reordering rewrites the attribution
+an operator tunes against. Measured example: `single_token_20` catches 3.5
+billion articles and ran thirteenth, behind `software_warez` — 81% of the
+engine's benchmarked cost for 0.3% of the catches.
+
+The older note below still holds for why order is not a silver bullet: `match` already returns on the
 first hit, so ordering only helps subjects that ARE junk — and ~84% of subjects
 match nothing and run every rule regardless. Order also decides which rule gets
 credited in `filter_hits`, so changing it silently rewrites the attribution an

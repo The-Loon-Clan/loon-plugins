@@ -161,6 +161,13 @@ type AssemblerStore interface {
 type JunkStore interface {
 	seedJunkRules(ctx context.Context, specs []junkRuleSpec) (int, error)
 	junkRules(ctx context.Context) ([]junkRuleSpec, error)
+	// The order editor: rules in EVALUATION order with their lifetime hit
+	// counts, and the writes that reorder or retire one. Order is operator
+	// state, not a code constant — `match` returns on the first hit, so where
+	// a rule sits decides how much CPU every article above it costs.
+	junkRuleStats(ctx context.Context) ([]junkRuleStat, error)
+	setJunkRulePositions(ctx context.Context, order map[string]int) error
+	setJunkRuleEnabled(ctx context.Context, name string, enabled bool) error
 }
 
 // HealthStore is the NZB health surface (health.go).

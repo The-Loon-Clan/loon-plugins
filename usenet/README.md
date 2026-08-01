@@ -55,7 +55,10 @@ Routes:
     `group-tune`, `group-move`, `group-del`,
     `groups-purge`, `crawl`, `backfill`, `run-crawl`, `run-backfill`,
     `run-build`, `run-tagfill`, `run-prune`, `run-health`, `reset-backfill`,
-    `filter-add`, `filter-toggle`, `filter-del`, `filter-reset`,
+    `junk-move`, `junk-order`, `junk-toggle` (the junk-rule ORDER editor:
+    rules listed in evaluation order with lifetime hit counts, share and
+    drift, so a high-volume rule sitting late is visible — see PIPELINE.md
+    §6), `filter-add`, `filter-toggle`, `filter-del`, `filter-reset`,
     `poster-watch-add`, `poster-watch-del`. Each action
     redirects back to its own tab.
   - `SlotJobsWidget` anchor `Usenet` — a richer card for the Usenet job group

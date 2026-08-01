@@ -81,6 +81,12 @@ func (p *Plugin) registerViews(c *core.Core) error {
 				return settingsRedirect(gc, "msg", "backfill re-armed for "+name)
 			},
 			// Filters tab
+			// Junk-rule order editor (junk_order.go). Order is the cheapest
+			// lever on this page: match returns on the first hit, so where a
+			// rule sits decides what every article above it costs.
+			"junk-move":     p.actionJunkMove,
+			"junk-order":    p.actionJunkApplyOrder,
+			"junk-toggle":   p.actionJunkToggle,
 			"filter-add":    p.actionAddBlacklist,
 			"filter-toggle": p.actionToggleBlacklist,
 			"filter-del":    p.actionDeleteBlacklist,

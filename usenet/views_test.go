@@ -417,6 +417,7 @@ func TestFiltersRenders(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	err = tmpl.ExecuteTemplate(&buf, "filters.html", map[string]any{
+		"JunkRules": []junkOrderRow{},
 		"Rules": []blacklistVM{
 			{ID: 1, Pattern: "(?i)spam", Field: "poster", Enabled: true},
 			{ID: 2, Pattern: "([unclosed", Field: "title", Invalid: "missing closing )"},
@@ -560,5 +561,58 @@ func TestInlineHandlersHaveNoRawNewlines(t *testing.T) {
 	if found == 0 {
 		t.Error("no inline handlers found in any template — the fixture no longer " +
 			"renders them, so this test is not checking anything")
+	}
+}
+
+// The junk-rule ORDER card. Two page-render failures this month came from
+// templates that compiled fine and blew up at runtime, so the card gets its
+// own execution test over a populated model — including the states that only
+// appear on real data: a disabled rule, a sized rule, a never-fired rule, and
+// both directions of drift.
+func TestJunkOrderCardRenders(t *testing.T) {
+	tmpl, err := template.ParseFS(viewFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := rankJunkRules([]junkRuleStat{
+		{Position: 10, Name: "long_alnum_run", Kind: "regex", Enabled: true,
+			Hits: 6_153_008_122, LastSample: "473e11675bdc5e4e3bc594b66b5deaa2"},
+		{Position: 40, Name: "software_warez", Kind: "regex", Enabled: true, Hits: 20_952_828,
+			LastSample: "Adobe Dreamweaver 2024 cracked license"},
+		{Position: 130, Name: "single_token_20", Kind: "regex", Enabled: true,
+			Hits: 3_564_164_538, LastSample: "5ef86c80883d3e835814.bin"},
+		{Position: 190, Name: "short_lowercase_token", Kind: "heuristic", Enabled: false, Hits: 0},
+		{Position: 923, Name: "under_1mib", Kind: "regex", Enabled: true, Hits: 4_165},
+	}, map[string]bool{"under_1mib": true})
+
+	var buf bytes.Buffer
+	err = tmpl.ExecuteTemplate(&buf, "filters.html", map[string]any{
+		"JunkRules": rows,
+		"Rules":     []blacklistVM{}, "Fields": blacklistFields,
+		"Hits": []filterHitVM{}, "TotalHits": 0,
+		"Watched": []string{}, "PosterHits": []posterHitRow{},
+		"Msg": "", "Err": "",
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		"evaluation order",
+		"long_alnum_run", "single_token_20", "software_warez",
+		"6,153,008,122", // formatted in Go, not by a template helper
+		"junk-move", "junk-order", "junk-toggle",
+		"type reorder", // the confirm gate on the bulk apply
+		"sized",        // the build-path-only marker
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("junk-order card is missing %q", want)
+		}
+	}
+	// single_token_20 runs 3rd among ingest rules but earns 2nd → +1, and the
+	// card must show that as the expensive direction.
+	if !strings.Contains(out, "+1") {
+		t.Error("positive drift is not rendered — that is the whole signal of the card")
 	}
 }

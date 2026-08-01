@@ -1,6 +1,92 @@
 {{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
 
+{{/* Junk-rule ORDER editor.
+     Hit counts and evaluation order both existed before this card, but on
+     separate screens — which is how a rule catching 3.5 billion articles came
+     to sit thirteenth, behind one costing 81% of the engine's CPU for 0.3% of
+     the catches. Showing them together is the point. */}}
+<div class="card mt-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Junk rules — evaluation order</span>
+        {{if .JunkRules}}<span class="text-muted small">{{len .JunkRules}} rule(s)</span>{{end}}
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">
+            Rules run <strong>in this order</strong> and matching <strong>stops at the first
+            hit</strong>. Most articles a busy feed ingests are junk, so a high-volume rule
+            sitting late means nearly every article pays for everything above it first.
+            <em>Drift</em> is how far a rule sits from where its catch rate would put it:
+            <span style="color:var(--danger)">+n</span> means it runs later than it earns
+            (the expensive direction), <span style="color:var(--text-muted)">-n</span> earlier.
+        </p>
+        {{if .JunkRules}}
+        <div class="table-responsive">
+            <table class="table table-dark table-sm align-middle">
+                <thead><tr>
+                    <th style="width:3rem">#</th><th>Rule</th>
+                    <th class="text-end">Hits</th><th class="text-end">Share</th>
+                    <th class="text-end">Drift</th><th>Last caught</th><th></th>
+                </tr></thead>
+                <tbody>
+                {{range .JunkRules}}
+                    <tr {{if not .Enabled}}style="opacity:.5"{{end}}>
+                        <td class="text-muted small">{{.Position}}</td>
+                        <td>
+                            <strong>{{.Name}}</strong>
+                            {{if .Sized}}<span class="text-muted small" title="needs the release size, so it only runs on the build path">sized</span>{{end}}
+                            {{if eq .Kind "heuristic"}}<span class="text-muted small">heuristic</span>{{end}}
+                        </td>
+                        <td class="text-end">{{.HitsFmt}}</td>
+                        <td class="text-end text-muted small">{{printf "%.2f%%" .Share}}</td>
+                        <td class="text-end">
+                            {{if gt .Drift 0}}<span style="color:var(--danger)">+{{.Drift}}</span>
+                            {{else if lt .Drift 0}}<span class="text-muted">{{.Drift}}</span>
+                            {{else}}<span class="text-muted">·</span>{{end}}
+                        </td>
+                        <td class="text-muted small" style="max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            {{if .LastSample}}{{.LastSample}}{{else}}<em>never</em>{{end}}
+                        </td>
+                        <td class="text-nowrap">
+                            <form method="post" action="/admin/p/usenet/junk-move" style="display:inline">
+                                <input type="hidden" name="name" value="{{.Name}}">
+                                <input type="hidden" name="dir" value="up">
+                                <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="run earlier">&uarr;</button>
+                            </form>
+                            <form method="post" action="/admin/p/usenet/junk-move" style="display:inline">
+                                <input type="hidden" name="name" value="{{.Name}}">
+                                <input type="hidden" name="dir" value="down">
+                                <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="run later">&darr;</button>
+                            </form>
+                            <form method="post" action="/admin/p/usenet/junk-toggle" style="display:inline">
+                                <input type="hidden" name="name" value="{{.Name}}">
+                                <input type="hidden" name="enabled" value="{{if .Enabled}}false{{else}}true{{end}}">
+                                <button class="btn btn-sm py-0 {{if .Enabled}}btn-success{{else}}btn-outline-secondary{{end}}"
+                                        type="submit">{{if .Enabled}}on{{else}}off{{end}}</button>
+                            </form>
+                        </td>
+                    </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+        <form method="post" action="/admin/p/usenet/junk-order" class="d-flex gap-2 align-items-center mt-2">
+            <input type="text" name="confirm" class="form-control form-control-sm" style="max-width:12rem"
+                   placeholder="type reorder" autocomplete="off">
+            <button class="btn btn-sm btn-primary" type="submit">Apply recommended order</button>
+            <span class="text-muted small">
+                Sorts every enabled rule by hits, highest first (sized rules keep their own
+                trailing band). Advisory, not automatic: hit counts describe the PAST, and
+                order also decides which rule is credited when two both match — so applying
+                this rewrites the attribution you tune against.
+            </span>
+        </form>
+        {{else}}
+        <div class="empty">No junk rules loaded.</div>
+        {{end}}
+    </div>
+</div>
+
 <div class="card mt-3">
     <div class="card-header">Blacklist</div>
     <div class="card-body">
