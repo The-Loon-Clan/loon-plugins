@@ -37,12 +37,6 @@ type PGConn struct {
 // migration of live operator settings, not an extraction. The host's
 // SettingsService satisfies this as-is.
 type ConfigStore interface {
-	// GetBackupMode returns "db_only" to skip the asset zips, anything else
-	// for a full run.
-	GetBackupMode(ctx context.Context) string
-	// GetBackupKeepCount returns how many dated runs to retain; <= 0 disables
-	// pruning entirely.
-	GetBackupKeepCount(ctx context.Context) int
 	// GetBackupDBExcludeTableData names tables whose ROWS the dump skips while
 	// still dumping their schema — request logs, caches, job history. On this
 	// install that is ~3.9 GB off every dump at zero correctness risk, which
@@ -66,7 +60,7 @@ type Deps struct {
 	DB PGConn
 	// Config backs the admin-editable mode + retention.
 	Config ConfigStore
-	// FreeDisk returns free bytes on the volume holding BackupDir, and DBSize
+	// FreeDisk returns free bytes on the volume holding DBDumpDir, and DBSize
 	// the database's on-disk size. Together they are the pre-flight: this job
 	// writes a full copy of everything it protects onto local disk, and
 	// without headroom it fills the volume and takes the SITE down with it —
@@ -88,19 +82,14 @@ type Deps struct {
 	// Root is the directory the class paths are relative to. Empty means the
 	// process working directory, which is what production uses; tests set it.
 	Root string
-	// BackupDir is where dated run folders are written.
-	//
-	// It MUST be a bind mount on the host side. Left inside a container's
-	// overlay filesystem it is wiped on every recreate, which turns the whole
-	// job into theatre: it runs, it logs success, and it protects nothing.
-	BackupDir string
 	// DBDumpDir is where `pg_dump -Fd` writes its dated directories.
 	//
 	// Empty means the database is NOT in the backup — the job says so on every
 	// run rather than failing, because an install without a dump volume is a
 	// configuration, not a fault.
 	//
-	// It MUST be a bind mount, for the BackupDir reason, and the host MUST
+	// It MUST be a bind mount — on the container overlay the dump is wiped
+	// on every recreate — and the host MUST
 	// also register it as an AssetClass: writing the dump is only half the
 	// job, and the half that makes it a backup is the index walking it into a
 	// generation like any other file. A dump directory that is not a class is

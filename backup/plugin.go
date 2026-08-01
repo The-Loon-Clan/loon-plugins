@@ -28,7 +28,6 @@ func init() {
 }
 
 const (
-	backupIntervalMin = 7 * 24 * 60 // weekly
 	// The index is cheap — almost nothing changes between runs, so the stat
 	// gate does the work and hashing is the exception. Daily keeps the window
 	// in which an in-place overwrite can hide down to a day.
@@ -44,17 +43,15 @@ const (
 	dbDumpJobs = 4
 )
 
-// Plugin owns the single backup job. The mutex keeps a manual /admin/jobs
-// trigger from racing the scheduled loop — a second concurrent run would
-// pg_dump and zip the same assets into a different dated folder, doubling the
-// IO and the disk for no benefit.
+// Plugin owns the two jobs that put this box's data somewhere else: the index
+// that inventories it and the dump that captures the database. Each carries
+// its own mutex so a manual /admin/jobs trigger cannot race the scheduled
+// loop — two concurrent passes would do the same work twice for no benefit.
+//
+// The local archive job that used to live here is gone; see
+// archive_retired.go for what replaced it and why.
 type Plugin struct {
-	job *schedule.JobInfo
-	mu  sync.Mutex
-
-	// indexJob walks the asset classes and records a generation. Separate from
-	// the archive job because they run on different clocks: the index is cheap
-	// enough to run daily, the full archive is not.
+	// indexJob walks the asset classes and records a generation.
 	indexJob *schedule.JobInfo
 	indexMu  sync.Mutex
 	// dumpJob writes the database into the asset tree as ordinary files, so
@@ -92,7 +89,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// so every web process hit the refusal below and the whole site failed to
 	// boot. A backup that cannot run must be loud, but an admin page that
 	// cannot render has no business taking the site down with it.
-	if deps == nil || deps.Config == nil || deps.BackupDir == "" || deps.DB.DBName == "" {
+	if deps == nil || deps.Config == nil || deps.DB.DBName == "" {
 		if c.Process == "web" {
 			c.Logger.Info("backup: SetDeps not staged in this process — the admin page is " +
 				"unavailable here; stage it in the SHARED section of the host's wiring, " +
@@ -102,8 +99,6 @@ func (p *Plugin) Provision(c *core.Core) error {
 		switch {
 		case deps == nil || deps.Config == nil:
 			return fmt.Errorf("backup: SetDeps not called (Config) before core.Boot — stage it in the host's shared wiring")
-		case deps.BackupDir == "":
-			return fmt.Errorf("backup: SetDeps missing BackupDir")
 		default:
 			return fmt.Errorf("backup: SetDeps missing DB connection (DBName empty) — pg_dump has nothing to target")
 		}
@@ -129,13 +124,6 @@ func (p *Plugin) Provision(c *core.Core) error {
 		"Walks the asset directories and records every file's size and content hash")
 	p.indexJob.IntervalMin = indexIntervalMin
 	p.indexJob.SetTrigger(func() { go p.runIndex(context.Background()) })
-
-	p.job = schedule.RegisterJob("Backup",
-		"Weekly backup: compresses cover art and dumps the PostgreSQL database")
-	p.job.IntervalMin = backupIntervalMin
-	// The trigger forces: an operator pressing Run in /admin/jobs means "now",
-	// not "now unless a recent backup exists".
-	p.job.SetTrigger(func() { go p.runForced(context.Background()) })
 
 	p.dumpJob = schedule.RegisterJob("Backup Database",
 		"Dumps PostgreSQL into the asset tree so the pull pipeline carries it")
@@ -172,11 +160,6 @@ type scheduledJob struct {
 // would ever honour. Nothing failed; the inventory simply stopped advancing.
 func (p *Plugin) loops() []scheduledJob {
 	return []scheduledJob{
-		// The boot delay replaces the old service's `for { sleep(week); run() }`,
-		// which never ran at boot and so slept a full week before its first
-		// backup. An hour is late enough not to compete with boot, early enough
-		// that a fresh deploy has a backup the same day.
-		{p.job, 1 * time.Hour, backupIntervalMin * time.Minute, p.run},
 		// The index is the cheap half and its whole value is freshness — it is
 		// what bounds the window in which an in-place overwrite can hide — so
 		// it waits minutes rather than an hour.
