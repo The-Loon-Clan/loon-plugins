@@ -2,7 +2,9 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -88,6 +90,26 @@ func (p *Plugin) runIndex(ctx context.Context) {
 			"rather than an unmounted volume — they are listed cheapest-first, so the earliest "+
 			"names are the ones that cannot be re-fetched from anywhere.",
 			len(empty), strings.Join(empty, ", "))
+		// The note above asks the operator to confirm something the kernel can
+		// answer. An empty class whose directory sits on the container's
+		// writable layer is not an empty class — it is a missing mount, and it
+		// is the difference between "nothing to back up" and "backing up
+		// nothing". That distinction earns an error, not a line in a log: the
+		// note existed while prod lost four database dumps.
+		for _, slug := range empty {
+			c, ok := classBySlug(deps.Classes, slug)
+			if !ok {
+				continue
+			}
+			w := ephemeralWarning("Class "+slug, filepath.Join(deps.Root, c.Dir))
+			if w == "" {
+				continue
+			}
+			p.indexJob.Log("WARNING: %s", w)
+			if p.core != nil && p.core.Errors != nil {
+				p.core.Errors.Report(ctx, "backup/class-dir-ephemeral", errors.New(w))
+			}
+		}
 	}
 	p.indexJob.SetIdle(time.Now().Add(time.Duration(indexIntervalMin) * time.Minute))
 }

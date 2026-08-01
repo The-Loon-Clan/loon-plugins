@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -77,6 +78,18 @@ func (p *Plugin) runDBDump(ctx context.Context) {
 	if err := os.MkdirAll(deps.DBDumpDir, 0o755); err != nil {
 		p.dumpFailed(fmt.Errorf("create dump dir: %w", err))
 		return
+	}
+	// Checked BEFORE the dump, not after: pg_dump costs ~47 minutes and ~24 GB
+	// here, and on the container's writable layer every byte of it is thrown
+	// away on the next deploy. The run still proceeds — a dump that survives
+	// until the next deploy beats no dump — but it is reported as an error
+	// rather than left as a line in a job log nobody reads. Prod completed
+	// four dumps this way and kept none of them.
+	if w := ephemeralWarning("DBDumpDir", deps.DBDumpDir); w != "" {
+		p.dumpJob.Log("WARNING: %s", w)
+		if p.core != nil && p.core.Errors != nil {
+			p.core.Errors.Report(ctx, "backup/dump-dir-ephemeral", errors.New(w))
+		}
 	}
 
 	// Pre-flight. A dump that fills prod's disk is an OUTAGE, not a failed
