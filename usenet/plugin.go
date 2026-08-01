@@ -546,6 +546,12 @@ func (p *Plugin) runPruneLocked(ctx context.Context) {
 	if _, err := p.st.pruneSetResolutions(ctx, cfg.DiagKeepDays); err != nil {
 		p.core.Errors.Report(ctx, "usenet/prune-resolutions", err)
 	}
+	// Instrument counters in filter_hits are the fastest-growing of the lot —
+	// one row per novel subject stem, 2,260 in the watch's first day. Rule
+	// counters in the same table are lifetime state and are never pruned.
+	if _, err := p.st.pruneFilterDiagnostics(ctx, cfg.DiagKeepDays); err != nil {
+		p.core.Errors.Report(ctx, "usenet/prune-filter-diagnostics", err)
+	}
 	kept := "kept forever"
 	if cfg.NZBRetentionDays > 0 {
 		kept = fmt.Sprintf("older than %dd", cfg.NZBRetentionDays)

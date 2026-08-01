@@ -636,12 +636,15 @@ func TestDiagnosticsRenderSeparatelyFromRules(t *testing.T) {
 				Sample: "473e11675bdc5e4e3bc594b66b5deaa2", LastSeen: "01:20"},
 		},
 		"TotalHits": 6_290_546_735,
-		"Diagnostics": []filterHitVM{
-			{Kind: "ungrouped", Rule: "two-blue.vol#+#.par#", Count: 48_261,
-				Sample: "two-blue.vol029+16.par2", LastSeen: "01:19"},
-			{Kind: "merge_suspect", Rule: "E01|E02", Count: 3, Sample: "Show E01 / E02", LastSeen: "01:18"},
-		},
-		"DiagnosticsTotal": 187_172_945, "DiagnosticsRows": 2257,
+		"Diag": buildDiagVM(diagPage{
+			Rows: []filterHitRow{
+				{Kind: "ungrouped", Rule: "two-blue.vol#+#.par#", TotalCount: 48_261,
+					LastSample: "two-blue.vol029+16.par2"},
+				{Kind: "merge_suspect", Rule: "E01|E02", TotalCount: 3, LastSample: "Show E01 / E02"},
+			},
+			Kinds:     []diagKind{{Kind: "ungrouped", Rows: 2255}, {Kind: "merge_suspect", Rows: 2}},
+			TotalRows: 2257, TotalHits: 187_172_945,
+		}, "", 1),
 		"Watched": []string{}, "PosterHits": []posterHitRow{},
 		"Msg": "", "Err": "",
 	})
@@ -656,7 +659,9 @@ func TestDiagnosticsRenderSeparatelyFromRules(t *testing.T) {
 		// html/template escapes '+' to &#43; in HTML text, so the stem is
 		// asserted in its wire form — the browser shows the literal.
 		"two-blue.vol#&#43;#.par#",
-		"2257 distinct", // says how many were hidden, never silently truncates
+		"1-2 of 2,257 distinct",                           // says what was NOT shown, never silently truncates
+		"ungrouped <span class=\"tab-count\">2255</span>", // per-instrument chips
+		">next</a>", // a second page exists, so the pager is live
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("diagnostics card missing %q", want)

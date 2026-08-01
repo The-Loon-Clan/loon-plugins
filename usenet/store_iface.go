@@ -122,7 +122,12 @@ type BlacklistStore interface {
 	// rows. Same accumulate-then-upsert discipline as recordFilterHits, for the
 	// same reason: a write per candidate set would cost more than the assembly.
 	recordBuildOutcomes(ctx context.Context, out map[buildOutcome]*outcomeVal) error
-	filterHitRows(ctx context.Context) ([]filterHitRow, error)
+	// The counters split by population, not by table: rules are bounded and
+	// read whole; instrument observations are unbounded and read a page at a
+	// time. See blacklist_store.go for why they cannot share one read.
+	ruleHitRows(ctx context.Context) ([]filterHitRow, error)
+	diagnosticHits(ctx context.Context, kind string, limit, offset int) (diagPage, error)
+	pruneFilterDiagnostics(ctx context.Context, keepDays int) (int64, error)
 	resetFilterHits(ctx context.Context) error
 }
 

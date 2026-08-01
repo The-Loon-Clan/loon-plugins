@@ -39,7 +39,13 @@ type sweepVM struct {
 	FirstSeen, LastSeen string
 }
 
-func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg string) (template.HTML, error) {
+// diagPageSize is how many instrument rows one page shows. Small on purpose:
+// the card is for spotting a loud stem worth teaching the parser, not for
+// reading the whole population — that is what the kind chips and the totals
+// are for.
+const diagPageSize = 25
+
+func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg, diagKindSel string, diagPageNo int) (template.HTML, error) {
 	rules, err := p.st.blacklistRules(ctx)
 	if err != nil {
 		return "", err
@@ -56,49 +62,34 @@ func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg string) (templat
 		vms[i] = vm
 	}
 
-	hits, err := p.st.filterHitRows(ctx)
+	// The counters are read as two populations, not one table. Rules
+	// (junk/blacklist) are bounded and read whole; instrument observations
+	// (ungrouped stems, merge suspects, parse drops) are unbounded and paged.
+	// Listing them together buried 26 rules under 2,257 stems, and an operator
+	// reasonably read that as "we now have 100k rules".
+	hits, err := p.st.ruleHitRows(ctx)
 	if err != nil {
 		return "", err
 	}
 	var total int64
 	for _, h := range hits {
-		if h.Kind == "junk" || h.Kind == "blacklist" {
-			total += h.TotalCount
-		}
+		total += h.TotalCount
 	}
-	// Split the counters by what they MEAN, not by which table they live in.
-	//
-	// filter_hits carries two unrelated things: what the RULES dropped
-	// (junk/blacklist), and what the observability instruments noticed
-	// (ungrouped stems, merge suspects, parse drops). Rendering them in one
-	// list buried 26 rules under 2,257 diagnostic stems, and an operator
-	// reasonably read that as "we now have 100k rules". They answer different
-	// questions and belong in different cards.
 	hvms := make([]filterHitVM, 0, len(hits))
-	dvms := make([]filterHitVM, 0)
-	var diagTotal int64
 	for _, h := range hits {
 		vm := filterHitVM{
 			Kind: h.Kind, Rule: h.Rule, Sample: h.LastSample,
 			Count: h.TotalCount, LastSeen: fmtTime(h.LastSeen),
 		}
-		switch h.Kind {
-		case "junk", "blacklist":
-			if total > 0 {
-				vm.Pct = float64(h.TotalCount) * 100 / float64(total)
-			}
-			hvms = append(hvms, vm)
-		default:
-			diagTotal += h.TotalCount
-			dvms = append(dvms, vm)
+		if total > 0 {
+			vm.Pct = float64(h.TotalCount) * 100 / float64(total)
 		}
+		hvms = append(hvms, vm)
 	}
-	// Diagnostics are unbounded (one row per distinct stem, capped at a few
-	// thousand), so the card shows the loudest and says how many it hid —
-	// silently truncating would misread as "that is all of them".
-	diagShown := dvms
-	if len(diagShown) > 25 {
-		diagShown = diagShown[:25]
+
+	diag, err := p.diagnosticsVM(ctx, diagKindSel, diagPageNo)
+	if err != nil {
+		return "", err
 	}
 
 	// Host sweep attribution (optional capability): which junk rule tagged how
@@ -158,7 +149,7 @@ func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg string) (templat
 		"JunkRules": jrows,
 		"Rules":     vms, "Fields": blacklistFields,
 		"Hits": hvms, "TotalHits": total,
-		"Diagnostics": diagShown, "DiagnosticsTotal": diagTotal, "DiagnosticsRows": len(dvms),
+		"Diag":  diag,
 		"Sweep": svms, "SweepTotal": sweepTotal,
 		"Watched": watched, "PosterHits": phits,
 		"Msg": msg, "Err": errMsg,

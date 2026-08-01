@@ -107,7 +107,16 @@ Principal tables:
   host's table and never touches this one).
 - `junk_rules` — the junk-filter rule set, seeded from `seed/junk_rules.tsv`.
 - `blacklist_regexes` — the operator's editorial blacklist.
-- `filter_hits` — per-rule drop counters (junk + blacklist).
+- `filter_hits` — two populations under one table, read separately. Rule
+  counters (`kind` = `junk`/`blacklist`) are one row per configured rule:
+  bounded, lifetime totals, never pruned, read whole for the Filters tab's rule
+  card. Instrument counters (`ungrouped`, `merge_suspect`, `parse_dropped`) are
+  one row per distinct observation — **unbounded**: the grouping watch's first
+  day produced 2,260 stems against 26 rules. Those are paged, filtered by kind,
+  and pruned by `last_seen_at` on the diagnostic horizon. Reading them together
+  made the page's cost grow with the diagnostics and buried the rules; an
+  operator reasonably read the merged list as "we now have 100k rules".
+  Migration 029 indexes both access paths.
 - `poster_watch` / `poster_hits` — the same accounting asked the other way
   round: `filter_hits` answers "which rule drops the most", which is right when
   tuning rules and useless when an operator says "this poster puts out a

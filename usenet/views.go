@@ -41,7 +41,14 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		// keep it in their generic Plugins section.
 		Nav: core.NavHint{Group: "Operations"},
 		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.renderSettings(gc.Request.Context(), gc.Query("gq"), gc.Query("msg"), gc.Query("err"), gc.Query("builder") == "1")
+			return p.renderSettings(gc.Request.Context(), settingsQuery{
+				GroupQuery: gc.Query("gq"), Msg: gc.Query("msg"), Err: gc.Query("err"),
+				ShowBuilder: gc.Query("builder") == "1",
+				// dkind reaches SQL as a bound parameter and the template
+				// escapes it, so an unknown value simply matches no rows.
+				DiagKind: strings.TrimSpace(gc.Query("dkind")),
+				DiagPage: parseDiagPage(gc.Query("dpage")),
+			})
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			"knobs":            p.actionSaveKnobs,

@@ -118,7 +118,19 @@ func validateKnobs(cur Config, vals map[string]int) string {
 	return ""
 }
 
-func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string, showBuilder bool) (template.HTML, error) {
+// settingsQuery is the admin page's URL state. Every field comes from the
+// request, so they are read and clamped at this one boundary rather than each
+// card reaching into the query string for itself.
+type settingsQuery struct {
+	GroupQuery  string // ?gq= — newsgroup search
+	Msg, Err    string // ?msg= / ?err= — post-action banners
+	ShowBuilder bool   // ?builder=1 — the expensive builder readout
+	DiagKind    string // ?dkind= — grouping-diagnostics instrument filter
+	DiagPage    int    // ?dpage= — 1-based, clamped against the real count
+}
+
+func (p *Plugin) renderSettings(ctx context.Context, q settingsQuery) (template.HTML, error) {
+	gq, msg, errMsg, showBuilder := q.GroupQuery, q.Msg, q.Err, q.ShowBuilder
 	groups, err := p.st.allGroups(ctx, gq, 300)
 	if err != nil {
 		return "", err
@@ -153,7 +165,9 @@ func (p *Plugin) renderSettings(ctx context.Context, gq, msg, errMsg string, sho
 	}
 	crawlersTab := tab("crawlers", func() (template.HTML, error) { return p.renderCrawlers(ctx, "", "") })
 	jobsTab := tab("jobs", func() (template.HTML, error) { return p.renderJobs(ctx, showBuilder) })
-	filtersTab := tab("filters", func() (template.HTML, error) { return p.renderFilters(ctx, "", "") })
+	filtersTab := tab("filters", func() (template.HTML, error) {
+		return p.renderFilters(ctx, "", "", q.DiagKind, q.DiagPage)
+	})
 	return p.frag("settings.html", map[string]any{
 		"Servers": servers, "DefaultConns": p.effective(ctx).Connections,
 		"Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,
