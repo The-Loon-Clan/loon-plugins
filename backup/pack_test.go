@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -348,12 +349,20 @@ func TestPackPlanningRespectsItsLimits(t *testing.T) {
 func TestOversizeIsRefusedRatherThanTruncated(t *testing.T) {
 	root := t.TempDir()
 
+	// A LONE oversized member is no longer refused — it is served raw, with no
+	// container (see writeRawPack). That path is exercised by
+	// TestWriteRawPackEmitsExactlyTheFile; what still has to be refused is an
+	// oversized member that raw cannot represent, i.e. one sharing a pack.
+	//
 	// Bytes deliberately left at zero, so ONLY the per-member check can refuse
 	// this. A plan is data; a caller that builds one without totalling it must
 	// still not be able to produce a wrapped header.
 	member := packPlan{
-		Class:   "screenshots",
-		Members: []packMember{{Path: "screenshots/huge.mkv", Size: 1 << 33}},
+		Class: "screenshots",
+		Members: []packMember{
+			{Path: "screenshots/huge.mkv", Size: 1 << 33},
+			{Path: "screenshots/small.jpg", Size: 1 << 10},
+		},
 	}
 	_, _, err := writePack(io.Discard, root, member)
 	// Assert on WHICH error. These fixtures are 8 GiB of nothing and were never
@@ -361,7 +370,7 @@ func TestOversizeIsRefusedRatherThanTruncated(t *testing.T) {
 	// guard deleted, which is how the first version of this test managed to
 	// assert nothing at all.
 	if err == nil || !strings.Contains(err.Error(), "zip64") {
-		t.Errorf("an 8 GiB member must be refused before any I/O; got %v", err)
+		t.Errorf("an 8 GiB member sharing a pack must be refused before any I/O; got %v", err)
 	}
 
 	// And the pack total is checked independently of any single member, since
@@ -403,5 +412,103 @@ func TestAFileChangingUnderThePackerIsAnError(t *testing.T) {
 	}
 	if _, _, err := writePack(io.Discard, root, plans[0]); err == nil {
 		t.Error("a deleted file produced a pack instead of an error")
+	}
+}
+
+// A member over 4 GiB cannot be represented in classic ZIP, and the database
+// class produces exactly that — pg_dump -Fd writes one file per table and nzbs
+// is a 20 GB member. Prod hit this on the first dump that reached the pipeline:
+// 7 of 9 packs transferred and the two biggest 404'd, which was 23 of the
+// 24.3 GB. The raw path is how that member moves at all.
+func TestOversizedMemberIsServedRaw(t *testing.T) {
+	big := packPlan{Class: "db-dumps", Members: []packMember{
+		{Path: "db-dumps/x/6175.dat.gz", SHA256: "abc", Size: 20 << 30},
+	}}
+	if !packIsRaw(big) {
+		t.Fatal("a lone 20 GiB member must be raw — it cannot be zipped")
+	}
+	// The wire size is the member itself: no local header, no central
+	// directory, no EOCD. A client using the ZIP figure would wait forever for
+	// bytes that are never sent.
+	if got := packWireSize(big); got != 20<<30 {
+		t.Errorf("raw wire size = %d, want exactly the member's %d", got, int64(20<<30))
+	}
+}
+
+// Everything that fits must keep its container, or the 2,000-odd image packs
+// would all change shape for a problem they do not have.
+func TestOrdinaryPacksAreNotRaw(t *testing.T) {
+	for _, p := range []packPlan{
+		{Class: "covers", Members: []packMember{{Path: "a.jpg", Size: 4 << 20}}},
+		// Exactly at the limit is still representable.
+		{Class: "covers", Members: []packMember{{Path: "a.bin", Size: math.MaxUint32}}},
+		// Two members, one large: planPacks never builds this, and if it ever
+		// did, raw could not represent it — writePack refuses instead.
+		{Class: "covers", Members: []packMember{
+			{Path: "a.bin", Size: 5 << 30}, {Path: "b.jpg", Size: 1 << 10},
+		}},
+	} {
+		if packIsRaw(p) {
+			t.Errorf("%+v was classed raw", p.Members)
+		}
+	}
+}
+
+// The invariant the raw path leans on: planPacks never groups a file larger
+// than the fill target with anything else, so an oversized member is always
+// alone and therefore always representable as a raw pack.
+func TestAnOversizedFileIsAlwaysAloneInItsPack(t *testing.T) {
+	rows := []fileRow{
+		{Path: "db-dumps/d/0001.dat.gz", SHA256: "a", Size: 1 << 10},
+		{Path: "db-dumps/d/6175.dat.gz", SHA256: "b", Size: 20 << 30},
+		{Path: "db-dumps/d/6288.dat.gz", SHA256: "c", Size: 5 << 30},
+		{Path: "db-dumps/d/9999.dat.gz", SHA256: "d", Size: 2 << 10},
+	}
+	for _, p := range planPacks("db-dumps", rows, packTargetBytes, packMaxMembers) {
+		for _, m := range p.Members {
+			if m.Size > math.MaxUint32 && len(p.Members) != 1 {
+				t.Errorf("oversized member %s shares a pack with %d others", m.Path, len(p.Members)-1)
+			}
+		}
+		if packIsRaw(p) && packWireSize(p) != p.Members[0].Size {
+			t.Errorf("raw pack %s wire size disagrees with its member", p.Members[0].Path)
+		}
+	}
+}
+
+// writeRawPack must emit the member's bytes and nothing else, and must refuse
+// a file whose length no longer matches what the generation recorded — every
+// client was already told to expect that number.
+func TestWriteRawPackEmitsExactlyTheFile(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "db-dumps")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("pretend this is twenty gigabytes of table data")
+	if err := os.WriteFile(filepath.Join(dir, "6175.dat.gz"), body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan := packPlan{Class: "db-dumps", Members: []packMember{
+		{Path: "db-dumps/6175.dat.gz", SHA256: "x", Size: int64(len(body))},
+	}}
+
+	var buf bytes.Buffer
+	cw := &countingWriter{w: &buf}
+	members, n, err := writeRawPack(cw, root, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(buf.Bytes(), body) {
+		t.Errorf("raw pack wrote %q, want the file verbatim", buf.String())
+	}
+	if n != int64(len(body)) || members[0].Offset != 0 {
+		t.Errorf("n=%d offset=%d, want %d and 0", n, members[0].Offset, len(body))
+	}
+
+	// A file that changed under us must not be served as if it matched.
+	plan.Members[0].Size = int64(len(body)) + 1
+	if _, _, err := writeRawPack(&countingWriter{w: &bytes.Buffer{}}, root, plan); err == nil {
+		t.Error("served a member whose length disagreed with the generation")
 	}
 }

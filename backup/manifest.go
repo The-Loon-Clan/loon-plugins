@@ -46,6 +46,25 @@ type PackInfo struct {
 	// as opposed to what the transfer costs.
 	Content int64 `json:"content_bytes"`
 	Members int   `json:"members"`
+
+	// Raw marks a pack served as the member's own bytes, with no ZIP container
+	// around it. Classic ZIP header fields are 32-bit, so a member over 4 GiB
+	// cannot be represented — and `pg_dump -Fd` writes one file per table, so
+	// the database class produces exactly that (nzbs alone is a 20 GB member).
+	// zip64 would lift the limit at the cost of the break-glass compatibility
+	// this format exists for; a bare file is MORE recoverable by hand than a
+	// zip, so the degenerate case drops the container instead.
+	//
+	// Only ever set on a single-member pack: planPacks never groups a file
+	// larger than the fill target with another, so an oversized member is
+	// always alone.
+	Raw bool `json:"raw,omitempty"`
+	// Path and SHA256 are the sole member's, and only set for a raw pack.
+	// A ZIP carries its members' names and CRCs in its own directory; a raw
+	// pack has nowhere to put them, so the manifest has to — otherwise a
+	// restore holds bytes it cannot name and cannot check.
+	Path   string `json:"path,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
 }
 
 // Manifest is everything a puller needs to decide what to fetch.
@@ -189,10 +208,16 @@ func (p *Plugin) plansFor(ctx context.Context, gen int64) (*genPlans, error) {
 		for _, plan := range planPacks(c.Slug, rows, packTargetBytes, packMaxMembers) {
 			id := packID(plan)
 			plans[id] = plan
-			man.Packs = append(man.Packs, PackInfo{
+			info := PackInfo{
 				ID: id, Class: plan.Class,
 				Bytes: packWireSize(plan), Content: plan.Bytes, Members: len(plan.Members),
-			})
+			}
+			if packIsRaw(plan) {
+				info.Raw = true
+				info.Path = plan.Members[0].Path
+				info.SHA256 = plan.Members[0].SHA256
+			}
+			man.Packs = append(man.Packs, info)
 		}
 	}
 	sortPacksByPriority(man.Packs, classRank)

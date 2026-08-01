@@ -187,15 +187,25 @@ func writePack(w io.Writer, root string, plan packPlan) ([]packMember, int64, er
 	members := append([]packMember(nil), plan.Members...)
 	cw := &countingWriter{w: w}
 
+	// A single oversized member is served RAW — see writeRawPack.
+	if packIsRaw(plan) {
+		return writeRawPack(cw, root, plan)
+	}
+
 	// The classic ZIP header fields are 32-bit. Going over silently truncates
 	// modulo 2^32 and produces an archive that opens, lists plausible sizes, and
 	// restores garbage — the one failure mode a backup must never have. zip64
 	// would lift the limit at the cost of the break-glass compatibility this
-	// format exists for, so refuse instead. Nothing in this corpus is close:
-	// the largest class averages under a megabyte per file.
+	// format exists for, so refuse instead.
+	//
+	// Reaching here with an oversized member means one was grouped WITH other
+	// files, which planPacks does not do — a file larger than the fill target
+	// always ends up alone. So this is now a broken-invariant check rather than
+	// the routine size gate it used to be, and refusing is still right: the
+	// alternative is a silently corrupt archive.
 	for _, m := range plan.Members {
 		if m.Size > math.MaxUint32 {
-			return nil, 0, fmt.Errorf("%s is %d bytes: a member over 4 GiB needs zip64, which this format deliberately does not use", m.Path, m.Size)
+			return nil, 0, fmt.Errorf("%s is %d bytes: a member over 4 GiB needs zip64, and it is not alone in its pack so it cannot be served raw", m.Path, m.Size)
 		}
 	}
 	if plan.Bytes > math.MaxUint32 {
@@ -393,7 +403,48 @@ func memberPath(root, rel string) (string, error) {
 // end-of-central-directory record. A client that sets Content-Length from that,
 // or treats it as the completion mark, stops before the EOCD on EVERY transfer
 // and stores an archive no reader will open.
+// packIsRaw reports whether a pack is served without a ZIP container.
+//
+// The condition is exactly "one member, too big for classic ZIP". Keyed off
+// the size rather than the class so it needs no knowledge of which classes
+// produce large files — the database class is simply the first that does.
+func packIsRaw(p packPlan) bool {
+	return len(p.Members) == 1 && p.Members[0].Size > math.MaxUint32
+}
+
+// writeRawPack streams the member's own bytes, no container.
+//
+// The member's offset is 0 and its length is the whole pack, so the Range-GET
+// contract that makes restoring one file cheap still holds — trivially, since
+// the pack IS the file. Integrity is the manifest's recorded sha256 rather
+// than a ZIP CRC, which is a stronger check than the one it replaces.
+func writeRawPack(cw *countingWriter, root string, plan packPlan) ([]packMember, int64, error) {
+	m := plan.Members[0]
+	f, err := os.Open(filepath.Join(root, filepath.FromSlash(m.Path)))
+	if err != nil {
+		return nil, 0, err
+	}
+	defer f.Close()
+	n, err := io.Copy(cw, f)
+	if err != nil {
+		return nil, 0, err
+	}
+	// The size is checked because the manifest already promised it: a member
+	// that grew or shrank since the index would make the pack a different
+	// length than every client was told to expect, and a truncated transfer
+	// is indistinguishable from a short file unless someone says so here.
+	if n != m.Size {
+		return nil, 0, fmt.Errorf("%s is %d bytes, the generation recorded %d", m.Path, n, m.Size)
+	}
+	m.Offset = 0
+	return []packMember{m}, n, nil
+}
+
 func packWireSize(plan packPlan) int64 {
+	// A raw pack is exactly its member — no headers, no directory.
+	if packIsRaw(plan) {
+		return plan.Members[0].Size
+	}
 	var n int64
 	for _, m := range plan.Members {
 		n += int64(localHeaderLen+len(m.Path)) + m.Size
