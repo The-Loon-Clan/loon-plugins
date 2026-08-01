@@ -616,3 +616,58 @@ func TestJunkOrderCardRenders(t *testing.T) {
 		t.Error("positive drift is not rendered — that is the whole signal of the card")
 	}
 }
+
+// Instrument counters must not render as rules.
+//
+// filter_hits carries both, and listing them together buried 26 real rules
+// under 2,257 ungrouped stems — an operator reading the page concluded the
+// install had grown 100k rules. The split is the fix; this pins it.
+func TestDiagnosticsRenderSeparatelyFromRules(t *testing.T) {
+	tmpl, err := template.ParseFS(viewFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	err = tmpl.ExecuteTemplate(&buf, "filters.html", map[string]any{
+		"JunkRules": []junkOrderRow{},
+		"Rules":     []blacklistVM{}, "Fields": blacklistFields,
+		"Hits": []filterHitVM{
+			{Kind: "junk", Rule: "long_alnum_run", Count: 6_290_546_735, Pct: 99.9,
+				Sample: "473e11675bdc5e4e3bc594b66b5deaa2", LastSeen: "01:20"},
+		},
+		"TotalHits": 6_290_546_735,
+		"Diagnostics": []filterHitVM{
+			{Kind: "ungrouped", Rule: "two-blue.vol#+#.par#", Count: 48_261,
+				Sample: "two-blue.vol029+16.par2", LastSeen: "01:19"},
+			{Kind: "merge_suspect", Rule: "E01|E02", Count: 3, Sample: "Show E01 / E02", LastSeen: "01:18"},
+		},
+		"DiagnosticsTotal": 187_172_945, "DiagnosticsRows": 2257,
+		"Watched": []string{}, "PosterHits": []posterHitRow{},
+		"Msg": "", "Err": "",
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		"Grouping diagnostics",
+		"Nothing here was dropped", // the sentence that prevents the misreading
+		// html/template escapes '+' to &#43; in HTML text, so the stem is
+		// asserted in its wire form — the browser shows the literal.
+		"two-blue.vol#&#43;#.par#",
+		"2257 distinct", // says how many were hidden, never silently truncates
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("diagnostics card missing %q", want)
+		}
+	}
+	// The rules card must not carry the diagnostic rows.
+	cut := strings.Index(out, "Grouping diagnostics")
+	if cut < 0 {
+		t.Fatal("no diagnostics card rendered at all")
+	}
+	if strings.Contains(out[:cut], "two-blue") {
+		t.Error("an ungrouped stem rendered in the RULES table — that is the bug")
+	}
+}

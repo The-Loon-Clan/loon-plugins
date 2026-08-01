@@ -62,18 +62,43 @@ func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg string) (templat
 	}
 	var total int64
 	for _, h := range hits {
-		total += h.TotalCount
+		if h.Kind == "junk" || h.Kind == "blacklist" {
+			total += h.TotalCount
+		}
 	}
-	hvms := make([]filterHitVM, len(hits))
-	for i, h := range hits {
+	// Split the counters by what they MEAN, not by which table they live in.
+	//
+	// filter_hits carries two unrelated things: what the RULES dropped
+	// (junk/blacklist), and what the observability instruments noticed
+	// (ungrouped stems, merge suspects, parse drops). Rendering them in one
+	// list buried 26 rules under 2,257 diagnostic stems, and an operator
+	// reasonably read that as "we now have 100k rules". They answer different
+	// questions and belong in different cards.
+	hvms := make([]filterHitVM, 0, len(hits))
+	dvms := make([]filterHitVM, 0)
+	var diagTotal int64
+	for _, h := range hits {
 		vm := filterHitVM{
 			Kind: h.Kind, Rule: h.Rule, Sample: h.LastSample,
 			Count: h.TotalCount, LastSeen: fmtTime(h.LastSeen),
 		}
-		if total > 0 {
-			vm.Pct = float64(h.TotalCount) * 100 / float64(total)
+		switch h.Kind {
+		case "junk", "blacklist":
+			if total > 0 {
+				vm.Pct = float64(h.TotalCount) * 100 / float64(total)
+			}
+			hvms = append(hvms, vm)
+		default:
+			diagTotal += h.TotalCount
+			dvms = append(dvms, vm)
 		}
-		hvms[i] = vm
+	}
+	// Diagnostics are unbounded (one row per distinct stem, capped at a few
+	// thousand), so the card shows the loudest and says how many it hid —
+	// silently truncating would misread as "that is all of them".
+	diagShown := dvms
+	if len(diagShown) > 25 {
+		diagShown = diagShown[:25]
 	}
 
 	// Host sweep attribution (optional capability): which junk rule tagged how
@@ -133,6 +158,7 @@ func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg string) (templat
 		"JunkRules": jrows,
 		"Rules":     vms, "Fields": blacklistFields,
 		"Hits": hvms, "TotalHits": total,
+		"Diagnostics": diagShown, "DiagnosticsTotal": diagTotal, "DiagnosticsRows": len(dvms),
 		"Sweep": svms, "SweepTotal": sweepTotal,
 		"Watched": watched, "PosterHits": phits,
 		"Msg": msg, "Err": errMsg,

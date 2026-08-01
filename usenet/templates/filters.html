@@ -159,9 +159,11 @@
     <div class="card-header">Filter hits</div>
     <div class="card-body">
     <p class="text-muted small">
-        What each rule has actually dropped, accumulated across restarts. Read it two ways:
-        a rule near zero is probably not earning its cost, and a rule at the top with a
-        sample that looks like a real release is eating content you wanted.
+        What each <strong>rule</strong> has actually dropped, accumulated across restarts.
+        Read it two ways: a rule near zero is probably not earning its cost, and a rule at
+        the top with a sample that looks like a real release is eating content you wanted.
+        Instrument counters (ungrouped stems, merge suspects) are a separate card below —
+        they are observations, not rules, and there are thousands of them.
     </p>
 
     {{if .Hits}}
@@ -199,6 +201,48 @@
     </div>
 </div>
 
+{{/* Instrument counters. These share the filter_hits table with the rule
+     counters but mean something completely different: nothing here DROPPED
+     anything. They are what the grouping watch noticed. Listing them beside
+     the rules made 26 rules look like thousands. */}}
+{{if .Diagnostics}}
+<div class="card mt-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Grouping diagnostics</span>
+        <span class="text-muted small">{{.DiagnosticsRows}} distinct, showing top {{len .Diagnostics}}</span>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">
+            <strong>Nothing here was dropped.</strong> These are observations from the
+            grouping watch, counted per normalised stem (digits become <code>#</code>).
+            <em>ungrouped</em> means the parser could not fold those subjects into a set —
+            a large cohort sharing one stem is a counter format worth teaching it.
+            <em>merge_suspect</em> is the opposite worry: distinct episode markers that
+            landed in ONE set, which would merge two releases.
+        </p>
+        <div class="table-responsive">
+            <table class="table table-dark table-sm align-middle mb-2">
+                <thead><tr>
+                    <th>Kind</th><th>Stem</th><th class="text-end">Seen</th><th>Last sample</th><th>Last seen</th>
+                </tr></thead>
+                <tbody>
+                {{range .Diagnostics}}
+                    <tr>
+                        <td><span class="badge bg-info text-dark">{{.Kind}}</span></td>
+                        <td><code>{{.Rule}}</code></td>
+                        <td class="text-end">{{.Count}}</td>
+                        <td class="small text-muted" style="max-width:28rem;overflow-wrap:anywhere">{{.Sample}}</td>
+                        <td class="small text-muted">{{.LastSeen}}</td>
+                    </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+        <span class="text-muted small">{{.DiagnosticsTotal}} observation(s) across {{.DiagnosticsRows}} stem(s).</span>
+    </div>
+</div>
+{{end}}
+
 {{/* Host sweep attribution — only when the host registers the junk-sweep
      capability (sink=host sites with their own stored-catalogue sweep).
      Ingest hits above = "what we dropped"; this = "what got past ingest and
@@ -206,6 +250,8 @@
 {{if .Sweep}}
 <div class="card mt-3">
     <div class="card-header">Catalog sweep (host)</div>
+
+
     <div class="card-body">
     <p class="text-muted small">
         The host's junk sweep tags already-indexed releases the ingest filter missed —
