@@ -512,3 +512,60 @@ func TestWriteRawPackEmitsExactlyTheFile(t *testing.T) {
 		t.Error("served a member whose length disagreed with the generation")
 	}
 }
+
+// Retiring the archive job removed its retention with it, orphaning every
+// folder it had ever written — 54 GB on prod — with nothing left to clean
+// them. The sweep is the fix, and its narrowness is the safety property: it
+// must reclaim its own leftovers and nothing else.
+func TestSweepRemovesOnlyTheRetiredArchivesOwnFolders(t *testing.T) {
+	dir := t.TempDir()
+	mk := func(name string, body string) {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if body != "" {
+			if err := os.WriteFile(filepath.Join(dir, name, "f.bin"), []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	mk("2026-07-04_215227", "eight bytes")   // the archive's format — goes
+	mk("2026-06-27_211316", "more bytes!")   // ditto
+	mk("db-dumps", "the database")           // THE BACKUP. Must survive.
+	mk("2026-08-01T102531Z", "a dump stamp") // dump format, not archive format
+	mk("notes", "somebody's own folder")
+	if err := os.WriteFile(filepath.Join(dir, "2026-07-04_215227.txt"), []byte("a file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, freed, err := sweepRetiredArchives(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 2 {
+		t.Errorf("removed %d, want exactly the 2 archive folders", removed)
+	}
+	if freed <= 0 {
+		t.Errorf("freed %d bytes, want the reclaimed total reported", freed)
+	}
+	for _, keep := range []string{"db-dumps", "2026-08-01T102531Z", "notes", "2026-07-04_215227.txt"} {
+		if _, err := os.Stat(filepath.Join(dir, keep)); err != nil {
+			t.Errorf("%s was removed — the sweep is too broad", keep)
+		}
+	}
+	for _, gone := range []string{"2026-07-04_215227", "2026-06-27_211316"} {
+		if _, err := os.Stat(filepath.Join(dir, gone)); !os.IsNotExist(err) {
+			t.Errorf("%s survived", gone)
+		}
+	}
+	// Idempotent, and silent once there is nothing left — this runs on every
+	// dump pass forever.
+	if n, _, err := sweepRetiredArchives(dir); err != nil || n != 0 {
+		t.Errorf("second sweep removed %d (err=%v), want 0", n, err)
+	}
+	// A directory that does not exist is not an error: an install that never
+	// ran the archive job has no such folder.
+	if n, _, err := sweepRetiredArchives(filepath.Join(dir, "nope")); err != nil || n != 0 {
+		t.Errorf("missing dir: n=%d err=%v", n, err)
+	}
+}

@@ -1,6 +1,11 @@
 package backup
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+)
 
 // The local archive job is gone.
 //
@@ -47,4 +52,68 @@ func humanBytes(b int64) string {
 	default:
 		return fmt.Sprintf("%d B", b)
 	}
+}
+
+// legacyStampFormat is the dated-folder name the retired archive job used.
+// Kept only so its leftovers can be recognised and removed.
+const legacyStampFormat = "2006-01-02_150405"
+
+// sweepRetiredArchives deletes the dated folders the archive job left behind.
+//
+// Retiring that job removed its retention along with it, which orphaned every
+// folder it had ever written — 54 GB on this install — with nothing left that
+// would ever clean them up. Telling an operator to `rm -rf` by hand is not a
+// fix: the code created the mess and the code should clear it.
+//
+// Deliberately narrow. It removes a directory ONLY when its name parses as the
+// archive's own timestamp format, which is the exact rule the old prune used
+// ("unrelated files in BackupDir are safe") and the reason db-dumps sitting
+// beside them is untouched. Anything a human put there keeps its name and
+// therefore keeps its life.
+//
+// This is a migration, not a policy: once the last install has run it, the
+// function has nothing left to find and costs one ReadDir per prune pass.
+func sweepRetiredArchives(dir string) (removed int, freed int64, err error) {
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, 0, nil
+		}
+		return 0, 0, err
+	}
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		if _, perr := time.Parse(legacyStampFormat, e.Name()); perr != nil {
+			continue // not ours; never delete what we did not create
+		}
+		path := filepath.Join(dir, e.Name())
+		size := dirBytes(path)
+		if rerr := os.RemoveAll(path); rerr != nil {
+			// Report the first failure but keep going: one undeletable folder
+			// must not strand the rest of the reclaim.
+			if err == nil {
+				err = rerr
+			}
+			continue
+		}
+		removed++
+		freed += size
+	}
+	return removed, freed, err
+}
+
+// dirBytes totals a directory tree, best-effort — it is only used to report
+// how much was reclaimed, so a walk error costs an understated number rather
+// than a failed sweep.
+func dirBytes(root string) int64 {
+	var n int64
+	_ = filepath.Walk(root, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && info != nil && info.Mode().IsRegular() {
+			n += info.Size()
+		}
+		return nil
+	})
+	return n
 }

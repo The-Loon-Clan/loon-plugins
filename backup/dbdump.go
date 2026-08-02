@@ -162,6 +162,15 @@ func (p *Plugin) runDBDump(ctx context.Context) {
 	if pruned := p.pruneDumps(ctx); pruned > 0 {
 		p.dumpJob.Log("pruned %d older dump(s)", pruned)
 	}
+	// Clear what the retired archive job left behind. It shares this volume —
+	// db-dumps lives inside it — and removing that job took its retention with
+	// it, so its folders would otherwise sit here forever. See
+	// sweepRetiredArchives for why only its own timestamped names are touched.
+	if n, freed, err := sweepRetiredArchives(filepath.Dir(deps.DBDumpDir)); err != nil {
+		p.dumpJob.Log("could not clear all retired archive folders: %v", err)
+	} else if n > 0 {
+		p.dumpJob.Log("removed %d folder(s) from the retired archive job, reclaiming %s", n, humanBytes(freed))
+	}
 	// The dump is not BACKED UP until the index walks it, packs it, and the
 	// puller fetches it. Say so, because "dump succeeded" reads as "safe".
 	p.dumpJob.Log("dump published — it becomes a backup once the index seals a generation and the puller fetches it")
