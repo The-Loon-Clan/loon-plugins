@@ -26,6 +26,19 @@ type BackupPack struct {
 	// as opposed to what the transfer costs.
 	Content int64 `json:"content_bytes"`
 	Members int   `json:"members"`
+
+	// Raw marks a pack streamed as its member's own bytes, with no ZIP
+	// container. Classic ZIP header fields are 32-bit, so a member over 4 GiB
+	// cannot be represented — and `pg_dump -Fd` writes one file per table, so
+	// the database class produces exactly that. A client MUST honour this: the
+	// body is not an archive, and opening it as one fails.
+	Raw bool `json:"raw,omitempty"`
+	// Path and SHA256 are the sole member's, set only for a raw pack. A ZIP
+	// carries its members' names and CRCs in its own directory; a raw pack has
+	// nowhere to put them, so they travel here instead — without them a client
+	// holds bytes it can neither name nor check.
+	Path   string `json:"path,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
 }
 
 // BackupManifest is everything a puller needs to decide what to fetch.

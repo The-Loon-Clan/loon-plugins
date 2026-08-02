@@ -5,8 +5,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	lpapi "github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // The pack ID is what makes "only fetch what changed" work, so it must depend
@@ -339,4 +342,40 @@ func indexOfClass(packs []PackInfo, class string) int {
 		}
 	}
 	return -1
+}
+
+// The plugin's PackInfo and pluginapi.BackupPack are two structs describing
+// one thing, and the conversion between them is the entire contract with every
+// client. A field added to one and not copied across is invisible until a
+// puller acts on a default it was never told about.
+//
+// That is not hypothetical: raw packs shipped exactly that way. The size came
+// through — it rides Bytes, which was already copied — so the manifest looked
+// right while the flag, the member path and the sha256 were all silently
+// absent, leaving clients to open a raw gzip as a zip.
+func TestEveryPackFieldSurvivesTheAPIConversion(t *testing.T) {
+	internal := PackInfo{
+		ID: "abc", Class: "db-dumps", Bytes: 20 << 30, Content: 20 << 30, Members: 1,
+		Raw: true, Path: "db-dumps/x/6175.dat.gz", SHA256: "deadbeef",
+	}
+	got := lpapi.BackupPack{
+		ID: internal.ID, Class: internal.Class, Bytes: internal.Bytes,
+		Content: internal.Content, Members: internal.Members,
+		Raw: internal.Raw, Path: internal.Path, SHA256: internal.SHA256,
+	}
+
+	// Compare FIELD COUNTS, so adding one to either struct without extending
+	// this conversion fails here rather than in production.
+	if a, b := reflect.TypeOf(internal).NumField(), reflect.TypeOf(got).NumField(); a != b {
+		t.Fatalf("PackInfo has %d fields, lpapi.BackupPack has %d — one gained a field the other did not, "+
+			"and the conversion in apiManifest almost certainly does not copy it", a, b)
+	}
+	// And every one of them must be non-zero here, or this test would pass
+	// while silently ignoring a field nobody set.
+	v := reflect.ValueOf(got)
+	for i := 0; i < v.NumField(); i++ {
+		if v.Field(i).IsZero() {
+			t.Errorf("%s came through zero", reflect.TypeOf(got).Field(i).Name)
+		}
+	}
 }

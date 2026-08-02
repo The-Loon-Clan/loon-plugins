@@ -324,8 +324,15 @@ func (s packServer) Manifest(ctx context.Context) (lpapi.BackupManifest, error) 
 		Packs: make([]lpapi.BackupPack, 0, len(m.Packs)),
 	}
 	for _, p := range m.Packs {
+		// Every field a client needs must be copied ACROSS, not just added to
+		// the internal struct: this conversion is the whole contract, and a
+		// field missing here is invisible until a puller behaves as though the
+		// flag were false. Raw shipped that way once — the size came through
+		// (it rides Bytes) while the flag did not, so the manifest described a
+		// zip the server was streaming raw.
 		out.Packs = append(out.Packs, lpapi.BackupPack{
 			ID: p.ID, Class: p.Class, Bytes: p.Bytes, Content: p.Content, Members: p.Members,
+			Raw: p.Raw, Path: p.Path, SHA256: p.SHA256,
 		})
 	}
 	return out, nil
