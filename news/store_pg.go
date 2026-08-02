@@ -40,10 +40,22 @@ func (r *PGStore) GetNewsPostByID(ctx context.Context, id int64) (*NewsPost, err
 	return &p, err
 }
 
+// GetNewsPostBySlug is the PUBLIC read, and it filters on published.
+//
+// It did not, and the only caller is the public /news/:slug page — so an
+// unpublished post was readable by anyone who knew or guessed its slug. That
+// was already wrong for a draft an admin was still writing; it becomes
+// load-bearing now that an agent can create drafts (see ai.go), because the
+// whole propose tier rests on a draft being inert until a human approves it.
+//
+// Filtered in the QUERY rather than checked in the handler: the guarantee then
+// holds for every future caller instead of for every caller that remembers.
+// Admin paths read by ID and are unaffected.
 func (r *PGStore) GetNewsPostBySlug(ctx context.Context, slug string) (*NewsPost, error) {
 	var p NewsPost
 	err := r.db.GetContext(ctx, &p,
-		`SELECT id, title, slug, body, published, created_at, updated_at FROM news_posts WHERE slug = $1`, slug)
+		`SELECT id, title, slug, body, published, created_at, updated_at
+		   FROM news_posts WHERE slug = $1 AND published = TRUE`, slug)
 	return &p, err
 }
 
