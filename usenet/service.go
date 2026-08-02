@@ -169,11 +169,19 @@ func (s *service) FetchGroups(ctx context.Context) (int, error) {
 	if !ok {
 		return 0, errNoServer
 	}
-	names, err := listGroups(srv)
-	if err != nil {
-		return 0, err
+	// listGroups reports skipped names as a NON-fatal error alongside the
+	// usable ones: dropping a malformed entry must not look like a failed
+	// fetch, but it must not be silent either — the operator asked for every
+	// group the server has.
+	names, skipErr := listGroups(srv)
+	if _, partial := skipErr.(errSkippedGroups); skipErr != nil && !partial {
+		return 0, skipErr
 	}
-	return s.store.upsertGroups(ctx, names)
+	added, err := s.store.upsertGroups(ctx, names)
+	if err != nil {
+		return added, err
+	}
+	return added, skipErr
 }
 
 func (s *service) AllGroups(ctx context.Context, query string, limit int) ([]pluginapi.GroupInfo, error) {

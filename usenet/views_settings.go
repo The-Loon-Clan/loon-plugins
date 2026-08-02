@@ -486,6 +486,13 @@ func postedBools(get func(string) string, fields map[string]*bool) map[string]st
 
 func (p *Plugin) actionFetchGroups(gc *gin.Context) (template.HTML, error) {
 	n, err := p.svc.FetchGroups(gc.Request.Context())
+	// A skipped-name report is not a failed fetch: the groups that could be
+	// read were added, and the operator is told what was left behind rather
+	// than being shown a red error for a list they cannot control.
+	if skipped, partial := err.(errSkippedGroups); partial {
+		return settingsRedirect(gc, "msg", fmt.Sprintf(
+			"fetched %d new group(s); %s", n, skipped.Error()))
+	}
 	if err != nil {
 		return settingsRedirect(gc, "err", "fetch failed: "+err.Error())
 	}
