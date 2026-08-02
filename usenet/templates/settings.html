@@ -247,9 +247,17 @@
       needed to index beyond it.
     </p>
     <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
-        <form method="post" action="/admin/p/usenet/fetch-groups" style="display:inline">
+        <!-- Confirmed because the scale surprises people, including the
+             operator it surprised: this adds EVERY group the provider carries,
+             which on a full-feed provider is six figures of rows. They arrive
+             disabled and nothing is lost, but a newsgroup list with 100,000
+             entries in it is not the page you were looking at a moment ago.
+             The button sits next to the search box, which is exactly where an
+             unintended click lands. -->
+        <form method="post" action="/admin/p/usenet/fetch-groups" style="display:inline"
+              onsubmit="return confirm('Fetch the FULL group list from the provider?\n\nThis adds every newsgroup the provider carries — often 100,000+ — as disabled entries. Existing groups and their crawl state are untouched, and you can remove the additions afterwards, but the list will be very long.\n\nTo find one group you already have, use the search box instead.');">
             <button class="btn btn-outline-primary btn-sm" type="submit"
-                    title="NNTP LIST against the primary provider — adds new names as disabled; existing groups untouched">Fetch group list</button>
+                    title="NNTP LIST against the primary provider — adds EVERY group it carries as disabled; existing groups untouched">Fetch full group list…</button>
         </form>
         <form method="get" action="/admin/p/usenet" style="display:flex;gap:.5rem;flex:1;min-width:220px">
             <input class="form-control form-control-sm" type="search" name="gq" value="{{.GroupQuery}}" placeholder="search groups…" style="flex:1">
