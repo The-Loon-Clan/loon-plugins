@@ -210,6 +210,29 @@ func TestValidateGradesAdviceAsInfo(t *testing.T) {
 	}
 }
 
+// ...but a per_unit reward is granted by a job reading its UnitSource, never
+// offered by a surface, so it has no use for a trigger. This fired on the
+// tenure reward the moment it was enabled in production, which is the only
+// reason the exclusion exists.
+func TestValidateAllowsPerUnitWithNoTrigger(t *testing.T) {
+	rewards := []Reward{{
+		ID: 1, Slug: "tenure", Kind: KindPerUnit, Trigger: "",
+		Delivery: DeliveryClaim, Enabled: true,
+		Payouts: []Payout{{Kind: PayoutPoints, Amount: 30000}},
+	}}
+	got := validateRewards(rewards, map[int64]EventStats{}, map[PayoutKind]bool{PayoutPoints: true})
+	if len(got) != 0 {
+		t.Errorf("job-driven per_unit reward produced %d finding(s): %+v", len(got), got)
+	}
+
+	// The same shape as one_off IS worth warning about: nothing would ever
+	// create the grant.
+	rewards[0].Kind = KindOneOff
+	if got := validateRewards(rewards, map[int64]EventStats{}, map[PayoutKind]bool{PayoutPoints: true}); len(got) != 1 {
+		t.Errorf("one_off with no trigger produced %d finding(s), want 1", len(got))
+	}
+}
+
 // Errors must sort above warnings above info: an operator scanning this needs
 // what is broken now at the top.
 func TestValidateSortsBySeverity(t *testing.T) {

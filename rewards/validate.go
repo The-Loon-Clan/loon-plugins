@@ -220,10 +220,14 @@ func validateRewards(rewards []Reward, events map[int64]EventStats, handled map[
 				"is per_unit AND gated by an event — the event still gates earning, but the reference is the high-water mark, not the window",
 				"usually per_unit rewards want no event at all"})
 		}
-		if r.Trigger == "" && r.Delivery == DeliveryClaim {
+		// A per_unit reward is granted by a job reading its UnitSource, never
+		// offered by a surface, so it has no use for a trigger. Warning about
+		// one was this check's first false positive in production -- on the
+		// tenure reward, whose whole design is job-driven.
+		if r.Trigger == "" && r.Delivery == DeliveryClaim && r.Kind != KindPerUnit {
 			out = append(out, Finding{SeverityWarn, subject,
 				"delivery=claim with no trigger — no surface asks for it, so nobody will ever be offered it",
-				"set a trigger (e.g. login), or grant it from a job"})
+				"set a trigger (e.g. login), or make it per_unit and grant it from a job"})
 		}
 	}
 	return out
