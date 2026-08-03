@@ -433,3 +433,46 @@ func (s *PGStore) PreviousMarks(ctx context.Context, rewardID int64, userIDs []i
 	}
 	return out, nil
 }
+
+// PendingGrantsFor drives the member-facing card, so it is deliberately two
+// small indexed reads rather than a join: reward_grants_pending_idx is a
+// partial index on (user_id, state) and the payout lines come back keyed by
+// grant. A member has a handful of these at most.
+func (s *PGStore) PendingGrantsFor(ctx context.Context, userID int64, limit int) ([]Grant, error) {
+	var grants []Grant
+	err := s.sel(ctx, &grants, `
+		SELECT id, reward_id, user_id, reference, state, reason, created_at, expires_at, settled_at
+		  FROM reward_grants
+		 WHERE user_id = $1 AND state = 'pending'
+		 ORDER BY id DESC LIMIT $2`, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("pending grants: %w", err)
+	}
+	if len(grants) == 0 {
+		return nil, nil
+	}
+	ids := make([]int64, len(grants))
+	idx := make(map[int64]*Grant, len(grants))
+	for i := range grants {
+		ids[i] = grants[i].ID
+		idx[grants[i].ID] = &grants[i]
+	}
+	var lines []struct {
+		GrantID int64      `db:"grant_id"`
+		Kind    PayoutKind `db:"kind"`
+		Target  string     `db:"target"`
+		Amount  int        `db:"amount"`
+	}
+	err = s.sel(ctx, &lines, `
+		SELECT grant_id, kind, COALESCE(target,'') AS target, amount
+		  FROM reward_grant_payouts WHERE grant_id = ANY($1) ORDER BY id`, pq.Array(ids))
+	if err != nil {
+		return nil, fmt.Errorf("pending grant payouts: %w", err)
+	}
+	for _, l := range lines {
+		if g := idx[l.GrantID]; g != nil {
+			g.Payouts = append(g.Payouts, Payout{Kind: l.Kind, Target: l.Target, Amount: l.Amount})
+		}
+	}
+	return grants, nil
+}

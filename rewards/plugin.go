@@ -149,6 +149,19 @@ func (p *Plugin) Provision(c *core.Core) error {
 		p.units[strings.TrimPrefix(name, UnitSourcePrefix)] = src
 	}
 
+	// Tell a member when something is waiting for them. Absent notifications
+	// are fine: the grant is durable and the card shows it regardless, so this
+	// is a nudge rather than the delivery mechanism.
+	if c.Notifications != nil {
+		p.engine.Notifier(func(ctx context.Context, userID int64, title, body, link string) {
+			if err := c.Notifications.Notify(ctx, userID, core.Notification{
+				Kind: "reward_claim", Title: title, Body: body, Link: link,
+			}); err != nil {
+				log.Printf("rewards: notify user %d: %v", userID, err)
+			}
+		})
+	}
+
 	// The host's login path calls Fire and Available through this.
 	c.Register(TriggerExtension, p.engine)
 	// ...and the ops API reads and writes configuration through this.
@@ -159,6 +172,12 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// view there would be a boot error rather than a harmless no-op.
 	if c.Process == "worker" {
 		return nil
+	}
+	// The member-facing claim card and its POST. Registered before the admin
+	// pages so a failure here is a boot error rather than a half-wired plugin
+	// that serves an admin surface for a delivery mode members cannot reach.
+	if err := p.registerMemberViews(c); err != nil {
+		return err
 	}
 	return p.registerViews(c)
 }

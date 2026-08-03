@@ -288,6 +288,23 @@ func (m *MemStore) InsertWindows(ctx context.Context, ws []Window) (int, error) 
 	return n, nil
 }
 
+func (m *MemStore) PendingGrantsFor(ctx context.Context, userID int64, limit int) ([]Grant, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Grant
+	for i := len(m.grants) - 1; i >= 0 && len(out) < limit; i-- {
+		g := m.grants[i]
+		if g.UserID != userID || g.State != StatePending {
+			continue
+		}
+		// ALL frozen lines, settled or not -- this is what the member is
+		// being offered, not what is left to execute.
+		g.Payouts = append([]Payout(nil), m.grantLines[g.ID]...)
+		out = append(out, g)
+	}
+	return out, nil
+}
+
 // Grants exposes the raw grant list for assertions.
 func (m *MemStore) Grants() []Grant {
 	m.mu.Lock()

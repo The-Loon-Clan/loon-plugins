@@ -76,6 +76,11 @@ type Store interface {
 	// claim pays.
 	CreateGrant(ctx context.Context, g Grant, payouts []Payout) (Grant, error)
 
+	// PendingGrantsFor returns a member's outstanding claim-delivery grants,
+	// newest first, each with its frozen payout lines. Drives the member-facing
+	// card, so it reads one indexed partial index and nothing else.
+	PendingGrantsFor(ctx context.Context, userID int64, limit int) ([]Grant, error)
+
 	// GrantByID returns a grant with its frozen payout lines, or nil.
 	GrantByID(ctx context.Context, id int64) (*Grant, error)
 

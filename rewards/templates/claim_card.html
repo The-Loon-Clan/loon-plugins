@@ -1,0 +1,21 @@
+{{define "claim_card.html"}}
+<div class="card mb-3">
+  <div class="card-header"><strong>Rewards to claim</strong></div>
+  <div class="card-body">
+    {{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
+    {{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
+    {{range .Grants}}
+      <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+        <div>
+          <strong>{{.Pays}}</strong>
+          {{if .Expires}}<div class="text-muted small">claim before {{.Expires}}</div>{{end}}
+        </div>
+        <form method="post" action="/plugin/rewards/claim" class="ms-3">
+          <input type="hidden" name="grant_id" value="{{.ID}}">
+          <button class="btn btn-sm btn-primary" type="submit">Claim</button>
+        </form>
+      </div>
+    {{end}}
+  </div>
+</div>
+{{end}}

@@ -22,6 +22,11 @@ page then has one job:
   counts and currently-open window, plus a per-event panel to author windows on
   a calendar. That panel is the only way a one-off event (no cron, so nothing
   generates for it) ever becomes usable.
+- **Site widget** (SlotSiteWidget, signed-in only) — a member's outstanding
+  claim-delivery grants, each with what it pays and a Claim button. Renders
+  **nothing** when there is nothing to claim: an empty card on every page load
+  forever is how a widget gets ignored, and then the one time it matters it is
+  already invisible.
 - **`/admin/p/rewards`** (Rewards) — WHAT. Rewards with their payout lines, the
   newest 50 grants, and a *Test on me* button that runs a real grant against
   the operator's own balance.
@@ -182,6 +187,21 @@ Findings carry a fix, not just a complaint. Published as `rewards.validator`
 and served at `GET /ops/rewards/validate`, where `healthy` is about the
 configuration and `ok` is about the call.
 
+## Claiming
+
+`delivery='claim'` writes a pending grant, notifies the member (`reward_claim`
+via `core.Notifications`), and shows it on the site widget until collected.
+POST `/plugin/rewards/claim` settles one.
+
+The member id comes from the **session**, never the form. `ClaimGrant` refuses
+a grant belonging to anybody else, and refuses it *identically* to one that
+does not exist — grant ids are sequential integers, so without both halves the
+endpoint is an IDOR that pays an attacker from someone else's pending grants,
+and with only the first it is an oracle for which ids are real.
+
+Notification is a nudge, not the delivery mechanism: the grant is durable and
+the widget shows it whether or not `core.Notifications` is wired.
+
 ## Editing, and what it deliberately refuses
 
 Rewards are created **disabled**, through both the page and the API. One that
@@ -200,10 +220,6 @@ model replaces.
 
 ## Not built yet
 
-**`delivery='claim'` has no member-facing surface.** The design specifies a
-pending grant plus an inbox message with a claim button; only the pending grant
-exists. A claim-delivery reward therefore sits pending forever and the member
-never learns of it. Use `delivery='auto'` until that lands.
 
 
 The design (`docs/REWARDS.md` in the private site repo) also specifies

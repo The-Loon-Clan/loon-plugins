@@ -28,6 +28,9 @@ type Engine struct {
 	handlers map[PayoutKind]PayoutHandler
 	now      func() time.Time // injectable so window-boundary tests are not flaky
 	logf     func(string, ...any)
+	// notify tells a member a claim is waiting. nil is fine: the grant still
+	// exists and the card still shows it, they just are not nudged.
+	notify func(ctx context.Context, userID int64, title, body, link string)
 }
 
 func NewEngine(store Store, logf func(string, ...any)) *Engine {
@@ -37,6 +40,40 @@ func NewEngine(store Store, logf func(string, ...any)) *Engine {
 		now:      time.Now,
 		logf:     logf,
 	}
+}
+
+// Notifier sets the "you have something to claim" callback.
+func (e *Engine) Notifier(fn func(ctx context.Context, userID int64, title, body, link string)) {
+	e.notify = fn
+}
+
+// Pending returns a member's outstanding claim-delivery grants.
+func (e *Engine) Pending(ctx context.Context, userID int64) ([]Grant, error) {
+	return e.store.PendingGrantsFor(ctx, userID, 20)
+}
+
+// ClaimGrant settles one pending grant FOR THE MEMBER WHO OWNS IT.
+//
+// The ownership check is the whole reason this exists rather than callers
+// reaching Settle directly: grant ids are sequential integers, so a claim
+// endpoint without it is an IDOR that pays an attacker from someone else's
+// pending grants. A grant belonging to somebody else returns the same error as
+// one that does not exist, so the endpoint cannot be used to probe which ids
+// are real.
+func (e *Engine) ClaimGrant(ctx context.Context, userID, grantID int64) error {
+	g, err := e.store.GrantByID(ctx, grantID)
+	if err != nil {
+		return err
+	}
+	if g == nil || g.UserID != userID {
+		return ErrNotOffered
+	}
+	if g.State != StatePending {
+		// Already collected, or lapsed. Settle would say so too, but saying it
+		// here keeps the member-facing wording ours.
+		return ErrAlreadyGranted
+	}
+	return e.Settle(ctx, grantID)
 }
 
 // Handle registers the executor for one payout kind. A kind with no handler is
@@ -242,6 +279,16 @@ func (e *Engine) grant(ctx context.Context, r Reward, userID, ref int64, reason 
 	g, err := e.store.CreateGrant(ctx, g, lines)
 	if err != nil {
 		return Grant{}, err
+	}
+	if r.Delivery == DeliveryClaim && e.notify != nil {
+		// Best-effort by design: the grant is durable and the card will show
+		// it regardless, so a flaky notification channel must not fail a grant
+		// that has already been written.
+		name := r.Name
+		if name == "" {
+			name = r.Slug
+		}
+		e.notify(ctx, userID, "You have a reward to claim", name, "/")
 	}
 	if r.Delivery == DeliveryAuto {
 		if err := e.Settle(ctx, g.ID); err != nil {
