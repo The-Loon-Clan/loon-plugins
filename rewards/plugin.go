@@ -173,6 +173,17 @@ func (p *Plugin) Start(ctx context.Context) error {
 		return nil
 	}
 	p.job = schedule.RegisterJob("Reward Windows", "Materialise event windows ahead and expire lapsed grants")
+	// Triggerable, because the operator loop is "create an event, see its
+	// windows". Without this the answer to "where are my windows" is "wait up
+	// to thirty minutes", which reads as broken and is how someone concludes
+	// the event is misconfigured when it is merely early.
+	p.job.SetTrigger(func() {
+		go func() {
+			if err := p.maintain(context.Background()); err != nil {
+				p.job.Log("manual run: %v", err)
+			}
+		}()
+	})
 	go schedule.ServiceLoop(ctx, p.job,
 		2*time.Minute,  // boot delay: let migrations and the pool settle
 		30*time.Minute, // default interval; operator-overridable like any job
@@ -203,6 +214,17 @@ const windowHorizon = 45 * 24 * time.Hour
 const expireBatch = 500
 
 func (p *Plugin) maintain(ctx context.Context) error {
+	// Mark the run, which ServiceLoop deliberately does not do for us. Two
+	// things depend on it and both failed silently without it: /admin/jobs
+	// showed run_count 0 and a zero last_run, so a job that was ticking
+	// perfectly looked exactly like one nobody had scheduled; and
+	// waitForJobsToDrain on SIGTERM only waits for jobs marked Running, so a
+	// deploy could kill this mid-grant. The grant model resumes rather than
+	// replays, so that was survivable -- but being unkillable-by-accident is
+	// cheaper than relying on it.
+	p.job.SetRunning()
+	defer p.job.SetIdle(time.Time{})
+
 	now := time.Now()
 	events, err := p.store.EventsWithCron(ctx)
 	if err != nil {
