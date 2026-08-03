@@ -86,7 +86,9 @@ func (p *Plugin) Metadata() core.Metadata {
 
 func (p *Plugin) Provision(c *core.Core) error {
 	p.core = c
-	pg := NewPGStore(c.Storage.SchemaDB("rewards").DB())
+	// The SchemaDB itself, NOT .DB(): unwrapping loses the search_path
+	// scoping every unqualified table name in this plugin depends on.
+	pg := NewPGStore(c.Storage.SchemaDB("rewards"))
 	p.store, p.admin = pg, pg
 	p.engine = NewEngine(p.store, log.Printf)
 

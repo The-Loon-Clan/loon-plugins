@@ -9,15 +9,49 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+
+	"github.com/the-loon-clan/loon/core"
 )
 
-// PGStore is the production Store. All statements are unqualified: loon scopes
-// search_path to the plugin's schema.
-type PGStore struct{ db *sqlx.DB }
+// PGStore is the production Store.
+//
+// It holds the *core.SchemaDB, not the raw pool. Every statement below is
+// unqualified, and the ONLY thing that makes `events` mean `rewards.events` is
+// running inside SchemaDB.WithTx, which issues SET LOCAL search_path for that
+// transaction. Unwrapping with .DB() yields a connection with no such scoping
+// and every query then resolves against public -- which is exactly what
+// shipped, because the test harness applied the schema unqualified and so had
+// no separation to expose it.
+type PGStore struct{ db *core.SchemaDB }
 
-func NewPGStore(db *sqlx.DB) *PGStore { return &PGStore{db: db} }
+func NewPGStore(db *core.SchemaDB) *PGStore { return &PGStore{db: db} }
 
 var _ Store = (*PGStore)(nil)
+
+// sel / get / exec are the scoped equivalents of sqlx's SelectContext,
+// GetContext and ExecContext. They exist so that reaching for an unscoped
+// connection is not something a caller can do by accident: there is no
+// s.db.Select to reach for.
+func (s *PGStore) sel(ctx context.Context, dest any, q string, args ...any) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error { return tx.SelectContext(ctx, dest, q, args...) })
+}
+
+func (s *PGStore) get(ctx context.Context, dest any, q string, args ...any) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error { return tx.GetContext(ctx, dest, q, args...) })
+}
+
+func (s *PGStore) exec(ctx context.Context, q string, args ...any) (int64, error) {
+	var n int64
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx, q, args...)
+		if err != nil {
+			return err
+		}
+		n, _ = res.RowsAffected()
+		return nil
+	})
+	return n, err
+}
 
 // uniqueViolation is Postgres 23505. Checked structurally rather than by
 // message text, which is localised and version-dependent.
@@ -71,7 +105,7 @@ func (s *PGStore) attachPayouts(ctx context.Context, rewards []Reward) error {
 		byID[rewards[i].ID] = &rewards[i]
 	}
 	var rows []Payout
-	err := s.db.SelectContext(ctx, &rows, `
+	err := s.sel(ctx, &rows, `
 		SELECT id, reward_id, kind, COALESCE(target,'') AS target, amount, ordinal
 		  FROM reward_payouts WHERE reward_id = ANY($1) ORDER BY reward_id, ordinal`,
 		pq.Array(ids))
@@ -88,7 +122,7 @@ func (s *PGStore) attachPayouts(ctx context.Context, rewards []Reward) error {
 
 func (s *PGStore) RewardsByTrigger(ctx context.Context, trigger string) ([]Reward, error) {
 	var rows []rewardRow
-	err := s.db.SelectContext(ctx, &rows, `
+	err := s.sel(ctx, &rows, `
 		SELECT `+rewardCols+` FROM rewards
 		 WHERE enabled AND trigger = $1 ORDER BY id`, trigger)
 	if err != nil {
@@ -103,7 +137,7 @@ func (s *PGStore) RewardsByTrigger(ctx context.Context, trigger string) ([]Rewar
 
 func (s *PGStore) rewardWhere(ctx context.Context, clause string, arg any) (*Reward, error) {
 	var row rewardRow
-	err := s.db.GetContext(ctx, &row, `SELECT `+rewardCols+` FROM rewards WHERE `+clause, arg) // sqllint:allow clause is a compile-time literal, the value flows through $1
+	err := s.get(ctx, &row, `SELECT `+rewardCols+` FROM rewards WHERE `+clause, arg) // sqllint:allow clause is a compile-time literal, the value flows through $1
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -136,7 +170,7 @@ func (s *PGStore) OpenWindowsFor(ctx context.Context, eventIDs []int64, at time.
 		return map[int64]Window{}, nil
 	}
 	var rows []Window
-	err := s.db.SelectContext(ctx, &rows, `
+	err := s.sel(ctx, &rows, `
 		SELECT DISTINCT ON (event_id) id, event_id, starts_at, ends_at
 		  FROM event_windows
 		 WHERE event_id = ANY($1) AND starts_at <= $2 AND ends_at > $2
@@ -157,7 +191,7 @@ func (s *PGStore) GrantsForUser(ctx context.Context, userID int64, rewardIDs []i
 		return map[int64]Grant{}, nil
 	}
 	var rows []Grant
-	err := s.db.SelectContext(ctx, &rows, `
+	err := s.sel(ctx, &rows, `
 		SELECT id, reward_id, user_id, reference, state, reason, created_at, expires_at, settled_at
 		  FROM reward_grants
 		 WHERE user_id = $1 AND reward_id = ANY($2)
@@ -178,48 +212,45 @@ func (s *PGStore) GrantsForUser(ctx context.Context, userID int64, rewardIDs []i
 }
 
 func (s *PGStore) CreateGrant(ctx context.Context, g Grant, payouts []Payout) (Grant, error) {
-	tx, err := s.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return Grant{}, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	err = tx.QueryRowContext(ctx, `
-		INSERT INTO reward_grants (reward_id, user_id, reference, state, reason, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
-		g.RewardID, g.UserID, g.Reference, string(g.State), g.Reason, g.ExpiresAt,
-	).Scan(&g.ID, &g.CreatedAt)
-	if uniqueViolation(err) {
-		// The constraint arbitrated: someone else got there first. Not an
-		// error condition, just the answer.
-		return Grant{}, ErrAlreadyGranted
-	}
-	if err != nil {
-		return Grant{}, fmt.Errorf("insert grant: %w", err)
-	}
-
-	g.Payouts = make([]Payout, 0, len(payouts))
-	for _, p := range payouts {
-		var id int64
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		err := tx.QueryRowContext(ctx, `
-			INSERT INTO reward_grant_payouts (grant_id, kind, target, amount)
-			VALUES ($1, $2, NULLIF($3,''), $4) RETURNING id`,
-			g.ID, string(p.Kind), p.Target, p.Amount).Scan(&id)
-		if err != nil {
-			return Grant{}, fmt.Errorf("freeze payout %s: %w", p.Kind, err)
+			INSERT INTO reward_grants (reward_id, user_id, reference, state, reason, expires_at)
+			VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
+			g.RewardID, g.UserID, g.Reference, string(g.State), g.Reason, g.ExpiresAt,
+		).Scan(&g.ID, &g.CreatedAt)
+		if uniqueViolation(err) {
+			// The constraint arbitrated: someone else got there first. Not an
+			// error condition, just the answer.
+			return ErrAlreadyGranted
 		}
-		p.ID = id
-		g.Payouts = append(g.Payouts, p)
-	}
-	if err := tx.Commit(); err != nil {
-		return Grant{}, fmt.Errorf("commit grant: %w", err)
+		if err != nil {
+			return fmt.Errorf("insert grant: %w", err)
+		}
+
+		g.Payouts = make([]Payout, 0, len(payouts))
+		for _, p := range payouts {
+			var id int64
+			err := tx.QueryRowContext(ctx, `
+				INSERT INTO reward_grant_payouts (grant_id, kind, target, amount)
+				VALUES ($1, $2, NULLIF($3,''), $4) RETURNING id`,
+				g.ID, string(p.Kind), p.Target, p.Amount).Scan(&id)
+			if err != nil {
+				return fmt.Errorf("freeze payout %s: %w", p.Kind, err)
+			}
+			p.ID = id
+			g.Payouts = append(g.Payouts, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return Grant{}, err
 	}
 	return g, nil
 }
 
 func (s *PGStore) GrantByID(ctx context.Context, id int64) (*Grant, error) {
 	var g Grant
-	err := s.db.GetContext(ctx, &g, `
+	err := s.get(ctx, &g, `
 		SELECT id, reward_id, user_id, reference, state, reason, created_at, expires_at, settled_at
 		  FROM reward_grants WHERE id = $1`, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -230,7 +261,7 @@ func (s *PGStore) GrantByID(ctx context.Context, id int64) (*Grant, error) {
 	}
 	// Only unsettled lines: a resumed grant must not re-execute what already
 	// landed, and the caller iterates whatever it is handed.
-	err = s.db.SelectContext(ctx, &g.Payouts, `
+	err = s.sel(ctx, &g.Payouts, `
 		SELECT id, kind, COALESCE(target,'') AS target, amount
 		  FROM reward_grant_payouts
 		 WHERE grant_id = $1 AND settled_at IS NULL ORDER BY id`, id)
@@ -241,21 +272,21 @@ func (s *PGStore) GrantByID(ctx context.Context, id int64) (*Grant, error) {
 }
 
 func (s *PGStore) MarkPayoutSettled(ctx context.Context, payoutID int64, at time.Time) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.exec(ctx,
 		`UPDATE reward_grant_payouts SET settled_at = $2 WHERE id = $1 AND settled_at IS NULL`,
 		payoutID, at)
 	return err
 }
 
 func (s *PGStore) SettleGrant(ctx context.Context, grantID int64, at time.Time) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.exec(ctx, `
 		UPDATE reward_grants SET state = 'credited', settled_at = $2
 		 WHERE id = $1 AND state = 'pending'`, grantID, at)
 	return err
 }
 
 func (s *PGStore) ExpireGrants(ctx context.Context, now time.Time, limit int) (int, error) {
-	res, err := s.db.ExecContext(ctx, `
+	n, err := s.exec(ctx, `
 		UPDATE reward_grants SET state = 'expired'
 		 WHERE id IN (SELECT id FROM reward_grants
 		               WHERE state = 'pending' AND expires_at IS NOT NULL AND expires_at <= $1
@@ -263,8 +294,7 @@ func (s *PGStore) ExpireGrants(ctx context.Context, now time.Time, limit int) (i
 	if err != nil {
 		return 0, fmt.Errorf("expire grants: %w", err)
 	}
-	n, err := res.RowsAffected()
-	return int(n), err
+	return int(n), nil
 }
 
 type eventRow struct {
@@ -292,7 +322,7 @@ func (r eventRow) toEvent() Event {
 
 func (s *PGStore) EventsWithCron(ctx context.Context) ([]Event, error) {
 	var rows []eventRow
-	err := s.db.SelectContext(ctx, &rows, `
+	err := s.sel(ctx, &rows, `
 		SELECT id, slug, name, description, cron,
 		       EXTRACT(EPOCH FROM duration) AS duration_secs, timezone, enabled
 		  FROM events WHERE enabled AND cron IS NOT NULL ORDER BY id`)
@@ -308,7 +338,7 @@ func (s *PGStore) EventsWithCron(ctx context.Context) ([]Event, error) {
 
 func (s *PGStore) LastWindowEnd(ctx context.Context, eventID int64) (time.Time, error) {
 	var t sql.NullTime
-	err := s.db.GetContext(ctx, &t,
+	err := s.get(ctx, &t,
 		`SELECT max(ends_at) FROM event_windows WHERE event_id = $1`, eventID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return time.Time{}, fmt.Errorf("last window end: %w", err)
@@ -324,26 +354,22 @@ func (s *PGStore) InsertWindows(ctx context.Context, ws []Window) (int, error) {
 		return 0, nil
 	}
 	var inserted int
-	tx, err := s.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	for _, w := range ws {
-		res, err := tx.ExecContext(ctx, `
-			INSERT INTO event_windows (event_id, starts_at, ends_at) VALUES ($1, $2, $3)
-			ON CONFLICT (event_id, starts_at) DO NOTHING`, w.EventID, w.StartsAt, w.EndsAt)
-		if err != nil {
-			return 0, fmt.Errorf("insert window: %w", err)
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		inserted = 0 // WithTx may retry; a resumed count must not double
+		for _, w := range ws {
+			res, err := tx.ExecContext(ctx, `
+				INSERT INTO event_windows (event_id, starts_at, ends_at) VALUES ($1, $2, $3)
+				ON CONFLICT (event_id, starts_at) DO NOTHING`, w.EventID, w.StartsAt, w.EndsAt)
+			if err != nil {
+				return fmt.Errorf("insert window: %w", err)
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				inserted++
+			}
 		}
-		if n, _ := res.RowsAffected(); n > 0 {
-			inserted++
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit windows: %w", err)
-	}
-	return inserted, nil
+		return nil
+	})
+	return inserted, err
 }
 
 // PreviousMark takes the greater of "what has been granted" and "where we were
@@ -352,7 +378,7 @@ func (s *PGStore) InsertWindows(ctx context.Context, ws []Window) (int, error) {
 // from too far back pays twice, and there is no undo.
 func (s *PGStore) PreviousMark(ctx context.Context, rewardID, userID int64) (int64, error) {
 	var mark int64
-	err := s.db.GetContext(ctx, &mark, `
+	err := s.get(ctx, &mark, `
 		SELECT GREATEST(
 		    COALESCE((SELECT max(reference) FROM reward_grants
 		               WHERE reward_id = $1 AND user_id = $2), 0),
@@ -368,7 +394,7 @@ func (s *PGStore) PreviousMark(ctx context.Context, rewardID, userID int64) (int
 // must not move the line backwards past grants already keyed on it, which
 // would re-pay everything in between.
 func (s *PGStore) SetBaseline(ctx context.Context, rewardID, userID, value int64) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.exec(ctx, `
 		INSERT INTO reward_baselines (reward_id, user_id, value) VALUES ($1, $2, $3)
 		ON CONFLICT (reward_id, user_id) DO UPDATE SET value = GREATEST(reward_baselines.value, EXCLUDED.value)`,
 		rewardID, userID, value)
@@ -389,7 +415,7 @@ func (s *PGStore) PreviousMarks(ctx context.Context, rewardID int64, userIDs []i
 		UserID int64 `db:"user_id"`
 		Mark   int64 `db:"mark"`
 	}
-	err := s.db.SelectContext(ctx, &rows, `
+	err := s.sel(ctx, &rows, `
 		SELECT u.id AS user_id,
 		       GREATEST(
 		           COALESCE((SELECT max(reference) FROM reward_grants g

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
@@ -59,7 +60,7 @@ var _ AdminStore = (*PGStore)(nil)
 
 func (s *PGStore) ListEventStats(ctx context.Context, at time.Time) ([]EventStats, error) {
 	var rows []eventRow
-	err := s.db.SelectContext(ctx, &rows, `
+	err := s.sel(ctx, &rows, `
 		SELECT id, slug, name, description, cron,
 		       EXTRACT(EPOCH FROM duration) AS duration_secs, timezone, enabled
 		  FROM events ORDER BY slug`)
@@ -83,7 +84,7 @@ func (s *PGStore) ListEventStats(ctx context.Context, at time.Time) ([]EventStat
 		EventID int64 `db:"event_id"`
 		N       int   `db:"n"`
 	}
-	if err := s.db.SelectContext(ctx, &cRows,
+	if err := s.sel(ctx, &cRows,
 		`SELECT event_id, count(*) AS n FROM event_windows WHERE event_id = ANY($1) GROUP BY event_id`,
 		pq.Array(ids)); err != nil {
 		return nil, fmt.Errorf("window counts: %w", err)
@@ -96,7 +97,7 @@ func (s *PGStore) ListEventStats(ctx context.Context, at time.Time) ([]EventStat
 		return nil, err
 	}
 	var nextRows []Window
-	if err := s.db.SelectContext(ctx, &nextRows, `
+	if err := s.sel(ctx, &nextRows, `
 		SELECT DISTINCT ON (event_id) id, event_id, starts_at, ends_at
 		  FROM event_windows WHERE event_id = ANY($1) AND starts_at > $2
 		 ORDER BY event_id, starts_at ASC`, pq.Array(ids), at); err != nil {
@@ -122,7 +123,7 @@ func (s *PGStore) ListEventStats(ctx context.Context, at time.Time) ([]EventStat
 func (s *PGStore) ListRewards(ctx context.Context) ([]Reward, error) {
 	var rows []rewardRow
 	// sqllint:allow rewardCols is a compile-time const column list, no user input
-	err := s.db.SelectContext(ctx, &rows, `SELECT `+rewardCols+` FROM rewards ORDER BY slug`)
+	err := s.sel(ctx, &rows, `SELECT `+rewardCols+` FROM rewards ORDER BY slug`)
 	if err != nil {
 		return nil, fmt.Errorf("list rewards: %w", err)
 	}
@@ -135,7 +136,7 @@ func (s *PGStore) ListRewards(ctx context.Context) ([]Reward, error) {
 
 func (s *PGStore) RecentGrants(ctx context.Context, limit int) ([]GrantRow, error) {
 	var rows []GrantRow
-	err := s.db.SelectContext(ctx, &rows, `
+	err := s.sel(ctx, &rows, `
 		SELECT g.id, g.reward_id, g.user_id, g.reference, g.state, g.reason,
 		       g.created_at, g.expires_at, g.settled_at, r.slug AS reward_slug,
 		       COALESCE((SELECT string_agg(
@@ -159,11 +160,13 @@ func (s *PGStore) CreateEvent(ctx context.Context, ev Event) (int64, error) {
 		v := ev.Duration.Seconds()
 		secs = &v
 	}
-	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO events (slug, name, description, cron, duration, timezone, enabled)
-		VALUES ($1,$2,$3,NULLIF($4,''), ($5::float8 || ' seconds')::interval, $6, $7)
-		RETURNING id`,
-		ev.Slug, ev.Name, ev.Description, derefStr(ev.Cron), secs, ev.Timezone, ev.Enabled).Scan(&id)
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.QueryRowContext(ctx, `
+			INSERT INTO events (slug, name, description, cron, duration, timezone, enabled)
+			VALUES ($1,$2,$3,NULLIF($4,''), ($5::float8 || ' seconds')::interval, $6, $7)
+			RETURNING id`,
+			ev.Slug, ev.Name, ev.Description, derefStr(ev.Cron), secs, ev.Timezone, ev.Enabled).Scan(&id)
+	})
 	if err != nil {
 		return 0, fmt.Errorf("create event: %w", err)
 	}
@@ -171,48 +174,45 @@ func (s *PGStore) CreateEvent(ctx context.Context, ev Event) (int64, error) {
 }
 
 func (s *PGStore) CreateReward(ctx context.Context, r Reward) (int64, error) {
-	tx, err := s.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	var secs *float64
 	if r.ExpiresAfter != nil {
 		v := r.ExpiresAfter.Seconds()
 		secs = &v
 	}
 	var id int64
-	err = tx.QueryRowContext(ctx, `
-		INSERT INTO rewards (slug, name, kind, event_id, trigger, expires_after, delivery, enabled)
-		VALUES ($1,$2,$3,$4,$5, ($6::float8 || ' seconds')::interval, $7,$8) RETURNING id`,
-		r.Slug, r.Name, string(r.Kind), r.EventID, r.Trigger, secs, string(r.Delivery), r.Enabled).Scan(&id)
-	if err != nil {
-		return 0, fmt.Errorf("create reward: %w", err)
-	}
-	// Payout lines in the same transaction: a reward that exists with no
-	// payouts pays nothing while looking perfectly healthy.
-	for i, p := range r.Payouts {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO reward_payouts (reward_id, kind, target, amount, ordinal)
-			VALUES ($1,$2,NULLIF($3,''),$4,$5)`,
-			id, string(p.Kind), p.Target, p.Amount, i); err != nil {
-			return 0, fmt.Errorf("create payout %s: %w", p.Kind, err)
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		err := tx.QueryRowContext(ctx, `
+			INSERT INTO rewards (slug, name, kind, event_id, trigger, expires_after, delivery, enabled)
+			VALUES ($1,$2,$3,$4,$5, ($6::float8 || ' seconds')::interval, $7,$8) RETURNING id`,
+			r.Slug, r.Name, string(r.Kind), r.EventID, r.Trigger, secs, string(r.Delivery), r.Enabled).Scan(&id)
+		if err != nil {
+			return fmt.Errorf("create reward: %w", err)
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit reward: %w", err)
+		// Payout lines in the same transaction: a reward that exists with no
+		// payouts pays nothing while looking perfectly healthy.
+		for i, p := range r.Payouts {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO reward_payouts (reward_id, kind, target, amount, ordinal)
+				VALUES ($1,$2,NULLIF($3,''),$4,$5)`,
+				id, string(p.Kind), p.Target, p.Amount, i); err != nil {
+				return fmt.Errorf("create payout %s: %w", p.Kind, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 	return id, nil
 }
 
 func (s *PGStore) SetRewardEnabled(ctx context.Context, rewardID int64, enabled bool) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE rewards SET enabled = $2 WHERE id = $1`, rewardID, enabled)
+	_, err := s.exec(ctx, `UPDATE rewards SET enabled = $2 WHERE id = $1`, rewardID, enabled)
 	return err
 }
 
 func (s *PGStore) SetEventEnabled(ctx context.Context, eventID int64, enabled bool) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE events SET enabled = $2 WHERE id = $1`, eventID, enabled)
+	_, err := s.exec(ctx, `UPDATE events SET enabled = $2 WHERE id = $1`, eventID, enabled)
 	return err
 }
 
@@ -224,7 +224,7 @@ func derefStr(s *string) string {
 }
 
 func (s *PGStore) AddWindow(ctx context.Context, w Window) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.exec(ctx, `
 		INSERT INTO event_windows (event_id, starts_at, ends_at) VALUES ($1,$2,$3)
 		ON CONFLICT (event_id, starts_at) DO NOTHING`, w.EventID, w.StartsAt, w.EndsAt)
 	if err != nil {
@@ -243,7 +243,7 @@ func (s *PGStore) AddWindow(ctx context.Context, w Window) error {
 // they were already paid for.
 func (s *PGStore) DeleteWindow(ctx context.Context, windowID int64) error {
 	var used int
-	err := s.db.GetContext(ctx, &used, `
+	err := s.get(ctx, &used, `
 		SELECT count(*) FROM reward_grants g
 		  JOIN rewards r ON r.id = g.reward_id
 		 WHERE r.kind = 'recurring' AND g.reference = $1`, windowID)
@@ -253,13 +253,13 @@ func (s *PGStore) DeleteWindow(ctx context.Context, windowID int64) error {
 	if used > 0 {
 		return fmt.Errorf("window %d has %d grant(s) keyed on it; deleting it would let those members be paid again", windowID, used)
 	}
-	_, err = s.db.ExecContext(ctx, `DELETE FROM event_windows WHERE id = $1`, windowID)
+	_, err = s.exec(ctx, `DELETE FROM event_windows WHERE id = $1`, windowID)
 	return err
 }
 
 func (s *PGStore) ListWindows(ctx context.Context, eventID int64, limit int) ([]Window, error) {
 	var out []Window
-	err := s.db.SelectContext(ctx, &out, `
+	err := s.sel(ctx, &out, `
 		SELECT id, event_id, starts_at, ends_at FROM event_windows
 		 WHERE event_id = $1 ORDER BY starts_at DESC LIMIT $2`, eventID, limit)
 	if err != nil {
@@ -276,7 +276,7 @@ func (s *PGStore) ListWindows(ctx context.Context, eventID int64, limit int) ([]
 // point of the check is to run it casually on a page render.
 func (s *PGStore) EventCoverage(ctx context.Context) (map[int64]Coverage, error) {
 	var rows []Coverage
-	err := s.db.SelectContext(ctx, &rows, `
+	err := s.sel(ctx, &rows, `
 		WITH ordered AS (
 		    SELECT event_id, starts_at, ends_at,
 		           lead(starts_at) OVER (PARTITION BY event_id ORDER BY starts_at) AS next_start
@@ -300,7 +300,7 @@ func (s *PGStore) EventCoverage(ctx context.Context) (map[int64]Coverage, error)
 
 func (s *PGStore) CountStalePending(ctx context.Context, now time.Time) (int, error) {
 	var n int
-	err := s.db.GetContext(ctx, &n, `
+	err := s.get(ctx, &n, `
 		SELECT count(*) FROM reward_grants
 		 WHERE state = 'pending' AND expires_at IS NOT NULL AND expires_at <= $1`, now)
 	if err != nil {

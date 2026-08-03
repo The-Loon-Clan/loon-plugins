@@ -20,6 +20,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+
+	"github.com/the-loon-clan/loon/core"
 )
 
 func testDB(t *testing.T) *sqlx.DB {
@@ -35,19 +37,51 @@ func testDB(t *testing.T) *sqlx.DB {
 	if err := db.Ping(); err != nil {
 		t.Fatalf("ping: %v", err)
 	}
+	// A REAL schema, scoped exactly the way production is.
+	//
+	// The first cut of this applied the migration with no schema, so every
+	// table landed in public and every unqualified query found it -- which meant
+	// the suite passed against a store that had unwrapped SchemaDB and lost its
+	// search_path entirely. Production then failed on the very first request
+	// with `relation "events" does not exist`. A harness that does not reproduce
+	// the scoping cannot test the scoping, so this one leaves the session on
+	// public and makes the store do its own.
+	if _, err := db.Exec(`DROP SCHEMA IF EXISTS rewards CASCADE; CREATE SCHEMA rewards`); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
 	schema, err := os.ReadFile("migrations/001_init.sql")
 	if err != nil {
 		t.Fatalf("read schema: %v", err)
 	}
+	// Applied INSIDE the schema; the session goes straight back to public.
+	if _, err := db.Exec("SET search_path = rewards"); err != nil {
+		t.Fatalf("scope for migration: %v", err)
+	}
 	if _, err := db.Exec(string(schema)); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
-	if _, err := db.Exec(`TRUNCATE events, event_windows, rewards, reward_payouts,
-	                      reward_grants, reward_grant_payouts RESTART IDENTITY CASCADE`); err != nil {
-		t.Fatalf("truncate: %v", err)
+	if _, err := db.Exec("SET search_path = public"); err != nil {
+		t.Fatalf("reset search_path: %v", err)
+	}
+	// The guard that keeps this honest. If the tables are reachable from
+	// public, the session scoping is doing the work and an unscoped store
+	// would pass every test below -- which is precisely how the bug shipped.
+	var leaked *string
+	if err := db.Get(&leaked, "SELECT to_regclass('public.events')::text"); err != nil {
+		t.Fatalf("check schema isolation: %v", err)
+	}
+	if leaked != nil {
+		t.Fatalf("rewards tables are visible in public (%s) -- the harness is not scoped, so it cannot test scoping", *leaked)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	return db
+}
+
+// testStore wraps the pool the way Provision does, so every test exercises the
+// same scoping path production uses.
+func testStore(t *testing.T, db *sqlx.DB) *PGStore {
+	t.Helper()
+	return NewPGStore(core.NewStorage(db).SchemaDB("rewards"))
 }
 
 // seedDaily creates a contiguous daily event with two windows and one
@@ -55,24 +89,24 @@ func testDB(t *testing.T) *sqlx.DB {
 func seedDaily(t *testing.T, db *sqlx.DB, day time.Time) (int64, int64, int64) {
 	t.Helper()
 	var eventID int64
-	if err := db.QueryRow(`INSERT INTO events (slug, cron, timezone) VALUES ('daily','0 0 * * *','UTC') RETURNING id`).Scan(&eventID); err != nil {
+	if err := db.QueryRow(`INSERT INTO rewards.events (slug, cron, timezone) VALUES ('daily','0 0 * * *','UTC') RETURNING id`).Scan(&eventID); err != nil {
 		t.Fatalf("insert event: %v", err)
 	}
 	var w1, w2 int64
-	if err := db.QueryRow(`INSERT INTO event_windows (event_id, starts_at, ends_at) VALUES ($1,$2,$3) RETURNING id`,
+	if err := db.QueryRow(`INSERT INTO rewards.event_windows (event_id, starts_at, ends_at) VALUES ($1,$2,$3) RETURNING id`,
 		eventID, day, day.Add(24*time.Hour)).Scan(&w1); err != nil {
 		t.Fatalf("insert window 1: %v", err)
 	}
-	if err := db.QueryRow(`INSERT INTO event_windows (event_id, starts_at, ends_at) VALUES ($1,$2,$3) RETURNING id`,
+	if err := db.QueryRow(`INSERT INTO rewards.event_windows (event_id, starts_at, ends_at) VALUES ($1,$2,$3) RETURNING id`,
 		eventID, day.Add(24*time.Hour), day.Add(48*time.Hour)).Scan(&w2); err != nil {
 		t.Fatalf("insert window 2: %v", err)
 	}
 	var rewardID int64
-	if err := db.QueryRow(`INSERT INTO rewards (slug, kind, event_id, trigger, delivery)
+	if err := db.QueryRow(`INSERT INTO rewards.rewards (slug, kind, event_id, trigger, delivery)
 	                       VALUES ('daily-login','recurring',$1,'login','claim') RETURNING id`, eventID).Scan(&rewardID); err != nil {
 		t.Fatalf("insert reward: %v", err)
 	}
-	if _, err := db.Exec(`INSERT INTO reward_payouts (reward_id, kind, amount) VALUES ($1,'points',10)`, rewardID); err != nil {
+	if _, err := db.Exec(`INSERT INTO rewards.reward_payouts (reward_id, kind, amount) VALUES ($1,'points',10)`, rewardID); err != nil {
 		t.Fatalf("insert payout: %v", err)
 	}
 	return rewardID, w1, w2
@@ -82,7 +116,7 @@ func seedDaily(t *testing.T, db *sqlx.DB, day time.Time) (int64, int64, int64) {
 // the claim the entire design rests on and the one a mock cannot make.
 func TestPGConcurrentGrantsHitTheConstraint(t *testing.T) {
 	db := testDB(t)
-	store := NewPGStore(db)
+	store := testStore(t, db)
 	day := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	rewardID, w1, _ := seedDaily(t, db, day)
 	payouts := []Payout{{Kind: PayoutPoints, Amount: 10}}
@@ -114,8 +148,8 @@ func TestPGConcurrentGrantsHitTheConstraint(t *testing.T) {
 		t.Errorf("succeeded=%d duplicates=%d, want 1/24", ok, dup)
 	}
 	var grants, lines int
-	_ = db.QueryRow(`SELECT count(*) FROM reward_grants`).Scan(&grants)
-	_ = db.QueryRow(`SELECT count(*) FROM reward_grant_payouts`).Scan(&lines)
+	_ = db.QueryRow(`SELECT count(*) FROM rewards.reward_grants`).Scan(&grants)
+	_ = db.QueryRow(`SELECT count(*) FROM rewards.reward_grant_payouts`).Scan(&lines)
 	if grants != 1 || lines != 1 {
 		t.Errorf("rows: grants=%d frozen lines=%d, want 1/1", grants, lines)
 	}
@@ -126,13 +160,13 @@ func TestPGConcurrentGrantsHitTheConstraint(t *testing.T) {
 // at every boundary.
 func TestPGOpenWindowIsHalfOpen(t *testing.T) {
 	db := testDB(t)
-	store := NewPGStore(db)
+	store := testStore(t, db)
 	day := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	_, w1, w2 := seedDaily(t, db, day)
 	ctx := context.Background()
 
 	var eventID int64
-	_ = db.QueryRow(`SELECT id FROM events WHERE slug='daily'`).Scan(&eventID)
+	_ = db.QueryRow(`SELECT id FROM rewards.events WHERE slug='daily'`).Scan(&eventID)
 
 	for _, tc := range []struct {
 		name string
@@ -171,7 +205,7 @@ func TestPGOpenWindowIsHalfOpen(t *testing.T) {
 // since freezing is a copy the store performs.
 func TestPGFrozenPayoutIsACopy(t *testing.T) {
 	db := testDB(t)
-	store := NewPGStore(db)
+	store := testStore(t, db)
 	day := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	rewardID, w1, _ := seedDaily(t, db, day)
 	ctx := context.Background()
@@ -185,7 +219,7 @@ func TestPGFrozenPayoutIsACopy(t *testing.T) {
 		t.Fatalf("create grant: %v", err)
 	}
 
-	if _, err := db.Exec(`UPDATE reward_payouts SET amount = 1 WHERE reward_id = $1`, rewardID); err != nil {
+	if _, err := db.Exec(`UPDATE rewards.reward_payouts SET amount = 1 WHERE reward_id = $1`, rewardID); err != nil {
 		t.Fatalf("retune: %v", err)
 	}
 	got, err := store.GrantByID(ctx, g.ID)
@@ -201,7 +235,7 @@ func TestPGFrozenPayoutIsACopy(t *testing.T) {
 // what already landed. Tested here because the filter lives in SQL.
 func TestPGGrantByIDSkipsSettledLines(t *testing.T) {
 	db := testDB(t)
-	store := NewPGStore(db)
+	store := testStore(t, db)
 	day := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	rewardID, w1, _ := seedDaily(t, db, day)
 	ctx := context.Background()
@@ -228,10 +262,10 @@ func TestPGGrantByIDSkipsSettledLines(t *testing.T) {
 // overlapping ranges.
 func TestPGInsertWindowsIsIdempotent(t *testing.T) {
 	db := testDB(t)
-	store := NewPGStore(db)
+	store := testStore(t, db)
 	ctx := context.Background()
 	var eventID int64
-	if err := db.QueryRow(`INSERT INTO events (slug, cron, timezone) VALUES ('daily','0 0 * * *','UTC') RETURNING id`).Scan(&eventID); err != nil {
+	if err := db.QueryRow(`INSERT INTO rewards.events (slug, cron, timezone) VALUES ('daily','0 0 * * *','UTC') RETURNING id`).Scan(&eventID); err != nil {
 		t.Fatalf("insert event: %v", err)
 	}
 	ev := Event{ID: eventID, Slug: "daily", Cron: str("0 0 * * *"), Timezone: "UTC"}
@@ -266,7 +300,7 @@ func TestPGInsertWindowsIsIdempotent(t *testing.T) {
 // their expiry.
 func TestPGExpireGrantsIsBoundedAndSelective(t *testing.T) {
 	db := testDB(t)
-	store := NewPGStore(db)
+	store := testStore(t, db)
 	day := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	rewardID, _, _ := seedDaily(t, db, day)
 	ctx := context.Background()
@@ -274,14 +308,14 @@ func TestPGExpireGrantsIsBoundedAndSelective(t *testing.T) {
 	past := day.Add(-time.Hour)
 	future := day.Add(48 * time.Hour)
 	for i := 0; i < 5; i++ {
-		if _, err := db.Exec(`INSERT INTO reward_grants (reward_id, user_id, reference, state, expires_at)
+		if _, err := db.Exec(`INSERT INTO rewards.reward_grants (reward_id, user_id, reference, state, expires_at)
 		                      VALUES ($1, $2, $3, 'pending', $4)`, rewardID, int64(i), int64(i), past); err != nil {
 			t.Fatalf("seed expiring grant: %v", err)
 		}
 	}
 	// One with no expiry and one not yet due: neither may be touched.
-	_, _ = db.Exec(`INSERT INTO reward_grants (reward_id, user_id, reference, state) VALUES ($1, 100, 100, 'pending')`, rewardID)
-	_, _ = db.Exec(`INSERT INTO reward_grants (reward_id, user_id, reference, state, expires_at) VALUES ($1, 101, 101, 'pending', $2)`, rewardID, future)
+	_, _ = db.Exec(`INSERT INTO rewards.reward_grants (reward_id, user_id, reference, state) VALUES ($1, 100, 100, 'pending')`, rewardID)
+	_, _ = db.Exec(`INSERT INTO rewards.reward_grants (reward_id, user_id, reference, state, expires_at) VALUES ($1, 101, 101, 'pending', $2)`, rewardID, future)
 
 	n, err := store.ExpireGrants(ctx, day, 3)
 	if err != nil || n != 3 {
@@ -292,7 +326,7 @@ func TestPGExpireGrantsIsBoundedAndSelective(t *testing.T) {
 		t.Fatalf("second sweep: n=%d err=%v, want the remaining 2", n, err)
 	}
 	var stillPending int
-	_ = db.QueryRow(`SELECT count(*) FROM reward_grants WHERE state='pending'`).Scan(&stillPending)
+	_ = db.QueryRow(`SELECT count(*) FROM rewards.reward_grants WHERE state='pending'`).Scan(&stillPending)
 	if stillPending != 2 {
 		t.Errorf("pending after sweeps = %d, want 2 (no-expiry and not-yet-due)", stillPending)
 	}
@@ -302,14 +336,14 @@ func TestPGExpireGrantsIsBoundedAndSelective(t *testing.T) {
 // wrong silently gives every reward an expiry of zero.
 func TestPGIntervalRoundTrip(t *testing.T) {
 	db := testDB(t)
-	store := NewPGStore(db)
+	store := testStore(t, db)
 	ctx := context.Background()
-	if _, err := db.Exec(`INSERT INTO rewards (slug, kind, trigger, expires_after)
+	if _, err := db.Exec(`INSERT INTO rewards.rewards (slug, kind, trigger, expires_after)
 	                      VALUES ('fleeting','one_off','login', INTERVAL '36 hours')`); err != nil {
 		t.Fatalf("insert reward: %v", err)
 	}
-	if _, err := db.Exec(`INSERT INTO reward_payouts (reward_id, kind, amount)
-	                      SELECT id, 'points', 5 FROM rewards WHERE slug='fleeting'`); err != nil {
+	if _, err := db.Exec(`INSERT INTO rewards.reward_payouts (reward_id, kind, amount)
+	                      SELECT id, 'points', 5 FROM rewards.rewards WHERE slug='fleeting'`); err != nil {
 		t.Fatalf("insert payout: %v", err)
 	}
 	r, err := store.RewardBySlug(ctx, "fleeting")
@@ -329,10 +363,10 @@ func TestPGIntervalRoundTrip(t *testing.T) {
 // back a per_unit reward pays, so both are tested against the real thing.
 func TestPGPreviousMarkAndBaseline(t *testing.T) {
 	db := testDB(t)
-	store := NewPGStore(db)
+	store := testStore(t, db)
 	ctx := context.Background()
 	var rewardID int64
-	if err := db.QueryRow(`INSERT INTO rewards (slug, kind, trigger, delivery)
+	if err := db.QueryRow(`INSERT INTO rewards.rewards (slug, kind, trigger, delivery)
 	                       VALUES ('grabs','per_unit','upload','auto') RETURNING id`).Scan(&rewardID); err != nil {
 		t.Fatalf("insert reward: %v", err)
 	}
@@ -369,7 +403,7 @@ func TestPGPreviousMarkAndBaseline(t *testing.T) {
 		t.Errorf("a lowered baseline moved the mark to %d, re-opening a paid range", mark)
 	}
 	var stored int64
-	_ = db.QueryRow(`SELECT value FROM reward_baselines WHERE reward_id=$1 AND user_id=7`, rewardID).Scan(&stored)
+	_ = db.QueryRow(`SELECT value FROM rewards.reward_baselines WHERE reward_id=$1 AND user_id=7`, rewardID).Scan(&stored)
 	if stored != 10000 {
 		t.Errorf("stored baseline = %d, want 10000 — SetBaseline must never lower", stored)
 	}
