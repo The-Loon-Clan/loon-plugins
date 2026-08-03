@@ -41,6 +41,16 @@ const TriggerExtension = "rewards.trigger"
 // everywhere and should answer wherever the plugin booted.
 const AdminExtension = "rewards.admin"
 
+// ValidatorExtension publishes the cross-table check, so the ops API and an
+// agent can ask "is this configuration actually going to pay anyone" without
+// re-deriving the rules on the other side of the wire.
+const ValidatorExtension = "rewards.validator"
+
+// Validator is the shape the host looks up.
+type Validator interface {
+	Validate(ctx context.Context) ([]Finding, error)
+}
+
 func init() {
 	core.RegisterPlugin("rewards", func() core.Plugin { return &Plugin{} })
 }
@@ -116,6 +126,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	c.Register(TriggerExtension, p.engine)
 	// ...and the ops API reads and writes configuration through this.
 	c.Register(AdminExtension, p.admin)
+	c.Register(ValidatorExtension, Validator(p))
 
 	// The admin page is web-only: the worker has no router, and registering a
 	// view there would be a boot error rather than a harmless no-op.

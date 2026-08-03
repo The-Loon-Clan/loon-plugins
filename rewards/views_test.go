@@ -54,29 +54,75 @@ func TestAdminTemplateRenders(t *testing.T) {
 		},
 	}
 
-	var sb strings.Builder
-	if err := p.tmpl.ExecuteTemplate(&sb, "rewards_admin.html", vm); err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	out := sb.String()
-
-	// Every section must survive to the end. A truncated render is the exact
-	// failure this test exists for, so assert on content from the LAST table.
-	for _, want := range []string{
-		"Events", "Rewards", "Recent grants",
-		"daily", "summer", "launch",
-		"until next firing", // the reset's nil duration
-		"one-off",           // the event with no cron
-		"daily-login", "hollow",
-		"NONE — will not grant", // the payout-less reward
-		// Both payout lines, asserted separately: html/template escapes the
-		// joining "+" to &#43;, so matching the rendered string would be
-		// testing the escaper rather than the page.
-		"10 points", "medal founder",
-		"Test on me",
+	// Both pages, from the same model. A truncated render is the exact failure
+	// this test exists for, so each assertion set includes content from the
+	// LAST table on its page.
+	for _, tc := range []struct {
+		tmpl string
+		want []string
+	}{
+		{"rewards_events.html", []string{
+			"Events",
+			"daily", "summer", "launch",
+			"until next firing", // the reset's nil duration
+			"one-off",           // the event with no cron
+			"Create event",
+		}},
+		{"rewards_admin.html", []string{
+			"Rewards", "Recent grants",
+			"daily-login", "hollow",
+			"NONE — will not grant", // the payout-less reward
+			// Both payout lines, asserted separately: html/template escapes the
+			// joining "+" to &#43;, so matching the rendered string would be
+			// testing the escaper rather than the page.
+			"10 points", "medal founder",
+			"Test on me",
+		}},
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("rendered page is missing %q — likely truncated mid-render", want)
+		var sb strings.Builder
+		if err := p.tmpl.ExecuteTemplate(&sb, tc.tmpl, vm); err != nil {
+			t.Fatalf("execute %s: %v", tc.tmpl, err)
+		}
+		out := sb.String()
+		for _, want := range tc.want {
+			if !strings.Contains(out, want) {
+				t.Errorf("%s is missing %q — likely truncated mid-render", tc.tmpl, want)
+			}
+		}
+	}
+}
+
+// The findings banner is shared by both pages, because the configuration that
+// breaks a reward usually lives on the other one.
+func TestFindingsBannerRendersOnBothPages(t *testing.T) {
+	p := &Plugin{}
+	if err := p.parseTemplates(); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	vm := adminVM{Now: time.Now(), Findings: []Finding{
+		{SeverityError, "reward daily-login", "has no payout lines", "add one"},
+		{SeverityWarn, "event daily", "windows run out in 72h", "run the job"},
+		{SeverityInfo, "reward x", "expiry never applies", ""},
+	}}
+	for _, tmpl := range []string{"rewards_events.html", "rewards_admin.html"} {
+		var sb strings.Builder
+		if err := p.tmpl.ExecuteTemplate(&sb, tmpl, vm); err != nil {
+			t.Fatalf("execute %s: %v", tmpl, err)
+		}
+		out := sb.String()
+		for _, want := range []string{
+			"Configuration check",
+			"has no payout lines", "windows run out in 72h",
+			"bg-danger", "bg-warning", "bg-secondary", // severity is visible, not just worded
+			"add one", // the fix, which is what makes it actionable
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("%s findings banner missing %q", tmpl, want)
+			}
+		}
+		// A finding with no fix must not render an empty arrow.
+		if strings.Contains(out, "&rarr; </span>") {
+			t.Errorf("%s renders an empty fix arrow", tmpl)
 		}
 	}
 }
@@ -88,14 +134,19 @@ func TestAdminTemplateRendersEmpty(t *testing.T) {
 	if err := p.parseTemplates(); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	var sb strings.Builder
-	if err := p.tmpl.ExecuteTemplate(&sb, "rewards_admin.html", adminVM{Now: time.Now(), Err: "bad cron"}); err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	out := sb.String()
-	for _, want := range []string{"No events yet", "No rewards yet", "Nothing granted yet", "bad cron"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("empty page is missing %q", want)
+	vm := adminVM{Now: time.Now(), Err: "bad cron"}
+	for tmpl, wants := range map[string][]string{
+		"rewards_events.html": {"No events yet", "bad cron"},
+		"rewards_admin.html":  {"No rewards yet", "Nothing granted yet", "bad cron"},
+	} {
+		var sb strings.Builder
+		if err := p.tmpl.ExecuteTemplate(&sb, tmpl, vm); err != nil {
+			t.Fatalf("execute %s: %v", tmpl, err)
+		}
+		for _, want := range wants {
+			if !strings.Contains(sb.String(), want) {
+				t.Errorf("empty %s is missing %q", tmpl, want)
+			}
 		}
 	}
 }
@@ -118,7 +169,7 @@ func TestAdminTemplateRendersWindowPanel(t *testing.T) {
 		},
 	}
 	var sb strings.Builder
-	if err := p.tmpl.ExecuteTemplate(&sb, "rewards_admin.html", vm); err != nil {
+	if err := p.tmpl.ExecuteTemplate(&sb, "rewards_events.html", vm); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	out := sb.String()
@@ -140,7 +191,7 @@ func TestAdminTemplateRendersWindowPanel(t *testing.T) {
 	// where the operator most needs telling what to do next.
 	vm.Windows = nil
 	sb.Reset()
-	if err := p.tmpl.ExecuteTemplate(&sb, "rewards_admin.html", vm); err != nil {
+	if err := p.tmpl.ExecuteTemplate(&sb, "rewards_events.html", vm); err != nil {
 		t.Fatalf("execute empty: %v", err)
 	}
 	if !strings.Contains(sb.String(), "cannot be earned until there is one") {

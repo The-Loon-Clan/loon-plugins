@@ -14,11 +14,20 @@ rule re-answered it. Getting it wrong pays somebody twice.
 
 ## Surface
 
-An admin page at `/admin/p/rewards` (SlotAdminPage, Operations group): events
-with their window counts and currently-open window, rewards with their payout
-lines, the newest 50 grants, and forms to create events, author windows by
-hand, create rewards, and enable or disable either. Plus a *Test on me* button
-that runs a real grant against the operator's own balance.
+Two admin pages under Operations, because events are not reward-specific — a
+season or an outage window is a site fact other systems can reference, and each
+page then has one job:
+
+- **`/admin/p/rewards-events`** (Events) — WHEN. Events with their window
+  counts and currently-open window, plus a per-event panel to author windows on
+  a calendar. That panel is the only way a one-off event (no cron, so nothing
+  generates for it) ever becomes usable.
+- **`/admin/p/rewards`** (Rewards) — WHAT. Rewards with their payout lines, the
+  newest 50 grants, and a *Test on me* button that runs a real grant against
+  the operator's own balance.
+
+Both carry the **configuration check** banner (below), because the row that
+breaks a reward usually lives on the other page.
 
 The engine is published on the extension registry as `rewards.trigger`; the
 host's login path looks it up and calls it. The configuration store is
@@ -91,6 +100,7 @@ appear on the wrong days with no error anywhere.
   handler calls `Fire` (auto-delivery, detached) and `Available` (claim
   delivery, synchronous, because the response has to render the button).
   **`rewards.admin`** — the `AdminStore`, consumed by the host's ops API.
+  **`rewards.validator`** — the cross-table check, same consumer.
 - Extensions CONSUMED: **`rewards.payout.<kind>`** for `role`, `medal`,
   `achievement`, `username_fx` — each a `PayoutHandler`. Optional: a host
   registering none can still run points-only rewards. Registered under the
@@ -118,6 +128,8 @@ already left the building.
 - `store.go` / `store_pg.go` / `store_mem.go` — the data seam, Postgres, tests.
 - `engine.go` — `Defs`, `Available`, `Claim`, `GrantPerUnit`, `Settle`, `Fire`.
 - `windows.go` — cron → concrete windows.
+- `validate.go` — the cross-table check.
+- `views.go` / `store_admin.go` / `templates/` — the two admin pages.
 
 ## Testing
 
@@ -137,6 +149,29 @@ already left the building.
 itself. That is deliberate: a mock that let a double-book through would hide the
 one thing the whole model rests on.
 
+## The configuration check
+
+Every table enforces its own shape, and every one of them can be satisfied by a
+configuration that pays nobody. An event with no windows is a valid event. A
+reward pointing at it is a valid reward. Together they are a reward that can
+never be earned, and nothing else says so — the failure is silence, and the
+first report is a member asking where their bonus went.
+
+`Validate` cross-checks relationships, and grades what will break SOON as well
+as what is broken now:
+
+| severity | means | examples |
+|---|---|---|
+| error | cannot pay right now | event with no windows; reward gated by a disabled event; enabled reward with no payout lines, or a payout kind nothing can execute; a reset with no open window |
+| warn | works today, will stop | windows run out inside a week; a contiguous reset with gaps; pending grants past expiry (the sweep is not running) |
+| info | legal, probably not meant | expiry on a `delivery=auto` reward, which settles immediately so it never applies; a `per_unit` reward gated by an event |
+
+A healthy configuration produces **nothing** — a validator that always finds
+something is one an operator learns to ignore, and there is a test pinning that.
+Findings carry a fix, not just a complaint. Published as `rewards.validator`
+and served at `GET /ops/rewards/validate`, where `healthy` is about the
+configuration and `ok` is about the call.
+
 ## Editing, and what it deliberately refuses
 
 Rewards are created **disabled**, through both the page and the API. One that
@@ -154,6 +189,12 @@ are rules; a per-member payment typed into a form is the ad-hoc thing this
 model replaces.
 
 ## Not built yet
+
+**`delivery='claim'` has no member-facing surface.** The design specifies a
+pending grant plus an inbox message with a claim button; only the pending grant
+exists. A claim-delivery reward therefore sits pending forever and the member
+never learns of it. Use `delivery='auto'` until that lands.
+
 
 The design (`docs/REWARDS.md` in the private site repo) also specifies
 achievements (a counter crossing a threshold) and retroactive issuances. The

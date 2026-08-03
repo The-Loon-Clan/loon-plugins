@@ -43,6 +43,13 @@ type AdminStore interface {
 	// keyed on — see the implementation.
 	DeleteWindow(ctx context.Context, windowID int64) error
 	ListWindows(ctx context.Context, eventID int64, limit int) ([]Window, error)
+
+	// EventCoverage reports every event's window health in ONE query: how many,
+	// how far ahead, and how many gaps. Feeds the validator.
+	EventCoverage(ctx context.Context) (map[int64]Coverage, error)
+	// CountStalePending counts pending grants past their expiry — a number
+	// that should always be zero if the expiry sweep is running.
+	CountStalePending(ctx context.Context, now time.Time) (int, error)
 	CreateReward(ctx context.Context, r Reward) (int64, error)
 	SetRewardEnabled(ctx context.Context, rewardID int64, enabled bool) error
 	SetEventEnabled(ctx context.Context, eventID int64, enabled bool) error
@@ -259,4 +266,45 @@ func (s *PGStore) ListWindows(ctx context.Context, eventID int64, limit int) ([]
 		return nil, fmt.Errorf("list windows: %w", err)
 	}
 	return out, nil
+}
+
+// EventCoverage computes counts, lookahead and gaps for every event at once.
+//
+// lead() over each event's windows is what makes the gap check cheap: a gap is
+// simply a row whose successor does not start where it ended. Doing this per
+// event in Go would mean pulling every window row into memory, and the whole
+// point of the check is to run it casually on a page render.
+func (s *PGStore) EventCoverage(ctx context.Context) (map[int64]Coverage, error) {
+	var rows []Coverage
+	err := s.db.SelectContext(ctx, &rows, `
+		WITH ordered AS (
+		    SELECT event_id, starts_at, ends_at,
+		           lead(starts_at) OVER (PARTITION BY event_id ORDER BY starts_at) AS next_start
+		      FROM event_windows
+		)
+		SELECT event_id,
+		       count(*)                                    AS windows,
+		       max(ends_at)                                AS last_end,
+		       count(*) FILTER (WHERE next_start IS NOT NULL
+		                          AND next_start <> ends_at) AS gaps
+		  FROM ordered GROUP BY event_id`)
+	if err != nil {
+		return nil, fmt.Errorf("event coverage: %w", err)
+	}
+	out := make(map[int64]Coverage, len(rows))
+	for _, c := range rows {
+		out[c.EventID] = c
+	}
+	return out, nil
+}
+
+func (s *PGStore) CountStalePending(ctx context.Context, now time.Time) (int, error) {
+	var n int
+	err := s.db.GetContext(ctx, &n, `
+		SELECT count(*) FROM reward_grants
+		 WHERE state = 'pending' AND expires_at IS NOT NULL AND expires_at <= $1`, now)
+	if err != nil {
+		return 0, fmt.Errorf("count stale pending: %w", err)
+	}
+	return n, nil
 }
