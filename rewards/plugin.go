@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/the-loon-clan/loon/core"
@@ -62,6 +63,11 @@ type Plugin struct {
 	engine *Engine
 	job    *schedule.JobInfo
 	tmpl   *template.Template
+
+	// Per-unit counters the host published, by reward slug. Snapshotted at
+	// Provision because the registry is written during boot and read on a
+	// worker tick; re-looking-up per tick would race a plugin still booting.
+	units map[string]UnitSource
 }
 
 var _ core.Plugin = (*Plugin)(nil)
@@ -120,6 +126,25 @@ func (p *Plugin) Provision(c *core.Core) error {
 			return fmt.Errorf("rewards: extension %q is %T, want rewards.PayoutHandler", key, v)
 		}
 		p.engine.Handle(kind, h)
+	}
+
+	// Per-unit counters. Discovered by suffix rather than declared, so adding a
+	// per_unit reward is a reward row plus one host registration and no change
+	// here. A source registered for a reward that does not exist is harmless —
+	// GrantUnits looks the reward up and finds nothing.
+	p.units = map[string]UnitSource{}
+	for _, name := range c.ExtensionNames() {
+		if !strings.HasPrefix(name, UnitSourcePrefix) {
+			continue
+		}
+		v, _ := c.Lookup(name)
+		src, ok := v.(UnitSource)
+		if !ok {
+			// Right key, wrong shape: the reward would silently never pay,
+			// which is precisely the failure this plugin exists to stop.
+			return fmt.Errorf("rewards: extension %q is %T, want rewards.UnitSource", name, v)
+		}
+		p.units[strings.TrimPrefix(name, UnitSourcePrefix)] = src
 	}
 
 	// The host's login path calls Fire and Available through this.
@@ -209,6 +234,22 @@ func (p *Plugin) maintain(ctx context.Context) error {
 			return fmt.Errorf("insert windows for %q: %w", ev.Slug, err)
 		}
 		totalNew += n
+	}
+
+	// Per-unit rewards: pay whatever each counter has moved by. Runs on the
+	// same tick as window generation because both are "keep the world
+	// consistent" work and neither is urgent — a tenure year is not less owed
+	// for arriving twenty minutes late, which is the entire point of paying on
+	// a high-water mark instead of on an anniversary DAY.
+	for slug, src := range p.units {
+		n, err := p.engine.GrantUnits(ctx, slug, src)
+		if err != nil {
+			p.job.Log("units %q: %v", slug, err)
+			continue
+		}
+		if n > 0 {
+			p.job.Log("%s: granted %d member(s)", slug, n)
+		}
 	}
 
 	expired, err := p.store.ExpireGrants(ctx, now, expireBatch)

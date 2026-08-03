@@ -338,9 +338,67 @@ func TestGrantRefusesEmptyPayout(t *testing.T) {
 	}
 }
 
-// per_unit pays the delta and never the history: the second call at the same
-// high-water mark is refused, and a higher one is a new grant.
+// per_unit must pay the DELTA times the rate, not a flat amount and not the
+// running total. This is the arithmetic that decides what an uploader is owed,
+// and getting it wrong is either underpaying everyone or paying history twice.
 func TestGrantPerUnitPaysTheDelta(t *testing.T) {
+	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+	f := newFixture(t, now)
+	var medals int
+	f.eng.Handle(PayoutMedal, func(ctx context.Context, userID int64, p Payout) error {
+		medals++
+		return nil
+	})
+	f.store.Rewards = append(f.store.Rewards, Reward{
+		ID: 600, Slug: "grabs", Kind: KindPerUnit, Trigger: "upload",
+		Delivery: DeliveryAuto, Enabled: true,
+		Payouts: []Payout{
+			{Kind: PayoutPoints, Amount: 2},
+			{Kind: PayoutMedal, Target: "uploader"},
+		},
+	})
+	ctx := context.Background()
+
+	// 500 grabs from nothing, at 2 points each.
+	if _, err := f.eng.GrantPerUnit(ctx, 7, 600, 500); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if got := f.points(7); got != 1000 {
+		t.Errorf("first grant paid %d, want 1000 (2 x 500) — a flat payout ignores the delta", got)
+	}
+	// A medal is not a quantity: 500 grabs is one badge, not 500.
+	if medals != 1 {
+		t.Errorf("medals awarded = %d, want 1 — only countable lines scale", medals)
+	}
+
+	// Nothing new: no grant, and specifically not an error the caller has to
+	// special-case, since a frequent job hits this for nearly every member.
+	if _, err := f.eng.GrantPerUnit(ctx, 7, 600, 500); !errors.Is(err, ErrNothingOwed) {
+		t.Errorf("same mark: %v, want ErrNothingOwed", err)
+	}
+
+	// 250 more, so 500 points — the DELTA, not 750 x 2.
+	if _, err := f.eng.GrantPerUnit(ctx, 7, 600, 750); err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	if got := f.points(7); got != 1500 {
+		t.Errorf("running total %d, want 1500 (1000 + 2 x 250) — it re-paid the history", got)
+	}
+
+	// The mark going BACKWARDS (a purge, a recount) must pay nothing rather
+	// than debiting a member for having fewer grabs than last time.
+	if _, err := f.eng.GrantPerUnit(ctx, 7, 600, 600); !errors.Is(err, ErrNothingOwed) {
+		t.Errorf("mark went backwards: %v, want ErrNothingOwed", err)
+	}
+	if got := f.points(7); got != 1500 {
+		t.Errorf("a backwards mark changed the balance to %d", got)
+	}
+}
+
+// The baseline is what stops a NEW per_unit reward paying for history. Without
+// it, a reward worth a point per grab pays every grab the site ever recorded,
+// for everyone, on its first run.
+func TestGrantPerUnitHonoursTheBaseline(t *testing.T) {
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	f := newFixture(t, now)
 	f.store.Rewards = append(f.store.Rewards, Reward{
@@ -350,14 +408,24 @@ func TestGrantPerUnitPaysTheDelta(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	if _, err := f.eng.GrantPerUnit(ctx, 7, 600, 500); err != nil {
-		t.Fatalf("first: %v", err)
+	// This member already had 10,000 grabs when the reward was created.
+	if err := f.store.SetBaseline(ctx, 600, 7, 10000); err != nil {
+		t.Fatalf("seed baseline: %v", err)
 	}
-	if _, err := f.eng.GrantPerUnit(ctx, 7, 600, 500); !errors.Is(err, ErrAlreadyGranted) {
-		t.Errorf("same high-water mark: %v, want ErrAlreadyGranted", err)
+	if _, err := f.eng.GrantPerUnit(ctx, 7, 600, 10050); err != nil {
+		t.Fatalf("grant: %v", err)
 	}
-	if _, err := f.eng.GrantPerUnit(ctx, 7, 600, 750); err != nil {
-		t.Errorf("higher high-water mark: %v, want a new grant", err)
+	if got := f.points(7); got != 100 {
+		t.Errorf("paid %d, want 100 (2 x the 50 since the baseline) — it paid the whole history", got)
+	}
+
+	// Re-seeding must never move a baseline BACKWARDS past grants already
+	// keyed on it, or everything in between gets paid again.
+	if err := f.store.SetBaseline(ctx, 600, 7, 5000); err != nil {
+		t.Fatalf("re-seed: %v", err)
+	}
+	if _, err := f.eng.GrantPerUnit(ctx, 7, 600, 10050); !errors.Is(err, ErrNothingOwed) {
+		t.Error("a lowered baseline re-opened an already-paid range")
 	}
 }
 

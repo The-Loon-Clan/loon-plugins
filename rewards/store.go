@@ -40,6 +40,26 @@ type Store interface {
 	// and a per-item round trip is how a 6-reward login becomes 13 queries.
 	OpenWindowsFor(ctx context.Context, eventIDs []int64, at time.Time) (map[int64]Window, error)
 
+	// PreviousMark is how far a per_unit reward has already paid this member:
+	// the highest reference it has granted, or the baseline recorded when the
+	// reward was created, whichever is greater.
+	//
+	// The baseline is what stops a new reward paying for history. Without one,
+	// "2 points per grab" pays every grab the site has ever recorded on its
+	// first run — which is why creating a per_unit reward and seeding
+	// baselines has to be the same operation.
+	PreviousMark(ctx context.Context, rewardID, userID int64) (int64, error)
+
+	// PreviousMarks is PreviousMark for many members in one query. The batch
+	// path exists because the per-member one would be thousands of round trips
+	// to discover that almost nobody's counter moved.
+	PreviousMarks(ctx context.Context, rewardID int64, userIDs []int64) (map[int64]int64, error)
+
+	// SetBaseline records where a per_unit reward starts counting for one
+	// member. Idempotent: re-seeding must not move a baseline that has already
+	// had grants keyed past it.
+	SetBaseline(ctx context.Context, rewardID, userID, value int64) error
+
 	// GrantsForUser returns this member's grants against the given rewards,
 	// keyed by reward id. Advisory: it decides whether a button renders live,
 	// never whether a claim succeeds.

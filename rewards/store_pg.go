@@ -345,3 +345,65 @@ func (s *PGStore) InsertWindows(ctx context.Context, ws []Window) (int, error) {
 	}
 	return inserted, nil
 }
+
+// PreviousMark takes the greater of "what has been granted" and "where we were
+// told to start". Both in one statement, because two round trips could see
+// different states and the larger of the two is the only safe answer: paying
+// from too far back pays twice, and there is no undo.
+func (s *PGStore) PreviousMark(ctx context.Context, rewardID, userID int64) (int64, error) {
+	var mark int64
+	err := s.db.GetContext(ctx, &mark, `
+		SELECT GREATEST(
+		    COALESCE((SELECT max(reference) FROM reward_grants
+		               WHERE reward_id = $1 AND user_id = $2), 0),
+		    COALESCE((SELECT value FROM reward_baselines
+		               WHERE reward_id = $1 AND user_id = $2), 0))`, rewardID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("previous mark: %w", err)
+	}
+	return mark, nil
+}
+
+// SetBaseline never LOWERS an existing baseline. Re-running a seeding script
+// must not move the line backwards past grants already keyed on it, which
+// would re-pay everything in between.
+func (s *PGStore) SetBaseline(ctx context.Context, rewardID, userID, value int64) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO reward_baselines (reward_id, user_id, value) VALUES ($1, $2, $3)
+		ON CONFLICT (reward_id, user_id) DO UPDATE SET value = GREATEST(reward_baselines.value, EXCLUDED.value)`,
+		rewardID, userID, value)
+	if err != nil {
+		return fmt.Errorf("set baseline: %w", err)
+	}
+	return nil
+}
+
+// PreviousMarks answers for a whole cohort at once. Same GREATEST(grant,
+// baseline) rule as the single-member version -- expressed once, over a join,
+// so the two can never drift apart into different answers.
+func (s *PGStore) PreviousMarks(ctx context.Context, rewardID int64, userIDs []int64) (map[int64]int64, error) {
+	if len(userIDs) == 0 {
+		return map[int64]int64{}, nil
+	}
+	var rows []struct {
+		UserID int64 `db:"user_id"`
+		Mark   int64 `db:"mark"`
+	}
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT u.id AS user_id,
+		       GREATEST(
+		           COALESCE((SELECT max(reference) FROM reward_grants g
+		                      WHERE g.reward_id = $1 AND g.user_id = u.id), 0),
+		           COALESCE((SELECT value FROM reward_baselines b
+		                      WHERE b.reward_id = $1 AND b.user_id = u.id), 0)
+		       ) AS mark
+		  FROM unnest($2::bigint[]) AS u(id)`, rewardID, pq.Array(userIDs))
+	if err != nil {
+		return nil, fmt.Errorf("previous marks: %w", err)
+	}
+	out := make(map[int64]int64, len(rows))
+	for _, r := range rows {
+		out[r.UserID] = r.Mark
+	}
+	return out, nil
+}

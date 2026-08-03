@@ -63,6 +63,10 @@ not own, and a plugin that hard-links to host tables cannot be uninstalled.
 | `recurring` | `event_windows.id` | at most once per window |
 | `per_unit` | high-water mark | the delta since last paid |
 
+`per_unit` pays **rate x delta**, and only countable lines scale: "2 points and
+the Uploader medal" for 500 new grabs owes 1000 points and ONE medal. A mark
+that moves backwards (a purge, a recount) pays nothing rather than debiting.
+
 For `recurring` the reference is a real row, not a computed period ordinal, so
 no two subsystems can compute the period differently.
 
@@ -101,7 +105,12 @@ appear on the wrong days with no error anywhere.
   delivery, synchronous, because the response has to render the button).
   **`rewards.admin`** — the `AdminStore`, consumed by the host's ops API.
   **`rewards.validator`** — the cross-table check, same consumer.
-- Extensions CONSUMED: **`rewards.payout.<kind>`** for `role`, `medal`,
+- Extensions CONSUMED: **`rewards.units.<reward slug>`** — a `UnitSource`
+  supplying current counts for a `per_unit` reward. The plugin deliberately
+  knows nothing about what is being counted; the host counts, and the engine
+  owns "how far have I already paid". Adding a per_unit reward is a reward row
+  plus one registration.
+  **`rewards.payout.<kind>`** for `role`, `medal`,
   `achievement`, `username_fx` — each a `PayoutHandler`. Optional: a host
   registering none can still run points-only rewards. Registered under the
   right key with the wrong *shape* fails Provision, because that is a wiring
@@ -128,6 +137,7 @@ already left the building.
 - `store.go` / `store_pg.go` / `store_mem.go` — the data seam, Postgres, tests.
 - `engine.go` — `Defs`, `Available`, `Claim`, `GrantPerUnit`, `Settle`, `Fire`.
 - `windows.go` — cron → concrete windows.
+- `units.go` — the per-unit counter seam and its batch grant path.
 - `validate.go` — the cross-table check.
 - `views.go` / `store_admin.go` / `templates/` — the two admin pages.
 

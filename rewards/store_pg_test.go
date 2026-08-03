@@ -323,3 +323,59 @@ func TestPGIntervalRoundTrip(t *testing.T) {
 		t.Errorf("payouts = %d, want 1", len(r.Payouts))
 	}
 }
+
+// PreviousMark is GREATEST(highest grant reference, baseline) in SQL, and
+// SetBaseline must never lower one. Both are arithmetic that decides how far
+// back a per_unit reward pays, so both are tested against the real thing.
+func TestPGPreviousMarkAndBaseline(t *testing.T) {
+	db := testDB(t)
+	store := NewPGStore(db)
+	ctx := context.Background()
+	var rewardID int64
+	if err := db.QueryRow(`INSERT INTO rewards (slug, kind, trigger, delivery)
+	                       VALUES ('grabs','per_unit','upload','auto') RETURNING id`).Scan(&rewardID); err != nil {
+		t.Fatalf("insert reward: %v", err)
+	}
+
+	// No grants, no baseline: counting starts at zero, which is why a reward
+	// created without seeding pays the member's entire history.
+	if mark, err := store.PreviousMark(ctx, rewardID, 7); err != nil || mark != 0 {
+		t.Fatalf("unseeded mark = %d (%v), want 0", mark, err)
+	}
+
+	if err := store.SetBaseline(ctx, rewardID, 7, 10000); err != nil {
+		t.Fatalf("set baseline: %v", err)
+	}
+	if mark, _ := store.PreviousMark(ctx, rewardID, 7); mark != 10000 {
+		t.Errorf("after baseline mark = %d, want 10000", mark)
+	}
+
+	// A grant past the baseline wins.
+	if _, err := store.CreateGrant(ctx,
+		Grant{RewardID: rewardID, UserID: 7, Reference: 10500, State: StateCredited},
+		[]Payout{{Kind: PayoutPoints, Amount: 1000}}); err != nil {
+		t.Fatalf("create grant: %v", err)
+	}
+	if mark, _ := store.PreviousMark(ctx, rewardID, 7); mark != 10500 {
+		t.Errorf("after a grant past the baseline mark = %d, want 10500", mark)
+	}
+
+	// Re-seeding LOWER must not move the line back past that grant — doing so
+	// would re-pay every unit in between.
+	if err := store.SetBaseline(ctx, rewardID, 7, 500); err != nil {
+		t.Fatalf("re-seed lower: %v", err)
+	}
+	if mark, _ := store.PreviousMark(ctx, rewardID, 7); mark != 10500 {
+		t.Errorf("a lowered baseline moved the mark to %d, re-opening a paid range", mark)
+	}
+	var stored int64
+	_ = db.QueryRow(`SELECT value FROM reward_baselines WHERE reward_id=$1 AND user_id=7`, rewardID).Scan(&stored)
+	if stored != 10000 {
+		t.Errorf("stored baseline = %d, want 10000 — SetBaseline must never lower", stored)
+	}
+
+	// Per member, not global.
+	if mark, _ := store.PreviousMark(ctx, rewardID, 8); mark != 0 {
+		t.Errorf("another member's mark = %d, want 0", mark)
+	}
+}

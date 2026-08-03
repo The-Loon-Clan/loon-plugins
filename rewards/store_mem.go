@@ -22,6 +22,7 @@ type MemStore struct {
 
 	grants     []Grant
 	grantLines map[int64][]Payout // grant id -> frozen lines
+	baselines  map[[2]int64]int64 // (reward, user) -> where counting starts
 	nextID     int64
 
 	Now time.Time
@@ -30,7 +31,46 @@ type MemStore struct {
 var _ Store = (*MemStore)(nil)
 
 func NewMemStore() *MemStore {
-	return &MemStore{grantLines: map[int64][]Payout{}, Now: time.Now()}
+	return &MemStore{grantLines: map[int64][]Payout{}, baselines: map[[2]int64]int64{}, Now: time.Now()}
+}
+
+// PreviousMark mirrors the SQL's GREATEST(max grant reference, baseline): a
+// mock that returned only one of the two would let a test pass while
+// production paid history over again.
+func (m *MemStore) PreviousMark(ctx context.Context, rewardID, userID int64) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	mark := m.baselines[[2]int64{rewardID, userID}]
+	for _, g := range m.grants {
+		if g.RewardID == rewardID && g.UserID == userID && g.Reference > mark {
+			mark = g.Reference
+		}
+	}
+	return mark, nil
+}
+
+// PreviousMarks is the batch form, delegating so the two cannot disagree.
+func (m *MemStore) PreviousMarks(ctx context.Context, rewardID int64, userIDs []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(userIDs))
+	for _, id := range userIDs {
+		mark, err := m.PreviousMark(ctx, rewardID, id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = mark
+	}
+	return out, nil
+}
+
+// SetBaseline never lowers an existing one — same rule as the SQL's GREATEST.
+func (m *MemStore) SetBaseline(ctx context.Context, rewardID, userID, value int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	k := [2]int64{rewardID, userID}
+	if cur, ok := m.baselines[k]; !ok || value > cur {
+		m.baselines[k] = value
+	}
+	return nil
 }
 
 func (m *MemStore) id() int64 { m.nextID++; return m.nextID }

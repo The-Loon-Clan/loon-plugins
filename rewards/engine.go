@@ -175,7 +175,14 @@ func (e *Engine) Claim(ctx context.Context, userID, rewardID int64) (Grant, erro
 	return e.grant(ctx, *r, userID, ref, "", now)
 }
 
-// GrantPerUnit awards the delta for a per_unit reward. The caller supplies the
+// ErrNothingOwed means a per_unit reward has already paid up to this mark.
+//
+// The ordinary outcome, not a failure: a job that runs every ten minutes gets
+// this for almost every member almost every time, and a caller that logged it
+// as an error would drown in it.
+var ErrNothingOwed = errors.New("rewards: nothing owed")
+
+// GrantPerUnit awards the DELTA for a per_unit reward. The caller supplies the
 // counter's current value because only it knows what is being counted; the
 // engine owns the "have I paid up to here" half.
 //
@@ -189,11 +196,25 @@ func (e *Engine) GrantPerUnit(ctx context.Context, userID, rewardID, highWaterMa
 	if r == nil || !r.Enabled || r.Kind != KindPerUnit {
 		return Grant{}, ErrNotOffered
 	}
-	return e.grant(ctx, *r, userID, highWaterMark, "", e.now())
+	previous, err := e.store.PreviousMark(ctx, rewardID, userID)
+	if err != nil {
+		return Grant{}, err
+	}
+	units := highWaterMark - previous
+	if units <= 0 {
+		// Includes the mark going BACKWARDS — a purge, a recount, a manual
+		// ledger edit. Paying a negative delta would debit a member for having
+		// fewer grabs than last time, so the floor is "nothing", never a debit.
+		return Grant{}, ErrNothingOwed
+	}
+	return e.grant(ctx, *r, userID, highWaterMark, "", e.now(), units)
 }
 
 // grant creates the row and, for auto delivery, settles it immediately.
-func (e *Engine) grant(ctx context.Context, r Reward, userID, ref int64, reason string, now time.Time) (Grant, error) {
+//
+// units scales the payout for a per_unit reward (variadic so the one_off and
+// recurring callers, where scaling is meaningless, cannot pass one by mistake).
+func (e *Engine) grant(ctx context.Context, r Reward, userID, ref int64, reason string, now time.Time, units ...int64) (Grant, error) {
 	if len(r.Payouts) == 0 {
 		// A reward with no payout lines pays nothing while looking perfectly
 		// healthy — the exact failure that would otherwise be discovered by a
@@ -214,7 +235,11 @@ func (e *Engine) grant(ctx context.Context, r Reward, userID, ref int64, reason 
 		exp := now.Add(*r.ExpiresAfter)
 		g.ExpiresAt = &exp
 	}
-	g, err := e.store.CreateGrant(ctx, g, r.Payouts)
+	lines := r.Payouts
+	if len(units) == 1 && units[0] > 1 {
+		lines = scalePayouts(lines, units[0])
+	}
+	g, err := e.store.CreateGrant(ctx, g, lines)
 	if err != nil {
 		return Grant{}, err
 	}
@@ -296,4 +321,27 @@ func (e *Engine) Fire(ctx context.Context, userID int64, trigger string) int {
 		granted++
 	}
 	return granted
+}
+
+// scalePayouts multiplies the COUNTABLE lines of a per_unit payout by how many
+// units are owed.
+//
+// Only points scale. A reward paying "2 points and the Uploader medal" for 500
+// new grabs owes 1000 points and ONE medal — a medal is not a quantity, and
+// neither is a role, an achievement or a username effect. Scaling those would
+// hand out 500 identical badges, which is at best noise and at worst 500 rows
+// in someone else's table.
+func scalePayouts(lines []Payout, units int64) []Payout {
+	out := make([]Payout, 0, len(lines))
+	for _, p := range lines {
+		if p.Kind == PayoutPoints {
+			// int64 throughout the multiply: a large delta against a missing
+			// baseline is exactly the case that would overflow an int, and
+			// silently paying a negative amount is worse than paying too much.
+			scaled := int64(p.Amount) * units
+			p.Amount = int(scaled)
+		}
+		out = append(out, p)
+	}
+	return out
 }
