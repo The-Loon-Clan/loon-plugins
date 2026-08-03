@@ -1,9 +1,11 @@
-// Package economy is a worker-only plugin hosting the points-economy cron jobs
-// extracted from pkg/services: the annual "Points Tenure Bonus" and the
-// per-grab "Points Grab Bonus". No web surface — it only registers + runs the
-// two scheduled loops. The points-per-grab / points-per-year settings stay on
-// the host SettingsService (injected via JobDeps) so the admin settings page
-// keeps configuring them.
+// Package economy is a worker-only plugin hosting the per-grab "Points Grab
+// Bonus", extracted from pkg/services. No web surface — it registers and runs
+// one scheduled loop, and the points-per-grab rate stays on the host
+// SettingsService so the admin settings page keeps configuring it.
+//
+// The annual tenure bonus used to live here. It is a per_unit reward in the
+// rewards plugin now, because paying on the exact anniversary DAY meant a
+// missed run cost a member a year — see that plugin, and docs/REWARDS.md.
 package economy
 
 import (
