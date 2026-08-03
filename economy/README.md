@@ -1,19 +1,21 @@
 # economy plugin
 
-Automatic points earning. Two scheduled rules, no web surface at all — they run
-on the worker, credit the ledger, and are configured from the host's settings
+Automatic points earning. One scheduled rule, no web surface at all — it runs
+on the worker, credits the ledger, and is configured from the host's settings
 page.
 
-- **Points Tenure Bonus** — awards points on a member's registration
-  anniversary, one payment per completed year of membership.
 - **Points Grab Bonus** — pays uploaders for grabs on their releases, crediting
   only what is new since the last run.
+
+**Points Tenure Bonus moved out.** It is now a `per_unit` reward over completed
+years of membership in the rewards plugin, which retires the anniversary-DAY
+query that made a missed run cost a member a whole year. See docs/REWARDS.md.
 
 ## Surface
 
 No routes. `Metadata.Processes: ["worker"]`, so it never provisions on web or
-api. Both rules appear in `/admin/jobs` as *Points Tenure Bonus* and *Points
-Grab Bonus*, and can be triggered or paused there like any other job.
+api. The rule appears in `/admin/jobs` as *Points Grab Bonus*, and can be
+triggered or paused there like any other job.
 
 ## Data
 
@@ -35,14 +37,9 @@ with points nothing explains, or an explanation for points they do not have.
 
 `Deps` (SetDeps in the worker block before `core.Boot`):
 
-- `PointsPerGrab`, `PointsTenurePerYear` — read **per run**, not captured at
-  Provision, so an admin changing a rate takes effect on the next tick rather
-  than the next deploy. Zero disables that rule, which is the documented way to
-  turn one off.
-- `TenureEligible` — members due an anniversary award today. The host owns this
-  query **because it owns the idempotency**: the shipped implementation matches
-  the anniversary day and excludes anyone already paid `earn_tenure` this
-  calendar year.
+- `PointsPerGrab` — read **per run**, not captured at Provision, so an admin
+  changing the rate takes effect on the next tick rather than the next deploy.
+  Zero disables the rule, which is the documented way to turn it off.
 - `UploaderGrabTotals`, `GrabsAlreadyCredited` — lifetime grabs, and the
   high-water mark last paid to. The difference is the award, so a re-run
   credits nothing.
@@ -73,20 +70,23 @@ with points nothing explains, or an explanation for points they do not have.
 - Unit-tested: the award arithmetic, which is the only place this plugin can
   lose money. `grabAward` covers a high-water mark *ahead* of the total (a
   purge, a manual ledger edit) awarding nothing rather than a negative — a
-  negative award would debit a member for having fewer grabs. `tenureAward`
-  covers fractional years, future `created_at`, and disabled rates. The reason
-  codes are pinned too: `GrabsAlreadyCredited` filters the ledger on
-  `earn_grabs`, so renaming it makes every past award invisible and re-pays
-  every uploader's entire history.
+  negative award would debit a member for having fewer grabs. The reason code
+  is pinned too: `GrabsAlreadyCredited` filters the ledger on `earn_grabs`, so
+  renaming it makes every past award invisible and re-pays every uploader's
+  entire history.
 - Needs integration (live DB): the eligibility queries themselves live on the
   host, so what is untested here is the seam wiring rather than the SQL.
 
-## A known fragility, inherited
+## Why tenure left
 
-The tenure rule pays only on the exact anniversary **day** — the host query
-matches month and day against `CURRENT_DATE`. If the job does not run that day
-(box down, off-peak gate, a deploy landing badly), the member is not paid, and
-the next opportunity is a year later. The calendar-year guard that prevents
-double-paying is also what prevents catching up. This predates the extraction
-and moved with it; fixing it means widening the window and having the guard
-work off "paid for THIS anniversary" rather than "paid this calendar year".
+The tenure rule paid only on the exact anniversary **day** — the host query
+matched month and day against `CURRENT_DATE`. A run missed that day (box down,
+off-peak gate, a deploy landing badly) meant the member was not paid, and the
+next opportunity was a year later. The calendar-year guard that prevented
+double-paying was also what prevented catching up.
+
+That is not fixable by widening the window: the guard and the bug are the same
+mechanism. As a `per_unit` reward over completed years, there is no day to miss
+— the reference is the year count, and "you have reached year 4 and been paid
+for year 3" is answerable whenever the job next looks. It moved rather than
+being patched.

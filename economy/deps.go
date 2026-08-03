@@ -1,9 +1,6 @@
 package economy
 
-import (
-	"context"
-	"time"
-)
+import "context"
 
 // Deps are the host seams the points-economy jobs read through.
 //
@@ -21,28 +18,13 @@ type Deps struct {
 	// changing them on the settings page takes effect on the next tick instead
 	// of the next deploy. Zero disables the rule, which is the documented way
 	// to turn one off.
-	PointsPerGrab       func(ctx context.Context) int
-	PointsTenurePerYear func(ctx context.Context) int
-
-	// TenureEligible returns users due an anniversary award today.
-	//
-	// The host owns this query because it owns the idempotency: the shipped
-	// implementation matches the anniversary day AND excludes anyone already
-	// paid earn_tenure this calendar year. A rule that re-derived eligibility
-	// here would be a second opinion about who has been paid.
-	TenureEligible func(ctx context.Context) ([]TenureUser, error)
+	PointsPerGrab func(ctx context.Context) int
 
 	// UploaderGrabTotals is every uploader's lifetime grab count, and
 	// GrabsAlreadyCredited the high-water mark this plugin last paid to. The
 	// difference is what gets awarded — a delta, so a re-run credits nothing.
 	UploaderGrabTotals   func(ctx context.Context) ([]GrabTotal, error)
 	GrabsAlreadyCredited func(ctx context.Context, userID int) (int, error)
-}
-
-// TenureUser is a member due an anniversary award.
-type TenureUser struct {
-	ID        int
-	CreatedAt time.Time
 }
 
 // GrabTotal is one uploader's lifetime grabs.
@@ -59,8 +41,7 @@ func SetDeps(d Deps) { deps = &d }
 
 func (d *Deps) ready() bool {
 	return d != nil &&
-		d.PointsPerGrab != nil && d.PointsTenurePerYear != nil &&
-		d.TenureEligible != nil &&
+		d.PointsPerGrab != nil &&
 		d.UploaderGrabTotals != nil && d.GrabsAlreadyCredited != nil
 }
 
@@ -68,7 +49,4 @@ func (d *Deps) ready() bool {
 // what GrabsAlreadyCredited filters on, so renaming one silently makes every
 // past award invisible to the rule that wrote it — and the grab rule would
 // then pay every uploader their entire history again.
-const (
-	reasonTenure = "earn_tenure"
-	reasonGrabs  = "earn_grabs"
-)
+const reasonGrabs = "earn_grabs"

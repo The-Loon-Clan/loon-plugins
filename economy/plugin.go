@@ -18,15 +18,14 @@ func init() {
 }
 
 type Plugin struct {
-	tenure *tenureBonus
-	grab   *grabBonus
+	grab *grabBonus
 }
 
 func (p *Plugin) Metadata() core.Metadata {
 	return core.Metadata{
 		Name:        "economy",
 		Version:     "1.0.0",
-		Description: "Points-economy worker jobs: annual tenure bonus + per-grab uploader bonus.",
+		Description: "Points-economy worker job: the per-grab uploader bonus.",
 		Processes:   []string{"worker"},
 	}
 }
@@ -36,19 +35,17 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return fmt.Errorf("economy: SetDeps not called, or missing a seam — wire it in main()'s worker block before core.Boot")
 	}
 	if c.Points == nil {
-		// Both jobs exist to move points. Without the ledger they would run,
+		// The job exists to move points. Without the ledger it would run,
 		// log success and award nothing, which is worse than refusing.
 		return fmt.Errorf("economy: Core.Points is nil — there is no ledger to award into")
 	}
-	p.tenure = newTenureBonus(*deps, c.Points)
 	p.grab = newGrabBonus(*deps, c.Points)
 	return nil
 }
 
 func (p *Plugin) Start(ctx context.Context) error {
-	// ctx is the host root context, cancelled on SIGTERM, so both loops exit
+	// ctx is the host root context, cancelled on SIGTERM, so the loop exits
 	// cleanly on docker stop rather than being killed mid-award.
-	p.tenure.start(ctx)
 	p.grab.start(ctx)
 	return nil
 }

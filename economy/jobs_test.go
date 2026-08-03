@@ -1,9 +1,6 @@
 package economy
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 // The grab bonus credits a DELTA against a high-water mark read back from the
 // ledger. Every way this goes wrong is a subtraction in the wrong direction,
@@ -36,36 +33,6 @@ func TestGrabAwardOnlyPaysWhatIsNew(t *testing.T) {
 	}
 }
 
-// Tenure pays completed years. It must never pay a fraction, and must never
-// pay an account that has not reached its first year.
-func TestTenureAwardPaysWholeYearsOnly(t *testing.T) {
-	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
-	day := 24 * time.Hour
-
-	for _, c := range []struct {
-		name      string
-		created   time.Time
-		perYear   int
-		wantYears int
-		wantPts   int
-	}{
-		{"exactly one year", now.Add(-365 * day), 10, 1, 10},
-		{"three years", now.Add(-3 * 365 * day), 10, 3, 30},
-		{"one day short of a year", now.Add(-364 * day), 10, 0, 0},
-		{"brand new account", now.Add(-day), 10, 0, 0},
-		{"rate of zero disables the rule", now.Add(-3 * 365 * day), 0, 0, 0},
-		// A created_at in the future is corrupt data, not a very old member.
-		{"created in the future", now.Add(365 * day), 10, 0, 0},
-		{"zero time", time.Time{}, 10, 0, 0},
-	} {
-		gotYears, gotPts := tenureAward(c.created, now, c.perYear)
-		if gotYears != c.wantYears || gotPts != c.wantPts {
-			t.Errorf("%s: tenureAward = %d years/%d pts, want %d/%d",
-				c.name, gotYears, gotPts, c.wantYears, c.wantPts)
-		}
-	}
-}
-
 // The ledger reason codes are load-bearing, not cosmetic: GrabsAlreadyCredited
 // filters the ledger on earn_grabs to find the high-water mark. Rename it and
 // every past award becomes invisible to the rule that wrote it — which would
@@ -73,8 +40,5 @@ func TestTenureAwardPaysWholeYearsOnly(t *testing.T) {
 func TestLedgerReasonCodesAreStable(t *testing.T) {
 	if reasonGrabs != "earn_grabs" {
 		t.Errorf("reasonGrabs = %q; changing it re-pays every uploader's whole history", reasonGrabs)
-	}
-	if reasonTenure != "earn_tenure" {
-		t.Errorf("reasonTenure = %q; the host's eligibility query filters on this exact string", reasonTenure)
 	}
 }
