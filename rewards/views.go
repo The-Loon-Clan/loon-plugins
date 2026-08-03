@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,16 @@ type adminVM struct {
 	Now     time.Time
 	Msg     string
 	Err     string
+
+	// The event whose windows are being authored, when one is selected.
+	// Zero means the windows panel is collapsed.
+	PickedEvent int64
+	PickedSlug  string
+	Windows     []Window
+	// Pre-formatted for <input type="datetime-local">, which will not accept
+	// an RFC3339 string with a zone.
+	DefaultStart string
+	DefaultEnd   string
 }
 
 func (p *Plugin) registerViews(c *core.Core) error {
@@ -40,10 +51,15 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		Description: "Events, what they pay, and what has actually been granted.",
 		Nav:         core.NavHint{Group: "Operations"},
 		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.render(gc.Request.Context(), gc.Query("msg"), gc.Query("err"))
+			// event id reaches SQL as a bound parameter; an unknown value
+			// simply lists no windows.
+			ev, _ := strconv.ParseInt(gc.Query("event"), 10, 64)
+			return p.render(gc.Request.Context(), ev, gc.Query("msg"), gc.Query("err"))
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			"event-create":  p.actionCreateEvent,
+			"window-add":    p.actionAddWindow,
+			"window-del":    p.actionDeleteWindow,
 			"event-toggle":  p.actionToggleEvent,
 			"reward-create": p.actionCreateReward,
 			"reward-toggle": p.actionToggleReward,
@@ -99,9 +115,9 @@ func (p *Plugin) parseTemplates() error {
 	return nil
 }
 
-func (p *Plugin) render(ctx context.Context, msg, errMsg string) (template.HTML, error) {
+func (p *Plugin) render(ctx context.Context, pickedEvent int64, msg, errMsg string) (template.HTML, error) {
 	now := time.Now()
-	vm := adminVM{Now: now, Msg: msg, Err: errMsg}
+	vm := adminVM{Now: now, Msg: msg, Err: errMsg, PickedEvent: pickedEvent}
 	var err error
 	if vm.Events, err = p.admin.ListEventStats(ctx, now); err != nil {
 		return "", err
@@ -111,6 +127,20 @@ func (p *Plugin) render(ctx context.Context, msg, errMsg string) (template.HTML,
 	}
 	if vm.Grants, err = p.admin.RecentGrants(ctx, 50); err != nil {
 		return "", err
+	}
+	if pickedEvent != 0 {
+		for _, e := range vm.Events {
+			if e.ID == pickedEvent {
+				vm.PickedSlug = e.Slug
+			}
+		}
+		if vm.Windows, err = p.admin.ListWindows(ctx, pickedEvent, 50); err != nil {
+			return "", err
+		}
+		// Sensible defaults so the picker opens on today rather than 1970.
+		start := now.UTC().Truncate(24 * time.Hour)
+		vm.DefaultStart = start.Format(localTimeLayout)
+		vm.DefaultEnd = start.Add(24 * time.Hour).Format(localTimeLayout)
 	}
 	var sb strings.Builder
 	if err := p.tmpl.ExecuteTemplate(&sb, "rewards_admin.html", vm); err != nil {
@@ -122,12 +152,57 @@ func (p *Plugin) render(ctx context.Context, msg, errMsg string) (template.HTML,
 // redirect sends the operator back to the page with a message. Actions return
 // no HTML of their own — the host re-renders.
 func (p *Plugin) redirect(gc *gin.Context, msg, errMsg string) (template.HTML, error) {
-	q := "msg=" + msg
+	q := url.Values{}
 	if errMsg != "" {
-		q = "err=" + errMsg
+		q.Set("err", errMsg)
+	} else if msg != "" {
+		q.Set("msg", msg)
 	}
-	gc.Redirect(http.StatusSeeOther, "/admin/p/rewards?"+q)
+	// Keep the windows panel open across an add/delete, so authoring a run of
+	// them is not twelve round trips through a collapsed page.
+	if ev := gc.PostForm("event_id"); ev != "" {
+		q.Set("event", ev)
+	}
+	gc.Redirect(http.StatusSeeOther, "/admin/p/rewards?"+q.Encode())
 	return "", nil
+}
+
+// localTimeLayout is what <input type="datetime-local"> emits and accepts. It
+// carries no zone, so both directions are interpreted as UTC explicitly rather
+// than as whatever the server happens to be set to.
+const localTimeLayout = "2006-01-02T15:04"
+
+func (p *Plugin) actionAddWindow(gc *gin.Context) (template.HTML, error) {
+	eventID, err := strconv.ParseInt(gc.PostForm("event_id"), 10, 64)
+	if err != nil {
+		return p.redirect(gc, "", "bad event id")
+	}
+	start, err := time.ParseInLocation(localTimeLayout, gc.PostForm("starts_at"), time.UTC)
+	if err != nil {
+		return p.redirect(gc, "", "bad start time")
+	}
+	end, err := time.ParseInLocation(localTimeLayout, gc.PostForm("ends_at"), time.UTC)
+	if err != nil {
+		return p.redirect(gc, "", "bad end time")
+	}
+	if !end.After(start) {
+		return p.redirect(gc, "", "the window must end after it starts")
+	}
+	if err := p.admin.AddWindow(gc.Request.Context(), Window{EventID: eventID, StartsAt: start, EndsAt: end}); err != nil {
+		return p.redirect(gc, "", err.Error())
+	}
+	return p.redirect(gc, "window added", "")
+}
+
+func (p *Plugin) actionDeleteWindow(gc *gin.Context) (template.HTML, error) {
+	id, err := strconv.ParseInt(gc.PostForm("id"), 10, 64)
+	if err != nil {
+		return p.redirect(gc, "", "bad window id")
+	}
+	if err := p.admin.DeleteWindow(gc.Request.Context(), id); err != nil {
+		return p.redirect(gc, "", err.Error())
+	}
+	return p.redirect(gc, "window deleted", "")
 }
 
 func (p *Plugin) actionCreateEvent(gc *gin.Context) (template.HTML, error) {

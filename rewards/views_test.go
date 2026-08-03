@@ -99,3 +99,51 @@ func TestAdminTemplateRendersEmpty(t *testing.T) {
 		}
 	}
 }
+
+// The window-authoring panel is the path a one-off event depends on entirely:
+// nothing generates windows for it, so if this panel does not render, the
+// event can never become earnable. Rendered here with rows and empty.
+func TestAdminTemplateRendersWindowPanel(t *testing.T) {
+	p := &Plugin{}
+	if err := p.parseTemplates(); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	vm := adminVM{
+		Now: now, PickedEvent: 3, PickedSlug: "launch",
+		DefaultStart: "2026-03-01T00:00", DefaultEnd: "2026-03-02T00:00",
+		Events: []EventStats{{Event: Event{ID: 3, Slug: "launch", Timezone: "UTC", Enabled: true}}},
+		Windows: []Window{
+			{ID: 90, EventID: 3, StartsAt: now, EndsAt: now.Add(48 * time.Hour)},
+		},
+	}
+	var sb strings.Builder
+	if err := p.tmpl.ExecuteTemplate(&sb, "rewards_admin.html", vm); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := sb.String()
+	for _, want := range []string{
+		"Windows for", "launch",
+		`type="datetime-local"`,    // the calendar picker, not a text box
+		`value="2026-03-01T00:00"`, // and it opens on today, not 1970
+		"Add window", "delete",
+		// $.PickedEvent inside the range — a scope slip here would silently
+		// post event_id="" and collapse the panel on every delete.
+		`name="event_id" value="3"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("window panel missing %q", want)
+		}
+	}
+
+	// Empty: the state a freshly-created one-off event is in, and the one
+	// where the operator most needs telling what to do next.
+	vm.Windows = nil
+	sb.Reset()
+	if err := p.tmpl.ExecuteTemplate(&sb, "rewards_admin.html", vm); err != nil {
+		t.Fatalf("execute empty: %v", err)
+	}
+	if !strings.Contains(sb.String(), "cannot be earned until there is one") {
+		t.Error("empty window list does not explain the consequence")
+	}
+}

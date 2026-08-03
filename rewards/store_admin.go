@@ -36,6 +36,13 @@ type AdminStore interface {
 	RecentGrants(ctx context.Context, limit int) ([]GrantRow, error)
 
 	CreateEvent(ctx context.Context, ev Event) (int64, error)
+	// AddWindow authors one window by hand. The only way a one-off event
+	// (no cron, so nothing generates for it) ever becomes usable.
+	AddWindow(ctx context.Context, w Window) error
+	// DeleteWindow removes an unused window. Refuses one that grants are
+	// keyed on — see the implementation.
+	DeleteWindow(ctx context.Context, windowID int64) error
+	ListWindows(ctx context.Context, eventID int64, limit int) ([]Window, error)
 	CreateReward(ctx context.Context, r Reward) (int64, error)
 	SetRewardEnabled(ctx context.Context, rewardID int64, enabled bool) error
 	SetEventEnabled(ctx context.Context, eventID int64, enabled bool) error
@@ -207,4 +214,49 @@ func derefStr(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func (s *PGStore) AddWindow(ctx context.Context, w Window) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO event_windows (event_id, starts_at, ends_at) VALUES ($1,$2,$3)
+		ON CONFLICT (event_id, starts_at) DO NOTHING`, w.EventID, w.StartsAt, w.EndsAt)
+	if err != nil {
+		return fmt.Errorf("add window: %w", err)
+	}
+	return nil
+}
+
+// DeleteWindow refuses to remove a window any grant is keyed on.
+//
+// reward_grants.reference holds the window id for a recurring reward, and it
+// is not a foreign key -- it cannot be, because the same column means a
+// high-water mark for a per_unit reward. So nothing at the schema level stops
+// this, and deleting the window a grant was issued against would leave that
+// grant pointing at nothing: the member could then be paid again for a period
+// they were already paid for.
+func (s *PGStore) DeleteWindow(ctx context.Context, windowID int64) error {
+	var used int
+	err := s.db.GetContext(ctx, &used, `
+		SELECT count(*) FROM reward_grants g
+		  JOIN rewards r ON r.id = g.reward_id
+		 WHERE r.kind = 'recurring' AND g.reference = $1`, windowID)
+	if err != nil {
+		return fmt.Errorf("check window use: %w", err)
+	}
+	if used > 0 {
+		return fmt.Errorf("window %d has %d grant(s) keyed on it; deleting it would let those members be paid again", windowID, used)
+	}
+	_, err = s.db.ExecContext(ctx, `DELETE FROM event_windows WHERE id = $1`, windowID)
+	return err
+}
+
+func (s *PGStore) ListWindows(ctx context.Context, eventID int64, limit int) ([]Window, error) {
+	var out []Window
+	err := s.db.SelectContext(ctx, &out, `
+		SELECT id, event_id, starts_at, ends_at FROM event_windows
+		 WHERE event_id = $1 ORDER BY starts_at DESC LIMIT $2`, eventID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list windows: %w", err)
+	}
+	return out, nil
 }

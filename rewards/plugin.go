@@ -35,6 +35,12 @@ var migrations embed.FS
 // plugin is not installed, which is a supported configuration.
 const TriggerExtension = "rewards.trigger"
 
+// AdminExtension is the registry key the configuration store is published
+// under. The host's ops API consumes it to serve /ops/rewards; unlike the
+// trigger it is published on every process, because the ops listener runs
+// everywhere and should answer wherever the plugin booted.
+const AdminExtension = "rewards.admin"
+
 func init() {
 	core.RegisterPlugin("rewards", func() core.Plugin { return &Plugin{} })
 }
@@ -108,6 +114,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 
 	// The host's login path calls Fire and Available through this.
 	c.Register(TriggerExtension, p.engine)
+	// ...and the ops API reads and writes configuration through this.
+	c.Register(AdminExtension, p.admin)
 
 	// The admin page is web-only: the worker has no router, and registering a
 	// view there would be a boot error rather than a harmless no-op.

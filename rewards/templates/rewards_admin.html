@@ -21,7 +21,7 @@
           <td>{{if .Cron}}<code>{{str .Cron}}</code>{{else}}<span class="text-muted">one-off</span>{{end}}</td>
           <td>{{if .Duration}}{{dur .Duration}}{{else}}<span class="text-muted">until next firing</span>{{end}}</td>
           <td>{{.Timezone}}</td>
-          <td>{{.Windows}}</td>
+          <td><a href="/admin/p/rewards?event={{.ID}}">{{.Windows}}</a></td>
           <td>{{window .Current}}</td>
           <td>{{window .Next}}</td>
           <td>
@@ -54,9 +54,51 @@
       <div class="col-12"><span class="text-muted small">
         Leave <strong>duration</strong> blank for a reset: the window runs until the next firing, contiguous.
         Set it (<code>1536h</code> = 64 days) for a season that closes and leaves a gap.
+        Leave <strong>cron</strong> blank for a one-off &mdash; then author its windows by hand below.
       </span></div>
     </form>
   </div>
+
+  {{if .PickedEvent}}
+  <div class="card-body border-top">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <strong>Windows for <code>{{.PickedSlug}}</code></strong>
+      <a class="text-muted small text-decoration-none" href="/admin/p/rewards">close</a>
+    </div>
+    <form method="post" action="/admin/p/rewards/window-add" class="row g-2 align-items-end mb-3">
+      <input type="hidden" name="event_id" value="{{.PickedEvent}}">
+      <div class="col-md-3"><label class="form-label small mb-0">Starts (UTC)</label>
+        <input type="datetime-local" name="starts_at" value="{{.DefaultStart}}" class="form-control form-control-sm" required></div>
+      <div class="col-md-3"><label class="form-label small mb-0">Ends (UTC)</label>
+        <input type="datetime-local" name="ends_at" value="{{.DefaultEnd}}" class="form-control form-control-sm" required></div>
+      <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Add window</button></div>
+      <div class="col-12"><span class="text-muted small">
+        Half-open: a member acting exactly at the end instant belongs to the NEXT window.
+        For a cron event these are generated &mdash; adding by hand is for one-offs.
+      </span></div>
+    </form>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>ID</th><th>Starts</th><th>Ends</th><th></th></tr></thead>
+        <tbody>
+        {{range .Windows}}
+          <tr>
+            <td>{{.ID}}</td><td>{{ts .StartsAt}}</td><td>{{ts .EndsAt}}</td>
+            <td><form method="post" action="/admin/p/rewards/window-del" class="d-inline">
+              <input type="hidden" name="id" value="{{.ID}}">
+              <input type="hidden" name="event_id" value="{{$.PickedEvent}}">
+              <button class="btn btn-sm btn-outline-danger py-0"
+                      title="Refused if any grant is keyed on this window.">delete</button>
+            </form></td>
+          </tr>
+        {{else}}
+          <tr><td colspan="4" class="text-muted">No windows. A reward on this event cannot be earned until there is one.</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{end}}
 </div>
 
 <div class="card mb-3">
@@ -118,7 +160,9 @@
         </select></div>
       <div class="col-md-1"><label class="form-label small mb-0">Points</label>
         <input name="points" class="form-control form-control-sm" placeholder="1"></div>
-      <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Create reward</button></div>
+      <div class="col-md-1"><label class="form-label small mb-0">Expires</label>
+        <input name="expires_after" class="form-control form-control-sm" placeholder="never"></div>
+      <div class="col-md-1"><button class="btn btn-sm btn-primary w-100">Create</button></div>
       <div class="col-12"><span class="text-muted small">
         Created <strong>disabled</strong> &mdash; check the payout line, then enable. A <code>medal</code> line needs a
         registered handler or the grant is refused; points work out of the box.

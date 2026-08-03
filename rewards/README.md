@@ -14,10 +14,19 @@ rule re-answered it. Getting it wrong pays somebody twice.
 
 ## Surface
 
-No routes of its own yet. The engine is published on the extension registry as
-`rewards.trigger`; the host's login (or upload, or signup) path looks it up and
-calls it. `Metadata.Processes: ["web", "worker"]` — web resolves and settles
-claims, worker materialises event windows and expires lapsed grants.
+An admin page at `/admin/p/rewards` (SlotAdminPage, Operations group): events
+with their window counts and currently-open window, rewards with their payout
+lines, the newest 50 grants, and forms to create events, author windows by
+hand, create rewards, and enable or disable either. Plus a *Test on me* button
+that runs a real grant against the operator's own balance.
+
+The engine is published on the extension registry as `rewards.trigger`; the
+host's login path looks it up and calls it. The configuration store is
+published as `rewards.admin`, which the host's ops API serves as
+`/ops/rewards` for machine callers.
+
+`Metadata.Processes: ["web", "worker"]` — web renders the page, resolves and
+settles claims; worker materialises event windows and expires lapsed grants.
 
 ## Data
 
@@ -81,6 +90,7 @@ appear on the wrong days with no error anywhere.
 - Extensions PUBLISHED: **`rewards.trigger`** — the `*Engine`. The host's login
   handler calls `Fire` (auto-delivery, detached) and `Available` (claim
   delivery, synchronous, because the response has to render the button).
+  **`rewards.admin`** — the `AdminStore`, consumed by the host's ops API.
 - Extensions CONSUMED: **`rewards.payout.<kind>`** for `role`, `medal`,
   `achievement`, `username_fx` — each a `PayoutHandler`. Optional: a host
   registering none can still run points-only rewards. Registered under the
@@ -127,9 +137,29 @@ already left the building.
 itself. That is deliberate: a mock that let a double-book through would hide the
 one thing the whole model rests on.
 
+## Editing, and what it deliberately refuses
+
+Rewards are created **disabled**, through both the page and the API. One that
+starts paying the moment it is typed leaves no chance to check the payout line
+first, and un-paying is not a thing.
+
+Deleting a window is refused when any grant is keyed on it. `reference` holds
+the window id for a recurring reward but cannot be a foreign key — the same
+column means a high-water mark for a `per_unit` one — so nothing at the schema
+level stops it, and removing the window a grant was issued against would let
+that member be paid again for a period they were already paid for.
+
+There is **no way to pay a named member**, from the page or the API. Rewards
+are rules; a per-member payment typed into a form is the ad-hoc thing this
+model replaces.
+
 ## Not built yet
 
 The design (`docs/REWARDS.md` in the private site repo) also specifies
-achievements (a counter crossing a threshold), retroactive issuances, the
-spreadsheet-style admin editor, and the MCP surface. The schema for issuances
-is here; the logic is not. Achievements have neither yet.
+achievements (a counter crossing a threshold) and retroactive issuances. The
+schema for issuances is here; the logic is not. Achievements have neither yet.
+
+Editing is create-and-toggle only — no in-place edit of an existing event or
+reward, and no adding a payout line after creation. Deleting and recreating
+works, and for a reward with grants against it that is arguably the honest
+operation anyway.
