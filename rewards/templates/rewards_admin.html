@@ -86,8 +86,8 @@
             </form>
             <form method="post" action="/admin/p/rewards/test-grant" class="d-inline">
               <input type="hidden" name="id" value="{{.ID}}">
-              <button class="btn btn-sm btn-outline-warning"
-                      title="Grants this reward to YOU, right now, using your own balance.">Test on me</button>
+              <button class="btn btn-sm btn-outline-warning"{{if not .Enabled}} disabled{{end}}
+                      title="Grants this reward to YOU, right now, on your own balance. Enable the reward first &mdash; a claim goes through the real path, which refuses a disabled reward.">Test on me</button>
             </form>
           </td>
         </tr>
