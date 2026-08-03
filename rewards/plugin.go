@@ -19,6 +19,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"html/template"
 	"log"
 	"time"
 
@@ -41,8 +42,10 @@ func init() {
 type Plugin struct {
 	core   *core.Core
 	store  Store
+	admin  AdminStore
 	engine *Engine
 	job    *schedule.JobInfo
+	tmpl   *template.Template
 }
 
 var _ core.Plugin = (*Plugin)(nil)
@@ -61,7 +64,8 @@ func (p *Plugin) Metadata() core.Metadata {
 
 func (p *Plugin) Provision(c *core.Core) error {
 	p.core = c
-	p.store = NewPGStore(c.Storage.SchemaDB("rewards").DB())
+	pg := NewPGStore(c.Storage.SchemaDB("rewards").DB())
+	p.store, p.admin = pg, pg
 	p.engine = NewEngine(p.store, log.Printf)
 
 	// Points is the one payout kind this plugin implements itself, because it
@@ -104,7 +108,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 
 	// The host's login path calls Fire and Available through this.
 	c.Register(TriggerExtension, p.engine)
-	return nil
+
+	// The admin page is web-only: the worker has no router, and registering a
+	// view there would be a boot error rather than a harmless no-op.
+	if c.Process == "worker" {
+		return nil
+	}
+	return p.registerViews(c)
 }
 
 // Start launches the window generator on the worker only.

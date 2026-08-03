@@ -1,0 +1,278 @@
+package rewards
+
+import (
+	"context"
+	"embed"
+	"fmt"
+	"html/template"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon/core"
+)
+
+//go:embed templates/*.html
+var viewFS embed.FS
+
+// The admin page answers the three questions an operator has about a rewards
+// system they cannot see: what is configured, is the machinery running (are
+// windows being materialised?), and is anything actually being granted.
+
+type adminVM struct {
+	Events  []EventStats
+	Rewards []Reward
+	Grants  []GrantRow
+	Now     time.Time
+	Msg     string
+	Err     string
+}
+
+func (p *Plugin) registerViews(c *core.Core) error {
+	if err := p.parseTemplates(); err != nil {
+		return err
+	}
+	return c.RegisterView(core.View{
+		Slug: "rewards", Title: "Rewards", Slot: core.SlotAdminPage,
+		Description: "Events, what they pay, and what has actually been granted.",
+		Nav:         core.NavHint{Group: "Operations"},
+		Render: func(gc *gin.Context) (template.HTML, error) {
+			return p.render(gc.Request.Context(), gc.Query("msg"), gc.Query("err"))
+		},
+		Actions: map[string]func(*gin.Context) (template.HTML, error){
+			"event-create":  p.actionCreateEvent,
+			"event-toggle":  p.actionToggleEvent,
+			"reward-create": p.actionCreateReward,
+			"reward-toggle": p.actionToggleReward,
+			"test-grant":    p.actionTestGrant,
+		},
+	})
+}
+
+// parseTemplates is split out so a test can render the page without a Core.
+func (p *Plugin) parseTemplates() error {
+	t, err := template.New("").Funcs(template.FuncMap{
+		"ts": func(t time.Time) string {
+			if t.IsZero() {
+				return "—"
+			}
+			return t.UTC().Format("2006-01-02 15:04")
+		},
+		"dur": func(d *time.Duration) string {
+			if d == nil {
+				return "—"
+			}
+			return d.String()
+		},
+		"str": derefStr,
+		"payouts": func(ps []Payout) string {
+			if len(ps) == 0 {
+				// Worth shouting about: this reward will be refused at grant
+				// time, and the admin table is where that becomes visible.
+				return "NONE — will not grant"
+			}
+			parts := make([]string, 0, len(ps))
+			for _, p := range ps {
+				if p.Kind == PayoutPoints {
+					parts = append(parts, fmt.Sprintf("%d points", p.Amount))
+					continue
+				}
+				parts = append(parts, string(p.Kind)+" "+p.Target)
+			}
+			return strings.Join(parts, " + ")
+		},
+		"window": func(w *Window) string {
+			if w == nil {
+				return "—"
+			}
+			return fmt.Sprintf("#%d %s → %s", w.ID,
+				w.StartsAt.UTC().Format("01-02 15:04"), w.EndsAt.UTC().Format("01-02 15:04"))
+		},
+	}).ParseFS(viewFS, "templates/*.html")
+	if err != nil {
+		return err
+	}
+	p.tmpl = t
+	return nil
+}
+
+func (p *Plugin) render(ctx context.Context, msg, errMsg string) (template.HTML, error) {
+	now := time.Now()
+	vm := adminVM{Now: now, Msg: msg, Err: errMsg}
+	var err error
+	if vm.Events, err = p.admin.ListEventStats(ctx, now); err != nil {
+		return "", err
+	}
+	if vm.Rewards, err = p.admin.ListRewards(ctx); err != nil {
+		return "", err
+	}
+	if vm.Grants, err = p.admin.RecentGrants(ctx, 50); err != nil {
+		return "", err
+	}
+	var sb strings.Builder
+	if err := p.tmpl.ExecuteTemplate(&sb, "rewards_admin.html", vm); err != nil {
+		return "", err
+	}
+	return template.HTML(sb.String()), nil
+}
+
+// redirect sends the operator back to the page with a message. Actions return
+// no HTML of their own — the host re-renders.
+func (p *Plugin) redirect(gc *gin.Context, msg, errMsg string) (template.HTML, error) {
+	q := "msg=" + msg
+	if errMsg != "" {
+		q = "err=" + errMsg
+	}
+	gc.Redirect(http.StatusSeeOther, "/admin/p/rewards?"+q)
+	return "", nil
+}
+
+func (p *Plugin) actionCreateEvent(gc *gin.Context) (template.HTML, error) {
+	slug := strings.TrimSpace(gc.PostForm("slug"))
+	if slug == "" {
+		return p.redirect(gc, "", "slug is required")
+	}
+	cron := strings.TrimSpace(gc.PostForm("cron"))
+	// Validate here rather than at generation time: a bad expression caught on
+	// the form is a message someone reads, and one caught at 3am inside the
+	// generator is an event that silently never produces windows.
+	if cron != "" {
+		if err := ValidateCron(cron); err != nil {
+			return p.redirect(gc, "", "bad cron: "+err.Error())
+		}
+	}
+	tz := strings.TrimSpace(gc.PostForm("timezone"))
+	if tz == "" {
+		tz = "UTC"
+	}
+	if _, err := time.LoadLocation(tz); err != nil {
+		return p.redirect(gc, "", "unknown timezone "+tz)
+	}
+
+	ev := Event{Slug: slug, Name: strings.TrimSpace(gc.PostForm("name")), Timezone: tz, Enabled: true}
+	if cron != "" {
+		ev.Cron = &cron
+	}
+	// Blank duration is the WHOLE point of a reset: the window runs until the
+	// next firing rather than closing.
+	if raw := strings.TrimSpace(gc.PostForm("duration")); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d <= 0 {
+			return p.redirect(gc, "", "duration must be a positive Go duration like 1536h")
+		}
+		if cron == "" {
+			return p.redirect(gc, "", "a duration needs a cron — 'closes after' has no 'starting when'")
+		}
+		ev.Duration = &d
+	}
+	if _, err := p.admin.CreateEvent(gc.Request.Context(), ev); err != nil {
+		return p.redirect(gc, "", err.Error())
+	}
+	return p.redirect(gc, "event+"+slug+"+created", "")
+}
+
+func (p *Plugin) actionToggleEvent(gc *gin.Context) (template.HTML, error) {
+	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
+	on := gc.PostForm("enabled") == "1"
+	if err := p.admin.SetEventEnabled(gc.Request.Context(), id, on); err != nil {
+		return p.redirect(gc, "", err.Error())
+	}
+	return p.redirect(gc, "event+updated", "")
+}
+
+func (p *Plugin) actionCreateReward(gc *gin.Context) (template.HTML, error) {
+	ctx := gc.Request.Context()
+	slug := strings.TrimSpace(gc.PostForm("slug"))
+	if slug == "" {
+		return p.redirect(gc, "", "slug is required")
+	}
+	kind := Kind(gc.PostForm("kind"))
+	switch kind {
+	case KindOneOff, KindRecurring, KindPerUnit:
+	default:
+		return p.redirect(gc, "", "unknown kind")
+	}
+	delivery := Delivery(gc.PostForm("delivery"))
+	if delivery != DeliveryAuto && delivery != DeliveryClaim {
+		return p.redirect(gc, "", "unknown delivery")
+	}
+
+	r := Reward{
+		Slug: slug, Name: strings.TrimSpace(gc.PostForm("name")), Kind: kind,
+		Trigger: strings.TrimSpace(gc.PostForm("trigger")), Delivery: delivery,
+		// Deliberately created DISABLED. A reward that starts paying the
+		// moment it is typed leaves no chance to check the payout line first,
+		// and un-paying is not a thing.
+		Enabled: false,
+	}
+	if raw := strings.TrimSpace(gc.PostForm("event_id")); raw != "" && raw != "0" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return p.redirect(gc, "", "bad event id")
+		}
+		r.EventID = &id
+	}
+	if kind == KindRecurring && r.EventID == nil {
+		return p.redirect(gc, "", "a recurring reward needs an event — that is its reset")
+	}
+	if raw := strings.TrimSpace(gc.PostForm("expires_after")); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d <= 0 {
+			return p.redirect(gc, "", "expiry must be a positive Go duration like 720h")
+		}
+		r.ExpiresAfter = &d
+	}
+
+	points, _ := strconv.Atoi(strings.TrimSpace(gc.PostForm("points")))
+	if points > 0 {
+		r.Payouts = append(r.Payouts, Payout{Kind: PayoutPoints, Amount: points})
+	}
+	if target := strings.TrimSpace(gc.PostForm("medal")); target != "" {
+		r.Payouts = append(r.Payouts, Payout{Kind: PayoutMedal, Target: target})
+	}
+	if len(r.Payouts) == 0 {
+		return p.redirect(gc, "", "a reward with no payout lines would grant nothing")
+	}
+
+	if _, err := p.admin.CreateReward(ctx, r); err != nil {
+		return p.redirect(gc, "", err.Error())
+	}
+	return p.redirect(gc, "reward+"+slug+"+created+(disabled)", "")
+}
+
+func (p *Plugin) actionToggleReward(gc *gin.Context) (template.HTML, error) {
+	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
+	on := gc.PostForm("enabled") == "1"
+	if err := p.admin.SetRewardEnabled(gc.Request.Context(), id, on); err != nil {
+		return p.redirect(gc, "", err.Error())
+	}
+	return p.redirect(gc, "reward+updated", "")
+}
+
+// actionTestGrant runs one reward against the signed-in admin, end to end.
+//
+// Against THEMSELVES and nobody else: there is deliberately no "grant to user
+// N" box. Rewards are rules, and a per-member grant typed into a form is the
+// one thing this whole model exists to stop being ad hoc. Testing on your own
+// balance costs the operator their own points and nobody else's.
+func (p *Plugin) actionTestGrant(gc *gin.Context) (template.HTML, error) {
+	rewardID, err := strconv.ParseInt(gc.PostForm("id"), 10, 64)
+	if err != nil {
+		return p.redirect(gc, "", "bad reward id")
+	}
+	u, ok := p.core.Auth.CurrentUser(gc)
+	if !ok || u == nil {
+		return p.redirect(gc, "", "not signed in")
+	}
+	g, err := p.engine.Claim(gc.Request.Context(), int64(u.ID), rewardID)
+	if err != nil {
+		// ErrAlreadyGranted is the expected answer on a second press and is
+		// exactly what a test wants to see — report it plainly rather than as
+		// a failure.
+		return p.redirect(gc, "", err.Error())
+	}
+	return p.redirect(gc, fmt.Sprintf("granted+%d+(ref+%d,+%s)", g.ID, g.Reference, g.State), "")
+}
