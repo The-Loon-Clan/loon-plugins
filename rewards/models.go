@@ -106,15 +106,20 @@ type Reward struct {
 
 // Grant is the record of what is owed or was paid.
 type Grant struct {
-	ID        int64      `db:"id"`
-	RewardID  int64      `db:"reward_id"`
-	UserID    int64      `db:"user_id"`
-	Reference int64      `db:"reference"`
-	State     GrantState `db:"state"`
-	Reason    string     `db:"reason"`
-	CreatedAt time.Time  `db:"created_at"`
-	ExpiresAt *time.Time `db:"expires_at"`
-	SettledAt *time.Time `db:"settled_at"`
+	ID       int64 `db:"id"`
+	RewardID int64 `db:"reward_id"`
+	// RewardSlug is join-derived on read, never stored: the grant row keeps
+	// only reward_id. It exists so a payout handler can attribute what it hands
+	// over — a ledger row that says which reward paid is the difference between
+	// an auditable credit and 30,000 points labelled "reward".
+	RewardSlug string     `db:"reward_slug"`
+	UserID     int64      `db:"user_id"`
+	Reference  int64      `db:"reference"`
+	State      GrantState `db:"state"`
+	Reason     string     `db:"reason"`
+	CreatedAt  time.Time  `db:"created_at"`
+	ExpiresAt  *time.Time `db:"expires_at"`
+	SettledAt  *time.Time `db:"settled_at"`
 
 	// Frozen at grant time — see reward_grant_payouts. Reading these back
 	// through the reward would let an admin's edit change what an

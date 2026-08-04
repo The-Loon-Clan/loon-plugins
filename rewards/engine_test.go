@@ -12,24 +12,26 @@ import (
 type fixture struct {
 	eng   *Engine
 	store *MemStore
-	paid  map[int64]int // userID -> points credited
+	paid  map[int64]int    // userID -> points credited
+	slugs map[int64]string // userID -> the reward slug the last credit named
 	mu    sync.Mutex
 	fail  error // when set, the points handler returns it
 }
 
 func newFixture(t *testing.T, now time.Time) *fixture {
 	t.Helper()
-	f := &fixture{store: NewMemStore(), paid: map[int64]int{}}
+	f := &fixture{store: NewMemStore(), paid: map[int64]int{}, slugs: map[int64]string{}}
 	f.store.Now = now
 	f.eng = NewEngine(f.store, func(string, ...any) {})
 	f.eng.now = func() time.Time { return now }
-	f.eng.Handle(PayoutPoints, func(ctx context.Context, userID int64, p Payout) error {
+	f.eng.Handle(PayoutPoints, func(ctx context.Context, g Grant, p Payout) error {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		if f.fail != nil {
 			return f.fail
 		}
-		f.paid[userID] += p.Amount
+		f.paid[g.UserID] += p.Amount
+		f.slugs[g.UserID] = g.RewardSlug
 		return nil
 	})
 	return f
@@ -234,7 +236,7 @@ func TestSettleExecutesEveryLineExactlyOnce(t *testing.T) {
 	f := newFixture(t, now)
 
 	var medals []string
-	f.eng.Handle(PayoutMedal, func(ctx context.Context, userID int64, p Payout) error {
+	f.eng.Handle(PayoutMedal, func(ctx context.Context, g Grant, p Payout) error {
 		medals = append(medals, p.Target)
 		return nil
 	})
@@ -274,7 +276,7 @@ func TestSettleResumesAfterAFailedLine(t *testing.T) {
 
 	var medalCalls int
 	medalErr := errors.New("medal service down")
-	f.eng.Handle(PayoutMedal, func(ctx context.Context, userID int64, p Payout) error {
+	f.eng.Handle(PayoutMedal, func(ctx context.Context, g Grant, p Payout) error {
 		medalCalls++
 		if medalCalls == 1 {
 			return medalErr
@@ -345,7 +347,7 @@ func TestGrantPerUnitPaysTheDelta(t *testing.T) {
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	f := newFixture(t, now)
 	var medals int
-	f.eng.Handle(PayoutMedal, func(ctx context.Context, userID int64, p Payout) error {
+	f.eng.Handle(PayoutMedal, func(ctx context.Context, g Grant, p Payout) error {
 		medals++
 		return nil
 	})
@@ -369,6 +371,14 @@ func TestGrantPerUnitPaysTheDelta(t *testing.T) {
 	// A medal is not a quantity: 500 grabs is one badge, not 500.
 	if medals != 1 {
 		t.Errorf("medals awarded = %d, want 1 — only countable lines scale", medals)
+	}
+	// The handler must be told WHICH reward paid: a 1000-point ledger row with
+	// no attribution is the first question in every balance dispute.
+	f.mu.Lock()
+	slug := f.slugs[7]
+	f.mu.Unlock()
+	if slug != "grabs" {
+		t.Errorf("handler saw reward slug %q, want %q — the ledger cannot attribute this credit", slug, "grabs")
 	}
 
 	// Nothing new: no grant, and specifically not an error the caller has to

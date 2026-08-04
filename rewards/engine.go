@@ -17,10 +17,15 @@ var ErrNotOffered = errors.New("rewards: not currently offered")
 // roles, medals, achievements and username effects are host or sibling-plugin
 // concerns registered through the extension registry.
 //
-// A handler MUST be idempotent for the same (userID, grantPayoutID): a grant
-// that dies between two lines is resumed, not rolled back, because half its
-// payout has already left the building.
-type PayoutHandler func(ctx context.Context, userID int64, p Payout) error
+// The Grant is passed for ATTRIBUTION, not authority: g.UserID says who,
+// g.RewardSlug says on whose account, and a handler writing to a ledger should
+// record both. What to hand over comes only from p — the frozen line — because
+// the reward may have been retuned since the grant was offered.
+//
+// A handler MUST be idempotent for the same (g.UserID, p.ID): a grant that
+// dies between two lines is resumed, not rolled back, because half its payout
+// has already left the building.
+type PayoutHandler func(ctx context.Context, g Grant, p Payout) error
 
 // Engine resolves and settles rewards. The type the host talks to.
 type Engine struct {
@@ -89,10 +94,11 @@ func (e *Engine) Defs(ctx context.Context, trigger string) ([]Reward, error) {
 // Available resolves a surface's rewards FOR one member: filtered to those
 // whose event is open, annotated with whether they have already had it.
 //
-// Three queries regardless of how many rewards there are — the rewards, their
-// open windows, this member's grants — because the obvious per-reward shape
-// (is the event open? has this been claimed?) is an N+1 that also cannot be
-// self-consistent, each round trip seeing a slightly different moment.
+// Four queries regardless of how many rewards there are — the rewards, their
+// payout lines, their open windows, this member's grants — because the obvious
+// per-reward shape (is the event open? has this been claimed?) is an N+1 that
+// also cannot be self-consistent, each round trip seeing a slightly different
+// moment.
 func (e *Engine) Available(ctx context.Context, userID int64, trigger string) ([]Offer, error) {
 	rewards, err := e.store.RewardsByTrigger(ctx, trigger)
 	if err != nil {
@@ -130,11 +136,16 @@ func (e *Engine) Available(ctx context.Context, userID int64, trigger string) ([
 		}
 		o := Offer{Reward: r, WindowID: windowIDFor(r, windows)}
 		if g, seen := grants[r.ID]; seen {
-			// Same reference means this exact entitlement is spoken for. A
-			// grant at a DIFFERENT reference is last period's and says nothing
-			// about this one.
+			// Same reference means this exact entitlement is spoken for — in
+			// ANY state, including expired. The UNIQUE constraint has no state
+			// column, so an expired grant occupies its reference forever and a
+			// re-claim can only ever return ErrAlreadyGranted; reporting it
+			// unclaimed here would render a live button no member can press.
+			// Lapsed means lost, which is also what ClaimGrant and Settle say.
+			// A grant at a DIFFERENT reference is last period's and says
+			// nothing about this one.
 			if g.Reference == ref {
-				o.Claimed = g.State != StateExpired
+				o.Claimed = true
 				if g.State == StatePending {
 					o.PendingGrantID = g.ID
 				}
@@ -327,7 +338,7 @@ func (e *Engine) Settle(ctx context.Context, grantID int64) error {
 		if !ok {
 			return fmt.Errorf("grant %d: no handler for payout kind %q", grantID, p.Kind)
 		}
-		if err := h(ctx, g.UserID, p); err != nil {
+		if err := h(ctx, *g, p); err != nil {
 			return fmt.Errorf("grant %d: payout %s: %w", grantID, p.Kind, err)
 		}
 		if err := e.store.MarkPayoutSettled(ctx, p.ID, now); err != nil {

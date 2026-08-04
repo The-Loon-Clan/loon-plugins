@@ -100,13 +100,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if c.Points == nil {
 		return errors.New("rewards: core.Points is not wired; every points payout would be refused at grant time")
 	}
-	p.engine.Handle(PayoutPoints, func(ctx context.Context, userID int64, payout Payout) error {
-		// The reason code is per reward, not per payout, so a ledger reader
-		// can tell a daily-login credit from a summer bonus. ref is the grant
-		// payout id: it makes every ledger row traceable to the exact frozen
-		// line that produced it, which is the first question asked when a
-		// balance is disputed.
-		_, err := c.Points.Award(ctx, userID, payout.Amount, "reward", "", payout.ID)
+	p.engine.Handle(PayoutPoints, func(ctx context.Context, g Grant, payout Payout) error {
+		// The detail is the reward's slug, so a ledger reader can tell a
+		// daily-login credit from a summer bonus — 30,000 tenure points
+		// labelled just "reward" is the first question in every balance
+		// dispute. ref is the grant payout id: it makes every ledger row
+		// traceable to the exact frozen line that produced it.
+		_, err := c.Points.Award(ctx, g.UserID, payout.Amount, "reward", g.RewardSlug, payout.ID)
 		return err
 	})
 

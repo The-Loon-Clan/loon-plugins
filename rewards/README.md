@@ -121,8 +121,14 @@ appear on the wrong days with no error anywhere.
   right key with the wrong *shape* fails Provision, because that is a wiring
   bug wearing the same face as "not registered".
 
-A handler **must be idempotent** for the same `(userID, grantPayoutID)`. A grant
-that dies between two lines is resumed, not rolled back — half its payout has
+A `PayoutHandler` is `func(ctx, g Grant, p Payout) error`. The Grant is passed
+for **attribution**, not authority: `g.UserID` says who, `g.RewardSlug` says on
+whose account — a handler writing to a ledger should record both. What to hand
+over comes only from `p`, the frozen line, because the reward may have been
+retuned since the grant was offered.
+
+A handler **must be idempotent** for the same `(g.UserID, p.ID)`. A grant that
+dies between two lines is resumed, not rolled back — half its payout has
 already left the building.
 
 ## Lifecycle

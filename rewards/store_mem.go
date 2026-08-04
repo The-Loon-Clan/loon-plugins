@@ -183,6 +183,14 @@ func (m *MemStore) GrantByID(ctx context.Context, id int64) (*Grant, error) {
 	for i := range m.grants {
 		if m.grants[i].ID == id {
 			g := m.grants[i]
+			// Same contract as the SQL join: the slug rides along for handler
+			// attribution, derived from the reward rather than stored.
+			for _, r := range m.Rewards {
+				if r.ID == g.RewardID {
+					g.RewardSlug = r.Slug
+					break
+				}
+			}
 			// Unsettled lines only — same contract as the SQL, so a resume
 			// test cannot pass here and fail in production.
 			var pending []Payout
@@ -217,7 +225,9 @@ func (m *MemStore) SettleGrant(ctx context.Context, grantID int64, at time.Time)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i := range m.grants {
-		if m.grants[i].ID == grantID && m.grants[i].State == StatePending {
+		// Same contract as the SQL: any state but credited flips, so a settle
+		// that raced the expiry sweep records the payment that DID happen.
+		if m.grants[i].ID == grantID && m.grants[i].State != StateCredited {
 			m.grants[i].State = StateCredited
 			m.grants[i].SettledAt = &at
 		}
@@ -235,6 +245,18 @@ func (m *MemStore) ExpireGrants(ctx context.Context, now time.Time, limit int) (
 			break
 		}
 		if g.State == StatePending && g.ExpiresAt != nil && !g.ExpiresAt.After(now) {
+			// Same contract as the SQL: a grant with a settled line is
+			// mid-delivery and belongs to its settle, not the sweep.
+			settled := false
+			for _, p := range m.grantLines[g.ID] {
+				if !p.settled.IsZero() {
+					settled = true
+					break
+				}
+			}
+			if settled {
+				continue
+			}
 			g.State = StateExpired
 			n++
 		}

@@ -204,9 +204,15 @@ func validateRewards(rewards []Reward, events map[int64]EventStats, handled map[
 			} else if ev.Current == nil && ev.Duration == nil {
 				// A season being closed is normal. A contiguous reset having
 				// no open window is not: some window should always contain now.
+				//
+				// Two causes share this symptom, and only one is cured by the
+				// job: a stalled generator, or an event created MID-period.
+				// The generator starts from now and cannot step a cron
+				// backwards, so a daily reset created at 3pm has no window
+				// until midnight no matter how often the job runs.
 				out = append(out, Finding{SeverityError, subject,
 					fmt.Sprintf("event %q has no window open right now, and it is a reset, so one always should be", ev.Slug),
-					"trigger the Reward Windows job in /admin/jobs"})
+					"trigger the Reward Windows job in /admin/jobs; if windows exist but only in the future, the event was created mid-period — author the current window by hand (add-window) or wait for the first firing"})
 			}
 		}
 
@@ -214,6 +220,16 @@ func validateRewards(rewards []Reward, events map[int64]EventStats, handled map[
 			out = append(out, Finding{SeverityInfo, subject,
 				"has an expiry but delivery=auto, so it settles immediately and the expiry never applies",
 				"expiry is for delivery=claim, where a grant waits to be collected"})
+		}
+		// The high-water mark counts every grant, expired ones included — that
+		// is what stops an expired grant being re-paid. The corollary for
+		// per_unit is that lapsing PERMANENTLY burns the units the grant
+		// covered: the mark has moved past them and nothing can move it back.
+		// Legal, and possibly even wanted, but never an accident anyone meant.
+		if r.Kind == KindPerUnit && r.Delivery == DeliveryClaim && r.ExpiresAfter != nil {
+			out = append(out, Finding{SeverityWarn, subject,
+				"per_unit with delivery=claim and an expiry — a member who misses the window loses those units forever, because the mark advances whether or not the grant was collected",
+				"drop the expiry (a claim that waits costs nothing), or make delivery=auto"})
 		}
 		if r.Kind == KindPerUnit && r.EventID != nil {
 			out = append(out, Finding{SeverityInfo, subject,

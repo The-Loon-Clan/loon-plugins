@@ -250,9 +250,14 @@ func (s *PGStore) CreateGrant(ctx context.Context, g Grant, payouts []Payout) (G
 
 func (s *PGStore) GrantByID(ctx context.Context, id int64) (*Grant, error) {
 	var g Grant
+	// The rewards join exists solely for reward_slug — Settle hands it to
+	// payout handlers so a ledger row can say WHICH reward paid. The grant row
+	// itself never stores the slug; renaming a reward renames its history.
 	err := s.get(ctx, &g, `
-		SELECT id, reward_id, user_id, reference, state, reason, created_at, expires_at, settled_at
-		  FROM reward_grants WHERE id = $1`, id)
+		SELECT g.id, g.reward_id, r.slug AS reward_slug, g.user_id, g.reference,
+		       g.state, g.reason, g.created_at, g.expires_at, g.settled_at
+		  FROM reward_grants g JOIN rewards r ON r.id = g.reward_id
+		 WHERE g.id = $1`, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -278,19 +283,36 @@ func (s *PGStore) MarkPayoutSettled(ctx context.Context, payoutID int64, at time
 	return err
 }
 
+// SettleGrant marks a grant credited once every line has executed.
+//
+// `state <> 'credited'` rather than `= 'pending'`, because the expiry sweep
+// can race a settle: Settle checks the state, the sweep flips it to expired,
+// the payout lines execute anyway. At that point the money has moved, and the
+// honest record is credited — an "expired" grant whose points were paid is a
+// ledger reader's nightmare. Settle refuses to START on an expired grant, so
+// the only path that reaches here from expired is that race, where payment
+// has in fact happened.
 func (s *PGStore) SettleGrant(ctx context.Context, grantID int64, at time.Time) error {
 	_, err := s.exec(ctx, `
 		UPDATE reward_grants SET state = 'credited', settled_at = $2
-		 WHERE id = $1 AND state = 'pending'`, grantID, at)
+		 WHERE id = $1 AND state <> 'credited'`, grantID, at)
 	return err
 }
 
+// ExpireGrants lapses pending grants past their expiry — EXCEPT ones with a
+// settled payout line. A settled line means delivery is mid-flight: part of
+// the payout has already left the building, and expiring the grant now would
+// strand the remainder in a state Settle refuses to resume. Those grants
+// belong to their settle, however long it takes; the sweep's business is only
+// the ones nobody ever collected.
 func (s *PGStore) ExpireGrants(ctx context.Context, now time.Time, limit int) (int, error) {
 	n, err := s.exec(ctx, `
 		UPDATE reward_grants SET state = 'expired'
-		 WHERE id IN (SELECT id FROM reward_grants
-		               WHERE state = 'pending' AND expires_at IS NOT NULL AND expires_at <= $1
-		               ORDER BY expires_at LIMIT $2)`, now, limit)
+		 WHERE id IN (SELECT g.id FROM reward_grants g
+		               WHERE g.state = 'pending' AND g.expires_at IS NOT NULL AND g.expires_at <= $1
+		                 AND NOT EXISTS (SELECT 1 FROM reward_grant_payouts p
+		                                  WHERE p.grant_id = g.id AND p.settled_at IS NOT NULL)
+		               ORDER BY g.expires_at LIMIT $2)`, now, limit)
 	if err != nil {
 		return 0, fmt.Errorf("expire grants: %w", err)
 	}
@@ -355,7 +377,7 @@ func (s *PGStore) InsertWindows(ctx context.Context, ws []Window) (int, error) {
 	}
 	var inserted int
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		inserted = 0 // WithTx may retry; a resumed count must not double
+		inserted = 0 // guard against a re-invoked fn ever double-counting
 		for _, w := range ws {
 			res, err := tx.ExecContext(ctx, `
 				INSERT INTO event_windows (event_id, starts_at, ends_at) VALUES ($1, $2, $3)

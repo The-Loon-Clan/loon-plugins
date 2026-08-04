@@ -12,7 +12,7 @@ import (
 func claimFixture(t *testing.T, now time.Time) *fixture {
 	t.Helper()
 	f := newFixture(t, now)
-	f.eng.Handle(PayoutMedal, func(ctx context.Context, userID int64, p Payout) error { return nil })
+	f.eng.Handle(PayoutMedal, func(ctx context.Context, g Grant, p Payout) error { return nil })
 	f.store.Rewards = append(f.store.Rewards, Reward{
 		ID: 900, Slug: "welcome", Name: "Welcome pack", Kind: KindOneOff,
 		Trigger: "signup", Delivery: DeliveryClaim, Enabled: true,
