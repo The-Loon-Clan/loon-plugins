@@ -39,6 +39,29 @@ type Diagnostics interface {
 	// failed monthly attempts on one index accumulated eighty of them, and
 	// because each is 0 bytes the only symptom was a catalogue nobody reads.
 	DropInvalidIndexes(ctx context.Context) (int, error)
+
+	// ListBtreeIndexes returns valid btree indexes eligible for verification,
+	// smallest heap first so a capped run covers the most ground.
+	//
+	// collatableOnly narrows to indexes whose ordering depends on a collation.
+	// maxHeapBytes skips tables too big to check in a sensible window; 0 means
+	// no limit.
+	ListBtreeIndexes(ctx context.Context, collatableOnly bool, maxHeapBytes int64, limit int) ([]BtreeIndex, error)
+
+	// VerifyIndex runs amcheck's bt_index_check. A corrupt index comes back as
+	// an error: that IS the finding, not a failure of the check itself.
+	VerifyIndex(ctx context.Context, indexName string, heapAllIndexed bool) error
+}
+
+// BtreeIndex is one verification candidate. HeapBytes is the cost driver — a
+// heapallindexed check reads the whole heap once per index, so the TABLE's size
+// decides the runtime, not the index's.
+type BtreeIndex struct {
+	TableName    string
+	IndexName    string
+	HeapBytes    int64
+	IsUnique     bool
+	HasCollation bool
 }
 
 // StatCache persists per-job run durations so the next run shows a real ETA.

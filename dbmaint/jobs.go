@@ -243,6 +243,153 @@ func (p *Plugin) runReindex(ctx context.Context) {
 	p.reindex.SetIdle(time.Now().Add(time.Duration(reindexIntervalMin) * time.Minute))
 }
 
+// ── Verify indexes (amcheck bt_index_check) ──────────────────────────────────
+
+// runVerify reads every eligible btree index against its heap and reports the
+// ones that disagree.
+//
+// This job exists because index corruption is SILENT. A glibc or ICU upgrade
+// changes how text sorts; every existing text index is then subtly mis-ordered,
+// but stays internally consistent — so it passes a structural check, raises no
+// error, and simply stops finding rows. On a UNIQUE index the damage eventually
+// announces itself, badly: ON CONFLICT consults the index, misses the duplicate
+// it should have found, and the importer inserts it again. On a NON-unique
+// index nothing ever announces it at all; queries just quietly return less than
+// they should.
+//
+// Both happened here. The unique case surfaced as duplicate usernames and
+// banned_paths, which is what prompted looking; the sweep that followed found
+// two more non-unique indexes that had been returning wrong results with
+// nothing anywhere reporting a problem. Nothing in the system would have
+// noticed either, which is the argument for running this on a schedule rather
+// than after someone gets suspicious.
+func (p *Plugin) runVerify(ctx context.Context) {
+	if !p.verifyMu.TryLock() {
+		p.verify.Log("Skipped: another run is already in progress")
+		return
+	}
+	defer p.verifyMu.Unlock()
+	if p.verify.IsPaused() {
+		return
+	}
+	p.verify.SetRunning()
+	start := time.Now()
+
+	// Pre-flight: amcheck ships with Postgres but is not installed by default.
+	installed, err := deps.Diag.IsPGExtensionInstalled(ctx, "amcheck")
+	if err != nil {
+		p.verify.Log("WARN: couldn't check pg_extension: %v", err)
+	}
+	if !installed {
+		p.verify.Log("amcheck extension not installed — run `CREATE EXTENSION amcheck;` in the target database to enable verification.")
+		p.verify.SetIdle(time.Now().Add(time.Duration(verifyIntervalMin) * time.Minute))
+		return
+	}
+
+	collatableOnly := p.verify.GetConfigBool("collatable_only")
+	heapAllIndexed := p.verify.GetConfigBool("heap_all_indexed")
+	autoReindex := p.verify.GetConfigBool("auto_reindex")
+
+	maxTableMB := p.verify.GetConfigInt("max_table_mb")
+	maxHeapBytes := int64(maxTableMB) * 1024 * 1024
+
+	maxN := p.verify.GetConfigInt("max_indexes_per_run")
+	if maxN <= 0 {
+		maxN = 200
+	}
+	perIndexSec := p.verify.GetConfigInt("per_index_timeout_sec")
+	if perIndexSec <= 0 {
+		perIndexSec = 600
+	}
+
+	candidates, err := deps.Diag.ListBtreeIndexes(ctx, collatableOnly, maxHeapBytes, maxN)
+	if err != nil {
+		p.verify.SetError(fmt.Sprintf("list indexes: %v", err))
+		return
+	}
+	if len(candidates) == 0 {
+		p.verify.Log("No eligible indexes (collatable_only=%v, max_table_mb=%d)", collatableOnly, maxTableMB)
+		p.verify.SetIdle(time.Now().Add(time.Duration(verifyIntervalMin) * time.Minute))
+		return
+	}
+
+	p.verify.Log("Verifying %d index(es); collatable_only=%v heap_all_indexed=%v max_table=%dMB",
+		len(candidates), collatableOnly, heapAllIndexed, maxTableMB)
+	if !heapAllIndexed {
+		// Worth saying out loud: the cheap mode cannot find the thing this job
+		// was built for. Someone who turned it off to speed up a run should not
+		// then read a clean result as "no collation damage".
+		p.verify.Log("NOTE heap_all_indexed is off — structural check only, which does NOT detect collation damage")
+	}
+
+	var corrupt []string
+	var skipped int
+	for i, c := range candidates {
+		p.verify.SetProgress("[%d/%d] bt_index_check %s (%s heap)",
+			i+1, len(candidates), c.IndexName, humanBytes(c.HeapBytes))
+
+		checkCtx, cancel := context.WithTimeout(ctx, time.Duration(perIndexSec)*time.Second)
+		err := deps.Diag.VerifyIndex(checkCtx, c.IndexName, heapAllIndexed)
+		cancel()
+
+		switch classifyVerifyError(err, ctx.Err()) {
+		case verifyClean:
+			continue
+		case verifyAborted:
+			p.verify.Log("Stopping: %v", ctx.Err())
+			return
+		case verifySkipped:
+			skipped++
+			p.verify.Log("SKIP %s: check exceeded %ds (table heap %s) — raise per_index_timeout_sec to cover it",
+				c.IndexName, perIndexSec, humanBytes(c.HeapBytes))
+			continue
+		}
+
+		kind := "non-unique"
+		if c.IsUnique {
+			kind = "UNIQUE"
+		}
+		corrupt = append(corrupt, c.IndexName)
+		p.verify.Log("CORRUPT %s on %s (%s): %v", c.IndexName, c.TableName, kind, err)
+
+		if autoReindex {
+			// Deliberately opt-in. Rebuilding a corrupt NON-unique index is
+			// safe and fixes silently-wrong results immediately. Rebuilding a
+			// corrupt UNIQUE one fails outright when the table already holds
+			// the duplicates the broken index let through — which is a real
+			// finding, but one that needs a human to dedupe before any rebuild
+			// can succeed.
+			if c.IsUnique {
+				p.verify.Log("  not auto-reindexing %s: a unique index whose table may already hold duplicates must be deduplicated first", c.IndexName)
+			} else if rerr := deps.Diag.ReindexIndexConcurrently(ctx, c.IndexName); rerr != nil {
+				p.verify.Log("  auto-reindex of %s failed: %v", c.IndexName, rerr)
+			} else {
+				p.verify.Log("  auto-reindexed %s", c.IndexName)
+			}
+		}
+	}
+
+	dur := time.Since(start)
+	if len(corrupt) > 0 {
+		// Must outlive the in-memory log ring, which every deploy clears —
+		// the same lesson the reindex job learned the hard way.
+		err := fmt.Errorf("amcheck found %d corrupt index(es): %s — rebuild with REINDEX INDEX CONCURRENTLY (dedupe first if unique)",
+			len(corrupt), strings.Join(corrupt, ", "))
+		p.verify.SetError(err.Error())
+		if p.core != nil && p.core.Errors != nil {
+			p.core.Errors.Report(ctx, "dbmaint/verify-indexes", err)
+		}
+	} else {
+		p.verify.Log("All %d index(es) verified clean in %s (%d skipped)",
+			len(candidates)-skipped, dur.Round(time.Second), skipped)
+	}
+
+	if err := deps.StatCache.SetStatCache(ctx, verifyStateKey, int64(dur.Seconds()), ""); err != nil {
+		p.verify.Log("Failed to persist run duration: %v", err)
+	}
+	p.verify.SetIdle(time.Now().Add(time.Duration(verifyIntervalMin) * time.Minute))
+}
+
 // ── Vacuum NZBs (VACUUM FULL, maintenance-mode gated; paused by default) ─────
 
 func (p *Plugin) runVacuum(ctx context.Context) {
@@ -343,6 +490,46 @@ func humanBytes(b int64) string {
 	default:
 		return fmt.Sprintf("%d B", b)
 	}
+}
+
+// verifyOutcome is what one bt_index_check result means.
+type verifyOutcome int
+
+const (
+	verifyClean verifyOutcome = iota
+	// verifyCorrupt: the index genuinely disagrees with its table.
+	verifyCorrupt
+	// verifySkipped: ran out of time. NOT a finding.
+	verifySkipped
+	// verifyAborted: the process is shutting down.
+	verifyAborted
+)
+
+// classifyVerifyError decides whether an error from bt_index_check is a
+// finding, a timeout, or a shutdown.
+//
+// The distinction carries the whole credibility of the job. bt_index_check
+// signals corruption by RAISING, so "the call returned an error" is the normal
+// success path for a bad index — which makes it dangerously easy to also report
+// every timeout and every cancelled context as corruption. Those would land
+// disproportionately on the biggest, busiest tables, and a corruption alert
+// that cries wolf about `nzbs` every week is one nobody reads by the time it is
+// telling the truth.
+//
+// parentErr is the sweep-level context error, checked FIRST: on shutdown the
+// per-index context is cancelled too, so without this the final index of every
+// deploy-time run would be reported as damaged.
+func classifyVerifyError(err, parentErr error) verifyOutcome {
+	if err == nil {
+		return verifyClean
+	}
+	if parentErr != nil {
+		return verifyAborted
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return verifySkipped
+	}
+	return verifyCorrupt
 }
 
 // isPermanentReindexFailure reports whether retrying is pointless.

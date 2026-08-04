@@ -17,10 +17,12 @@ func init() {
 const (
 	pgRepackIntervalMin   = 7 * 24 * 60  // weekly
 	reindexIntervalMin    = 30 * 24 * 60 // monthly
+	verifyIntervalMin     = 7 * 24 * 60  // weekly
 	vacuumFullIntervalMin = 7 * 24 * 60  // weekly (legacy; paused by default)
 
 	pgRepackStateKey   = "pg_repack_nzbs"
 	reindexStateKey    = "reindex_concurrently"
+	verifyStateKey     = "verify_indexes"
 	vacuumFullStateKey = "vacuum_full_nzbs"
 )
 
@@ -33,10 +35,12 @@ type Plugin struct {
 
 	repack  *schedule.JobInfo
 	reindex *schedule.JobInfo
+	verify  *schedule.JobInfo
 	vacuum  *schedule.JobInfo
 
 	repackMu  sync.Mutex
 	reindexMu sync.Mutex
+	verifyMu  sync.Mutex
 	vacuumMu  sync.Mutex
 }
 
@@ -60,6 +64,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.provisionRepack()
 	p.provisionReindex()
+	p.provisionVerify()
 	p.provisionVacuum()
 	return nil
 }
@@ -70,6 +75,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// stagger the heavy jobs (repack before reindex before vacuum).
 	go schedule.ServiceLoop(ctx, p.repack, 1*time.Hour, time.Duration(pgRepackIntervalMin)*time.Minute, p.runRepack)
 	go schedule.ServiceLoop(ctx, p.reindex, 2*time.Hour, time.Duration(reindexIntervalMin)*time.Minute, p.runReindex)
+	go schedule.ServiceLoop(ctx, p.verify, 3*time.Hour, time.Duration(verifyIntervalMin)*time.Minute, p.runVerify)
 	go schedule.ServiceLoop(ctx, p.vacuum, 1*time.Hour, time.Duration(vacuumFullIntervalMin)*time.Minute, p.runVacuum)
 	return nil
 }
@@ -138,6 +144,75 @@ func (p *Plugin) provisionReindex() {
 			Description: "Cap on how many REINDEXes one tick performs, so a monthly run can't run for many hours and accidentally race the pg_repack run. Larger indexes take longer; tune down if you see runs piling up.",
 			Type:        schedule.JobConfigInt,
 			Default:     "50",
+		},
+	)
+}
+
+func (p *Plugin) provisionVerify() {
+	p.verify = schedule.RegisterJob("Verify Indexes",
+		"Reads every collatable btree index against its table with amcheck's "+
+			"bt_index_check and reports any that disagree. Detects the silent "+
+			"corruption a glibc/ICU collation change causes, which no error "+
+			"message and no structural check will ever surface. Read-only "+
+			"(AccessShareLock) — the site stays up.").MarkOffPeak()
+	p.verify.IntervalMin = verifyIntervalMin
+	p.verify.SetTrigger(func() { go p.runVerify(context.Background()) })
+	p.verify.DeclareConfig(deps.ConfigStore,
+		schedule.JobConfigVar{
+			Key:   "collatable_only",
+			Label: "Only collatable indexes",
+			Description: "Check only indexes whose ordering depends on a collation (text, varchar, citext). " +
+				"An index on integers or timestamps cannot be damaged by a collation change, and skipping " +
+				"them cuts the sweep to roughly a third. Turn OFF for a full audit after a hardware fault, " +
+				"disk error, or unclean shutdown, where any index can be damaged.",
+			Type:    schedule.JobConfigBool,
+			Default: "true",
+		},
+		schedule.JobConfigVar{
+			Key:   "heap_all_indexed",
+			Label: "Check heap against index",
+			Description: "Verify that every heap row actually appears in the index, rather than only that the " +
+				"index is internally consistent. THIS IS THE SETTING THAT MATTERS: a collation-damaged index " +
+				"is perfectly well-formed and merely incomplete, so the cheap structural check passes it. " +
+				"Turning this off makes runs much faster and makes them unable to find what this job is for.",
+			Type:    schedule.JobConfigBool,
+			Default: "true",
+		},
+		schedule.JobConfigVar{
+			Key:   "max_table_mb",
+			Label: "Max table size (MB)",
+			Description: "Skip indexes on tables whose heap exceeds this. Cost scales with the TABLE, not the " +
+				"index, because each check reads the whole heap once. 0 = no limit. Raise it together with " +
+				"the per-index timeout if the biggest tables are going unchecked.",
+			Type:    schedule.JobConfigInt,
+			Default: "12000",
+		},
+		schedule.JobConfigVar{
+			Key:   "per_index_timeout_sec",
+			Label: "Per-index timeout (seconds)",
+			Description: "Cap on a single index check. A timeout is logged as SKIPPED, never as corruption — " +
+				"a false alarm on the largest tables is the fastest way to make this job ignorable.",
+			Type:    schedule.JobConfigInt,
+			Default: "600",
+		},
+		schedule.JobConfigVar{
+			Key:   "max_indexes_per_run",
+			Label: "Max indexes per run",
+			Description: "Cap on one sweep. Candidates come back smallest-heap-first, so a capped run covers " +
+				"as many indexes as it can rather than spending the whole budget on one large table.",
+			Type:    schedule.JobConfigInt,
+			Default: "200",
+		},
+		schedule.JobConfigVar{
+			Key:   "auto_reindex",
+			Label: "Auto-rebuild corrupt indexes",
+			Description: "Immediately REINDEX CONCURRENTLY a corrupt NON-unique index. Off by default: " +
+				"a corrupt index is evidence, and rebuilding it destroys the evidence before anyone has " +
+				"asked why it happened. Unique indexes are never auto-rebuilt regardless — when a broken " +
+				"unique index has already let duplicates through, the rebuild cannot succeed until someone " +
+				"deduplicates the table.",
+			Type:    schedule.JobConfigBool,
+			Default: "false",
 		},
 	)
 }
