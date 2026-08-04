@@ -2,10 +2,13 @@ package dbmaint
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 // ── Repack NZBs (online pg_repack) ───────────────────────────────────────────
@@ -186,16 +189,50 @@ func (p *Plugin) runReindex(ctx context.Context) {
 	}
 
 	p.reindex.Log("Reindexing %d index(es); skip-tables=%v, min=%dMB", len(candidates), skip, minMB)
+	var permanent []string
 	for i, c := range candidates {
 		p.reindex.SetProgress("[%d/%d] REINDEX INDEX CONCURRENTLY %s.%s (%s)",
 			i+1, len(candidates), c.Table, c.Index, humanBytes(c.Size))
 		if err := deps.Diag.ReindexIndexConcurrently(ctx, c.Index); err != nil {
-			// Don't abort the whole run on one failure — the common cause is a
-			// concurrent ALTER / pg_repack overlap, which we skip past.
-			p.reindex.Log("REINDEX %s failed: %v (continuing)", c.Index, err)
+			// Not all failures are alike, and treating them alike is how this
+			// job spent months retrying something that could never succeed.
+			//
+			// A transient one — a concurrent ALTER, a pg_repack overlap — is
+			// worth skipping past and trying again next month. A UNIQUE
+			// violation is not: it means the table holds duplicates the index
+			// cannot represent, which no amount of waiting fixes. Retried
+			// monthly, it failed eighty times, left eighty invalid indexes,
+			// and reported it only to an in-memory log ring that every deploy
+			// cleared.
+			if isPermanentReindexFailure(err) {
+				permanent = append(permanent, c.Index)
+				p.reindex.Log("REINDEX %s CANNOT SUCCEED: %v — the table has duplicates the unique index cannot hold; dedupe first", c.Index, err)
+			} else {
+				p.reindex.Log("REINDEX %s failed: %v (continuing)", c.Index, err)
+			}
 			continue
 		}
 		p.reindex.Log("[%d/%d] %s done", i+1, len(candidates), c.Index)
+	}
+
+	// Sweep the debris. A failed REINDEX CONCURRENTLY leaves an invalid
+	// <index>_ccnew behind by design; Postgres expects the operator to drop
+	// it, and until now nobody did.
+	if n, err := deps.Diag.DropInvalidIndexes(ctx); err != nil {
+		p.reindex.Log("could not drop invalid indexes left by failed reindexes: %v", err)
+	} else if n > 0 {
+		p.reindex.Log("dropped %d invalid index(es) left by failed REINDEX CONCURRENTLY", n)
+	}
+
+	// A permanent failure must outlive the log ring. This is the one thing
+	// that would have surfaced the problem years earlier.
+	if len(permanent) > 0 {
+		err := fmt.Errorf("REINDEX cannot succeed on %d index(es) until their tables are deduplicated: %s",
+			len(permanent), strings.Join(permanent, ", "))
+		p.reindex.SetError(err.Error())
+		if p.core != nil && p.core.Errors != nil {
+			p.core.Errors.Report(ctx, "dbmaint/reindex", err)
+		}
 	}
 
 	dur := time.Since(start)
@@ -306,4 +343,26 @@ func humanBytes(b int64) string {
 	default:
 		return fmt.Sprintf("%d B", b)
 	}
+}
+
+// isPermanentReindexFailure reports whether retrying is pointless.
+//
+// 23505 is unique_violation: the table holds rows the unique index cannot
+// represent, so the build fails at the same row every time. 23P01 is
+// exclusion_violation, which fails for the same structural reason.
+//
+// Matched on SQLSTATE rather than message text, which is localised and moves
+// between releases.
+func isPermanentReindexFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return pqErr.Code == "23505" || pqErr.Code == "23P01"
+	}
+	// Fall back to the text when the driver error did not survive wrapping.
+	// Deliberately narrow: a false positive here downgrades a transient
+	// failure into a loud one, which is the harmless direction.
+	return strings.Contains(err.Error(), "could not create unique index")
 }

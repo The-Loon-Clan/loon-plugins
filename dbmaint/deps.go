@@ -31,6 +31,14 @@ type Diagnostics interface {
 	IsPGExtensionInstalled(ctx context.Context, name string) (bool, error)
 	GetIndexUsage(ctx context.Context, limit int) ([]IndexUsage, error)
 	ReindexIndexConcurrently(ctx context.Context, indexName string) error
+	// DropInvalidIndexes removes the half-built indexes a failed REINDEX
+	// CONCURRENTLY leaves behind, returning how many went.
+	//
+	// Postgres names them <index>_ccnew[N] and marks them invalid, and says
+	// plainly that they should be dropped. Nothing was doing it: eighty
+	// failed monthly attempts on one index accumulated eighty of them, and
+	// because each is 0 bytes the only symptom was a catalogue nobody reads.
+	DropInvalidIndexes(ctx context.Context) (int, error)
 }
 
 // StatCache persists per-job run durations so the next run shows a real ETA.

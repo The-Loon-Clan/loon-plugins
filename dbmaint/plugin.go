@@ -27,6 +27,10 @@ const (
 // Plugin owns the three maintenance jobs. Each has its own mutex so a manual
 // /admin/jobs trigger can't race the scheduled loop.
 type Plugin struct {
+	// core is held for its error sink: a permanent REINDEX failure has to
+	// outlive the job's in-memory log ring, which every deploy clears.
+	core *core.Core
+
 	repack  *schedule.JobInfo
 	reindex *schedule.JobInfo
 	vacuum  *schedule.JobInfo
@@ -47,6 +51,7 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
+	p.core = c
 	if deps == nil || deps.Diag == nil || deps.StatCache == nil || deps.ConfigStore == nil {
 		return fmt.Errorf("dbmaint: SetDeps not called (Diag/StatCache/ConfigStore) before core.Boot — wire it in the worker block")
 	}
