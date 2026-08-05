@@ -189,3 +189,82 @@ func writeSized(t *testing.T, path string, n int) {
 		t.Fatal(err)
 	}
 }
+
+// Abandoned partial dumps were never deleted by anything.
+//
+// The RemoveAll in runDBDump only ever targeted the CURRENT stamp -- a
+// directory that by definition does not already exist -- and publishedDumps
+// skips the .incoming- prefix, so retention never saw them either. Production
+// was still carrying one from 2026-08-04, and the space it held is why three
+// consecutive dumps refused for want of disk.
+//
+// A dump takes ~58 minutes and dies with any container recreate, so this
+// accumulates once per deploy that lands in the dump window -- and deploys just
+// became a single command.
+func TestClearStaleIncomingReclaimsAbandonedPartials(t *testing.T) {
+	dir := t.TempDir()
+
+	// Two abandoned partials, one of them the real name seen on production.
+	for _, name := range []string{".incoming-20260804T020809Z", ".incoming-20260805T010101Z"} {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeSized(t, filepath.Join(p, "partial.dat.gz"), 4<<20)
+	}
+	// A PUBLISHED dump, which must survive -- it is the backup.
+	published := filepath.Join(dir, "20260805T072837Z")
+	if err := os.MkdirAll(published, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSized(t, filepath.Join(published, "1.dat.gz"), 1<<20)
+	// Something this plugin did not create. Never a deletion candidate -- the
+	// same rule publishedDumps and retention already follow.
+	foreign := filepath.Join(dir, ".incoming-not-a-stamp")
+	if err := os.MkdirAll(foreign, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	n, freed := clearStaleIncoming(dir)
+	if n != 2 {
+		t.Errorf("cleared %d, want 2", n)
+	}
+	if freed < 8<<20 {
+		t.Errorf("reclaimed %d bytes, want at least %d", freed, 8<<20)
+	}
+	if _, err := os.Stat(published); err != nil {
+		t.Error("the PUBLISHED dump was deleted -- that is the backup")
+	}
+	if _, err := os.Stat(foreign); err != nil {
+		t.Error("deleted a directory whose name is not our stamp format")
+	}
+	for _, name := range []string{".incoming-20260804T020809Z", ".incoming-20260805T010101Z"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Errorf("%s survived the sweep", name)
+		}
+	}
+
+	// Idempotent: a second sweep finds nothing and reports nothing.
+	if n, _ := clearStaleIncoming(dir); n != 0 {
+		t.Errorf("second sweep cleared %d, want 0", n)
+	}
+}
+
+// The sweep must run BEFORE the disk check, or the check refuses on space the
+// sweep is about to return -- which is exactly what production did.
+func TestSweepPrecedesTheDiskCheck(t *testing.T) {
+	src, err := os.ReadFile("dbdump.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(src)
+	sweep := strings.Index(s, "clearStaleIncoming(deps.DBDumpDir)")
+	check := strings.Index(s, "deps.FreeDisk(ctx)")
+	if sweep < 0 || check < 0 {
+		t.Fatal("could not locate both the sweep and the disk check")
+	}
+	if sweep > check {
+		t.Error("the disk check runs before the sweep, so it will refuse on space " +
+			"the sweep would have reclaimed")
+	}
+}

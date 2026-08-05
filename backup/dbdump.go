@@ -92,11 +92,27 @@ func (p *Plugin) runDBDump(ctx context.Context) {
 		}
 	}
 
+	// Sweep abandoned partials BEFORE the disk pre-flight, or the check refuses
+	// on space the sweep is about to return.
+	//
+	// A dump takes ~58 minutes and is killed by any container recreate, which
+	// leaves a partial .incoming- directory holding up to a full dump. Nothing
+	// deleted them: the RemoveAll below only ever targeted the CURRENT stamp,
+	// which by definition does not already exist, and publishedDumps skips the
+	// prefix so retention never saw them either. One from 2026-08-04 was still
+	// on production, and the disk it was occupying is why three dumps in a row
+	// refused for want of space.
+	//
+	// This gets worse as deploys get cheaper, which they just did -- every
+	// deploy during the dump window orphans another one.
+	if n, freed := clearStaleIncoming(deps.DBDumpDir); n > 0 {
+		p.dumpJob.Log("cleared %d abandoned partial dump(s), reclaiming %s",
+			n, humanBytes(freed))
+	}
+
 	// Pre-flight. A dump that fills prod's disk is an OUTAGE, not a failed
 	// backup, and the peak is two dumps: the new one is written alongside the
-	// previous so a failure never leaves us with neither. pg_dump -Fd
-	// compresses per table, so the on-disk database size is a deliberately
-	// conservative estimate of what one dump costs.
+	// previous so a failure never leaves us with neither.
 	if deps.FreeDisk != nil && deps.DBSize != nil {
 		free, ferr := deps.FreeDisk(ctx)
 		size, serr := deps.DBSize(ctx)
@@ -307,6 +323,43 @@ func (p *Plugin) pruneDumps(ctx context.Context) int {
 
 // publishedDumps lists published dump directories, newest first. Incoming
 // directories are excluded by name — they are not dumps yet.
+// clearStaleIncoming deletes every abandoned partial dump, returning how many
+// and how much space came back.
+//
+// Safe to delete unconditionally: an .incoming- directory is only ever the
+// target of a pg_dump that has not finished, and this job holds dumpMu so no
+// concurrent run of its own can own one. A dump killed mid-flight leaves one
+// behind and it is worthless -- pg_dump -Fd cannot resume, and the directory is
+// only renamed into place once the dump has fully succeeded.
+//
+// The name must still parse as a stamp, so a directory this plugin did not
+// create is never a deletion candidate. That rule already governs
+// publishedDumps and retention; a sweep that ignored it would be the one place
+// in this file willing to delete something it does not recognise.
+func clearStaleIncoming(dir string) (int, int64) {
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, 0
+	}
+	var n int
+	var freed int64
+	for _, e := range ents {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), dumpIncoming) {
+			continue
+		}
+		if _, err := time.Parse(dumpStampFormat,
+			strings.TrimPrefix(e.Name(), dumpIncoming)); err != nil {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		freed += dirBytes(path)
+		if err := os.RemoveAll(path); err == nil {
+			n++
+		}
+	}
+	return n, freed
+}
+
 // dumpSpaceNeeded estimates what ONE dump will cost on disk, with the basis
 // named so the log says where the number came from.
 //
@@ -333,16 +386,8 @@ func dumpSpaceNeeded(dir string, dbSize int64) (int64, string) {
 	// Newest first, per publishedDumps' contract.
 	last := filepath.Join(dir, names[0])
 	var total int64
-	err := filepath.Walk(last, func(_ string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !fi.IsDir() {
-			total += fi.Size()
-		}
-		return nil
-	})
-	if err != nil || total <= 0 {
+	total = dirBytes(last)
+	if total <= 0 {
 		return dbSize, "could not measure the last dump; using database size"
 	}
 	return total + total/100*15, "last dump " + humanBytes(total) + " + 15%"
