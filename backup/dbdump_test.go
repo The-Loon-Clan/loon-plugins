@@ -3,6 +3,7 @@ package backup
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -108,5 +109,83 @@ func TestDirTotals(t *testing.T) {
 	files, bytes := dirTotals(dir)
 	if files != 3 || bytes != 2160 {
 		t.Errorf("dirTotals = (%d files, %d bytes), want (3, 2160)", files, bytes)
+	}
+}
+
+// The pre-flight must estimate what a dump ACTUALLY costs, not what the
+// database weighs.
+//
+// Production ran into this the day the dump went daily: 55 GB database, 34.7 GB
+// dump (eleven tables excluded), and three consecutive refusals reading
+// "insufficient disk for a database dump" on nights when the dump would have
+// finished. The guard was not wrong about arithmetic -- it was comparing
+// against a number that exclusions had made obsolete, and the operator reads
+// that message as "buy a bigger disk".
+func TestDumpSpaceNeededMeasuresTheLastDump(t *testing.T) {
+	dir := t.TempDir()
+	const dbSize = 55 << 30
+
+	// Nothing to measure yet: the database size is the honest fallback, and a
+	// first run has no other evidence.
+	need, basis := dumpSpaceNeeded(dir, dbSize)
+	if need != dbSize {
+		t.Errorf("with no dumps: need = %d, want the database size %d", need, dbSize)
+	}
+	if !strings.Contains(basis, "database size") {
+		t.Errorf("basis should say where the number came from, got %q", basis)
+	}
+
+	// One published dump of 100 MB -> 115 MB, and NOT the 55 GB database.
+	older := filepath.Join(dir, "20260804T010101Z")
+	if err := os.MkdirAll(older, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSized(t, filepath.Join(older, "1.dat.gz"), 100<<20)
+
+	need, basis = dumpSpaceNeeded(dir, dbSize)
+	if want := int64(100<<20) + int64(100<<20)/100*15; need != want {
+		t.Errorf("need = %d, want %d (last dump + 15%%)", need, want)
+	}
+	if need >= dbSize {
+		t.Errorf("still using the database size (%d); the whole point is not to", need)
+	}
+	if !strings.Contains(basis, "last dump") {
+		t.Errorf("basis = %q, want it to name the measured dump", basis)
+	}
+
+	// A NEWER dump must win, or the estimate drifts as exclusions change.
+	newer := filepath.Join(dir, "20260805T010101Z")
+	if err := os.MkdirAll(newer, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSized(t, filepath.Join(newer, "1.dat.gz"), 200<<20)
+	need, _ = dumpSpaceNeeded(dir, dbSize)
+	if want := int64(200<<20) + int64(200<<20)/100*15; need != want {
+		t.Errorf("need = %d, want %d -- the NEWEST dump must be measured", need, want)
+	}
+
+	// An in-progress dump is not evidence: pg_dump is still writing it, so its
+	// size is whatever it happens to have reached.
+	incoming := filepath.Join(dir, dumpIncoming+"20260806T010101Z")
+	if err := os.MkdirAll(incoming, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSized(t, filepath.Join(incoming, "partial.dat.gz"), 5<<20)
+	need, _ = dumpSpaceNeeded(dir, dbSize)
+	if want := int64(200<<20) + int64(200<<20)/100*15; need != want {
+		t.Errorf("need = %d, want %d -- an .incoming dump must be ignored", need, want)
+	}
+
+	// The margin has to point the safe way: a dump that grew must not squeeze in.
+	if need <= 200<<20 {
+		t.Errorf("need = %d, must exceed the measured %d so growth has room",
+			need, 200<<20)
+	}
+}
+
+func writeSized(t *testing.T, path string, n int) {
+	t.Helper()
+	if err := os.WriteFile(path, make([]byte, n), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

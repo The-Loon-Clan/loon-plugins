@@ -107,14 +107,17 @@ func (p *Plugin) runDBDump(ctx context.Context) {
 			p.dumpJob.SetIdle(time.Now().Add(time.Duration(dbDumpIntervalMin) * time.Minute))
 			return
 		}
-		if free < size {
-			p.dumpJob.Log("REFUSING to dump: %s free, database is %s. "+
+		need, basis := dumpSpaceNeeded(deps.DBDumpDir, size)
+		if free < need {
+			p.dumpJob.Log("REFUSING to dump: %s free, need about %s (%s). "+
 				"The dump is written beside the previous one, so plan for two. "+
 				"Free space, lower backup_db_keep, or add exclusions (backup_db_exclude_table_data).",
-				humanBytes(free), humanBytes(size))
+				humanBytes(free), humanBytes(need), basis)
 			p.dumpJob.SetError("insufficient disk for a database dump")
 			return
 		}
+		p.dumpJob.Log("disk ok: %s free, need about %s (%s)",
+			humanBytes(free), humanBytes(need), basis)
 	}
 
 	stamp := time.Now().UTC().Format(dumpStampFormat)
@@ -304,6 +307,47 @@ func (p *Plugin) pruneDumps(ctx context.Context) int {
 
 // publishedDumps lists published dump directories, newest first. Incoming
 // directories are excluded by name — they are not dumps yet.
+// dumpSpaceNeeded estimates what ONE dump will cost on disk, with the basis
+// named so the log says where the number came from.
+//
+// The database's on-disk size was the original estimate and was described as
+// deliberately conservative. It stopped being merely conservative once tables
+// were excluded: with eleven excluded the real dump is 34.7 GB against a 55 GB
+// database, so the guard refused every night the box had between 35 and 55 GB
+// free -- nights the dump would have completed. A backup skipped for a reason
+// that is no longer true is the most expensive kind of caution, because the
+// operator sees "insufficient disk" and believes the disk is the problem.
+//
+// So measure the last dump instead. It already reflects the current exclusion
+// set, the current compression, and the current data, and it self-corrects when
+// any of those change. Plus 15% because the database grows between runs, and
+// the whole point of a pre-flight is to be wrong in the safe direction.
+//
+// Falls back to the database size when no dump exists yet, which is the
+// original behaviour and correct for a first run: there is nothing to measure.
+func dumpSpaceNeeded(dir string, dbSize int64) (int64, string) {
+	names := publishedDumps(dir)
+	if len(names) == 0 {
+		return dbSize, "no previous dump to measure; using database size"
+	}
+	// Newest first, per publishedDumps' contract.
+	last := filepath.Join(dir, names[0])
+	var total int64
+	err := filepath.Walk(last, func(_ string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !fi.IsDir() {
+			total += fi.Size()
+		}
+		return nil
+	})
+	if err != nil || total <= 0 {
+		return dbSize, "could not measure the last dump; using database size"
+	}
+	return total + total/100*15, "last dump " + humanBytes(total) + " + 15%"
+}
+
 func publishedDumps(dir string) []string {
 	ents, err := os.ReadDir(dir)
 	if err != nil {
