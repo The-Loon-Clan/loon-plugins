@@ -122,7 +122,12 @@ func (p *Plugin) Stop(ctx context.Context) error  { return nil }
 
 func (h *Handlers) NewsAll(c *gin.Context) {
 	news, _ := h.store.GetPublishedNewsPosts(c.Request.Context(), 50)
-	// Mark bodies as safe HTML so the template won't escape them.
+	// Mark bodies as safe HTML so the template won't escape them — but ONLY
+	// after Sanitize, exactly as NewsDetail does. This list previously passed
+	// p.Body through raw: any markup an admin (or anything that ever reached
+	// the admin form) stored was rendered unescaped on the public feed, while
+	// the detail page for the same post was filtered. A host's Sanitize policy
+	// cannot defend a path that never calls it.
 	type safePost struct {
 		ID        int64
 		Title     string
@@ -132,7 +137,7 @@ func (h *Handlers) NewsAll(c *gin.Context) {
 	}
 	safe := make([]safePost, 0, len(news))
 	for _, p := range news {
-		safe = append(safe, safePost{p.ID, p.Title, p.Slug, template.HTML(p.Body), p.CreatedAt})
+		safe = append(safe, safePost{p.ID, p.Title, p.Slug, template.HTML(deps.Sanitize(p.Body)), p.CreatedAt})
 	}
 	c.HTML(http.StatusOK, "news.html", deps.BaseData(c, gin.H{"News": safe}))
 }

@@ -200,10 +200,10 @@ func (h *Handlers) AdminIndex(c *gin.Context) {
 }
 
 func (h *Handlers) NewTopic(c *gin.Context) {
-	c.HTML(http.StatusOK, "admin_wiki_topic_form.html", gin.H{
+	c.HTML(http.StatusOK, "admin_wiki_topic_form.html", deps.BaseData(c, gin.H{
 		"Action": "Create",
 		"Icons":  TopicIcons,
-	})
+	}))
 }
 
 // topicInputFrom reads the shared create/edit form. Icon and colour are
@@ -246,11 +246,11 @@ func (h *Handlers) EditTopic(c *gin.Context) {
 	}
 	for _, t := range topics {
 		if t.ID == id {
-			c.HTML(http.StatusOK, "admin_wiki_topic_form.html", gin.H{
+			c.HTML(http.StatusOK, "admin_wiki_topic_form.html", deps.BaseData(c, gin.H{
 				"Action": "Edit",
 				"Topic":  t,
 				"Icons":  TopicIcons,
-			})
+			}))
 			return
 		}
 	}
@@ -282,10 +282,10 @@ func (h *Handlers) DeleteTopic(c *gin.Context) {
 func (h *Handlers) NewPost(c *gin.Context) {
 	topicIDStr := c.Query("topic_id")
 	topicID, _ := strconv.Atoi(topicIDStr)
-	c.HTML(http.StatusOK, "admin_wiki_post_form.html", gin.H{
+	c.HTML(http.StatusOK, "admin_wiki_post_form.html", deps.BaseData(c, gin.H{
 		"Action":  "Create",
 		"TopicID": topicID,
-	})
+	}))
 }
 
 func (h *Handlers) CreatePost(c *gin.Context) {
@@ -314,10 +314,10 @@ func (h *Handlers) EditPost(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/admin/wiki")
 		return
 	}
-	c.HTML(http.StatusOK, "admin_wiki_post_form.html", gin.H{
+	c.HTML(http.StatusOK, "admin_wiki_post_form.html", deps.BaseData(c, gin.H{
 		"Action": "Edit",
 		"Post":   post,
-	})
+	}))
 }
 
 func (h *Handlers) UpdatePost(c *gin.Context) {
