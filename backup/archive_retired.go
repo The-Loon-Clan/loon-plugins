@@ -1,3 +1,18 @@
+// Package backup is PRODUCTION's backup pipeline: it indexes every asset
+// directory, packs the files content-addressed, serves them over HTTP with
+// Range, and a puller on separate hardware fetches and verifies them. Nothing
+// on the production box holds a write credential to the backup.
+//
+// NOT to be confused with package `backups` (plural) in this same repo, which
+// is the GENERIC one the demo host uses: a weekly job that dumps the database
+// and archives whatever each plugin's pluginapi.Backupable hook hands over.
+// Both are real, both are used, and they are one letter apart -- which has
+// already caused a confident "that directory is dead scaffolding, delete it".
+// It is not; loon-demo-site imports it.
+//
+// Which you want: `backup` if the data is too large to re-transfer whole and
+// must survive the box it lives on. `backups` if one archive per week is
+// enough and you would rather plugins declare their own contents.
 package backup
 
 import (

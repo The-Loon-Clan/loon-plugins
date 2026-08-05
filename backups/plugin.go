@@ -4,6 +4,11 @@
 // pluginapi.Backupable and calling pluginapi.RegisterBackup(c, self) in their
 // Provision — the backups plugin discovers them off the core extension registry,
 // so adding a backup-capable plugin needs no change here.
+// NOT to be confused with package `backup` (singular) in this same repo, which
+// is production's index/pack/pull pipeline -- 5,700 lines to this file's 115,
+// solving a different problem: assets too large to re-transfer whole, kept on
+// hardware separate from the box that made them. This one is the generic
+// answer and the one the demo host wires.
 package backups
 
 import (
