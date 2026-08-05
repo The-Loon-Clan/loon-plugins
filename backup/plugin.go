@@ -32,11 +32,25 @@ const (
 	// gate does the work and hashing is the exception. Daily keeps the window
 	// in which an in-place overwrite can hide down to a day.
 	indexIntervalMin = 24 * 60
-	// The database dump is weekly: it is a full dump every time (the update
-	// rate makes an incremental impossible — see dbdump.go), so its cost is
-	// the whole database each run, and daily would move ~20 GB a day across
-	// the wire for a corpus that a week-old copy restores just as correctly.
-	dbDumpIntervalMin = 7 * 24 * 60
+	// The database dump is DAILY.
+	//
+	// It was weekly, justified as "a week-old copy restores just as
+	// correctly". That is true about correctness and silent about loss: the
+	// assets are captured continuously, so the database was the only thing
+	// with a seven-day recovery point, and what it holds — accounts, points
+	// ledger, comments, forum posts — is exactly the part that cannot be
+	// re-derived from anything. A restore that works perfectly and returns
+	// the site to last Tuesday is still the worst outcome in the system.
+	//
+	// The cost is real and was the original argument: a full dump every time
+	// (the update rate makes an incremental impossible — see dbdump.go), so
+	// daily means moving the whole thing daily. Measured rather than
+	// estimated: 51.6 GB of heap+TOAST, of which nzbs.nzb_data alone is 35.6
+	// GB and is irreplaceable, landing as ~29 GB compressed. The exclusion
+	// list below trims what it honestly can. That is a bigger nightly
+	// transfer, on a tailnet, off-peak — and it is worth it to turn a
+	// seven-day worst case into a one-day one.
+	dbDumpIntervalMin = 24 * 60
 	// Parallel dump workers. Four is pg_dump's sweet spot on this box and the
 	// number the restore side mirrors (pg_restore -j 4); higher mostly buys
 	// contention with the live site, which is running while this dumps.
