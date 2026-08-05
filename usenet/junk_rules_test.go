@@ -19,7 +19,7 @@ func TestEmbeddedJunkRulesParse(t *testing.T) {
 		"template_token", "dot_sep_obfuscated", "rot13_archive",
 		"repeated_short_tok", "alnum_blob_ext", "short_alnum_token",
 		"mid_alnum_token", "js_template_leak", "single_token_20",
-		"long_digit_run", "high_special_chars", "random_words",
+		"long_digit_run", "bare_numeric_token", "high_special_chars", "random_words",
 		"word_word_hex", "tiny_no_space", "short_lowercase_token",
 		"long_no_space", "chaotic_specials_small", "par2_volume",
 		"short_random_token", "under_1mib", "under_5mib",
