@@ -328,6 +328,22 @@ func validItem(it *Item) error {
 			return errors.New("rank reward needs a numeric rank id in reward ref")
 		}
 		return nil
+	case RewardInvite:
+		// RewardInvite was declared and documented, and the BUY path already
+		// handles it (including the "no InviteGranter registered" case), but
+		// this switch had no branch for it — so the item could never be
+		// created and that buy path was unreachable.
+		//
+		// RewardRef is how many invites, and the type's own documentation says
+		// "empty or unparseable means 1", so an unreadable value is a default
+		// rather than an error. A negative or zero count is still rejected:
+		// that is a mis-configured item, not an unstated default.
+		if it.RewardRef != "" {
+			if n, err := strconv.Atoi(it.RewardRef); err == nil && n <= 0 {
+				return errors.New("invite reward count must be positive")
+			}
+		}
+		return nil
 	default:
 		return fmt.Errorf("unsupported reward type %q", it.RewardType)
 	}
