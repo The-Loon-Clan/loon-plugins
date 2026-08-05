@@ -162,7 +162,12 @@ func (s *PGStore) recordBuildOutcomes(ctx context.Context, out map[buildOutcome]
 				                           THEN EXCLUDED.last_sample
 				                           ELSE build_outcomes.last_sample END,
 				       last_seen_at = now()`,
-				string(k), v.count, v.sample); err != nil {
+				// last_sample is a base subject: poster-controlled, frequently
+				// not valid UTF-8, and uncapped in the schema. truncateSample
+				// sanitises and bounds it in one step. Doing it here rather
+				// than in note() costs at most one call per outcome bucket
+				// instead of one per candidate set.
+				string(k), v.count, truncateSample(v.sample)); err != nil {
 				return err
 			}
 		}

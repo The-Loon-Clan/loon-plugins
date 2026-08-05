@@ -346,7 +346,11 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			p.outcomes.note(outcomeXMLError, k.Base)
 			// Malformed input the sanitising didn't cover. Leave the set staged:
 			// the prune horizon clears it if it never becomes buildable.
-			p.reportErr(ctx, "usenet/build-xml", fmt.Errorf("%s/%s: %w", k.Group, k.Base, err))
+			// truncateSample, not k.Base raw: an error report ABOUT a bad
+			// subject was itself unstorable in error_logs.message, and that
+			// write is swallowed — so the diagnostic disappeared in exactly
+			// the case it was written for. Also bounds a kilobyte subject.
+			p.reportErr(ctx, "usenet/build-xml", fmt.Errorf("%s/%s: %w", k.Group, truncateSample(k.Base), err))
 			continue
 		}
 		gz, err := gzipBytes(xmlBytes)
@@ -598,7 +602,7 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 		}
 		xmlBytes, err := buildNZB(arts)
 		if err != nil {
-			p.reportErr(ctx, "usenet/salvage-xml", fmt.Errorf("%s/%s: %w", k.Group, k.Base, err))
+			p.reportErr(ctx, "usenet/salvage-xml", fmt.Errorf("%s/%s: %w", k.Group, truncateSample(k.Base), err))
 			continue
 		}
 		gz, err := gzipBytes(xmlBytes)

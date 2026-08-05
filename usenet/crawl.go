@@ -1132,8 +1132,17 @@ func (s *PGStore) stageArticles(ctx context.Context, arts []stagedArticle) (int,
 				                      $6::timestamptz[], $7::text[], $8::int[], $9::int[], $10::int[],
 				                      $11::int[], $12::int[], $13::boolean[])
 				 ON CONFLICT (message_id) DO NOTHING`,
-				pq.Array(ids), pq.Array(subjects), pq.Array(bases), pq.Array(posters), pq.Array(bytesArr),
-				pq.GenericArray{A: posted}, pq.Array(groupsArr), pq.Array(partNums), pq.Array(totalParts), pq.Array(segTotals),
+				// Subject, base_subject and poster come straight off the wire
+				// and are frequently not valid UTF-8; one bad byte fails the
+				// whole chunked INSERT and loses every article in it. This is
+				// key-coherent in pg staging mode: the stored base_subject IS
+				// the grouping key that assemble reads back, so sanitising on
+				// the way in keeps write and read agreeing. (The redis path
+				// deliberately does NOT do this — its key is a hash of the RAW
+				// base, and sanitising only the stored copy would desynchronise
+				// the two and strand the set.)
+				pgTextArray(ids), pgTextArray(subjects), pgTextArray(bases), pgTextArray(posters), pq.Array(bytesArr),
+				pq.GenericArray{A: posted}, pgTextArray(groupsArr), pq.Array(partNums), pq.Array(totalParts), pq.Array(segTotals),
 				pq.Array(fileNums), pq.Array(totalFiles), pq.Array(fileParts))
 			if err != nil {
 				return err

@@ -13,6 +13,16 @@ import (
 //	pq: invalid byte sequence for encoding "UTF8": 0xe1 0x6e 0x61
 const badSubject = "Espa\xf1a - Cancio\xe1n - \xe1na.mkv"
 
+// The 2026-08-04 bytes, from usenet/resolutions-flush (528 occurrences):
+//
+//	pq: invalid byte sequence for encoding "UTF8": 0xca 0x34
+//
+// 0xCA is a Big5/Shift_JIS lead byte that passthroughCharset hands back
+// unconverted by design; 0x34 is the ASCII '4' that followed it, which is not a
+// valid continuation byte. Shaped like a real release subject because the point
+// is that the readable half survives.
+const badBase = "[Group] Anime \xca4 Title - 01 [1080p][ABCD1234].mkv"
+
 func TestPgSafeTextMakesStorableUTF8(t *testing.T) {
 	got := pgSafeText(badSubject)
 	if !utf8.ValidString(got) {
@@ -92,6 +102,49 @@ func TestPosterHitsSanitiseKeyAndSample(t *testing.T) {
 		if !utf8.ValidString(v.sample) {
 			t.Errorf("poster sample is not storable: %q", v.sample)
 		}
+	}
+}
+
+// The bind is the guarantee. pgSafeText existed for three days and two new
+// writers still bypassed it, so what is tested here is that binding through
+// pgTextArray sanitises EVERY element without touching the valid ones — a
+// version that mangled Japanese titles would be worse than the bug it fixes.
+func TestPgTextArraySanitisesEveryElement(t *testing.T) {
+	in := []string{badBase, "clean", "葬送のフリーレン", "with\x00nul", ""}
+	got := pgTextArray(in)
+	if len(got) != len(in) {
+		t.Fatalf("length changed: %d, want %d", len(got), len(in))
+	}
+	for i, s := range got {
+		if !utf8.ValidString(s) {
+			t.Errorf("element %d is not storable: %q", i, s)
+		}
+		if strings.ContainsRune(s, 0) {
+			t.Errorf("element %d kept a NUL: %q", i, s)
+		}
+	}
+	if got[1] != "clean" || got[2] != "葬送のフリーレン" {
+		t.Errorf("valid elements were altered: %q", got)
+	}
+	// The readable halves either side of the bad byte must survive, or the
+	// row is storable but useless.
+	for _, want := range []string{"[Group] Anime ", " Title - 01 [1080p][ABCD1234].mkv"} {
+		if !strings.Contains(got[0], want) {
+			t.Errorf("lost %q from the subject: %q", want, got[0])
+		}
+	}
+}
+
+// build_outcomes.last_sample has no length cap in the schema, and the samples
+// it stores are longest in exactly the obfuscated-junk case the counter exists
+// to measure.
+func TestBuildOutcomeSampleIsBoundedAndStorable(t *testing.T) {
+	got := truncateSample(strings.Repeat("あ", 300) + badBase)
+	if !utf8.ValidString(got) {
+		t.Errorf("sample is not storable: %q", got)
+	}
+	if len(got) > 210 {
+		t.Errorf("sample = %d bytes, want it bounded near 200", len(got))
 	}
 }
 

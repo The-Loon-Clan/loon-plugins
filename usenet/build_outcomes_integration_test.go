@@ -5,6 +5,7 @@ package usenet
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -265,5 +266,67 @@ func TestSetResolutionsStore(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("stored %d matching rows, want 1", n)
+	}
+}
+
+// The 2026-08-04 outage in one test.
+//
+//	op: usenet/resolutions-flush
+//	pq: invalid byte sequence for encoding "UTF8": 0xca 0x34
+//	528 occurrences since 2026-07-31
+//
+// The flush is ONE batched unnest, so a single poster's byte discarded every
+// resolution in the round — including the clean ones. That matters most for
+// kind='evicted', where this row is the only surviving record of what the
+// sweep destroyed. No mock can catch it: the rejection comes from Postgres's
+// encoding check, so a fake would only restate the assumption that was wrong.
+func TestSetResolutionsSurviveInvalidUTF8(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	rows := []setResolution{
+		{group: "a.b.utf8", base: badBase, kind: "evicted", artLo: 1, artHi: 2, held: 3},
+		{group: "a.b.utf8", base: "Clean.Release", kind: "built", artLo: 4, artHi: 5, held: 6},
+	}
+	marks := map[string]groupMarks{"a.b.utf8": {Back: 1, High: 9}}
+	if err := s.insertSetResolutions(ctx, rows, marks); err != nil {
+		t.Fatalf("one bad byte lost the whole flush: %v", err)
+	}
+	var n int
+	if err := s.db.DB().QueryRow(`SELECT COUNT(*) FROM ` + s.db.Schema() +
+		`.set_resolutions WHERE group_name='a.b.utf8'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("stored %d rows, want 2 — the clean row must not die with the dirty one", n)
+	}
+	// Stored, and still recognisable: a row that survives as unreadable bytes
+	// would satisfy the count and be useless to the operator reading it.
+	var got string
+	if err := s.db.DB().QueryRow(`SELECT base_subject FROM `+s.db.Schema()+
+		`.set_resolutions WHERE group_name='a.b.utf8' AND kind=$1`, "evicted").Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "[1080p][ABCD1234].mkv") {
+		t.Errorf("the readable half of the subject did not survive: %q", got)
+	}
+}
+
+// Same bug, same era, the sibling op: usenet/build-outcomes, 43 occurrences.
+func TestBuildOutcomesSurviveInvalidUTF8(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	if err := s.recordBuildOutcomes(ctx, map[buildOutcome]*outcomeVal{
+		outcomeBuilt:      {count: 7, sample: badBase},
+		outcomeIncomplete: {count: 400, sample: "clean"},
+	}); err != nil {
+		t.Fatalf("flush rejected: %v", err)
+	}
+	// The counts are the data; the sample is garnish. A bad sample must never
+	// be able to take the count with it.
+	if n, sample, ok := outcomeRow(t, s, outcomeBuilt); !ok || n != 7 {
+		t.Errorf("count lost to a bad sample: n=%d ok=%v sample=%q", n, ok, sample)
+	}
+	if n, _, ok := outcomeRow(t, s, outcomeIncomplete); !ok || n != 400 {
+		t.Errorf("a clean bucket died with the dirty one: n=%d ok=%v", n, ok)
 	}
 }

@@ -140,10 +140,17 @@ func (s *PGStore) insertSetResolutions(ctx context.Context, rows []setResolution
 		backs[i], highs[i] = m.Back, m.High
 	}
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		// base_subject is the raw poster header and is routinely not valid
+		// UTF-8 (see pgSafeText). This flush is ONE batched unnest, so one
+		// poster's byte discarded every resolution in the round — and for
+		// kind='evicted' that row is the only surviving record of what the
+		// sweep destroyed. group_name is already utf8-gated upstream and kind
+		// is a Go literal; both bind through the same helper anyway, because
+		// the next text column added here will not be.
 		_, err := tx.ExecContext(ctx,
 			`INSERT INTO set_resolutions (group_name, base_subject, kind, art_lo, art_hi, held, back_watermark, high_watermark)
 			 SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::bigint[], $5::bigint[], $6::int[], $7::bigint[], $8::bigint[])`,
-			pq.Array(groups), pq.Array(bases), pq.Array(kinds), pq.Array(los), pq.Array(his),
+			pgTextArray(groups), pgTextArray(bases), pgTextArray(kinds), pq.Array(los), pq.Array(his),
 			pq.Array(helds), pq.Array(backs), pq.Array(highs))
 		return err
 	})
