@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 
 	"github.com/the-loon-clan/loon/catalog"
 	"github.com/the-loon-clan/loon/core"
@@ -19,6 +20,7 @@ type Store interface {
 	UpsertEntry(ctx context.Context, e catalog.CatalogEntry) error
 	SetReleaseCover(ctx context.Context, releaseID int64, coverURL string) error
 	ReleaseCover(ctx context.Context, releaseID int64) (string, bool, error)
+	ReleaseCovers(ctx context.Context, releaseIDs []int64) (map[int64]string, error)
 	DisabledSet(ctx context.Context) (map[int]bool, error)
 	SetEnabled(ctx context.Context, categoryID int, enabled bool) error
 }
@@ -70,6 +72,59 @@ func (s *PGStore) ReleaseCover(ctx context.Context, releaseID int64) (string, bo
 		return e
 	})
 	return url, url != "", err
+}
+
+// ReleaseCovers reads many covers in ONE query — the batch shape behind
+// pluginapi.CatalogCoverBatch, so a home page rendering a poster strip plus a
+// listing plus a sidebar does not turn into 30+ round trips. release_cover is
+// keyed by release_id (PRIMARY KEY, see migrations/002_entries.sql), so the
+// ANY() lookup is an index scan.
+//
+// Ids with no cover row — or a blank one, matching ReleaseCover's ok=false —
+// are absent from the map; a short map is normal, not an error.
+func (s *PGStore) ReleaseCovers(ctx context.Context, releaseIDs []int64) (map[int64]string, error) {
+	if len(releaseIDs) == 0 {
+		return map[int64]string{}, nil
+	}
+	// Dedupe: callers stitch ids together from several page sections and the
+	// same release can legitimately appear in more than one of them.
+	ids := make([]int64, 0, len(releaseIDs))
+	seen := make(map[int64]struct{}, len(releaseIDs))
+	for _, id := range releaseIDs {
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	out := make(map[int64]string, len(ids))
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		rows, err := tx.QueryContext(ctx,
+			`SELECT release_id, cover_url FROM release_cover WHERE release_id = ANY($1)`,
+			pq.Array(ids))
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var (
+				id  int64
+				url string
+			)
+			if err := rows.Scan(&id, &url); err != nil {
+				return err
+			}
+			if url != "" {
+				out[id] = url
+			}
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // DisabledSet returns the top-level category ids an admin has turned off.

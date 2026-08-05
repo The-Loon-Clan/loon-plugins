@@ -16,9 +16,10 @@ import (
 type service struct{ store Store }
 
 var (
-	_ pluginapi.Catalog       = (*service)(nil)
-	_ pluginapi.CatalogSink   = (*service)(nil)
-	_ pluginapi.CatalogCovers = (*service)(nil)
+	_ pluginapi.Catalog           = (*service)(nil)
+	_ pluginapi.CatalogSink       = (*service)(nil)
+	_ pluginapi.CatalogCovers     = (*service)(nil)
+	_ pluginapi.CatalogCoverBatch = (*service)(nil)
 )
 
 // Upsert (CatalogSink) persists a scraped entry.
@@ -33,6 +34,13 @@ func (s *service) SetReleaseCover(ctx context.Context, releaseID int64, coverURL
 
 func (s *service) ReleaseCover(ctx context.Context, releaseID int64) (string, bool, error) {
 	return s.store.ReleaseCover(ctx, releaseID)
+}
+
+// ReleaseCovers (CatalogCoverBatch) is the bulk read: one query for a whole
+// page's worth of ids instead of one per poster. Ids without a cover are absent
+// from the map — callers fall back to their placeholder per id.
+func (s *service) ReleaseCovers(ctx context.Context, releaseIDs []int64) (map[int64]string, error) {
+	return s.store.ReleaseCovers(ctx, releaseIDs)
 }
 
 func (s *service) All(_ context.Context) ([]pluginapi.Category, error) {

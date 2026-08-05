@@ -46,4 +46,22 @@ type CatalogCovers interface {
 	ReleaseCover(ctx context.Context, releaseID int64) (url string, ok bool, err error)
 }
 
+// CatalogCoverBatch is the OPTIONAL bulk read side of CatalogCovers: one call
+// for many release ids, so a page that renders a poster strip + a listing +
+// a sidebar (30+ covers) costs one round trip instead of 30. Release ids with
+// no cover are simply absent from the returned map — a short map is the normal
+// case, not an error, and the caller falls back to its placeholder per id.
+//
+// It is a SEPARATE interface rather than a third method on CatalogCovers so
+// adding it does not break existing implementors: consumers feature-detect it
+// by type assertion (`if b, ok := covers.(pluginapi.CatalogCoverBatch); ok`)
+// and loop over ReleaseCover when the assertion fails. Same convention as
+// pluginapi.Fillable, scraper.Searcher, and catalog.CrossIDResolver.
+//
+// The catalog plugin's service implements both, so a host that type-asserts
+// the Catalog capability gets the batch path for free.
+type CatalogCoverBatch interface {
+	ReleaseCovers(ctx context.Context, releaseIDs []int64) (map[int64]string, error)
+}
+
 const CatalogName = "catalog.taxonomy"
