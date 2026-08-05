@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +45,16 @@ type adminVM struct {
 	// Cross-table findings, shown on BOTH pages: the configuration that breaks
 	// a reward usually lives on the other page from the one being looked at.
 	Findings []Finding
+
+	// Triggers offers the surface names already in use, so the form is a
+	// picker rather than a spelling test. A typo here is silent: the reward
+	// saves fine, no surface ever asks for that string, and nobody is offered
+	// the reward — which looks exactly like a reward that is merely unpopular.
+	//
+	// Advisory, not a whitelist. Fire() takes any string and the HOST decides
+	// what it fires, so the field stays free-text via a datalist; the plugin
+	// cannot know a surface it was never told about.
+	Triggers []string
 }
 
 func (p *Plugin) registerViews(c *core.Core) error {
@@ -149,6 +160,7 @@ func (p *Plugin) renderPage(ctx context.Context, tmpl string, pickedEvent int64,
 	if vm.Grants, err = p.admin.RecentGrants(ctx, 50); err != nil {
 		return "", err
 	}
+	vm.Triggers = knownTriggers(vm.Rewards)
 	if pickedEvent != 0 {
 		for _, e := range vm.Events {
 			if e.ID == pickedEvent {
@@ -382,4 +394,27 @@ func (p *Plugin) actionTestGrant(gc *gin.Context) (template.HTML, error) {
 		return p.redirect(gc, rewardsPage, "", err.Error())
 	}
 	return p.redirect(gc, rewardsPage, fmt.Sprintf("granted+%d+(ref+%d,+%s)", g.ID, g.Reference, g.State), "")
+}
+
+// knownTriggers is the suggestion list for the trigger picker: every surface
+// name already configured, plus the ones a stock host fires.
+//
+// Seeded rather than purely derived because the list is empty exactly when it
+// is most needed — configuring the FIRST trigger-driven reward, when there is
+// nothing to derive from. "login" is what the reference host fires
+// (handlers.fireLoginRewards passes it on both login paths); an install that
+// fires something else will see it here as soon as one reward uses it.
+func knownTriggers(rewards []Reward) []string {
+	seen := map[string]bool{"login": true}
+	for _, r := range rewards {
+		if r.Trigger != "" {
+			seen[r.Trigger] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for t := range seen {
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return out
 }

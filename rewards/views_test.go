@@ -198,3 +198,99 @@ func TestAdminTemplateRendersWindowPanel(t *testing.T) {
 		t.Error("empty window list does not explain the consequence")
 	}
 }
+
+// The event field is a SELECT built from real events, and the trigger field a
+// datalist of names already in use.
+//
+// Both were free-text boxes. Event asked the operator to recall a numeric id
+// and silently accepted a wrong one — a reward pointing at a nonexistent event
+// only shows up as an ERROR after saving. Trigger is worse, because a typo
+// there is silent forever: the reward saves, no surface ever asks for that
+// string, and nobody is offered it, which is indistinguishable from a reward
+// nobody wants.
+//
+// Tested because a dropdown that stops listing its options degrades to an
+// empty picker — strictly worse than the text box it replaced, and invisible
+// unless something asserts the options are there.
+func TestRewardFormOffersEventsAndTriggers(t *testing.T) {
+	p := &Plugin{}
+	if err := p.parseTemplates(); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	cron := "0 0 * * *"
+	vm := adminVM{
+		Now: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC),
+		Events: []EventStats{
+			{Event: Event{ID: 7, Slug: "daily-reset", Cron: &cron, Enabled: true}},
+			{Event: Event{ID: 8, Slug: "summer-2026", Enabled: false}},
+		},
+		Rewards:  []Reward{{Slug: "daily-login", Trigger: "login"}},
+		Triggers: knownTriggers([]Reward{{Slug: "daily-login", Trigger: "login"}}),
+	}
+	var sb strings.Builder
+	if err := p.tmpl.ExecuteTemplate(&sb, "rewards_admin.html", vm); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := sb.String()
+
+	// The event picker must be a select carrying real ids, not a text box.
+	for _, want := range []string{
+		`<select name="event_id"`,
+		`value="7"`, `daily-reset`,
+		`value="8"`, `summer-2026`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("event picker missing %q — operators are back to guessing ids", want)
+		}
+	}
+	// The cron is shown INLINE, so "is a schedule behind this?" is answerable
+	// without opening the Events page.
+	if !strings.Contains(out, cron) {
+		t.Error("the event's cron is not shown in the picker; the whole point is " +
+			"seeing that a job drives it")
+	}
+	// A disabled event must be visibly disabled rather than quietly selectable.
+	if !strings.Contains(out, "DISABLED") {
+		t.Error("a disabled event is offered with no warning — a reward gated by " +
+			"one can never be earned")
+	}
+	// "no event" has to be reachable: per_unit rewards want exactly that.
+	if !strings.Contains(out, `<option value="">`) {
+		t.Error("no way to choose NO event, which is what every per_unit reward needs")
+	}
+	// Trigger: a datalist (free text preserved — the host owns the vocabulary).
+	if !strings.Contains(out, `list="trigger-options"`) || !strings.Contains(out, `<datalist id="trigger-options">`) {
+		t.Error("trigger is not wired to its datalist")
+	}
+	if !strings.Contains(out, `<option value="login">`) {
+		t.Error("the trigger list does not offer login, the one a stock host fires")
+	}
+	// And the operator is told what actually drives each kind.
+	if !strings.Contains(out, "Reward Windows") {
+		t.Error("the form does not mention the job that grants per_unit rewards " +
+			"and materialises windows")
+	}
+}
+
+// knownTriggers seeds "login" so the picker is useful when it matters most:
+// configuring the FIRST trigger-driven reward, when there is nothing to derive.
+func TestKnownTriggersSeedsAndDedupes(t *testing.T) {
+	got := knownTriggers(nil)
+	if len(got) != 1 || got[0] != "login" {
+		t.Errorf("empty config gave %v, want [login] — an empty picker is useless "+
+			"exactly when the first reward is being made", got)
+	}
+	got = knownTriggers([]Reward{
+		{Trigger: "login"}, {Trigger: "profile"}, {Trigger: ""}, {Trigger: "profile"},
+	})
+	want := []string{"login", "profile"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v (deduped, blank skipped, sorted)", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("got %v, want %v", got, want)
+			break
+		}
+	}
+}
