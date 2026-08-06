@@ -4,6 +4,7 @@ import (
 	"embed"
 	"html/template"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,7 +25,8 @@ var pageFS embed.FS
 //
 // `slice` is not here: it has been a template builtin since Go 1.13.
 var pageTmpl = template.Must(template.New("offers").Funcs(template.FuncMap{
-	"add": func(a, b int) int { return a + b },
+	"add":     func(a, b int) int { return a + b },
+	"initial": initial,
 	"deref": func(p *int) int {
 		if p == nil {
 			return 0
@@ -66,4 +68,28 @@ func page(c *gin.Context, title, name string, data gin.H) {
 		return
 	}
 	deps.RenderPage(c, title, template.HTML(sb.String()))
+}
+
+// initial is the no-avatar circle's letter.
+//
+// NOT `slice .Username 0 1`, which is what this markup used to say: slice
+// counts BYTES, so a name whose first character is multi-byte puts half a rune
+// into the page, and an empty one does not degrade but errors — html/template
+// streams, so the render aborts wherever it had got to and the reader gets a
+// page that stops mid-list.
+//
+// Reimplemented rather than taken from Deps for the same reason `add` is: it
+// is pure logic with no answer to drift toward. Markdown crosses the seam
+// because it sanitises; this does not.
+//
+// Case is left alone — the caller's CSS does text-transform: uppercase.
+func initial(s string) string {
+	if s == "" {
+		return ""
+	}
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError && size <= 1 {
+		return ""
+	}
+	return s[:size]
 }

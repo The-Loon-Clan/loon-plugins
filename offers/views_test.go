@@ -150,3 +150,21 @@ func TestStoredVocabularyMatchesTheDatabase(t *testing.T) {
 		}
 	}
 }
+
+// The avatar fallback used `slice $u.Username 0 1`, which counts bytes: a
+// multi-byte first character went into the page as half a rune, and an empty
+// username errored rather than degrading — and html/template streams, so that
+// aborts the render part way down the page.
+func TestInitialIsRuneSafe(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"kirisame", "k"},
+		{"Ω-user", "Ω"},
+		{"日本", "日"},
+		{"", ""},
+		{string([]byte{0xff}), ""}, // a lone invalid byte, not a character
+	} {
+		if got := initial(tc.in); got != tc.want {
+			t.Errorf("initial(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

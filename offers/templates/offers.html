@@ -165,7 +165,7 @@
                             {{if $u.AvatarPath}}
                             <img src="{{$u.AvatarPath}}" alt="{{$u.Username}}" class="oc-avatar">
                             {{else}}
-                            <div class="oc-avatar-fallback">{{slice $u.Username 0 1}}</div>
+                            <div class="oc-avatar-fallback">{{initial $u.Username}}</div>
                             {{end}}
                             <div class="oc-name">
                                 <a href="/u/{{$u.Username}}">{{$u.Username}}</a>
