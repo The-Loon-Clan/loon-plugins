@@ -1,0 +1,65 @@
+{{define "support_public.html"}}
+    <style>
+        .ticket-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 0.8rem;
+            align-items: center;
+            padding: 0.7rem 0.9rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            text-decoration: none;
+            color: inherit;
+        }
+        .ticket-row:hover { border-color: var(--blue); }
+        .ticket-subject { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
+        .ticket-meta    { font-size: 0.74rem; color: var(--text-muted); margin-top: 0.15rem; }
+        .ticket-status  { font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .status-open       { background: rgba(245,158,11,0.18); color: var(--warn); }
+        .status-progress   { background: var(--teal-tint); color: var(--teal); }
+        .status-closed     { background: rgba(34,197,94,0.18); color: var(--green); }
+        .priority-pill { font-size: 0.65rem; padding: 1px 6px; border-radius: 6px; }
+    </style>
+
+    <div class="container mt-4 page-narrow">
+        <div class="d-flex justify-content-between align-items-baseline mb-3">
+            <div>
+                <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:0.2rem;">Public tickets</h2>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:0;">
+                    Tickets the owner has opted in to share. Lets common issues bubble up so you can see whether yours is already known.
+                    Have an issue? <a href="/support" style="color:var(--blue);">Open a ticket</a> — you choose whether to make it public when you file.
+                </p>
+            </div>
+        </div>
+
+        {{if .Tickets}}
+        {{range .Tickets}}
+        <a class="ticket-row" href="/support/{{.ID}}">
+            <div>
+                <div class="ticket-subject">{{.Subject}}</div>
+                <div class="ticket-meta">
+                    by <span style="color:var(--text-primary);">{{.Username}}</span>
+                    &middot; opened {{.CreatedAt.Format "Jan 02, 2006"}}
+                    &middot; updated {{.UpdatedAt.Format "Jan 02 15:04"}}
+                    {{if eq .Priority "high"}}<span class="priority-pill ms-2" style="background:rgba(239,68,68,0.18);color:var(--red);">HIGH</span>{{end}}
+                </div>
+            </div>
+            <span class="ticket-status status-{{if eq .Status "in_progress"}}progress{{else}}{{.Status}}{{end}}">
+                {{if eq .Status "in_progress"}}in progress{{else}}{{.Status}}{{end}}
+            </span>
+            <span style="font-size:1.2rem;color:var(--text-muted);">›</span>
+        </a>
+        {{end}}
+        {{else}}
+        <div class="ticket-row" style="display:block;text-align:center;color:var(--text-muted);">
+            No public tickets yet. When users opt to share their support tickets, they'll show up here.
+        </div>
+        {{end}}
+
+        {{.PaginationHTML}}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{{end}}

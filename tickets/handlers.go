@@ -9,6 +9,7 @@ package tickets
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,10 +36,11 @@ func (h *Handlers) SupportPage(c *gin.Context) {
 		return
 	}
 	tickets, _ := h.store.GetTicketsByUser(c.Request.Context(), user.ID)
-	c.HTML(http.StatusOK, "support.html", deps.BaseData(c, gin.H{
-		"Tickets":   tickets,
-		"Submitted": c.Query("submitted"),
-	}))
+	render(c, http.StatusOK, "Support", "support.html", gin.H{
+		"EditorHTML": editor(newTicketEditor),
+		"Tickets":    tickets,
+		"Submitted":  c.Query("submitted"),
+	})
 }
 
 func (h *Handlers) SubmitTicket(c *gin.Context) {
@@ -55,19 +57,21 @@ func (h *Handlers) SubmitTicket(c *gin.Context) {
 
 	if subject == "" || body == "" {
 		tickets, _ := h.store.GetTicketsByUser(ctx, user.ID)
-		c.HTML(http.StatusBadRequest, "support.html", deps.BaseData(c, gin.H{
-			"Error":   "Subject and description are required.",
-			"Tickets": tickets,
-		}))
+		render(c, http.StatusBadRequest, "Support", "support.html", gin.H{
+			"EditorHTML": editor(newTicketEditor),
+			"Error":      "Subject and description are required.",
+			"Tickets":    tickets,
+		})
 		return
 	}
 	subject = clampSubject(subject)
 
 	ticket, err := h.store.CreateTicket(ctx, user.ID, user.Username, subject, body, priority)
 	if err != nil {
-		c.HTML(http.StatusInternalServerError, "support.html", deps.BaseData(c, gin.H{
-			"Error": "Failed to submit ticket. Please try again.",
-		}))
+		render(c, http.StatusInternalServerError, "Support", "support.html", gin.H{
+			"EditorHTML": editor(newTicketEditor),
+			"Error":      "Failed to submit ticket. Please try again.",
+		})
 		return
 	}
 	if h.deps.NotifyNewTicket != nil && ticket != nil {
@@ -107,12 +111,17 @@ func (h *Handlers) TicketDetail(c *gin.Context) {
 	}
 	viewerRole := h.roleData(ctx, user.Role)
 
-	c.HTML(http.StatusOK, "support_ticket.html", deps.BaseData(c, gin.H{
+	render(c, http.StatusOK, "Ticket", "support_ticket.html", gin.H{
+		"EditorHTML": editor(replyEditor),
+		// The reply page hides "delete" from anyone but the ticket owner; the
+		// comparison used to read $.User off the host page data, which stops
+		// existing once the markup lives here.
+		"ViewerID":   viewerID(c),
 		"Ticket":     ticket,
 		"Replies":    replies,
 		"OwnerRole":  ownerRole,
 		"ViewerRole": viewerRole,
-	}))
+	})
 }
 
 // SetTicketVisibility — owner-only toggle for the public flag.
@@ -158,12 +167,12 @@ func (h *Handlers) PublicTickets(c *gin.Context) {
 		h.errs.HandlerError(c, "ticket/public-list", err)
 		return
 	}
-	pagination := deps.Pagination(page, pageSize, total, "/support/public?")
-	c.HTML(http.StatusOK, "support_public.html", deps.BaseData(c, gin.H{
+	pagination := deps.RenderPagination(page, pageSize, total, "/support/public?")
+	render(c, http.StatusOK, "Public tickets", "support_public.html", gin.H{
 		"Tickets":    tickets,
 		"Total":      total,
 		"Pagination": pagination,
-	}))
+	})
 }
 
 func (h *Handlers) ReplyTicket(c *gin.Context) {
@@ -211,8 +220,8 @@ func (h *Handlers) Tickets(c *gin.Context) {
 	if statusFilter != "" {
 		ticketBaseURL = "/admin/tickets?status=" + statusFilter + "&"
 	}
-	pag := deps.Pagination(page, ticketsPageSize, total, ticketBaseURL)
-	c.HTML(http.StatusOK, "admin_tickets.html", deps.BaseData(c, gin.H{
+	pag := deps.RenderPagination(page, ticketsPageSize, total, ticketBaseURL)
+	render(c, http.StatusOK, "Tickets — admin", "admin_tickets.html", gin.H{
 		"Tickets": tickets,
 		"Total":   total,
 		// Computed here rather than read back off the opaque pagination
@@ -222,7 +231,7 @@ func (h *Handlers) Tickets(c *gin.Context) {
 		"TotalPages":   totalPages(total, ticketsPageSize),
 		"StatusFilter": statusFilter,
 		"Pagination":   pag,
-	}))
+	})
 }
 
 func (h *Handlers) UpdateTicket(c *gin.Context) {
@@ -327,4 +336,31 @@ func totalPages(totalItems, pageSize int) int {
 		n = 1
 	}
 	return n
+}
+
+// viewerID is the signed-in member's id, or 0. Small helper because the reply
+// page's owner check needs it and a nil Viewer must compare as "not the
+// owner" rather than panicking.
+func viewerID(c *gin.Context) int {
+	if v := deps.Viewer(c); v != nil {
+		return v.ID
+	}
+	return 0
+}
+
+// editor and paginate pick whichever contract the host wired. Both return
+// empty on the legacy path, where the host's own template supplies these
+// itself and the extra keys are simply unused.
+func editor(opts map[string]any) template.HTML {
+	if deps.RenderEditor == nil {
+		return ""
+	}
+	return deps.RenderEditor(opts)
+}
+
+func paginate(page, pageSize, total int, baseURL string) template.HTML {
+	if deps.RenderPagination == nil {
+		return ""
+	}
+	return deps.RenderPagination(page, pageSize, total, baseURL)
 }

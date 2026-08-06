@@ -1,0 +1,59 @@
+{{define "admin_tickets.html"}}
+
+    <div class="container mt-4 site-container">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span>Support Tickets <span class="text-muted" style="font-size:0.85rem;">({{.Total}})</span></span>
+                <div class="d-flex gap-2 flex-wrap align-items-center">
+                    <div class="btn-group btn-group-sm">
+                        <a href="/admin/tickets" class="btn {{if eq .StatusFilter ""}}btn-secondary{{else}}btn-outline-secondary{{end}}">All</a>
+                        <a href="/admin/tickets?status=open" class="btn {{if eq .StatusFilter "open"}}btn-warning{{else}}btn-outline-secondary{{end}}">Open</a>
+                        <a href="/admin/tickets?status=in_progress" class="btn {{if eq .StatusFilter "in_progress"}}btn-info{{else}}btn-outline-secondary{{end}}">In Progress</a>
+                        <a href="/admin/tickets?status=closed" class="btn {{if eq .StatusFilter "closed"}}btn-success{{else}}btn-outline-secondary{{end}}">Closed</a>
+                    </div>
+                    {{.PaginationHTML}}
+                </div>
+            </div>
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th style="font-size:0.85rem;">#</th>
+                        <th style="font-size:0.85rem;">User</th>
+                        <th style="font-size:0.85rem;">Subject</th>
+                        <th style="font-size:0.85rem;width:80px;">Priority</th>
+                        <th style="font-size:0.85rem;width:90px;">Status</th>
+                        <th style="font-size:0.85rem;width:120px;">Submitted</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Tickets}}
+                    <tr style="cursor:pointer;" onclick="window.location='/support/{{.ID}}'">
+                        <td style="color:var(--text-muted);font-size:0.85rem;">{{.ID}}</td>
+                        <td style="font-size:0.88rem;">{{.Username}}</td>
+                        <td>
+                            <div style="font-size:0.88rem;font-weight:500;">{{.Subject}}</div>
+                        </td>
+                        <td>
+                            {{if eq .Priority "high"}}<span class="badge bg-danger">High</span>
+                            {{else if eq .Priority "low"}}<span class="badge bg-secondary">Low</span>
+                            {{else}}<span class="badge bg-primary">Normal</span>{{end}}
+                        </td>
+                        <td>
+                            {{if eq .Status "open"}}<span class="badge bg-warning text-dark">Open</span>
+                            {{else if eq .Status "in_progress"}}<span class="badge bg-info text-dark">In Progress</span>
+                            {{else}}<span class="badge bg-success">Closed</span>{{end}}
+                        </td>
+                        <td style="color:var(--text-muted);font-size:0.82rem;white-space:nowrap;">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="6" class="text-center" style="color:var(--text-muted);padding:2rem;">No tickets found.</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{{end}}

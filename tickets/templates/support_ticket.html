@@ -1,0 +1,147 @@
+{{define "support_ticket.html"}}
+    <style>
+        .msg { max-width: 75%; padding: 0.65rem 0.9rem; border-radius: 12px; font-size: 0.88rem; line-height: 1.55; }
+        .msg-user { background: rgba(var(--bs-primary-rgb), 0.15); margin-left: auto; border-bottom-right-radius: 4px; }
+        .msg-admin { background: var(--bg-elevated); border-bottom-left-radius: 4px; }
+        .msg-meta { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+        .msg-body { word-break: break-word; }
+        .msg-body p:last-child { margin-bottom: 0; }
+        .msg-body code { background: rgba(0,0,0,0.25); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.85em; }
+        .msg-body blockquote { border-left: 3px solid var(--blue); padding: 0.1rem 0 0.1rem 0.7rem; margin: 0.3rem 0; color: var(--text-muted); }
+
+        /* Bounded conversation pane — fixed height + internal scroll
+           so the reply form stays anchored at the bottom of the
+           viewport on long threads. Auto-scrolls to the most recent
+           message on load (JS at the bottom). */
+        .ticket-thread {
+            max-height: 60vh;
+            min-height: 320px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+    </style>
+    <div class="container mt-4 site-container">
+
+        <nav aria-label="breadcrumb" style="font-size:0.85rem;" class="mb-3">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="/support">Support</a></li>
+                <li class="breadcrumb-item active">Ticket #{{.Ticket.ID}}</li>
+            </ol>
+        </nav>
+
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <span style="font-weight:600;">{{.Ticket.Subject}}</span>
+                    {{if eq .Ticket.Priority "high"}}<span class="badge bg-danger ms-2">High</span>
+                    {{else if eq .Ticket.Priority "low"}}<span class="badge bg-secondary ms-2">Low</span>
+                    {{else}}<span class="badge bg-primary ms-2">Normal</span>{{end}}
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    {{if .Ticket.Public}}<span class="badge bg-info" title="Public — readable by anyone signed in">🌐 Public</span>{{end}}
+                    {{if eq .Ticket.Status "open"}}<span class="badge bg-warning text-dark">Open</span>
+                    {{else if eq .Ticket.Status "in_progress"}}<span class="badge bg-info text-dark">In Progress</span>
+                    {{else}}<span class="badge bg-success">Closed</span>{{end}}
+                </div>
+            </div>
+            {{/* Owner-only visibility toggle (migration 207). The
+                 ticket owner can flip public/private at any time;
+                 admins manage status separately below. */}}
+            {{if and $.ViewerID (eq $.ViewerID .Ticket.UserID)}}
+            <div class="card-footer d-flex align-items-center gap-2" style="font-size:0.82rem;background:var(--bg-elevated);">
+                <span style="color:var(--text-muted);">Visibility:</span>
+                <form method="POST" action="/support/{{.Ticket.ID}}/visibility" class="d-flex align-items-center gap-2">
+                    {{if .Ticket.Public}}
+                    <span style="color:var(--blue);">🌐 Public</span>
+                    <span style="color:var(--text-muted);font-size:0.75rem;">— anyone signed in can read this ticket. Replies are still owner + admin only.</span>
+                    <input type="hidden" name="public" value="0">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary py-0" style="font-size:0.78rem;">Make private</button>
+                    {{else}}
+                    <span style="color:var(--text-muted);">🔒 Private</span>
+                    <span style="color:var(--text-muted);font-size:0.75rem;">— only you and admins can read this ticket.</span>
+                    <input type="hidden" name="public" value="1">
+                    <button type="submit" class="btn btn-sm btn-outline-info py-0" style="font-size:0.78rem;">Make public</button>
+                    {{end}}
+                </form>
+            </div>
+            {{end}}
+            {{if .IsAdmin}}
+            <div class="card-footer d-flex align-items-center gap-2 flex-wrap" style="font-size:0.82rem;">
+                <span style="color:var(--text-muted);">Status:</span>
+                <form method="POST" action="/admin/tickets/{{.Ticket.ID}}/update" class="d-flex gap-1 align-items-center">
+                    <select name="status" class="form-select form-select-sm" style="width:auto;font-size:0.8rem;">
+                        <option value="open" {{if eq .Ticket.Status "open"}}selected{{end}}>Open</option>
+                        <option value="in_progress" {{if eq .Ticket.Status "in_progress"}}selected{{end}}>In Progress</option>
+                        <option value="closed" {{if eq .Ticket.Status "closed"}}selected{{end}}>Closed</option>
+                    </select>
+                    <input type="hidden" name="admin_note" value="">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary py-0" style="font-size:0.78rem;">Update</button>
+                </form>
+                <form method="POST" action="/admin/tickets/{{.Ticket.ID}}/delete" class="ms-auto"
+                      onsubmit="return confirm('Delete this ticket permanently?')">
+                    <button type="submit" class="btn btn-sm btn-outline-danger py-0" style="font-size:0.78rem;">Delete Ticket</button>
+                </form>
+            </div>
+            {{end}}
+        </div>
+
+        {{/* ── Chat messages ── */}}
+        <div class="ticket-thread d-flex flex-column gap-3 mb-4" id="ticket-thread">
+            {{/* Original ticket body as first message */}}
+            <div>
+                <div class="msg msg-user">
+                    <div class="msg-body">{{markdown .Ticket.Body}}</div>
+                </div>
+                <div class="msg-meta text-end">
+                    <span style="color:var(--bs-{{.OwnerRole.Color}});font-weight:600;">{{.Ticket.Username}}</span>
+                    <span class="badge bg-{{.OwnerRole.Color}}" style="font-size:0.58rem;vertical-align:middle;">{{.OwnerRole.DisplayName}}</span>
+                    &middot; {{.Ticket.CreatedAt.Format "Jan 02, 2006 15:04"}}
+                </div>
+            </div>
+
+            {{range .Replies}}
+            <div>
+                <div class="msg {{if .IsAdmin}}msg-admin{{else}}msg-user{{end}}">
+                    <div class="msg-body">{{markdown .Body}}</div>
+                </div>
+                <div class="msg-meta {{if .IsAdmin}}{{else}}text-end{{end}}">
+                    {{if .IsAdmin}}
+                    <span style="color:var(--bs-danger);font-weight:600;">{{.Username}}</span>
+                    <span class="badge bg-danger" style="font-size:0.58rem;vertical-align:middle;">Staff</span>
+                    {{else}}
+                    <span style="color:var(--bs-{{$.OwnerRole.Color}});font-weight:600;">{{.Username}}</span>
+                    <span class="badge bg-{{$.OwnerRole.Color}}" style="font-size:0.58rem;vertical-align:middle;">{{$.OwnerRole.DisplayName}}</span>
+                    {{end}}
+                    &middot; {{.CreatedAt.Format "Jan 02, 2006 15:04"}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+
+        {{/* ── Reply form ── */}}
+        {{if ne .Ticket.Status "closed"}}
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="/support/{{.Ticket.ID}}/reply">
+                    {{.EditorHTML}}
+                    <div class="text-end mt-2">
+                        <button type="submit" class="btn btn-primary btn-sm">Send Reply</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {{else}}
+        <div class="text-center" style="color:var(--text-muted);font-size:0.85rem;">This ticket is closed.</div>
+        {{end}}
+
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-scroll the conversation pane to the most recent message
+        // so the reply form is always visible without manual scroll.
+        (function(){
+            const t = document.getElementById('ticket-thread');
+            if (t) t.scrollTop = t.scrollHeight;
+        })();
+    </script>
+{{end}}

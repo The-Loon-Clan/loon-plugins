@@ -2,6 +2,7 @@ package tickets
 
 import (
 	"context"
+	"html/template"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,14 +19,48 @@ import (
 // operator owns. So the plugin asks one question — who is this, and may they
 // act on other people's tickets — and the host answers in its own terms.
 type Deps struct {
-	// BaseData merges the host's page chrome into a template data map.
-	BaseData func(c *gin.Context, extra gin.H) gin.H
+	// RenderPage wraps a finished fragment in the site chrome. The four pages
+	// are this plugin's markup now, so what it needs from the host is chrome
+	// rather than a data map.
+	//
+	// status is a parameter because three of these pages re-render themselves
+	// on a validation failure. Fixing it at 200 would mean a page saying "your
+	// ticket was rejected" while telling every client it succeeded.
+	RenderPage func(c *gin.Context, status int, title string, body template.HTML)
+
+	// BaseData and Pagination are the PREVIOUS contract, kept working while
+	// loon-demo-site migrates. A host that sets these instead of RenderPage
+	// gets the old behaviour: the plugin renders by template NAME out of the
+	// host's own directory rather than its embedded fragment.
+	//
+	// This exists because loon-demo-site is maintained separately and builds
+	// against this working tree — shipping the new seam alone would have
+	// broken a build in someone else's session, for code they did not write.
+	// Delete both, and the legacy branch in views.go, once demo sets
+	// RenderPage.
+	BaseData   func(c *gin.Context, extra gin.H) gin.H
+	Pagination func(page, pageSize, totalItems int, baseURL string) any
+	// RenderEditor returns the site's shared markdown editor as ready HTML,
+	// for the options given. Shared chrome used by seven pages across the
+	// site, so it is rendered host-side rather than copied in here — but the
+	// OPTIONS are per call site (rows, placeholder), hence a function.
+	RenderEditor func(opts map[string]any) template.HTML
+	// Markdown renders a ticket body or reply.
+	//
+	// Crosses the seam rather than being reimplemented, and this one is not a
+	// convenience: it SANITISES. A second renderer in the plugin would be a
+	// second allow-list, and two sanitisers that disagree is a stored-XSS bug
+	// waiting for whichever one is laxer. Same reasoning as a shared hash —
+	// the failure would be silent.
+	Markdown func(string) template.HTML
 
 	// PageOffset and Pagination are the host's paging helpers. Passed rather
 	// than copied: the value is consumed by the host's pagination PARTIAL, so
 	// a lifted copy would render correctly until the partial changed.
 	PageOffset func(page, pageSize int) int
-	Pagination func(page, pageSize, totalItems int, baseURL string) any
+	// RenderPagination is the site's pager as finished HTML. A fragment runs
+	// in this plugin's own template set and cannot reach the host's partials.
+	RenderPagination func(page, pageSize, totalItems int, baseURL string) template.HTML
 
 	// Viewer identifies the requester and answers the two authority questions
 	// this surface asks. nil means not signed in.
@@ -71,6 +106,14 @@ func SetDeps(d Deps) { deps = &d }
 // Notifications and role chrome are deliberately excluded — each degrades one
 // feature rather than the page.
 func (d *Deps) ready() bool {
-	return d != nil && d.BaseData != nil && d.Viewer != nil &&
-		d.PageOffset != nil && d.Pagination != nil
+	if d == nil || d.Viewer == nil || d.PageOffset == nil {
+		return false
+	}
+	// Either contract is acceptable: the new chrome seam, or the legacy
+	// name-and-data-map one. Not a mixture — a host that set half of each
+	// would render some pages and blank others.
+	modern := d.RenderPage != nil && d.RenderPagination != nil &&
+		d.RenderEditor != nil && d.Markdown != nil
+	legacy := d.BaseData != nil && d.Pagination != nil
+	return modern || legacy
 }

@@ -28,8 +28,11 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// and role chrome are excluded on purpose: each degrades a feature rather
 	// than the page, so a host without them still has working support tickets.
 	if !deps.ready() {
-		return fmt.Errorf("tickets: SetDeps not called, or missing BaseData/Viewer/PageOffset/Pagination — wire it in main() before core.Boot")
+		return fmt.Errorf("tickets: SetDeps not called, or missing RenderPage/RenderEditor/Markdown/Viewer/PageOffset/RenderPagination — wire it in main() before core.Boot")
 	}
+	// Templates are parsed here, not at package init: the markdown helper is a
+	// Deps function and Deps does not exist until now.
+	parseTemplates()
 	db := c.Storage.DB()
 	if db == nil {
 		return fmt.Errorf("tickets: Core.Storage.DB() is nil")
