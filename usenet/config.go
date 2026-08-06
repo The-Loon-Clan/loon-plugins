@@ -155,6 +155,14 @@ type Config struct {
 	HealthRecheckDays int `json:"health_recheck_days"`  // re-check a release this often (default 30)
 	HealthMinAgeHours int `json:"health_min_age_hours"` // propagation guard: skip releases newer than this (default 24)
 	HealthStatChunk   int `json:"health_stat_chunk"`    // segments STATted per connection lease (default 200)
+	// HealthTransportYield: how many releases in a row may fail on TRANSPORT
+	// (the provider timed out mid-STAT) before the pass gives up. Not the same
+	// as the pool being busy, which still yields on the first refusal so the
+	// crawler keeps priority. This exists because the yield used to be decided
+	// per release and end the whole pass: against a provider that times out
+	// routinely the first release tripped it every time, and the sweep checked
+	// nothing for weeks while logging a plausible "pool busy or failing".
+	HealthTransportYield int `json:"health_transport_yield"` // consecutive transport-failed releases before yielding (default 5)
 
 	// NNTP transport bounds. Per-provider behavior lives on the servers table;
 	// these are the plugin-wide dial/operation limits every pool is built with.
@@ -303,6 +311,9 @@ func (c *Config) applyDefaults() {
 	if c.HealthStatChunk <= 0 {
 		c.HealthStatChunk = 200
 	}
+	if c.HealthTransportYield <= 0 {
+		c.HealthTransportYield = 5
+	}
 	if c.DialTimeoutSec <= 0 {
 		c.DialTimeoutSec = 30
 	}
@@ -394,6 +405,7 @@ func (c *Config) knobFields() map[string]*int {
 		"health_recheck_days":           &c.HealthRecheckDays,
 		"health_min_age_hours":          &c.HealthMinAgeHours,
 		"health_stat_chunk":             &c.HealthStatChunk,
+		"health_transport_yield":        &c.HealthTransportYield,
 		"backfill_pressure_high_pct":    &c.BackfillPressureHighPct,
 		"crawl_pressure_high_pct":       &c.CrawlPressureHighPct,
 		"backfill_pressure_low_pct":     &c.BackfillPressureLowPct,

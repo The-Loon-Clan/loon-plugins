@@ -219,7 +219,9 @@ Extensions CONSUMED (`Core.Lookup`):
   (`ReleaseSink`, `ReleaseHealthStore` in `pluginapi`) and **consumes the host's
   implementations**: assembled releases go out through the sink, health
   candidates/verdicts flow through the health store. Host mode without them is a
-  loud refusal.
+  loud refusal. `ReleaseHealthStore` also carries
+  `ClearHealthRecheckRequest`, for the one check outcome that writes neither a
+  verdict nor a touch — see "How the health sweep gives up" below.
 - `pluginapi.UsenetCatalogStatsName` — optional, `sink: host` only: catalog
   totals + the health breakdown for the dashboard's Index Stats and NZB Health
   cards (in host mode the releases and verdicts live in the host's domain,
@@ -496,3 +498,34 @@ here, so these paths are worth a real server:
 docker run -d --name usenet-test-redis -p 6399:6379 redis:7-alpine
 USENET_TEST_REDIS=127.0.0.1:6399 go test -tags=integration -race ./usenet/
 ```
+
+## How the health sweep gives up
+
+The sweep borrows the fleet's primary pool, so it must be a considerate
+neighbour to the crawler. It distinguishes three ways a release can fail to
+produce a verdict, and they are not interchangeable — collapsing two of them is
+what left the checker doing **no work at all for weeks** while logging a
+plausible "connection pool busy or failing":
+
+| what happened | outcome | effect |
+|---|---|---|
+| the pool had nothing to lend (`ErrPoolBusy` / `ErrPoolEmpty`) | `healthSkipTransient` | **ends the pass at once** — the crawler is using those connections and waiting for them is its loss |
+| we held a connection and the provider failed the read | `healthSkipTransport` | **abandons that release**, tries the next; the pass ends only after `health_transport_yield` of them in a row |
+| the server answered, but too much of the answer was unusable | `healthSkipRow` | abandons that release; it will be exactly as inconclusive next pass, so ending the pass on it starved every other check |
+
+The middle row is the fix. It used to be the first: one release timing out
+ended the whole pass, and against a provider that times out routinely the
+FIRST release tripped it on every single pass. `health_transport_yield`
+(default 5) is the run length that means the pool itself is sick — providers
+kill idle NNTP sessions, so after a quiet gap every socket is a corpse and
+grinding on costs an op-timeout each. Any release that reaches an answer resets
+the run, because that proves the connections work.
+
+None of the three stamps `last_health_check_at`, so a release that could not be
+checked is retried promptly rather than waiting out the recheck window. The one
+thing a skip DOES clear is a user's recheck request, and only for
+`healthSkipRow`: a person pressed a button, the answer is "we genuinely cannot
+tell", and leaving the request set means re-STATting that release on every pass
+forever while their page says "queued". `healthSkipTransport` and
+`healthSkipTransient` leave the request alone — their check never really
+happened, so the request has not been serviced.

@@ -221,7 +221,20 @@ type healthOutcome int
 const (
 	healthWritten       healthOutcome = iota // verdict recorded
 	healthSkipPermanent                      // bad data: stamp it so it stops jamming the queue
-	healthSkipTransient                      // pool-level trouble (busy / transport failures): end the pass
+	healthSkipTransient                      // the POOL has nothing to give: end the pass
+	// healthSkipTransport — we HELD a connection and the provider failed the
+	// request (an i/o timeout mid-STAT). Row-level, unlike the above.
+	//
+	// These were the same outcome, and it made the sweep useless. The yield
+	// was decided per release but ended the whole pass, so against a provider
+	// that times out routinely the FIRST release tripped it on every pass and
+	// the checker checked nothing — for weeks — while logging a plausible
+	// "connection pool busy or failing". Whether the pool is exhausted and
+	// whether one release's reads timed out are different facts and now have
+	// different outcomes: the first still yields immediately so the crawler
+	// keeps priority, the second moves to the next release and only yields
+	// after HealthTransportYield of them in a row.
+	healthSkipTransport
 	// healthSkipRow — THIS row's answers were too doubtful to trust, but the
 	// pool is fine. Continue to the next row. Splitting this from transient
 	// was a confirmed high: a release whose ids draw deterministic non-430
@@ -320,10 +333,10 @@ func checkSegments(ctx context.Context, segs releaseSegments, chunk, claimedTota
 		return nil
 	}
 	if err := count(segs.Data, &missData); err != nil {
-		return "", 0, 0, 0, healthSkipTransient
+		return "", 0, 0, 0, transportOrPool(err)
 	}
 	if err := count(segs.Par2, &missPar2); err != nil {
-		return "", 0, 0, 0, healthSkipTransient
+		return "", 0, 0, 0, transportOrPool(err)
 	}
 
 	// Too much doubt: keep whatever verdict this release already had. The
@@ -336,12 +349,56 @@ func checkSegments(ctx context.Context, segs releaseSegments, chunk, claimedTota
 	// pass on it starved every other check forever. Row-level: move on.
 	if float64(unknown)/float64(total-baseline) > maxInconclusiveRatio {
 		if transportFails > 0 {
-			return "", 0, 0, 0, healthSkipTransient
+			// Doubt minted by dying sockets, not by the server's answers — so
+			// this says nothing about the release. Skip the ROW; the pass
+			// decides for itself whether enough of these in a row mean the
+			// pool is sick.
+			return "", 0, 0, 0, healthSkipTransport
 		}
 		return "", 0, 0, 0, healthSkipRow
 	}
 	missData += baseline
 	return healthVerdict(missData, len(segs.Par2), missPar2), total, missData, len(segs.Par2), healthWritten
+}
+
+// passYield decides when a RUN of provider timeouts means the pool is sick
+// rather than one release being unlucky.
+//
+// Split out of the sweep loop for the same reason checkSegments was split out
+// of checkOne: the loop around it needs a live NNTP pool to run, and the
+// accounting is exactly where this went wrong. The old version had no
+// accounting at all — one bad release ended the pass — so the sweep checked
+// nothing for weeks against a provider that times out routinely.
+type passYield struct {
+	limit int // consecutive failures before giving up; 0 disables the yield
+	run   int // consecutive transport-failed releases right now
+	total int // transport-failed releases this pass, for the log
+}
+
+// observe folds one release's outcome in and reports whether the pass should
+// stop. Any release that reaches an answer — a verdict, an unreadable blob, or
+// server-answered doubt — resets the run: those prove the pool is working.
+func (y *passYield) observe(outcome healthOutcome) (yield bool) {
+	if outcome != healthSkipTransport {
+		y.run = 0
+		return false
+	}
+	y.total++
+	y.run++
+	return y.limit > 0 && y.run >= y.limit
+}
+
+// transportOrPool separates "the pool had nothing to lend" from "we held a
+// connection and the provider failed the request". Only the pool sentinels end
+// a pass: they mean the crawler is using the connections, and waiting for them
+// is the crawler's loss. A ctx error counts as pool-level too — that is
+// shutdown, and there is no next release to try.
+func transportOrPool(err error) healthOutcome {
+	if errors.Is(err, nntp.ErrPoolBusy) || errors.Is(err, nntp.ErrPoolEmpty) ||
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return healthSkipTransient
+	}
+	return healthSkipTransport
 }
 
 // healthBackend is where candidates come from and verdicts go. Internal mode
@@ -481,10 +538,11 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 	p.healthJob.Log("health check: sweeping %d release(s) due a check", len(rows))
 
 	var checked, unreadable int
-	var yielded bool
+	var yielded, poolExhausted bool
 	var inconclusive int
 	var inconclusiveRequests int
 	var inconclusiveIDs []int64
+	timeouts := passYield{limit: cfg.HealthTransportYield}
 	tally := map[string]int{}
 	for _, row := range rows {
 		if ctx.Err() != nil {
@@ -532,10 +590,20 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 					inconclusiveRequests++
 				}
 			}
+		case healthSkipTransport:
+			// We held a connection and the provider failed the request. Say
+			// nothing about this release — its verdict and its checked-at are
+			// both untouched, so it is retried promptly — and try the next
+			// one. Only a RUN of these means the pool itself is sick.
 		case healthSkipTransient:
-			// The connections are wanted elsewhere, or the provider is flaky.
-			// Stop the pass instead of grinding through the rest for the same
-			// answer, and leave the row untouched so it is retried promptly.
+			// The pool has nothing to lend: the crawler is using every
+			// connection. Stop rather than queue behind it — those
+			// connections are better spent indexing — and leave the row
+			// untouched so it is retried promptly.
+			poolExhausted = true
+			yielded = true
+		}
+		if timeouts.observe(outcome) {
 			yielded = true
 		}
 		if yielded {
@@ -556,8 +624,19 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 			msg += fmt.Sprintf(" — %d of them user-requested, request cleared", inconclusiveRequests)
 		}
 	}
-	if yielded {
-		msg += " — yielded early (connection pool busy or failing)"
+	if timeouts.total > 0 {
+		// Named separately from the yield, because the two used to be the same
+		// line and that is what hid a checker doing no work at all: "pool busy
+		// or failing" reads like contention even when every release is dying
+		// on provider timeouts.
+		msg += fmt.Sprintf(", %d skipped on provider timeouts", timeouts.total)
+	}
+	switch {
+	case poolExhausted:
+		msg += " — yielded early (every connection is with the crawler)"
+	case yielded:
+		msg += fmt.Sprintf(" — yielded early (%d releases in a row failed on provider timeouts; the pool looks sick)",
+			timeouts.run)
 	}
 	p.healthJob.Log("%s", msg)
 	p.healthJob.SetIdle(p.nextHealth(cfg))

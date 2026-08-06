@@ -60,6 +60,7 @@ func knobList(cfg Config) []knob {
 		{"health_recheck_days", "Health re-check after (days)", cfg.HealthRecheckDays, "how long a verdict stands before it is re-tested (default 30)"},
 		{"health_min_age_hours", "Health min age (hrs)", cfg.HealthMinAgeHours, "skip releases newer than this — articles may still be propagating, and checking early wrongly marks new uploads dead (default 24)"},
 		{"health_stat_chunk", "Health STATs per lease", cfg.HealthStatChunk, "segments checked per borrowed connection; smaller returns connections to the crawler more often (default 200)"},
+		{"health_transport_yield", "Health transport tolerance", cfg.HealthTransportYield, "releases in a row that may fail on a provider timeout before the sweep gives up; a busy pool still yields immediately so the crawler keeps priority (default 5)"},
 		{"backfill_pressure_high_pct", "Backfill pause at (% pressure)", cfg.BackfillPressureHighPct, "backfill pauses when staging pressure reaches this percent (default 85), while the builder has a backlog to drain"},
 		{"backfill_pressure_low_pct", "Backfill resume below (% pressure)", cfg.BackfillPressureLowPct, "paused backfill resumes once pressure drops below this percent (default 70) — must stay below the pause threshold or the gate flaps"},
 		{"backfill_pressure_ceiling_pct", "Eviction ceiling (% pressure)", cfg.BackfillPressureCeilingPct, "the hard stop that applies even with nothing to drain (default 92) — past it Redis EVICTS forming sets to make room; also caps the crawl's effective pause threshold"},

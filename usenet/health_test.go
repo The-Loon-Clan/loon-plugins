@@ -32,7 +32,9 @@ func TestCheckSegmentsFoldsFailedChunks(t *testing.T) {
 	t.Run("failed chunk's unknowns must reach the ratio guard", func(t *testing.T) {
 		// 400 segments, chunk 200. Chunk 1 dies with nothing answered; chunk 2
 		// answers everything present. Half the release was never checked, so
-		// the only defensible outcome is a transient skip.
+		// the one thing that must NOT happen is a definitive verdict — the
+		// doubt is transport-minted, so the release is abandoned and the pass
+		// counts it toward deciding whether the pool is sick.
 		segs := releaseSegments{Data: ids(400)}
 		calls := 0
 		_, _, _, _, outcome := checkSegments(context.Background(), segs, 200, 0,
@@ -54,8 +56,8 @@ func TestCheckSegmentsFoldsFailedChunks(t *testing.T) {
 			t.Fatal("a check that never answered half the segments produced a definitive verdict — " +
 				"the failed chunk's unknowns were discarded instead of feeding the inconclusive guard")
 		}
-		if outcome != healthSkipTransient {
-			t.Fatalf("outcome = %v, want healthSkipTransient", outcome)
+		if outcome != healthSkipTransport {
+			t.Fatalf("outcome = %v, want healthSkipTransport", outcome)
 		}
 	})
 
@@ -99,7 +101,7 @@ func TestCheckSegmentsFoldsFailedChunks(t *testing.T) {
 		}
 	})
 
-	t.Run("three transport failures still abort the release", func(t *testing.T) {
+	t.Run("three transport failures still abort the release", func(t *testing.T) { //nolint:dupl
 		segs := releaseSegments{Data: ids(600)}
 		calls := 0
 		_, _, _, _, outcome := checkSegments(context.Background(), segs, 100, 0,
@@ -111,11 +113,36 @@ func TestCheckSegmentsFoldsFailedChunks(t *testing.T) {
 				}
 				return res, transportErr
 			})
-		if outcome != healthSkipTransient {
-			t.Fatalf("outcome = %v, want healthSkipTransient (the pool is sick, yield)", outcome)
+		// Row-level, NOT pass-level. Three dead sockets in one release still
+		// abandons that release — the corpse-pool bail-out is intact — but the
+		// pass now decides for itself whether enough releases in a row failed
+		// this way to mean the pool is sick. Making this end the whole pass is
+		// what left the checker doing nothing for weeks against a provider
+		// that times out routinely.
+		if outcome != healthSkipTransport {
+			t.Fatalf("outcome = %v, want healthSkipTransport (abandon the release, let the pass judge the pool)", outcome)
 		}
 		if calls != 3 {
 			t.Errorf("stat called %d times, want 3 — the corpse-pool bail-out must survive the fix", calls)
+		}
+	})
+
+	t.Run("an exhausted pool still ends the pass immediately", func(t *testing.T) {
+		segs := releaseSegments{Data: ids(600)}
+		calls := 0
+		_, _, _, _, outcome := checkSegments(context.Background(), segs, 100, 0,
+			func(chunk []string) ([]statResult, error) {
+				calls++
+				return nil, nntp.ErrPoolBusy
+			})
+		// Unchanged and load-bearing: a busy pool means the CRAWLER holds the
+		// connections, and waiting for them is the crawler's loss. First
+		// refusal ends it, without burning a second lease attempt.
+		if outcome != healthSkipTransient {
+			t.Fatalf("outcome = %v, want healthSkipTransient — a busy pool must still yield at once", outcome)
+		}
+		if calls != 1 {
+			t.Errorf("stat called %d times, want 1 — the sweep queued behind the crawler", calls)
 		}
 	})
 
@@ -353,8 +380,9 @@ func TestCheckSegmentsRowDoubtVsPoolDoubt(t *testing.T) {
 		t.Fatalf("outcome = %v, want healthSkipRow — server-answered doubt is a property of the release, not the pool", outcome)
 	}
 
-	// Same doubt ratio, but produced by a died connection: pool trouble, and
-	// the pass must still yield (the corpse-pool lesson).
+	// Same doubt ratio, but produced by a died connection. That says nothing
+	// about the release, so the ROW is skipped — and it is the pass, counting
+	// consecutive ones, that decides whether the pool is sick.
 	transportErr := errors.New("read tcp: connection reset by peer")
 	failing := func(chunk []string) ([]statResult, error) {
 		res := make([]statResult, len(chunk))
@@ -363,8 +391,17 @@ func TestCheckSegmentsRowDoubtVsPoolDoubt(t *testing.T) {
 		}
 		return res, transportErr
 	}
-	if _, _, _, _, outcome := checkSegments(context.Background(), segs, 200, 0, failing); outcome != healthSkipTransient {
-		t.Fatalf("outcome = %v, want healthSkipTransient — connection-minted doubt is pool trouble", outcome)
+	if _, _, _, _, outcome := checkSegments(context.Background(), segs, 200, 0, failing); outcome != healthSkipTransport {
+		t.Fatalf("outcome = %v, want healthSkipTransport — connection-minted doubt is not evidence about the release", outcome)
+	}
+
+	// And an exhausted pool is a third, distinct answer. Collapsing these two
+	// into one outcome is the bug: the sweep reported "pool busy or failing"
+	// and checked nothing, for weeks, while the pool was fine and the provider
+	// was merely slow.
+	if _, _, _, _, outcome := checkSegments(context.Background(), segs, 200, 0,
+		func([]string) ([]statResult, error) { return nil, nntp.ErrPoolEmpty }); outcome != healthSkipTransient {
+		t.Fatalf("outcome = %v, want healthSkipTransient — an empty pool is not a provider timeout", outcome)
 	}
 }
 
@@ -405,4 +442,69 @@ func TestCheckSegmentsClaimedTotalKeepsBrokenDurable(t *testing.T) {
 	if verdict, _, _, _, _ := checkSegments(context.Background(), segs, 200, 40, allPresent); verdict != healthHealthy {
 		t.Errorf("claimed == listed, all present: verdict=%q, want %q", verdict, healthHealthy)
 	}
+}
+
+// The fix for a sweep that checked nothing for weeks.
+//
+// A release that fails on a provider timeout used to end the WHOLE pass. On a
+// provider that times out routinely the first release tripped it every time,
+// so the checker did no work at all — while logging "connection pool busy or
+// failing", which reads like ordinary contention. Whether the pool is
+// exhausted and whether one release's reads timed out are different facts, and
+// only the first should stop a pass.
+func TestPassYieldTakesARunNotOneBadRelease(t *testing.T) {
+	t.Run("one timeout does not end the pass", func(t *testing.T) {
+		y := passYield{limit: 5}
+		if y.observe(healthSkipTransport) {
+			t.Fatal("a single provider timeout ended the pass — this is the bug: " +
+				"against a flaky provider the sweep never gets past its first release")
+		}
+	})
+
+	t.Run("a run of them does", func(t *testing.T) {
+		y := passYield{limit: 3}
+		for i := 1; i <= 2; i++ {
+			if y.observe(healthSkipTransport) {
+				t.Fatalf("yielded after %d, want 3", i)
+			}
+		}
+		if !y.observe(healthSkipTransport) {
+			t.Error("three in a row did not yield — a pool full of dead sockets " +
+				"costs an op-timeout per release, so grinding on is not free")
+		}
+		if y.total != 3 {
+			t.Errorf("total = %d, want 3", y.total)
+		}
+	})
+
+	t.Run("any release that reaches an answer resets the run", func(t *testing.T) {
+		// This is what makes the difference between "flaky provider" and "sick
+		// pool": if releases are still coming back with answers in between, the
+		// connections plainly work.
+		for _, ok := range []healthOutcome{healthWritten, healthSkipPermanent, healthSkipRow} {
+			y := passYield{limit: 2}
+			y.observe(healthSkipTransport)
+			y.observe(ok)
+			if y.observe(healthSkipTransport) {
+				t.Errorf("outcome %v did not reset the run; two failures either side "+
+					"of a success were treated as consecutive", ok)
+			}
+			if y.total != 2 {
+				t.Errorf("outcome %v: total = %d, want 2 — resets must not lose the count",
+					ok, y.total)
+			}
+		}
+	})
+
+	t.Run("a zero limit disables the yield rather than yielding at once", func(t *testing.T) {
+		// Config coerces this to a default, so a zero can only arrive from a
+		// caller that skipped that — and "yield immediately, forever" would be
+		// the worst possible reading of it.
+		y := passYield{limit: 0}
+		for i := 0; i < 50; i++ {
+			if y.observe(healthSkipTransport) {
+				t.Fatalf("yielded at %d with the yield disabled", i)
+			}
+		}
+	})
 }
