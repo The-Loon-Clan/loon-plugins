@@ -21,13 +21,13 @@ func (h *Handlers) AdminCategories(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "list forum categories: %v", err)
 		return
 	}
-	c.HTML(http.StatusOK, "admin_forum_categories.html", deps.BaseData(c, gin.H{
+	h.render(c, http.StatusOK, "Forum categories", "admin_forum_categories.html", gin.H{
 		"Categories": cats,
 		"Colors":     categoryColorList,
 		"GateRoles":  gateRoleList,
 		"Flash":      c.Query("msg"),
 		"Err":        c.Query("err"),
-	}))
+	})
 }
 
 // categoryColorList is the closed palette the category color must come from

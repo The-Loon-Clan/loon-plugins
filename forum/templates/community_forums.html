@@ -1,0 +1,141 @@
+{{define "community_forums.html"}}
+    <div class="container mt-4 site-container-wide">
+
+        <div class="page-header d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 style="font-size:1.6rem;font-weight:700;margin-bottom:0.15rem;">Forums</h1>
+                <div class="text-secondary small">Join the discussion with the community</div>
+            </div>
+            <a href="/community/forums/new" class="btn btn-primary"
+               style="border-radius:999px;padding:0.4rem 1.1rem;font-size:0.85rem;font-weight:500;">New Thread</a>
+        </div>
+
+        <div class="row g-4">
+            <!-- ── Categories column ───────────────────────────────── -->
+            <div class="col-lg-8">
+                {{range .Categories}}
+                <a href="/community/forums/category/{{.ID}}" class="card forum-cat-card mb-2 text-decoration-none">
+                    <div class="card-body">
+                        <div class="row align-items-center g-3">
+                            <div class="col-auto">
+                                <span class="forum-cat-icon forum-cat-icon-{{.Color}}">
+                                    <i class="bi bi-{{.Icon}}"></i>
+                                </span>
+                            </div>
+                            <div class="col">
+                                <h3 class="forum-cat-title mb-0">{{.Name}}</h3>
+                                {{if .Description}}<div class="text-secondary small">{{.Description}}</div>{{end}}
+                            </div>
+                            <div class="col-auto text-end d-none d-md-block forum-cat-stats">
+                                <div class="text-secondary small"><strong class="text-body">{{.ThreadCount}}</strong> threads</div>
+                                <div class="text-secondary small"><strong class="text-body">{{.PostCount}}</strong> posts</div>
+                            </div>
+                            <div class="col-auto d-none d-lg-block forum-cat-latest">
+                                {{if .LastThreadTitle}}
+                                <div class="small">
+                                    <div class="text-truncate forum-latest-title">{{with .LastThreadTitle}}{{.}}{{end}}</div>
+                                    <div class="text-muted small text-truncate">
+                                        {{with .LastPostUser}}<span class="forum-latest-user">{{.}}</span>{{end}}
+                                        {{if .LastPostAt}} · <span title="{{.LastPostAt.Format "2006-01-02 15:04:05"}}">{{relativeTime .LastPostAt}}</span>{{end}}
+                                    </div>
+                                </div>
+                                {{else}}
+                                <div class="small text-muted">No posts yet</div>
+                                {{end}}
+                            </div>
+                        </div>
+                    </div>
+                </a>
+                {{else}}
+                <div class="card"><div class="card-body text-center text-muted">No forum categories yet.</div></div>
+                {{end}}
+            </div>
+
+            <!-- ── Sidebar column ──────────────────────────────────── -->
+            <div class="col-lg-4">
+                <div class="forum-sidebar">
+
+                    <div class="card forum-side-card mb-2">
+                        <div class="forum-card-stripe stripe-blue"></div>
+                        <div class="forum-side-body">
+                            <div class="d-flex gap-3 align-items-center">
+                                <div class="text-center flex-fill">
+                                    <div class="forum-stat-num">{{.TotalThreads}}</div>
+                                    <div class="forum-stat-label">Threads</div>
+                                </div>
+                                <div class="forum-stat-divider"></div>
+                                <div class="text-center flex-fill">
+                                    <div class="forum-stat-num">{{.TotalPosts}}</div>
+                                    <div class="forum-stat-label">Posts</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card forum-side-card mb-2">
+                        <div class="forum-card-stripe stripe-green"></div>
+                        <div class="forum-side-header">Recent Activity</div>
+                        {{if .Activity}}
+                        <ul class="forum-activity-list">
+                            {{range .Activity}}
+                            <li>
+                                <a href="/community/forums/thread/{{.ThreadID}}#post-{{.PostID}}" style="display:flex;gap:0.6rem;align-items:center;">
+                                    {{if .AvatarPath}}
+                                    <img class="forum-avatar" src="{{.AvatarPath}}" alt="" loading="lazy">
+                                    {{else}}
+                                    <span class="forum-avatar-fallback">{{initial .Username}}</span>
+                                    {{end}}
+                                    <div style="min-width:0;flex:1;">
+                                        <div class="text-truncate forum-activity-title">{{.ThreadTitle}}</div>
+                                        <div class="text-truncate forum-activity-meta">
+                                            <span class="role-name role-name-{{or .Role "user"}}">{{.Username}}</span> ·
+                                            <span title="{{.CreatedAt.Format "2006-01-02 15:04:05"}}">{{relativeTime .CreatedAt}}</span>
+                                        </div>
+                                    </div>
+                                    {{/* Category icon — small tinted square that mirrors
+                                         the icon styling from the category-list cards
+                                         above. Lets a sidebar scanner see "this post is
+                                         in Support" at a glance. Falls back to a chat
+                                         bubble if the category has no icon configured. */}}
+                                    {{if .CategoryIcon}}
+                                    <span class="forum-cat-icon forum-cat-icon-{{or .CategoryColor "blue"}}" style="width:28px;height:28px;border-radius:7px;font-size:0.85rem;flex-shrink:0;">
+                                        <i class="bi bi-{{.CategoryIcon}}"></i>
+                                    </span>
+                                    {{end}}
+                                </a>
+                            </li>
+                            {{end}}
+                        </ul>
+                        {{else}}
+                        <div class="forum-side-empty">No recent posts.</div>
+                        {{end}}
+                    </div>
+
+                    <div class="card forum-side-card mb-2">
+                        <div class="forum-card-stripe stripe-purple"></div>
+                        <div class="forum-side-header">Top Contributors</div>
+                        {{if .Contributors}}
+                        <ol class="forum-contrib-list">
+                            {{range $i, $c := .Contributors}}
+                            <li style="display:flex;gap:0.6rem;align-items:center;">
+                                <span class="forum-contrib-rank">{{add $i 1}}</span>
+                                {{if $c.AvatarPath}}
+                                <img class="forum-avatar" src="{{$c.AvatarPath}}" alt="" loading="lazy">
+                                {{else}}
+                                <span class="forum-avatar-fallback">{{initial $c.Username}}</span>
+                                {{end}}
+                                <a href="/u/{{$c.Username}}" class="forum-contrib-name role-name role-name-{{or $c.Role "user"}}" style="flex:1;min-width:0;">{{$c.Username}}</a>
+                                <span class="forum-contrib-badge">{{$c.PostCount}} posts</span>
+                            </li>
+                            {{end}}
+                        </ol>
+                        {{else}}
+                        <div class="forum-side-empty">No contributors yet.</div>
+                        {{end}}
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+{{end}}

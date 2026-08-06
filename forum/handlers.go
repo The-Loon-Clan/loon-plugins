@@ -16,7 +16,7 @@ import (
 const forumPageSize = 30
 
 // pageOffset is the SQL offset for a (page, pageSize) pair, page clamped to
-// >= 1 — the up-front half of the pagination math (deps.Paginate builds the
+// >= 1 — the up-front half of the pagination math (deps.RenderPagination builds the
 // view-model once the total is known).
 func pageOffset(page, pageSize int) int {
 	if pageSize < 1 {
@@ -50,6 +50,13 @@ type forumPostView struct {
 	*ForumPost
 	BodyHTML   template.HTML
 	QuotedHTML template.HTML
+	// EditorHTML is this post's inline edit form, prefilled with its own
+	// body. Per-post rather than per-page because it sits inside the post
+	// range: a single page-level editor would have to be re-rendered per row
+	// anyway, and `.EditorHTML` inside a {{range}} resolves against the ROW —
+	// a page-level key there is a silent empty, which is an edit form that
+	// renders as a bare Save button.
+	EditorHTML template.HTML
 }
 
 // Handlers serves the public forum pages and the thread/post write
@@ -114,13 +121,13 @@ func (h *Handlers) Forums(c *gin.Context) {
 		totalPosts += cat.PostCount
 	}
 
-	c.HTML(http.StatusOK, "community_forums.html", deps.BaseData(c, gin.H{
+	h.render(c, http.StatusOK, "Forums", "community_forums.html", gin.H{
 		"Categories":   cats,
 		"Activity":     activity,
 		"Contributors": contributors,
 		"TotalThreads": totalThreads,
 		"TotalPosts":   totalPosts,
-	}))
+	})
 }
 
 // ForumCategory — lists threads in a category.
@@ -151,10 +158,12 @@ func (h *Handlers) ForumCategory(c *gin.Context) {
 		// Seeable but locked: show the category shell with an access note
 		// instead of the thread list — the viewer is allowed to know it
 		// exists, not what's inside.
-		c.HTML(http.StatusOK, "community_category.html", deps.BaseData(c, gin.H{
+		h.render(c, http.StatusOK, cat.Name, "community_category.html", gin.H{
 			"Category": cat, "Threads": nil, "Total": 0,
 			"Page": 1, "TotalPages": 1, "AccessDenied": true,
-		}))
+			// No pager on the locked shell: there is no list to page.
+			"PaginationHTML": template.HTML(""),
+		})
 		return
 	}
 	threads, total, err := h.store.GetForumThreads(c.Request.Context(), id, forumPageSize, offset)
@@ -166,15 +175,17 @@ func (h *Handlers) ForumCategory(c *gin.Context) {
 	if totalPages < 1 {
 		totalPages = 1
 	}
-	pg := deps.Paginate(page, totalPages, fmt.Sprintf("/community/forums/category/%d?", id))
-	c.HTML(http.StatusOK, "community_category.html", deps.BaseData(c, gin.H{
+	h.render(c, http.StatusOK, cat.Name, "community_category.html", gin.H{
 		"Category":   cat,
 		"Threads":    threads,
 		"Total":      total,
 		"Page":       page,
 		"TotalPages": totalPages,
-		"Pagination": pg,
-	}))
+		"PaginationHTML": paginate(page, total,
+			fmt.Sprintf("/community/forums/category/%d?", id)),
+		"Pagination": legacyPaginate(page, totalPages,
+			fmt.Sprintf("/community/forums/category/%d?", id)),
+	})
 }
 
 // ForumThread — shows posts in a thread.
@@ -249,24 +260,33 @@ func (h *Handlers) ForumThread(c *gin.Context) {
 		if p.QuotedBodyExcerpt != nil && *p.QuotedBodyExcerpt != "" {
 			v.QuotedHTML = deps.Markdown(*p.QuotedBodyExcerpt)
 		}
+		v.EditorHTML = editor(map[string]any{
+			"Name": "body", "Rows": 4, "Value": p.Body, "Required": true,
+		})
 		views = append(views, v)
 	}
 
-	pg := deps.Paginate(page, totalPages, fmt.Sprintf("/community/forums/thread/%d?", id))
-	c.HTML(http.StatusOK, "community_thread.html", deps.BaseData(c, gin.H{
+	h.render(c, http.StatusOK, thread.Title, "community_thread.html", gin.H{
 		"Thread":        thread,
 		"Posts":         views,
 		"Total":         total,
 		"Page":          page,
 		"TotalPages":    totalPages,
 		"CurrentUserID": currentUserID,
-		"Pagination":    pg,
+		"PaginationHTML": paginate(page, total,
+			fmt.Sprintf("/community/forums/thread/%d?", id)),
+		"Pagination": legacyPaginate(page, totalPages,
+			fmt.Sprintf("/community/forums/thread/%d?", id)),
+		"ReplyEditorHTML": editor(map[string]any{
+			"Name": "body", "Rows": 4, "Placeholder": "Write your reply…", "Required": true,
+		}),
+		"ReportModalHTML": reportModal(c),
 		// Surfaced to the template so the recruitment-thread chrome
 		// can show "Replies are private" hints + suppress the public
 		// reply-count display for non-privileged viewers.
 		"IsRecruitment":    thread.ThreadType == ForumThreadTypeRecruitment,
 		"CanSeeAllReplies": canSeeAllReplies,
-	}))
+	})
 }
 
 // NewThread — GET form. The category picker offers only categories the
@@ -281,10 +301,13 @@ func (h *Handlers) NewThread(c *gin.Context) {
 			writable = append(writable, cat)
 		}
 	}
-	c.HTML(http.StatusOK, "community_new_thread.html", deps.BaseData(c, gin.H{
+	h.render(c, http.StatusOK, "New thread", "community_new_thread.html", gin.H{
 		"Categories":       writable,
 		"SelectedCategory": catID,
-	}))
+		"EditorHTML": editor(map[string]any{
+			"Name": "body", "Rows": 8, "Placeholder": "Write your post…", "Required": true,
+		}),
+	})
 }
 
 // CreateThread — POST.

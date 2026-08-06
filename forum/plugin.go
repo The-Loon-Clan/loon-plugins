@@ -20,18 +20,57 @@ func init() {
 // injector, its markdown renderer, and its pagination view-model builder.
 // SetDeps must be called before core.Boot; Provision fails loud otherwise.
 type Deps struct {
-	// BaseData merges the host's page chrome (user, nav, CSRF, notification
-	// counts, ...) into a template data map — every page render goes through
-	// it, exactly as host-side handlers do.
-	BaseData func(c *gin.Context, extra gin.H) gin.H
+	// RenderPage wraps a finished fragment in the site chrome. All five
+	// pages are this plugin's markup now, so it needs chrome rather than a
+	// data map. status crosses too: the new-thread page re-renders on a
+	// validation failure, and a 200 saying "rejected" would lie to a client.
+	RenderPage func(c *gin.Context, status int, title string, body template.HTML)
 	// Markdown renders untrusted forum markdown to sanitized HTML. Whatever
 	// the host uses for its other user-authored surfaces, so forum posts
 	// render identically to comments/DMs.
+	//
+	// This is the one helper that crosses for SAFETY rather than for
+	// consistency: a second allow-list inside the plugin is a stored-XSS bug
+	// waiting on whichever copy is laxer.
 	Markdown func(src string) template.HTML
-	// Paginate builds the view-model the host's pagination partial consumes.
-	// Returned as `any` so the plugin never learns the host's type — the
-	// template reads it by field name.
+	// CSRFToken for the reply, edit, moderation and new-thread forms —
+	// minted by host middleware, so only the host can answer it.
+	CSRFToken func(c *gin.Context) string
+	// RenderEditor is the site's shared markdown editor as ready HTML, for
+	// the options given. Seven pages across the site use it, so it stays
+	// host-rendered and only the per-call options cross.
+	RenderEditor func(opts map[string]any) template.HTML
+	// RenderPagination is the site's pager as finished HTML.
+	RenderPagination func(page, pageSize, totalItems int, baseURL string) template.HTML
+	// RenderReportModal is the site-wide "report this content" dialog. The
+	// forum's report buttons target it by id, so a host that omits it gets
+	// buttons that open nothing — hence required rather than optional.
+	RenderReportModal func(c *gin.Context) template.HTML
+	// RelativeTime formats a timestamp as "2 hours ago". Passed rather than
+	// copied for consistency of wording across the site, not for safety —
+	// the weaker of the two reasons, and worth saying so.
+	RelativeTime func(any) string
+
+	// BaseData and Paginate are the PREVIOUS contract, where the HOST owned
+	// these five templates and the plugin rendered them by name.
+	//
+	// Kept working because loon-demo-site still wires it and compiles against
+	// this working tree — breaking it would surface as a build error in
+	// someone else's session about code they did not write. Remove both, and
+	// the branches in render()/paginate() that read them, once the demo has
+	// moved to RenderPage. See TestLegacyContractIsStillAccepted, which also
+	// refuses a MIXTURE of the two.
+	BaseData func(c *gin.Context, extra gin.H) gin.H
 	Paginate func(page, totalPages int, baseURL string) any
+
+	// RepBadge names the earned reputation tier shown beside a poster's name.
+	//
+	// OPTIONAL, and the only Deps entry here that is site VOCABULARY rather
+	// than a rendering service: what the tiers are called is the operator's
+	// decision, and a plugin that hardcoded one site's ladder would ship
+	// those words to every adopter. A host that leaves it nil simply shows
+	// no badge.
+	RepBadge func(tier int) RepBadgeInfo
 }
 
 var deps Deps
@@ -74,9 +113,17 @@ func (p *Plugin) Metadata() core.Metadata {
 // /admin/forum-categories/*) via Router.Engine() — moving them
 // would break every bookmark and template link for zero gain.
 func (p *Plugin) Provision(c *core.Core) error {
-	if deps.BaseData == nil || deps.Markdown == nil || deps.Paginate == nil {
-		return fmt.Errorf("forum: SetDeps not called (BaseData/Markdown/Paginate required) — wire it in main() before core.Boot")
+	if !deps.ready() {
+		return fmt.Errorf("forum: SetDeps not called, or a render seam is missing — " +
+			"Markdown plus either the current contract (RenderPage, CSRFToken, " +
+			"RenderEditor, RenderPagination, RenderReportModal, RelativeTime) or the " +
+			"previous one (BaseData, Paginate); wire it in main() before core.Boot")
 	}
+	// Parsed here, not at package init: RelativeTime is a Deps function.
+	// Forgetting this leaves pageTmpl nil and panics on the first page view
+	// rather than failing at boot. Skipped on the legacy contract, where the
+	// host renders its own copies of these templates by name.
+	parseTemplates()
 	db := c.Storage.DB()
 	if db == nil {
 		return fmt.Errorf("forum: Core.Storage.DB() is nil")
@@ -137,3 +184,18 @@ func (p *Plugin) Provision(c *core.Core) error {
 
 func (p *Plugin) Start(ctx context.Context) error { return nil }
 func (p *Plugin) Stop(ctx context.Context) error  { return nil }
+
+// ready reports whether the host wired one COMPLETE contract.
+//
+// Deliberately not "enough seams to limp": a half-wired host would render
+// some pages and blank others, which reads as a broken site rather than a
+// missing call. Markdown is required either way — it is the sanitiser.
+func (d Deps) ready() bool {
+	if d.Markdown == nil {
+		return false
+	}
+	modern := d.RenderPage != nil && d.CSRFToken != nil && d.RenderEditor != nil &&
+		d.RenderPagination != nil && d.RenderReportModal != nil && d.RelativeTime != nil
+	legacy := d.BaseData != nil && d.Paginate != nil
+	return modern || legacy
+}
