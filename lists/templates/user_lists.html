@@ -1,0 +1,118 @@
+{{define "user_lists.html"}}
+    <style>
+        .form-control { background: var(--bg-surface); color: var(--text-primary); border-color: var(--border); }
+        .form-control:focus { background: var(--bg-surface); color: var(--text-primary); border-color: var(--blue); box-shadow: none; }
+    </style>
+    <div class="container mt-4 site-container">
+        <div class="card mb-4">
+            <div class="card-header">Create New Collection</div>
+            <div class="card-body">
+                <form method="POST" action="/lists">
+                    <div class="mb-2">
+                        <input type="text" name="name" class="form-control" placeholder="Collection name" required maxlength="100">
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" name="description" class="form-control" placeholder="Description (optional)" maxlength="300">
+                    </div>
+                    <div class="mb-3 d-flex align-items-center gap-2">
+                        <input type="checkbox" name="public" value="1" class="form-check-input mt-0" id="createPublic">
+                        <label for="createPublic" style="font-size:0.85rem;color:var(--text-muted);">Make public — visible on Collections</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">Create Collection</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>My Collections</span>
+                <a href="/community/watchlists" style="font-size:0.8rem;color:var(--blue);">Browse Collections →</a>
+            </div>
+            <table class="table mb-0">
+                <tbody>
+                    {{range .Lists}}
+                    <tr>
+                        <td style="width:48px;vertical-align:middle;">
+                            {{if .CoverURL}}
+                            <img src="{{.CoverURL}}" onerror="this.style.display='none'" alt=""
+                                 style="width:40px;height:56px;object-fit:cover;border-radius:4px;">
+                            {{else}}
+                            <div style="width:40px;height:56px;border-radius:4px;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:var(--text-muted);">&#128203;</div>
+                            {{end}}
+                        </td>
+                        <td>
+                            <a href="/lists/{{.ID}}" style="color:var(--text-primary);font-weight:500;">{{.Name}}</a>
+                            {{if .Public}}<span class="badge ms-1" style="background:var(--blue);font-size:0.65rem;">Public</span>{{end}}
+                            {{if .Description}}<div style="color:var(--text-muted);font-size:0.8rem;">{{.Description}}</div>{{end}}
+                        </td>
+                        <td style="color:var(--text-muted);font-size:0.85rem;width:80px;vertical-align:middle;">{{.ItemCount}} items</td>
+                        <td style="width:200px;vertical-align:middle;">
+                            {{if .Public}}
+                            <form method="POST" action="/lists/{{.ID}}/visibility" class="d-inline me-1">
+                                <input type="hidden" name="public" value="0">
+                                <button class="btn btn-sm btn-outline-secondary">Make Private</button>
+                            </form>
+                            {{else}}
+                            <form method="POST" action="/lists/{{.ID}}/visibility" class="d-inline me-1">
+                                <input type="hidden" name="public" value="1">
+                                <button class="btn btn-sm btn-outline-secondary">Make Public</button>
+                            </form>
+                            {{end}}
+                            <form method="POST" action="/lists/{{.ID}}/delete" class="d-inline">
+                                <button class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr><td colspan="3" class="text-center" style="color:var(--text-muted);padding:2rem;">No collections yet.</td></tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{/* ── Following ── */}}
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Following</span>
+                <a href="/community/watchlists" style="font-size:0.8rem;color:var(--blue);">Discover Collections &#8594;</a>
+            </div>
+            {{if .Followed}}
+            <table class="table mb-0">
+                <tbody>
+                    {{range .Followed}}
+                    <tr>
+                        <td style="width:48px;vertical-align:middle;">
+                            {{if .CoverURL}}
+                            <img src="{{.CoverURL}}" onerror="this.style.display='none'" alt=""
+                                 style="width:40px;height:56px;object-fit:cover;border-radius:4px;">
+                            {{else}}
+                            <div style="width:40px;height:56px;border-radius:4px;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:var(--text-muted);">&#128203;</div>
+                            {{end}}
+                        </td>
+                        <td>
+                            <a href="/lists/{{.ID}}" style="color:var(--text-primary);font-weight:500;">{{.Name}}</a>
+                            <span style="font-size:0.75rem;color:var(--text-muted);margin-left:4px;">by {{.Username}}</span>
+                            {{if .Description}}<div style="color:var(--text-muted);font-size:0.8rem;">{{.Description}}</div>{{end}}
+                        </td>
+                        <td style="color:var(--text-muted);font-size:0.85rem;width:80px;vertical-align:middle;">{{.ItemCount}} items</td>
+                        <td style="width:180px;vertical-align:middle;white-space:nowrap;">
+                            <form method="POST" action="/lists/{{.ID}}/copy" class="d-inline me-1">
+                                <button class="btn btn-sm btn-outline-secondary" title="Copy to my lists">Copy</button>
+                            </form>
+                            <form method="POST" action="/lists/{{.ID}}/unfollow" class="d-inline">
+                                <button class="btn btn-sm btn-outline-danger">Unfollow</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{else}}
+            <div class="card-body text-center" style="color:var(--text-muted);font-size:0.85rem;padding:1.5rem;">
+                You're not following any collections yet. Browse <a href="/community/watchlists" style="color:var(--blue);">community collections</a> to find some to follow.
+            </div>
+            {{end}}
+        </div>
+
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{{end}}

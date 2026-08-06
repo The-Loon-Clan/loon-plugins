@@ -4,46 +4,80 @@
 //
 // The list TABLES stay host-owned: the account Following tab and the
 // release-page widgets read them too. This plugin owns the /lists surface
-// over them.
+// over them, markup included.
 package lists
 
 import (
 	"context"
+	"html/template"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// ListRef is a list the plugin has to reason about: the four fields it
-// actually checks, plus the host's own record for the host's template.
+// List is a watchlist as this plugin's pages display it.
 //
-// Raw is the honest part of this seam. These pages render host-owned
-// templates that read a dozen fields the plugin has no opinion about — cover
-// art, item counts, grab totals. Rather than mirror a struct the plugin does
-// not understand (and quietly break the page the first time the host adds a
-// column), it carries the row through untouched and never looks inside. When
-// the templates move here, Raw goes away.
-type ListRef struct {
-	ID     int
-	Name   string
-	Public bool
+// These are the plugin's OWN fields, not a window onto the host's record.
+// That is the difference the template move bought: while the markup lived
+// host-side it read the host's struct directly, so the plugin had to carry
+// the row through opaquely and the two could never be told apart. Now the
+// pages render from this, and anything the host adds to its own record is
+// invisible here until someone asks for it.
+type List struct {
+	ID            int
+	Name          string
+	Description   string
+	Public        bool
+	Username      string // the owner's display name
+	ItemCount     int
+	CoverURL      string
+	DownloadCount int
+	FollowCount   int
+	CreatedAt     time.Time
+
+	// UserID is the owner, for the private-list check. Not rendered.
 	UserID int
-	Raw    any
 }
 
-// ItemRef is one release in a list: the two fields the ZIP builder needs,
-// plus the host row for the detail template. Same Raw contract as ListRef.
-type ItemRef struct {
+// Item is one release in a list.
+//
+// Card is the site's release card, already rendered: it is shared chrome used
+// on every listing page, reads most of a release record, and belongs to the
+// host. Rather than mirror that whole record here to redraw a card the host
+// already knows how to draw, the host draws it and this carries the result.
+// ID and Filename are the two fields the ZIP builder needs for itself.
+type Item struct {
 	ID       int64
 	Filename string
-	Raw      any
+	Card     template.HTML
 }
 
-// Deps carries everything the plugin cannot do for itself. Most entries are
-// plain scalars in and out — only ListRef and ItemRef carry a host row, and
-// only because the templates still live host-side.
+// NzbRef is the release header on /release/:id/lists — the two fields that
+// page prints, nothing more.
+type NzbRef struct {
+	ID    int64
+	Title string
+}
+
+// Deps carries everything the plugin cannot do for itself.
 type Deps struct {
-	// BaseData merges the host's page chrome into a template data map.
-	BaseData func(c *gin.Context, extra gin.H) gin.H
+	// RenderPage wraps a finished fragment in the site chrome and writes it.
+	//
+	// This plugin keeps its own routes rather than becoming slot views: it is
+	// four pages, one of them with a path parameter (/lists/:id), and the
+	// slot model is one page per slug. So the host supplies chrome on demand
+	// instead, and every URL stays exactly where members have it bookmarked.
+	RenderPage func(c *gin.Context, title string, body template.HTML)
+	// RenderError writes the site's error page. Used for the one refusal that
+	// is a page rather than a redirect (bulk download from an unpinned IP).
+	RenderError func(c *gin.Context, code int, msg string)
+
+	// Shared site chrome the plugin embeds but does not own. The release
+	// card itself arrives pre-rendered on each Item — the host has the record
+	// it needs at that point, so there is nothing to hand back here.
+	NzbCardCSS  func() template.HTML
+	ReportModal func(c *gin.Context) template.HTML
+
 	// The host's JSON helpers, for the two AJAX endpoints.
 	JSONOK    func(c *gin.Context, extras gin.H)
 	JSONError func(c *gin.Context, code int, msg string)
@@ -63,18 +97,15 @@ type Deps struct {
 	// so the host owns the decoding.
 	Gunzip func(compressed []byte) ([]byte, error)
 
-	// Reads whose results only ever reach a host template are typed `any` —
-	// the plugin hands them straight over and never inspects them.
-	UserLists   func(ctx context.Context, userID int) (owned, followed any, err error)
-	NzbAndLists func(ctx context.Context, nzbID int64) (nzb, lists any, err error)
-
-	ByID        func(ctx context.Context, listID int) (*ListRef, error)
-	Items       func(ctx context.Context, listID int) ([]ItemRef, error)
+	UserLists   func(ctx context.Context, userID int) (owned, followed []List, err error)
+	ByID        func(ctx context.Context, listID int) (*List, error)
+	Items       func(ctx context.Context, listID int) ([]Item, error)
 	IsFollowing func(ctx context.Context, userID, listID int) (bool, error)
+	ListsForNzb func(ctx context.Context, nzbID int64) (*NzbRef, []List, error)
 
 	// Discovery returns the three axes of the public grid. The plugin merges
 	// and dedupes them; the host just fetches.
-	Discovery func(ctx context.Context, perAxis int) (newest, top, grabbed []ListRef, err error)
+	Discovery func(ctx context.Context, perAxis int) (newest, top, grabbed []List, err error)
 
 	Create    func(ctx context.Context, userID int, name, description string, public bool) error
 	Delete    func(ctx context.Context, listID, userID int) error
@@ -104,10 +135,12 @@ func SetDeps(d Deps) { deps = &d }
 // deliberately excluded — it is the one genuinely optional entry.
 func (d *Deps) ok() bool {
 	return d != nil &&
-		d.BaseData != nil && d.JSONOK != nil && d.JSONError != nil &&
+		d.RenderPage != nil && d.RenderError != nil &&
+		d.NzbCardCSS != nil && d.ReportModal != nil &&
+		d.JSONOK != nil && d.JSONError != nil &&
 		d.Viewer != nil && d.DownloadAllowed != nil && d.Gunzip != nil &&
-		d.UserLists != nil && d.NzbAndLists != nil && d.ByID != nil &&
-		d.Items != nil && d.IsFollowing != nil && d.Discovery != nil &&
+		d.UserLists != nil && d.ByID != nil && d.Items != nil &&
+		d.IsFollowing != nil && d.ListsForNzb != nil && d.Discovery != nil &&
 		d.Create != nil && d.Delete != nil && d.SetPublic != nil && d.Copy != nil &&
 		d.Follow != nil && d.Unfollow != nil &&
 		d.AddItem != nil && d.RemoveItem != nil &&

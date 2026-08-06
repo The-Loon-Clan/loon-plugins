@@ -1,0 +1,169 @@
+{{define "community_watchlists.html"}}
+{{.NzbCardCSS}}
+    <style>
+        /* Watchlist-specific overrides on top of nzb-card-css. The
+           card body shows creator + title + item count; no resolution
+           overlay since lists aren't single-NZB rows. */
+        .wl-card { box-shadow: 0 2px 6px rgba(0,0,0,0.45); }
+        .wl-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.55); }
+        .wl-creator {
+            display: flex; align-items: center; gap: 4px;
+            font-size: 0.78rem; font-weight: 600;
+            color: var(--bs-info);
+            text-decoration: none;
+            margin-bottom: 4px;
+        }
+        .wl-creator:hover { color: var(--bs-primary); }
+        .wl-title {
+            font-size: 0.92rem; font-weight: 600; color: var(--text-primary);
+            line-height: 1.25; overflow: hidden;
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+            margin-bottom: 8px;
+        }
+        .wl-itemcount {
+            text-align: center; padding: 6px 0;
+            font-size: 0.82rem; color: var(--text-muted);
+            border-top: 1px solid var(--border);
+        }
+        .wl-toolbar {
+            display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        .wl-toolbar input, .wl-toolbar select {
+            min-width: 0;
+        }
+        .wl-no-cover {
+            background:
+                repeating-linear-gradient(
+                    45deg,
+                    var(--bg-elevated) 0 12px,
+                    rgba(255,255,255,0.025) 12px 14px
+                );
+        }
+    </style>
+    <div class="container mt-4 site-container-wide">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <p class="mb-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:500;">
+                    Community
+                </p>
+                <h2 class="mb-0" style="font-size:1.4rem;font-weight:600;">Collections</h2>
+                <small style="color:var(--text-muted);">
+                    <span id="wl-visible-count">{{len .Lists}}</span> of {{len .Lists}} public collections
+                </small>
+            </div>
+            <a href="/lists" class="btn btn-sm btn-primary fw-semibold">+ My Collections</a>
+        </div>
+
+        {{/* Toolbar — client-side filter + sort over the combined set
+             loaded by the handler. Server-side filtering can swap in
+             later if the list count grows past a few hundred. */}}
+        <div class="wl-toolbar">
+            <input id="wl-search" type="search" class="form-control form-control-sm"
+                   placeholder="Search by name…" autocomplete="off"
+                   style="max-width:300px;">
+            <input id="wl-username" type="search" class="form-control form-control-sm"
+                   placeholder="Username…" autocomplete="off"
+                   style="max-width:200px;">
+            <select id="wl-sort" class="form-select form-select-sm" style="max-width:160px;">
+                <option value="new">Newest</option>
+                <option value="items">Most items</option>
+                <option value="grabs">Most grabbed</option>
+                <option value="follows">Most followed</option>
+                <option value="name">Name (A-Z)</option>
+            </select>
+        </div>
+
+        <div id="wl-grid" class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3">
+            {{range .Lists}}
+            <div class="col wl-item"
+                 data-id="{{.ID}}"
+                 data-name="{{.Name}}"
+                 data-username="{{.Username}}"
+                 data-items="{{.ItemCount}}"
+                 data-grabs="{{.DownloadCount}}"
+                 data-follows="{{.FollowCount}}"
+                 data-created="{{.CreatedAt.Unix}}">
+                <div class="card h-100 cover-card wl-card" style="background:var(--bg-elevated);border-color:var(--border);">
+                    <a href="/lists/{{.ID}}">
+                        <div class="cover-wrap">
+                            {{if .CoverURL}}
+                            <img src="{{.CoverURL}}"
+                                 onerror="this.style.display='none';this.parentElement.classList.add('wl-no-cover');"
+                                 alt="{{.Name}}" class="cover-img" loading="lazy">
+                            {{else}}
+                            <div class="cover-img-placeholder wl-no-cover">&#128221;</div>
+                            {{end}}
+                        </div>
+                    </a>
+                    <div class="card-body p-2">
+                        <a href="/community/user/{{.Username}}" class="wl-creator">
+                            &#9881; {{.Username}}
+                        </a>
+                        <a href="/lists/{{.ID}}" class="wl-title text-decoration-none" title="{{.Name}}">
+                            {{.Name}}
+                        </a>
+                    </div>
+                    <div class="wl-itemcount">{{.ItemCount}} title{{if ne .ItemCount 1}}s{{end}}</div>
+                </div>
+            </div>
+            {{else}}
+            <div class="col-12 text-center" style="color:var(--text-muted);padding:3rem;">
+                No public collections yet. Be the first to publish one from
+                <a href="/lists" style="color:var(--bs-primary);">your own collections</a>.
+            </div>
+            {{end}}
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    (function() {
+        var grid = document.getElementById('wl-grid');
+        if (!grid) return;
+        var search   = document.getElementById('wl-search');
+        var username = document.getElementById('wl-username');
+        var sort     = document.getElementById('wl-sort');
+        var counter  = document.getElementById('wl-visible-count');
+        var items    = Array.prototype.slice.call(grid.querySelectorAll('.wl-item'));
+
+        // Filter + sort in one pass — keep it cheap so it stays
+        // responsive at a few hundred items without virtualization.
+        function applyFilter() {
+            var nameQ = (search.value || '').trim().toLowerCase();
+            var userQ = (username.value || '').trim().toLowerCase();
+            var visible = 0;
+            items.forEach(function(el) {
+                var name = (el.dataset.name || '').toLowerCase();
+                var user = (el.dataset.username || '').toLowerCase();
+                var ok = (!nameQ || name.indexOf(nameQ) >= 0)
+                      && (!userQ || user.indexOf(userQ) >= 0);
+                el.style.display = ok ? '' : 'none';
+                if (ok) visible++;
+            });
+            if (counter) counter.textContent = visible;
+        }
+        function applySort() {
+            var mode = sort.value;
+            var sortFn;
+            switch (mode) {
+                case 'items':   sortFn = function(a,b){ return (+b.dataset.items)   - (+a.dataset.items); }; break;
+                case 'grabs':   sortFn = function(a,b){ return (+b.dataset.grabs)   - (+a.dataset.grabs); }; break;
+                case 'follows': sortFn = function(a,b){ return (+b.dataset.follows) - (+a.dataset.follows); }; break;
+                case 'name':    sortFn = function(a,b){ return a.dataset.name.localeCompare(b.dataset.name); }; break;
+                default:        sortFn = function(a,b){ return (+b.dataset.created) - (+a.dataset.created); };
+            }
+            var sorted = items.slice().sort(sortFn);
+            // Reattach in new order — DOM mutation is cheap relative
+            // to the user typing latency budget at this scale.
+            sorted.forEach(function(el){ grid.appendChild(el); });
+        }
+
+        search.addEventListener('input',  applyFilter);
+        username.addEventListener('input', applyFilter);
+        sort.addEventListener('change',    applySort);
+    })();
+    </script>
+{{end}}

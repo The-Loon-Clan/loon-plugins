@@ -1,0 +1,248 @@
+{{define "list_detail.html"}}
+{{.NzbCardCSS}}
+    <style>
+        /* Banner — uses the list's primary cover blown out as a
+           background, with a dark gradient overlay so the title +
+           description stay legible. Falls back to a subtle stripe
+           pattern when no cover is available. */
+        .list-banner {
+            position: relative;
+            min-height: 280px;
+            border-radius: 8px;
+            overflow: hidden;
+            background:
+                linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.85) 100%),
+                repeating-linear-gradient(
+                    45deg,
+                    var(--bg-elevated) 0 16px,
+                    rgba(255,255,255,0.03) 16px 18px
+                );
+            background-size: cover;
+            background-position: center;
+            margin-bottom: 1.25rem;
+        }
+        .list-banner.has-cover {
+            background:
+                linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.85) 100%),
+                var(--banner-url) center / cover no-repeat;
+        }
+        .list-banner-inner {
+            position: relative; z-index: 1;
+            padding: 1.25rem 1.5rem;
+            display: flex; gap: 1.25rem;
+            min-height: 280px;
+            align-items: center;
+        }
+        .list-banner-cover {
+            width: 140px; height: 200px;
+            object-fit: cover; border-radius: 6px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.55);
+            flex-shrink: 0;
+        }
+        .list-banner-body { min-width: 0; flex: 1; }
+        .list-banner-title {
+            font-size: 1.6rem; font-weight: 700;
+            color: #fff;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+            margin-bottom: 0.4rem;
+        }
+        .list-banner-creator {
+            display: inline-flex; align-items: center; gap: 5px;
+            color: var(--bs-info); font-weight: 600; font-size: 0.92rem;
+            text-decoration: none;
+        }
+        .list-banner-creator:hover { color: var(--bs-primary); }
+        .list-banner-desc {
+            color: rgba(255,255,255,0.88);
+            font-size: 0.92rem; line-height: 1.5;
+            margin-top: 0.6rem;
+            white-space: pre-wrap;
+        }
+        .list-stats-row {
+            display: flex; gap: 0.6rem; flex-wrap: wrap;
+            margin-top: 0.8rem;
+        }
+        .list-stat {
+            background: rgba(0,0,0,0.45);
+            color: rgba(255,255,255,0.92);
+            font-size: 0.78rem;
+            padding: 3px 10px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .sidebar-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.85rem 1rem;
+            margin-bottom: 1rem;
+        }
+        .sidebar-card h6 {
+            font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em;
+            text-transform: uppercase; color: var(--text-muted);
+            margin: 0 0 0.6rem 0;
+        }
+        .sidebar-card .row-line {
+            display: flex; justify-content: space-between;
+            font-size: 0.82rem; color: var(--text-muted);
+            padding: 4px 0;
+        }
+        .sidebar-card .row-line span:last-child { color: var(--text-primary); }
+        .empty-state {
+            text-align: center; padding: 3rem;
+            color: var(--text-muted);
+            background: var(--bg-surface);
+            border: 1px dashed var(--border);
+            border-radius: 8px;
+        }
+        @media (max-width: 768px) {
+            .list-banner-inner { flex-direction: column; text-align: center; }
+        }
+    </style>
+
+    <div class="container mt-4 site-container-wide">
+
+        {{/* Hero banner. The cover image (if present) is layered as a
+             blurred-cover backdrop AND a sharp-edge poster on the
+             left, mirroring the playlist-detail UI in the user's
+             reference screenshot. */}}
+        <div class="list-banner {{if .List.CoverURL}}has-cover{{end}}"
+             {{if .List.CoverURL}}style="--banner-url:url('{{.List.CoverURL}}');"{{end}}>
+            <div class="list-banner-inner">
+                {{if .List.CoverURL}}
+                <img src="{{.List.CoverURL}}" alt="{{.List.Name}}" class="list-banner-cover" loading="lazy"
+                     onerror="this.style.display='none';">
+                {{end}}
+                <div class="list-banner-body">
+                    <p class="mb-1" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.07em;color:rgba(255,255,255,0.7);font-weight:600;">
+                        <a href="/community/watchlists" style="color:inherit;text-decoration:none;">Collections</a>
+                    </p>
+                    <h1 class="list-banner-title">
+                        {{.List.Name}}
+                        {{if .List.Public}}<span class="badge ms-2" style="background:var(--bs-info);font-size:0.55rem;vertical-align:middle;">PUBLIC</span>{{end}}
+                    </h1>
+                    <a href="/community/user/{{.List.Username}}" class="list-banner-creator">
+                        &#9881; {{.List.Username}}
+                    </a>
+                    {{if .List.Description}}
+                    <div class="list-banner-desc">{{.List.Description}}</div>
+                    {{end}}
+                    <div class="list-stats-row">
+                        <span class="list-stat">{{.List.ItemCount}} title{{if ne .List.ItemCount 1}}s{{end}}</span>
+                        {{if .List.DownloadCount}}<span class="list-stat">{{.List.DownloadCount}} grabs</span>{{end}}
+                        {{if .List.FollowCount}}<span class="list-stat">{{.List.FollowCount}} followers</span>{{end}}
+                        <span class="list-stat">created {{.List.CreatedAt.Format "Jan 02, 2006"}}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            {{/* Sidebar — Actions / Download / Info. Mirrors the
+                 playlist reference layout. */}}
+            <div class="col-lg-3 order-lg-2">
+                {{if not .IsOwner}}
+                <div class="sidebar-card">
+                    <h6>Actions</h6>
+                    {{if .List.Public}}
+                        {{if .IsFollowing}}
+                        <form method="POST" action="/lists/{{.List.ID}}/unfollow">
+                            <button class="btn btn-outline-danger btn-sm w-100 fw-semibold">Unfollow</button>
+                        </form>
+                        {{else}}
+                        <form method="POST" action="/lists/{{.List.ID}}/follow">
+                            <button class="btn btn-outline-primary btn-sm w-100 fw-semibold">Follow</button>
+                        </form>
+                        {{end}}
+                        <form method="POST" action="/lists/{{.List.ID}}/copy" class="mt-2">
+                            <button class="btn btn-outline-secondary btn-sm w-100 fw-semibold">Copy to my lists</button>
+                        </form>
+                        {{/* Report — visible to every signed-in viewer except
+                             the list's owner. 5 reports auto-hide the list
+                             pending community review. */}}
+                        {{if and $.ViewerID (ne $.ViewerID .List.UserID)}}
+                        <button type="button" class="btn btn-outline-warning btn-sm w-100 fw-semibold mt-2 report-content"
+                                data-target-type="user_list" data-target-id="{{.List.ID}}">⚑ Report list</button>
+                        {{end}}
+                    {{end}}
+                </div>
+                {{end}}
+
+                {{if .List.ItemCount}}
+                <div class="sidebar-card">
+                    <h6>Download</h6>
+                    <a href="/lists/{{.List.ID}}/download-all" class="btn btn-primary btn-sm w-100 fw-semibold mb-2">
+                        &#11015; Download all NZBs
+                    </a>
+                    <a href="#items" class="btn btn-outline-secondary btn-sm w-100 fw-semibold">
+                        Jump to titles
+                    </a>
+                </div>
+                {{end}}
+
+                <div class="sidebar-card">
+                    <h6>Info</h6>
+                    <div class="row-line">
+                        <span>Created at</span>
+                        <span>{{.List.CreatedAt.Format "Jan 02, 2006"}}</span>
+                    </div>
+                    <div class="row-line">
+                        <span>Items</span>
+                        <span>{{.List.ItemCount}}</span>
+                    </div>
+                    {{if .List.DownloadCount}}
+                    <div class="row-line">
+                        <span>Total grabs</span>
+                        <span>{{.List.DownloadCount}}</span>
+                    </div>
+                    {{end}}
+                    {{if .List.FollowCount}}
+                    <div class="row-line">
+                        <span>Followers</span>
+                        <span>{{.List.FollowCount}}</span>
+                    </div>
+                    {{end}}
+                    <div class="row-line">
+                        <span>Visibility</span>
+                        <span>{{if .List.Public}}Public{{else}}Private{{end}}</span>
+                    </div>
+                </div>
+
+                {{if .IsOwner}}
+                <div class="sidebar-card">
+                    <h6>Manage</h6>
+                    <a href="/lists" class="btn btn-outline-secondary btn-sm w-100 fw-semibold mb-2">
+                        All my lists
+                    </a>
+                    <form method="POST" action="/lists/{{.List.ID}}/visibility">
+                        <input type="hidden" name="public" value="{{if .List.Public}}0{{else}}1{{end}}">
+                        <button class="btn btn-outline-{{if .List.Public}}warning{{else}}info{{end}} btn-sm w-100 fw-semibold">
+                            Make {{if .List.Public}}private{{else}}public{{end}}
+                        </button>
+                    </form>
+                </div>
+                {{end}}
+            </div>
+
+            <div class="col-lg-9 order-lg-1">
+                <h5 id="items" style="font-weight:600;margin-bottom:0.8rem;">Titles</h5>
+
+                {{if not .Items}}
+                <div class="empty-state">
+                    No titles in this list yet.
+                </div>
+                {{else}}
+                <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-xl-5 g-3">
+                    {{range .Items}}
+                    <div class="col">{{.Card}}</div>
+                    {{end}}
+                </div>
+                {{end}}
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    {{.ReportModal}}
+{{end}}

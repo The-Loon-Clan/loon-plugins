@@ -17,10 +17,7 @@ type Handlers struct{}
 func (h *Handlers) UserLists(c *gin.Context) {
 	userID, _, _ := deps.Viewer(c)
 	owned, followed, _ := deps.UserLists(c.Request.Context(), userID)
-	c.HTML(http.StatusOK, "user_lists.html", deps.BaseData(c, gin.H{
-		"Lists":    owned,
-		"Followed": followed,
-	}))
+	page(c, "My Lists", "user_lists.html", userListsVM{Lists: owned, Followed: followed})
 }
 
 // CreateList creates a new user list.
@@ -102,12 +99,15 @@ func (h *Handlers) ViewList(c *gin.Context) {
 	}
 	items, _ := deps.Items(c.Request.Context(), listID)
 	isFollowing, _ := deps.IsFollowing(c.Request.Context(), userID, listID)
-	c.HTML(http.StatusOK, "list_detail.html", deps.BaseData(c, gin.H{
-		"List":        list.Raw,
-		"Items":       rawItems(items),
-		"IsFollowing": isFollowing,
-		"IsOwner":     list.UserID == userID,
-	}))
+	page(c, list.Name, "list_detail.html", listDetailVM{
+		List:        list,
+		Items:       items,
+		IsFollowing: isFollowing,
+		IsOwner:     list.UserID == userID,
+		ViewerID:    userID,
+		NzbCardCSS:  deps.NzbCardCSS(),
+		ReportModal: deps.ReportModal(c),
+	})
 }
 
 // DownloadAllList serves all NZBs in a list as a ZIP archive.
@@ -117,10 +117,8 @@ func (h *Handlers) DownloadAllList(c *gin.Context) {
 	userID, _, _ := deps.Viewer(c)
 
 	if !deps.DownloadAllowed(c) {
-		c.HTML(http.StatusForbidden, "error.html", gin.H{
-			"Code":    403,
-			"Message": "Download blocked: your IP does not match your pinned browse IP.",
-		})
+		deps.RenderError(c, http.StatusForbidden,
+			"Download blocked: your IP does not match your pinned browse IP.")
 		return
 	}
 
@@ -195,12 +193,13 @@ func (h *Handlers) RemoveFromList(c *gin.Context) {
 // ReleaseLists shows all lists containing a release.
 func (h *Handlers) ReleaseLists(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	nzb, lists, err := deps.NzbAndLists(c.Request.Context(), id)
-	if err != nil {
+	nzb, ls, err := deps.ListsForNzb(c.Request.Context(), id)
+	if err != nil || nzb == nil {
 		c.String(http.StatusNotFound, "not found")
 		return
 	}
-	c.HTML(http.StatusOK, "release_lists.html", deps.BaseData(c, gin.H{"Nzb": nzb, "Lists": lists}))
+	page(c, "Lists containing "+nzb.Title, "release_lists.html",
+		releaseListsVM{Nzb: nzb, Lists: ls})
 }
 
 // WatchLists renders the public-watchlists index as a unified poster
@@ -219,9 +218,8 @@ func (h *Handlers) WatchLists(c *gin.Context) {
 	// useful default for spotting fresh activity; the template's sort
 	// dropdown can re-order client-side.
 	combined := dedupPublicLists(newLists, topLists, topGrabbed)
-	c.HTML(http.StatusOK, "community_watchlists.html", deps.BaseData(c, gin.H{
-		"Lists": combined,
-	}))
+	page(c, "Watchlists", "community_watchlists.html",
+		watchlistsVM{Lists: combined, NzbCardCSS: deps.NzbCardCSS()})
 }
 
 // sanitizeListFilename strips characters that are illegal in a
@@ -239,31 +237,18 @@ func sanitizeListFilename(name string) string {
 
 // dedupPublicLists merges the discovery axes into a single slice,
 // keeping the first occurrence of each list ID and preserving the
-// order in which axes (and lists within them) are supplied. Returns
-// the host rows, which is what the grid template reads.
-func dedupPublicLists(axes ...[]ListRef) []any {
+// order in which axes (and lists within them) are supplied.
+func dedupPublicLists(axes ...[]List) []List {
 	seen := map[int]bool{}
-	combined := make([]any, 0)
+	combined := make([]List, 0)
 	for _, axis := range axes {
 		for _, l := range axis {
-			// A row the host could not resolve is skipped rather than passed
-			// on as a nil the grid template would range straight into.
-			if l.Raw == nil || seen[l.ID] {
+			if seen[l.ID] {
 				continue
 			}
 			seen[l.ID] = true
-			combined = append(combined, l.Raw)
+			combined = append(combined, l)
 		}
 	}
 	return combined
-}
-
-// rawItems unwraps the host rows for the detail template, which reads far
-// more of an item than the ZIP builder does.
-func rawItems(items []ItemRef) []any {
-	out := make([]any, len(items))
-	for i, it := range items {
-		out[i] = it.Raw
-	}
-	return out
 }
