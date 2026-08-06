@@ -1,0 +1,196 @@
+{{define "admin_offers.html"}}
+    <style>
+        .ao-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.25rem;
+        }
+        @media (max-width: 1000px) { .ao-grid { grid-template-columns: 1fr; } }
+        .ao-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem 1.2rem;
+            margin-bottom: 1.1rem;
+        }
+        .ao-card h2 {
+            font-size: 0.92rem;
+            font-weight: 700;
+            margin: 0 0 0.65rem 0;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .ao-status-pill {
+            display: inline-block;
+            font-size: 0.7rem;
+            padding: 2px 9px;
+            border-radius: 999px;
+            margin-right: 0.35rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .ao-open       { background: rgba(96,165,250,0.18); color:#60a5fa; }
+        .ao-claimed    { background: rgba(234,179,8,0.18);  color:#facc15; }
+        .ao-delivered  { background: rgba(74,222,128,0.18); color:#4ade80; }
+        .ao-failed     { background: rgba(244,114,182,0.18); color:#f472b6; }
+        .ao-cancelled  { background: rgba(148,163,184,0.18); color:#cbd5e1; }
+        .ao-stuck      { color:#f87171; font-weight:600; }
+        table.ao-table { width: 100%; font-size: 0.82rem; }
+        table.ao-table th { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; padding-bottom: 0.4rem; }
+        table.ao-table td { padding: 0.45rem 0.45rem 0.45rem 0; border-top: 1px solid var(--border); vertical-align: top; }
+        .of-pill {
+            display: inline-block;
+            font-size: 0.66rem;
+            padding: 2px 7px;
+            border-radius: 999px;
+            margin-right: 0.25rem;
+        }
+        .of-pill-priv { background: rgba(96,165,250,0.15); color:#60a5fa; }
+        .of-pill-pub  { background: rgba(74,222,128,0.15); color:#4ade80; }
+        .of-pill-per  { background: rgba(168,85,247,0.15); color:#c084fc; }
+    </style>
+
+    <div class="container mt-4 site-container-wide">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div>
+                <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Admin · Offers</h1>
+                <div style="color:var(--text-muted);font-size:0.85rem;">
+                    Read-only view of the fulfillment queue. Stuck claims highlighted red;
+                    sweeper auto-reopens them on its next tick.
+                </div>
+            </div>
+            <div style="font-size:0.85rem;">
+                <a href="/admin/trackers" style="color:var(--blue);">Trackers</a>
+                &middot;
+                <a href="/admin" style="color:var(--blue);">Admin home</a>
+            </div>
+        </div>
+
+        <div class="ao-card">
+            <h2>Status histogram</h2>
+            {{if .StatusCounts}}
+                {{range .StatusCounts}}
+                <span class="ao-status-pill ao-{{.Status}}">{{.Status}}: {{.Count}}</span>
+                {{end}}
+            {{else}}
+                <span style="color:var(--text-muted);font-size:0.85rem;">No requests yet.</span>
+            {{end}}
+        </div>
+
+        <div class="ao-grid">
+            <div>
+                <div class="ao-card">
+                    <h2>Recent requests (100)</h2>
+                    {{if .Recent}}
+                    <table class="ao-table">
+                        <thead>
+                            <tr>
+                                <th style="width:70px;">#</th>
+                                <th style="width:90px;">Status</th>
+                                <th>Content</th>
+                                <th style="width:120px;">Requester</th>
+                                <th style="width:140px;">Claimer</th>
+                                <th style="width:110px;">Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {{range .Recent}}
+                            <tr>
+                                <td style="color:var(--text-muted);">{{.RequestID}}</td>
+                                <td>
+                                    <span class="ao-status-pill ao-{{.Status}}">{{.Status}}</span>
+                                    {{if and (eq .Status "claimed") .ClaimExpiresAt}}
+                                        <div style="font-size:0.7rem;margin-top:0.2rem;">
+                                            exp <span class="ao-stuck">{{.ClaimExpiresAt.Format "Jan 2 15:04"}}</span>
+                                        </div>
+                                    {{end}}
+                                </td>
+                                <td>
+                                    <div style="color:var(--text-primary);font-weight:600;font-size:0.85rem;">
+                                        {{.EntityType}}
+                                        {{if .EntityID}}<a href="/{{.EntityType}}/{{.EntityID}}" style="color:var(--blue);text-decoration:none;">#{{.EntityID}}</a>{{end}}
+                                        {{if .SeasonNum}}· S{{.SeasonNum}}{{end}}
+                                        {{if .EpisodeNum}}E{{.EpisodeNum}}{{end}}
+                                    </div>
+                                    <div style="color:var(--text-muted);font-size:0.72rem;">
+                                        {{if .Resolution}}{{.Resolution}} · {{end}}
+                                        {{if .SourceTag}}{{.SourceTag}} · {{end}}
+                                        {{.SizeBucket}}
+                                        {{if .PointsOffered}} · {{.PointsOffered}} pts{{end}}
+                                    </div>
+                                </td>
+                                <td>
+                                    <a href="/u/{{.RequesterUsername}}" style="color:var(--blue);text-decoration:none;">{{.RequesterUsername}}</a>
+                                </td>
+                                <td>
+                                    {{if .ClaimerUsername}}
+                                        <a href="/u/{{.ClaimerUsername}}" style="color:var(--blue);text-decoration:none;">{{.ClaimerUsername}}</a>
+                                        {{if .TrackerName}}<div style="color:var(--text-muted);font-size:0.7rem;">via {{.TrackerName}}</div>{{end}}
+                                    {{else}}
+                                        <span style="color:var(--text-muted);">—</span>
+                                    {{end}}
+                                </td>
+                                <td style="color:var(--text-muted);font-size:0.74rem;">{{.CreatedAt.Format "Jan 2 15:04"}}</td>
+                            </tr>
+                        {{end}}
+                        </tbody>
+                    </table>
+                    {{else}}
+                    <div style="color:var(--text-muted);font-size:0.85rem;">No requests yet.</div>
+                    {{end}}
+                </div>
+            </div>
+
+            <div>
+                <div class="ao-card">
+                    <h2>Top deliverers</h2>
+                    {{if .Leaders}}
+                        {{range .Leaders}}
+                        <div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
+                            <div style="flex:1;min-width:0;">
+                                <a href="/u/{{.Username}}" style="color:var(--text-primary);font-weight:600;text-decoration:none;">{{.Username}}</a>
+                                <div style="color:var(--text-muted);font-size:0.72rem;">{{.OfferCount}} offer{{if ne .OfferCount 1}}s{{end}}</div>
+                            </div>
+                            <div style="text-align:right;">
+                                <strong style="color:var(--text-primary);">{{.FulfilledCount}}</strong>
+                                {{if gt .FailedCount 0}}<span style="color:var(--text-muted);font-size:0.72rem;">/ {{.FailedCount}} fail</span>{{end}}
+                            </div>
+                        </div>
+                        {{end}}
+                    {{else}}
+                    <div style="color:var(--text-muted);font-size:0.85rem;">No deliveries yet.</div>
+                    {{end}}
+                </div>
+
+                <div class="ao-card">
+                    <h2>Tracker activity</h2>
+                    {{if .Trackers}}
+                        {{range .Trackers}}
+                        <div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
+                            <div style="flex:1;min-width:0;">
+                                <div style="color:var(--text-primary);font-weight:600;">{{.TrackerName}}</div>
+                                <div style="color:var(--text-muted);font-size:0.72rem;">
+                                    {{if eq .TrackerVisibility "private"}}<span class="of-pill of-pill-priv">private</span>{{end}}
+                                    {{if eq .TrackerVisibility "public"}}<span class="of-pill of-pill-pub">public</span>{{end}}
+                                    {{if eq .TrackerVisibility "personal"}}<span class="of-pill of-pill-per">personal</span>{{end}}
+                                    {{.UserCount}} user{{if ne .UserCount 1}}s{{end}} · {{.OfferCount}} offer{{if ne .OfferCount 1}}s{{end}}
+                                </div>
+                            </div>
+                            <div style="text-align:right;">
+                                <strong style="color:var(--text-primary);">{{.DeliveriesWeek}}</strong>
+                                <div style="color:var(--text-muted);font-size:0.7rem;">7d</div>
+                            </div>
+                        </div>
+                        {{end}}
+                    {{else}}
+                    <div style="color:var(--text-muted);font-size:0.85rem;">No tracker activity.</div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{{end}}

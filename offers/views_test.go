@@ -1,0 +1,152 @@
+package offers
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+// These fragments are LIFTED markup — 600 lines nobody in this package wrote —
+// so executing them is the only thing that proves the view types match what
+// they read. html/template streams: a field the markup wants and the data
+// lacks aborts the render part way through, and the caller sees a 200 with
+// half a page and nothing logged.
+
+func ts(s string) *time.Time { t, _ := time.Parse(time.RFC3339, s); return &t }
+
+func sampleBucket() Bucket {
+	one := 1
+	return Bucket{
+		BucketID: 5, EntityType: EntityAnime, EntityID: &one,
+		SeasonNum: &one, EpisodeNum: &one,
+		Resolution: "1080p", SourceTag: "web-dl", SizeBucket: "<1GB",
+		OfferCount: 3, ActiveOfferCount: 2, MinPoints: 0,
+		HasPrivate: true, HasPublic: false, HasPersonal: true,
+	}
+}
+
+func sampleTracker() Tracker {
+	return Tracker{
+		ID: 1, Name: "AnimeBytes", ShortName: "ab",
+		Visibility: VisibilityPrivate, Status: StatusActive,
+		RulesMarkdown: "be nice", ScrapeMinSeconds: 30,
+		OfferCount: 12, AccessCount: 4,
+	}
+}
+
+// render executes a fragment directly, bypassing the chrome seam so the test
+// needs no host.
+func render(t *testing.T, name string, data gin.H) string {
+	t.Helper()
+	data["CSRFToken"] = "test-csrf"
+	var sb strings.Builder
+	if err := pageTmpl.ExecuteTemplate(&sb, name, data); err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	s := sb.String()
+	if strings.TrimSpace(s) == "" {
+		t.Fatalf("%s rendered empty", name)
+	}
+	// Body content only — the host wrapper owns the document.
+	for _, unwanted := range []string{"<!DOCTYPE", "<html", `template "navbar"`, `template "footer"`} {
+		if strings.Contains(s, unwanted) {
+			t.Errorf("%s carries host chrome it should not: %q", name, unwanted)
+		}
+	}
+	return s
+}
+
+func TestOffersPageRenders(t *testing.T) {
+	got := render(t, "offers.html", gin.H{
+		"EntityType": EntityAnime,
+		"SizeBucket": "",
+		"Buckets":    []Bucket{sampleBucket(), sampleBucket()},
+		"Leaders": []Leader{{
+			UserID: 1, Username: "kirisame", OfferCount: 9,
+			FulfilledCount: 7, FailedCount: 1, LastFulfilledAt: ts("2026-08-06T12:00:00Z"),
+		}},
+		"Recent": []Fulfillment{{
+			RequestID: 3, BucketID: 5, DeliveredAt: time.Now(),
+			EntityType: EntityAnime, Resolution: "1080p", SourceTag: "web-dl", SizeBucket: "<1GB",
+		}},
+		"Trackers": []TrackerStat{{
+			TrackerID: 1, TrackerName: "AnimeBytes", TrackerVisibility: VisibilityPrivate,
+			OfferCount: 12, UserCount: 4, DeliveriesWeek: 2,
+		}},
+	})
+	for _, want := range []string{"kirisame", "AnimeBytes", "1080p"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("offers page missing %q", want)
+		}
+	}
+}
+
+func TestAdminOffersPageRenders(t *testing.T) {
+	name := "AnimeBytes"
+	claimer := "shigure"
+	got := render(t, "admin_offers.html", gin.H{
+		"PageTitle": "Offers", "ActiveNav": "admin",
+		"Recent": []AdminRequest{{
+			RequestID: 7, BucketID: 5, Status: "claimed", PointsOffered: 0,
+			CreatedAt: time.Now(), ClaimExpiresAt: ts("2026-08-06T12:15:00Z"),
+			RequesterUserID: 1, RequesterUsername: "kirisame",
+			ClaimerUsername: &claimer, TrackerName: &name,
+		}},
+		"StatusCounts": []StatusCount{{Status: "open", Count: 4}},
+		"Leaders":      []Leader{{UserID: 1, Username: "kirisame", FulfilledCount: 7}},
+		"Trackers":     []TrackerStat{{TrackerID: 1, TrackerName: name, OfferCount: 12}},
+	})
+	for _, want := range []string{"kirisame", "shigure", "claimed"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("admin offers page missing %q", want)
+		}
+	}
+}
+
+// admin_trackers exercises the self-defined admin_tracker_form partial and the
+// dict helper, which is the one FuncMap function this package had to
+// reimplement.
+func TestAdminTrackersPageRenders(t *testing.T) {
+	got := render(t, "admin_trackers.html", gin.H{
+		"PageTitle": "Trackers", "ActiveNav": "admin",
+		"Trackers": []Tracker{sampleTracker()},
+	})
+	for _, want := range []string{"AnimeBytes", "test-csrf", VisibilityPrivate} {
+		if !strings.Contains(got, want) {
+			t.Errorf("admin trackers page missing %q", want)
+		}
+	}
+}
+
+// The empty state is what an operator sees on a fresh install, and a range
+// over nothing is where a missing {{else}} shows up.
+func TestPagesRenderEmpty(t *testing.T) {
+	render(t, "offers.html", gin.H{
+		"EntityType": EntityAnime, "SizeBucket": "",
+		"Buckets": []Bucket{}, "Leaders": []Leader{},
+		"Recent": []Fulfillment{}, "Trackers": []TrackerStat{},
+	})
+	render(t, "admin_offers.html", gin.H{
+		"Recent": []AdminRequest{}, "StatusCounts": []StatusCount{},
+		"Leaders": []Leader{}, "Trackers": []TrackerStat{},
+	})
+	render(t, "admin_trackers.html", gin.H{"Trackers": []Tracker{}})
+}
+
+// The plugin's copies of the host's stored strings. A drift here means a
+// tracker saved as "private" stops matching the visibility check — loud and
+// immediate, unlike ComputeOfferHash, which is why these are duplicated and
+// that one crosses the seam as a function.
+func TestStoredVocabularyMatchesTheDatabase(t *testing.T) {
+	for got, want := range map[string]string{
+		VisibilityPrivate: "private", VisibilityPublic: "public", VisibilityPersonal: "personal",
+		StatusUnvetted: "unvetted", StatusActive: "active", StatusBanned: "banned",
+		VerificationHonor: "honor", EntityAnime: "anime",
+	} {
+		if got != want {
+			t.Errorf("stored value drifted: got %q want %q", got, want)
+		}
+	}
+}

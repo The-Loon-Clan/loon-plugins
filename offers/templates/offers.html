@@ -1,0 +1,283 @@
+{{define "offers.html"}}
+    <style>
+        .of-page { margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+        .of-grid {
+            display: grid;
+            grid-template-columns: 1.7fr 1fr;
+            gap: 1.25rem;
+        }
+        @media (max-width: 1000px) { .of-grid { grid-template-columns: 1fr; } }
+
+        /* Search-side cards (left column) */
+        .of-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.9rem 1.1rem;
+            margin-bottom: 0.6rem;
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+        }
+        .of-card .of-title { font-weight: 600; color: var(--text-primary); font-size: 0.95rem; }
+        .of-card .of-meta  { color: var(--text-muted); font-size: 0.78rem; margin-top: 0.15rem; }
+        .of-pill {
+            display: inline-block;
+            font-size: 0.66rem;
+            padding: 2px 7px;
+            border-radius: 999px;
+            margin-right: 0.25rem;
+        }
+        .of-pill-priv { background: rgba(96,165,250,0.15); color:#60a5fa; }
+        .of-pill-pub  { background: rgba(74,222,128,0.15); color:#4ade80; }
+        .of-pill-per  { background: rgba(168,85,247,0.15); color:#c084fc; }
+        .of-count {
+            margin-left: auto;
+            text-align: right;
+            font-size: 0.85rem;
+        }
+        .of-count strong { font-size: 1.05rem; color: var(--text-primary); }
+
+        /* Community panel (right column) */
+        .oc-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem 1.2rem;
+            margin-bottom: 1.1rem;
+        }
+        .oc-card h2 {
+            font-size: 0.92rem;
+            font-weight: 700;
+            margin: 0 0 0.65rem 0;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .oc-row {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+        }
+        .oc-row:last-child { border-bottom: none; }
+        .oc-rank { font-size: 0.78rem; color: var(--text-muted); width: 1.5rem; text-align: right; }
+        .oc-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
+        .oc-avatar-fallback {
+            width: 30px; height: 30px; border-radius: 50%;
+            background: #3a7bd5; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.78rem; font-weight: 700;
+            flex-shrink: 0;
+        }
+        .oc-name { flex: 1; min-width: 0; }
+        .oc-name a { color: var(--text-primary); font-weight: 600; text-decoration: none; }
+        .oc-name a:hover { color: var(--blue); text-decoration: underline; }
+        .oc-name-sub { color: var(--text-muted); font-size: 0.72rem; }
+        .oc-stat-right { text-align: right; font-size: 0.76rem; color: var(--text-muted); white-space: nowrap; }
+        .oc-stat-right strong { color: var(--text-primary); font-size: 0.92rem; display: block; }
+        .oc-recent-meta { color: var(--text-muted); font-size: 0.72rem; }
+    </style>
+
+    <div class="container page of-page">
+        <div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+            <div>
+                <h1 style="font-size:1.4rem;font-weight:700;margin:0;">Offers</h1>
+                <div style="color:var(--text-muted);font-size:0.88rem;">
+                    Catalog of releases users can deliver from private trackers, public indexers, or personal collections.
+                    Source identities stay anonymous — click an offer to send a request.
+                </div>
+            </div>
+        </div>
+
+        <div class="of-grid">
+            {{/* ── Left column: filter + offer-bucket list ── */}}
+            <div>
+                <form method="GET" action="/offers" class="d-flex flex-wrap gap-2 align-items-end mb-3">
+                    <div>
+                        <label class="form-label small mb-1">Type</label>
+                        <select name="type" class="form-select form-select-sm">
+                            {{$t := .EntityType}}
+                            <option value="anime" {{if eq $t "anime"}}selected{{end}}>Anime</option>
+                            <option value="manga" {{if eq $t "manga"}}selected{{end}}>Manga</option>
+                            <option value="music" {{if eq $t "music"}}selected{{end}}>Music</option>
+                            <option value="movie" {{if eq $t "movie"}}selected{{end}}>Movie</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label small mb-1">Size</label>
+                        <select name="size" class="form-select form-select-sm">
+                            {{$s := .SizeBucket}}
+                            <option value=""        {{if eq $s ""}}selected{{end}}>Any</option>
+                            <option value="<500MB"  {{if eq $s "<500MB"}}selected{{end}}>&lt;500MB</option>
+                            <option value="<1GB"    {{if eq $s "<1GB"}}selected{{end}}>&lt;1GB</option>
+                            <option value="<2.5GB"  {{if eq $s "<2.5GB"}}selected{{end}}>&lt;2.5GB</option>
+                            <option value=">=2.5GB" {{if eq $s ">=2.5GB"}}selected{{end}}>&ge;2.5GB</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                </form>
+
+                {{if .Buckets}}
+                    {{range .Buckets}}
+                    <div class="of-card">
+                        <div style="flex:1;min-width:0;">
+                            <div class="of-title">
+                                {{.EntityType}} {{if .EntityID}}#{{deref .EntityID}}{{end}}
+                                {{if .SeasonNum}}· S{{deref .SeasonNum}}{{end}}{{if .EpisodeNum}}E{{deref .EpisodeNum}}{{end}}
+                                {{if .Resolution}}· {{.Resolution}}{{end}}
+                                {{if .SourceTag}}· {{.SourceTag}}{{end}}
+                            </div>
+                            <div class="of-meta">
+                                {{if .HasPrivate}}<span class="of-pill of-pill-priv">private</span>{{end}}
+                                {{if .HasPublic}}<span class="of-pill of-pill-pub">public</span>{{end}}
+                                {{if .HasPersonal}}<span class="of-pill of-pill-per">personal</span>{{end}}
+                                {{.SizeBucket}}
+                                {{if .MinPoints}}· {{.MinPoints}} pts min{{else}}· free{{end}}
+                            </div>
+                        </div>
+                        <div class="of-count">
+                            <strong>{{.ActiveOfferCount}}</strong> active
+                            <div style="color:var(--text-muted);font-size:0.7rem;">{{.OfferCount}} total</div>
+                        </div>
+                        <button type="button"
+                                class="btn btn-outline-primary btn-sm of-request"
+                                data-bucket-id="{{.BucketID}}">Request</button>
+                    </div>
+                    {{end}}
+                {{else}}
+                <div style="color:var(--text-muted);text-align:center;padding:3rem 1rem;border:1px dashed var(--border);border-radius:12px;">
+                    No offers yet for this filter. Once offerers register their sources you'll see buckets here.
+                </div>
+                {{end}}
+            </div>
+
+            {{/* ── Right column: community panel ── */}}
+            <div>
+                <div class="oc-card">
+                    <h2>Top deliverers</h2>
+                    {{if .Leaders}}
+                        {{range $i, $u := .Leaders}}
+                        <div class="oc-row">
+                            <div class="oc-rank">{{add $i 1}}.</div>
+                            {{if $u.AvatarPath}}
+                            <img src="{{$u.AvatarPath}}" alt="{{$u.Username}}" class="oc-avatar">
+                            {{else}}
+                            <div class="oc-avatar-fallback">{{slice $u.Username 0 1}}</div>
+                            {{end}}
+                            <div class="oc-name">
+                                <a href="/u/{{$u.Username}}">{{$u.Username}}</a>
+                                <div class="oc-name-sub">{{$u.OfferCount}} active offer{{if ne $u.OfferCount 1}}s{{end}}</div>
+                            </div>
+                            <div class="oc-stat-right">
+                                <strong>{{$u.FulfilledCount}}</strong>
+                                {{if gt $u.FailedCount 0}}{{$u.FailedCount}} failed{{else}}deliveries{{end}}
+                            </div>
+                        </div>
+                        {{end}}
+                    {{else}}
+                        <div style="color:var(--text-muted);font-size:0.82rem;">
+                            No deliveries yet. <a href="/account-settings#offers" style="color:var(--blue);">Register sources</a> to contribute.
+                        </div>
+                    {{end}}
+                </div>
+
+                <div class="oc-card">
+                    <h2>Recent fulfillments</h2>
+                    {{if .Recent}}
+                        {{range .Recent}}
+                        <div class="oc-row">
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-weight:600;color:var(--text-primary);font-size:0.85rem;">
+                                    {{.EntityType}}
+                                    {{if .EntityID}}<a href="/{{.EntityType}}/{{.EntityID}}" style="color:var(--blue);text-decoration:none;">#{{.EntityID}}</a>{{end}}
+                                    {{if .SeasonNum}}· S{{.SeasonNum}}{{end}}{{if .EpisodeNum}}E{{.EpisodeNum}}{{end}}
+                                </div>
+                                <div class="oc-recent-meta">
+                                    {{if .Resolution}}{{.Resolution}} · {{end}}
+                                    {{if .SourceTag}}{{.SourceTag}} · {{end}}
+                                    {{.SizeBucket}}
+                                </div>
+                            </div>
+                            <div class="oc-stat-right">
+                                {{if .NzbID}}<a href="/release/{{.NzbID}}" style="color:var(--blue);text-decoration:none;font-size:0.74rem;">view →</a>{{else}}<span style="font-size:0.72rem;color:var(--text-muted);">(no nzb)</span>{{end}}
+                                <div style="font-size:0.7rem;color:var(--text-muted);">{{.DeliveredAt.Format "Jan 2 15:04"}}</div>
+                            </div>
+                        </div>
+                        {{end}}
+                    {{else}}
+                        <div style="color:var(--text-muted);font-size:0.82rem;">Nothing delivered yet.</div>
+                    {{end}}
+                </div>
+
+                <div class="oc-card">
+                    <h2>Active trackers</h2>
+                    {{if .Trackers}}
+                        {{range .Trackers}}
+                        <div class="oc-row">
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-weight:600;color:var(--text-primary);font-size:0.85rem;">{{.TrackerName}}</div>
+                                <div class="oc-recent-meta">
+                                    {{if eq .TrackerVisibility "private"}}<span class="of-pill of-pill-priv">private</span>{{end}}
+                                    {{if eq .TrackerVisibility "public"}}<span class="of-pill of-pill-pub">public</span>{{end}}
+                                    {{if eq .TrackerVisibility "personal"}}<span class="of-pill of-pill-per">personal</span>{{end}}
+                                    {{.UserCount}} user{{if ne .UserCount 1}}s{{end}} · {{.OfferCount}} offer{{if ne .OfferCount 1}}s{{end}}
+                                </div>
+                            </div>
+                            <div class="oc-stat-right">
+                                <strong>{{.DeliveriesWeek}}</strong>
+                                7d
+                            </div>
+                        </div>
+                        {{end}}
+                    {{else}}
+                        <div style="color:var(--text-muted);font-size:0.82rem;">No tracker activity yet.</div>
+                    {{end}}
+                </div>
+
+                <div class="oc-card">
+                    <h2>Want to contribute?</h2>
+                    <div style="font-size:0.82rem;color:var(--text-muted);">
+                        Register a source — tracker access or a local folder — on
+                        <a href="/account-settings#offers" style="color:var(--blue);">/account-settings</a>.
+                        Your tracker identity stays anonymous on every public surface;
+                        only your fulfillment counter is visible.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    // Request modal-less click — POST + replace button with status line.
+    document.querySelectorAll('.of-request').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            btn.textContent = '…';
+            try {
+                const r = await fetch('/offers/request', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': (document.cookie.match(/(?:^|;\s*)csrf_tok=([^;]+)/) || [])[1] || '',
+                    },
+                    body: JSON.stringify({bucket_id: parseInt(btn.dataset.bucketId, 10), points: 0, notes: ''}),
+                });
+                const j = await r.json();
+                if (j.ok) {
+                    btn.outerHTML = '<span style="color:#4ade80;font-size:0.78rem;">Request #' + j.request_id + ' filed</span>';
+                } else {
+                    btn.textContent = 'Failed';
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                btn.textContent = 'Failed';
+                btn.disabled = false;
+            }
+        });
+    });
+    </script>
+{{end}}
