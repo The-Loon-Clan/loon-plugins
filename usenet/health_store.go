@@ -15,6 +15,11 @@ type healthRow struct {
 	ID    int64
 	Data  []byte
 	Total int
+	// UserRequested — someone asked for this check from the site, rather than
+	// the rotation picking it. Only host mode can set it: the plugin's own
+	// table has no recheck-request column, because internal mode has no site
+	// to ask from. See the healthSkipRow case in the sweep for why it matters.
+	UserRequested bool
 }
 
 // nzbsNeedingHealthCheck returns releases due a check: never-checked first, then

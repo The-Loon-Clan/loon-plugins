@@ -12,6 +12,7 @@ type fakeHealthStore struct {
 	cands    []pluginapi.HealthCandidate
 	verdicts map[int64]string
 	touched  map[int64]bool
+	cleared  map[int64]bool
 	err      error
 }
 
@@ -36,6 +37,17 @@ func (f *fakeHealthStore) TouchHealthChecked(_ context.Context, id int64) error 
 		f.touched = map[int64]bool{}
 	}
 	f.touched[id] = true
+	return nil
+}
+
+// Tracked separately from touched on purpose: clearing a recheck request must
+// NOT stamp checked-at, and a fake that conflated them would let that
+// regression through.
+func (f *fakeHealthStore) ClearHealthRecheckRequest(_ context.Context, id int64) error {
+	if f.cleared == nil {
+		f.cleared = map[int64]bool{}
+	}
+	f.cleared[id] = true
 	return nil
 }
 
@@ -92,5 +104,57 @@ func TestResolveHealthBackendRefusesHostWithoutCapability(t *testing.T) {
 		// a core in host mode by construction (Provision sets it). Guard the
 		// test to the documented contract instead of nil-poking.
 		t.Skip("host-mode resolution requires a provisioned core; refusal path exercised in the demo")
+	}
+}
+
+// A user-requested check that comes back inconclusive must have its REQUEST
+// dropped and nothing else. Every other ending clears the request as a side
+// effect -- a verdict through SetHealthVerdict, an unreadable blob through
+// TouchHealthChecked -- and this third ending writes neither, so the request
+// used to stay set forever: the row was re-STATted on every pass and the page
+// the person was watching said "queued" indefinitely. Three releases were in
+// that state in production, the oldest for 22 hours.
+func TestClearRecheckDropsTheRequestWithoutStampingChecked(t *testing.T) {
+	fake := &fakeHealthStore{}
+	b := hostHealth{hs: fake}
+
+	if err := b.clearRecheck(context.Background(), 77); err != nil {
+		t.Fatalf("clearRecheck: %v", err)
+	}
+	if !fake.cleared[77] {
+		t.Error("the recheck request was not dropped")
+	}
+	if fake.touched[77] {
+		t.Error("clearing a request stamped checked-at — that pushes a release " +
+			"nobody can get an answer about to the back of the rotation, which " +
+			"hides it rather than surfacing it")
+	}
+	if fake.verdicts[77] != "" {
+		t.Error("clearing a request wrote a verdict the checker could not trust")
+	}
+}
+
+// UserRequested has to survive the host adapter, or the sweep can never tell
+// a person's request apart from the rotation's own pick.
+func TestUserRequestedCrossesTheHostSeam(t *testing.T) {
+	fake := &fakeHealthStore{cands: []pluginapi.HealthCandidate{
+		{ID: 11, NZBGz: []byte{1}, UserRequested: true},
+		{ID: 12, NZBGz: []byte{2}},
+	}}
+	rows, err := hostHealth{hs: fake}.candidates(context.Background(), 10, 30, 24)
+	if err != nil {
+		t.Fatalf("candidates: %v", err)
+	}
+	if !rows[0].UserRequested || rows[1].UserRequested {
+		t.Errorf("UserRequested did not cross the seam: %+v", rows)
+	}
+}
+
+// Internal mode has no site to request a recheck from, so its rows are never
+// UserRequested and clearRecheck must be an inert no-op rather than an error
+// the sweep would report every pass.
+func TestInternalModeClearRecheckIsInert(t *testing.T) {
+	if err := (internalHealth{}).clearRecheck(context.Background(), 1); err != nil {
+		t.Errorf("internal clearRecheck returned %v, want nil", err)
 	}
 }

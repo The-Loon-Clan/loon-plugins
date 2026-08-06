@@ -353,6 +353,10 @@ type healthBackend interface {
 	candidates(ctx context.Context, limit, recheckDays, minAgeHours int) ([]healthRow, error)
 	setVerdict(ctx context.Context, id int64, status string, total, missing, par2 int) error
 	touch(ctx context.Context, id int64) error
+	// clearRecheck drops a user's recheck request without stamping
+	// checked-at. Only reachable for a row whose UserRequested is set, which
+	// internal mode never produces.
+	clearRecheck(ctx context.Context, id int64) error
 }
 
 type internalHealth struct{ st HealthStore }
@@ -367,6 +371,11 @@ func (b internalHealth) touch(ctx context.Context, id int64) error {
 	return b.st.touchHealthChecked(ctx, id)
 }
 
+// clearRecheck is a no-op in internal mode: there is no site to request a
+// recheck from, so the plugin's own table carries no request column and no row
+// it yields is ever UserRequested.
+func (b internalHealth) clearRecheck(context.Context, int64) error { return nil }
+
 type hostHealth struct{ hs pluginapi.ReleaseHealthStore }
 
 func (b hostHealth) candidates(ctx context.Context, limit, recheckDays, minAgeHours int) ([]healthRow, error) {
@@ -376,7 +385,8 @@ func (b hostHealth) candidates(ctx context.Context, limit, recheckDays, minAgeHo
 	}
 	rows := make([]healthRow, len(cands))
 	for i, c := range cands {
-		rows[i] = healthRow{ID: c.ID, Data: c.NZBGz, Total: c.TotalSegments}
+		rows[i] = healthRow{ID: c.ID, Data: c.NZBGz, Total: c.TotalSegments,
+			UserRequested: c.UserRequested}
 	}
 	return rows, nil
 }
@@ -385,6 +395,9 @@ func (b hostHealth) setVerdict(ctx context.Context, id int64, status string, tot
 }
 func (b hostHealth) touch(ctx context.Context, id int64) error {
 	return b.hs.TouchHealthChecked(ctx, id)
+}
+func (b hostHealth) clearRecheck(ctx context.Context, id int64) error {
+	return b.hs.ClearHealthRecheckRequest(ctx, id)
 }
 
 // resolveHealthBackend mirrors resolveSink: host mode without the capability
@@ -470,6 +483,7 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 	var checked, unreadable int
 	var yielded bool
 	var inconclusive int
+	var inconclusiveRequests int
 	var inconclusiveIDs []int64
 	tally := map[string]int{}
 	for _, row := range rows {
@@ -502,6 +516,22 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 			if len(inconclusiveIDs) < 3 {
 				inconclusiveIDs = append(inconclusiveIDs, row.ID)
 			}
+			// A USER asked for this one, and this is the only ending that
+			// writes nothing — a verdict clears their request, so does a
+			// touch, and an inconclusive result does neither. Left alone the
+			// request stays set forever: the row is re-STATted every pass and
+			// the page they are watching says "queued" indefinitely. Drop the
+			// request, not the checked-at stamp: the release genuinely has not
+			// been checked, and stamping would hide a release nobody can get
+			// an answer about at the back of the rotation.
+			if row.UserRequested {
+				if err := backend.clearRecheck(ctx, row.ID); err != nil {
+					p.reportErr(ctx, "usenet/health-clear-recheck",
+						fmt.Errorf("nzb %d: %w", row.ID, err))
+				} else {
+					inconclusiveRequests++
+				}
+			}
 		case healthSkipTransient:
 			// The connections are wanted elsewhere, or the provider is flaky.
 			// Stop the pass instead of grinding through the rest for the same
@@ -519,6 +549,12 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 		// Named, not folded into the yield message: "which release keeps
 		// refusing to answer" is the first question of the wedge diagnosis.
 		msg += fmt.Sprintf(", %d inconclusive (e.g. nzb %v)", inconclusive, inconclusiveIDs)
+		if inconclusiveRequests > 0 {
+			// Worth its own number: these are people waiting on an answer the
+			// checker cannot give, and the count is how an operator sees that
+			// the "Recheck" button is producing nothing for somebody.
+			msg += fmt.Sprintf(" — %d of them user-requested, request cleared", inconclusiveRequests)
+		}
 	}
 	if yielded {
 		msg += " — yielded early (connection pool busy or failing)"

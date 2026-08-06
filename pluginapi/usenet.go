@@ -416,6 +416,17 @@ type HealthCandidate struct {
 	// exceeds what the NZB lists, the difference is missing data by
 	// definition, and the checker folds it in before scoring.
 	TotalSegments int
+	// UserRequested marks a candidate that a person asked for from the site,
+	// as opposed to one the periodic rotation picked.
+	//
+	// It exists because the two want opposite handling of an INCONCLUSIVE
+	// result. For the rotation, writing nothing is correct: the row keeps its
+	// prior verdict and is retried promptly. For a user request it is a leak
+	// — the request flag is only ever cleared by a verdict or a touch, and an
+	// inconclusive check produces neither, so the row is re-STATted on every
+	// pass forever and the page the person is watching says "queued" until
+	// somebody notices. See ClearHealthRecheckRequest.
+	UserRequested bool
 }
 
 // ReleaseHealthStore is the host's side of health checking: pick candidates,
@@ -444,6 +455,20 @@ type ReleaseHealthStore interface {
 	// TouchHealthChecked stamps checked-at WITHOUT changing the verdict — used
 	// for unreadable blobs so they stop jamming the queue head.
 	TouchHealthChecked(ctx context.Context, id int64) error
+	// ClearHealthRecheckRequest drops a user's recheck request WITHOUT
+	// stamping checked-at and WITHOUT changing the verdict.
+	//
+	// Called for exactly one outcome: a user-requested check that came back
+	// inconclusive. Every other ending already clears the request as a side
+	// effect — a verdict through SetHealthVerdict, an unreadable blob through
+	// TouchHealthChecked — and this is the third ending, which writes neither
+	// and so used to leave the request set forever.
+	//
+	// It must NOT stamp checked-at. The release genuinely has not been
+	// checked; stamping would push it to the back of the rotation and hide a
+	// release nobody can get an answer about. Dropping the request alone
+	// returns it to the ordinary queue, which is the honest state.
+	ClearHealthRecheckRequest(ctx context.Context, id int64) error
 }
 
 // LookupReleaseHealthStore resolves the host-registered health store, if any.
