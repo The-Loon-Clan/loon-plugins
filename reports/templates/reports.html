@@ -1,0 +1,56 @@
+{{define "reports.html"}}
+    <div class="container mt-4 page">
+        <div class="d-flex gap-2 mb-3">
+            <a href="/admin/p/reports" class="btn btn-sm {{if not .Resolved}}btn-primary{{else}}btn-outline-secondary{{end}}">Open</a>
+            <a href="/admin/p/reports?resolved=1" class="btn btn-sm {{if .Resolved}}btn-primary{{else}}btn-outline-secondary{{end}}">Resolved</a>
+        </div>
+        <div class="card">
+            <div class="card-header d-flex justify-content-between">
+                <span>{{if .Resolved}}Resolved Reports{{else}}Open Reports{{end}}</span>
+                <small style="color:var(--text-muted);">{{.Total}} total</small>
+            </div>
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>Release</th>
+                        <th>Reason</th>
+                        <th>Reporter</th>
+                        <th>Detail</th>
+                        <th style="width:140px;">Date</th>
+                        {{if not .Resolved}}<th style="width:90px;"></th>{{end}}
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Reports}}
+                    <tr>
+                        <td><a href="/release/{{.NzbID}}" style="color:var(--blue);">{{.NzbTitle}}</a></td>
+                        <td>
+                            {{if eq .Reason "malware"}}<span class="badge bg-danger">Malware</span>
+                            {{else if eq .Reason "broken"}}<span class="badge bg-warning text-dark">Broken</span>
+                            {{else if eq .Reason "mislabeled"}}<span class="badge bg-secondary">Mislabeled</span>
+                            {{else}}<span class="badge bg-secondary">{{.Reason}}</span>{{end}}
+                        </td>
+                        <td style="font-size:0.85rem;">{{.Username}}</td>
+                        <td style="font-size:0.85rem;color:var(--text-muted);">{{.Detail}}</td>
+                        <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt.Format "Jan 02 15:04"}}</td>
+                        {{if not $.Resolved}}
+                        <td>
+                            <form method="POST" action="/admin/p/reports/resolve">
+                                <input type="hidden" name="id" value="{{.ID}}">
+                                {{if $.Resolved}}<input type="hidden" name="resolved" value="1">{{end}}
+                                <input type="hidden" name="page" value="{{$.Page}}">
+                                <button class="btn btn-sm btn-outline-success">Resolve</button>
+                            </form>
+                        </td>
+                        {{end}}
+                    </tr>
+                    {{else}}
+                    <tr><td colspan="6" class="text-center" style="color:var(--text-muted);padding:2rem;">No reports.</td></tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{.PaginationHTML}}
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{{end}}
