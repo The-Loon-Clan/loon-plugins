@@ -1,0 +1,820 @@
+{{define "wiki.html"}}
+    <style>
+        /* ── Shell layout ──────────────────────────────────────────
+           3-column grid: left explorer, main content, right rail.
+           Collapses to one column under 1100px; the rails stack
+           below the main column so the article list always gets the
+           full width on phones / tablets. */
+        .wiki-page { margin: 0 auto; padding: 1.4rem 1rem 3rem; }
+        /* Grid children get explicit min-width:0 so any wide-looking
+           descendant (a long article title, a 100%-width button) can't
+           inflate the column past its track. Pair with minmax(0, 1fr)
+           on the column itself for a complete fix. */
+        .wiki-rail-left, .wiki-main, .wiki-rail-right { min-width: 0; }
+        .wiki-shell {
+            display: grid;
+            grid-template-columns: 260px minmax(0, 1fr) 320px;
+            gap: 1.1rem;
+            align-items: start;
+        }
+        @media (max-width: 1200px) {
+            .wiki-shell { grid-template-columns: 260px minmax(0, 1fr); }
+            .wiki-rail-right { grid-column: 1 / -1; display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+        }
+        @media (max-width: 820px) {
+            /* minmax(0, 1fr) — NOT bare 1fr — so the grid column can't
+               be inflated by a child's min-content (long un-wrapping
+               titles, 100%-width buttons), which was pushing the whole
+               column past the viewport on phones. */
+            .wiki-shell { grid-template-columns: minmax(0, 1fr); }
+            .wiki-rail-right { grid-template-columns: minmax(0, 1fr); }
+            .wiki-page { padding: 1rem 0.75rem 2rem; overflow-x: hidden; }
+            /* Sticky on the left rail is desktop-only useful — at this
+               breakpoint the rail stacks above the main column anyway,
+               so dropping sticky here also unblocks the overflow-x
+               clamp we use as a safety net for stray child overflow. */
+            .wiki-rail-left { position: static; }
+        }
+        @media (max-width: 480px) {
+            /* Tighten the hero + cards once more on phones so the
+               banner art and the 38px icon tiles don't crowd the
+               text. */
+            .wiki-hero { padding: 1rem 0.95rem; }
+            .wiki-hero h1 { font-size: 1.35rem; }
+            .wiki-hero-body { max-width: 100%; }
+            .wiki-cat-grid { grid-template-columns: minmax(0, 1fr); }
+            .wiki-cat-card { min-height: 0; }
+            .wiki-explorer { padding: 0.85rem 0.85rem; }
+            .wiki-contribute-card { padding: 0.85rem 0.85rem 0.7rem; }
+        }
+
+        /* Shared card chrome. Slightly rounder + softer border than
+           the global .card so the wiki feels distinct from the rest
+           of the site without inventing a new palette. */
+        .wiki-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+        }
+
+        /* ── Left rail — Wiki Explorer ───────────────────────────── */
+        .wiki-rail-left { position: sticky; top: 1rem; display:flex; flex-direction:column; gap:1rem; }
+        .wiki-eyebrow {
+            font-size: 0.66rem;
+            text-transform: uppercase;
+            letter-spacing: 0.10em;
+            color: var(--text-muted);
+            font-weight: 700;
+            margin: 0 0 0.5rem;
+        }
+        .wiki-explorer { padding: 1rem 1.05rem; }
+        .wiki-search {
+            position: relative;
+            margin-bottom: 0.85rem;
+        }
+        .wiki-search input {
+            width: 100%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.84rem;
+            padding: 0.5rem 2.6rem 0.5rem 2rem;
+            outline: none;
+            transition: border-color 0.12s ease;
+        }
+        .wiki-search input:focus { border-color: var(--blue); }
+        .wiki-search input::placeholder { color: var(--text-muted); }
+        .wiki-search .ws-icon {
+            position: absolute;
+            left: 0.6rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 0.88rem;
+        }
+        .wiki-search .ws-kbd {
+            position: absolute;
+            right: 0.45rem;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.66rem;
+            color: var(--text-muted);
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 1px 5px;
+            font-family: inherit;
+        }
+
+        .wiki-nav { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:0.1rem; }
+        .wiki-nav a {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            font-size: 0.86rem;
+            font-weight: 500;
+            padding: 0.5rem 0.65rem;
+            border-radius: 9px;
+            transition: background-color 0.12s ease, color 0.12s ease;
+        }
+        .wiki-nav a:hover { background: var(--bg-elevated); }
+        .wiki-nav a.is-active {
+            background: var(--blue-tint, rgba(91,138,245,0.15));
+            color: var(--blue);
+            font-weight: 600;
+        }
+        .wiki-nav .nav-ico { width: 18px; display:inline-flex; justify-content:center; opacity: 0.85; }
+
+        .wiki-cat-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:0.15rem; }
+        .wiki-cat-list a {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            font-size: 0.86rem;
+            font-weight: 500;
+            padding: 0.45rem 0.65rem;
+            border-radius: 9px;
+            transition: background-color 0.12s ease;
+        }
+        .wiki-cat-list a:hover { background: var(--bg-elevated); }
+        .wiki-cat-list .cat-ico {
+            width: 22px; height: 22px;
+            display: inline-flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            color: var(--blue);
+        }
+        /* Per-slug accent for the left-rail icons. Same colour map as
+           the centre category grid so a folder reads the same colour
+           in both lists. Falls back to --blue when a slug isn't
+           recognised. */
+        .wiki-cat-list li[data-slug="usenet"]   .cat-ico { color: #f59e0b; }
+        .wiki-cat-list li[data-slug="guides"]   .cat-ico { color: #a855f7; }
+        .wiki-cat-list li[data-slug="api"]      .cat-ico { color: #22c55e; }
+        .wiki-cat-list li[data-slug="policies"] .cat-ico,
+        .wiki-cat-list li[data-slug="security"] .cat-ico { color: #f87171; }
+        .wiki-cat-list .cat-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .wiki-cat-list .cat-count {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+            background: var(--bg-elevated);
+            border-radius: 999px;
+            padding: 1px 8px;
+            font-weight: 600;
+        }
+
+        /* Contribute callout in the left rail. Gradient panel + the
+           hero mascot pinned to the bottom — same illustration as
+           the hero card, scaled down. */
+        .wiki-contribute-card {
+            padding: 1rem 1.05rem 0.8rem;
+            background: linear-gradient(180deg, rgba(91,138,245,0.10), rgba(168,85,247,0.06));
+            position: relative;
+            overflow: hidden;
+        }
+        .wiki-contribute-card h4 { font-size: 0.95rem; margin: 0 0 0.35rem; color: var(--text-primary); font-weight: 700; }
+        .wiki-contribute-card p { font-size: 0.78rem; color: var(--text-muted); margin: 0 0 0.85rem; line-height: 1.45; }
+        /* Multi-stop blue → purple gradient — matches the right-rail
+           "Visit the Forums" CTA so the two primary buttons feel
+           like the same control. Full-width inside the card so the
+           label has room and the gradient reads end-to-end instead
+           of being clipped to a narrow chip. */
+        .wiki-contribute-card .btn-contribute {
+            display: block;
+            width: 100%;
+            text-align: center;
+            background: linear-gradient(135deg, var(--blue) 0%, #a855f7 100%);
+            color: #fff;
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-decoration: none;
+            padding: 0.55rem 0.85rem;
+            border-radius: 9px;
+            margin-bottom: 0.8rem;
+            transition: filter 0.12s ease;
+        }
+        .wiki-contribute-card .btn-contribute:hover { filter: brightness(1.08); }
+        /* Mascot art fills the card width (minus the 1.05rem rail
+           padding on each side). `width: 100%` lets it scale to the
+           rail without a fixed max — the source is 320px wide so
+           on the typical 260px rail it renders at native quality.
+           drop-shadow gives the figure the same soft glow the
+           mockup has without needing a separate background blob. */
+        .wiki-contribute-card .contribute-mascot {
+            display: block;
+            margin: 0.4rem auto 0;
+            width: 100%;
+            max-width: 240px;
+            filter: drop-shadow(0 4px 12px rgba(91, 138, 245, 0.35));
+        }
+
+        /* ── Hero ─────────────────────────────────────────────────── */
+        /* Background-image + gradient-wash recipe lifted from the
+           homepage discord-card so the wiki landing shares its
+           "banner art behind a left-side text wash" silhouette. The
+           wiki-banner artwork is wide-format (1983x793 source),
+           uploaded under /static/site/ on prod; the three width
+           variants below let small screens pull less bandwidth. */
+        .wiki-hero {
+            position: relative;
+            background-color: #0e1226;
+            background-image:
+                /* Gentler left-side wash so the mascot + moon
+                   artwork stays visible across the right ~60% of
+                   the panel. Fades to fully transparent by 40%
+                   instead of 58% — the previous heavier wash was
+                   covering the artwork the reference design wants
+                   to feature. */
+                linear-gradient(100deg,
+                    rgba(14, 18, 38, 0.92) 0%,
+                    rgba(31, 41, 96, 0.55) 20%,
+                    rgba(91, 138, 245, 0.15) 32%,
+                    rgba(91, 138, 245, 0) 40%),
+                url('/static/site/wiki-banner-640.png');
+            background-size: cover, cover;
+            background-position: center, right center;
+            background-repeat: no-repeat, no-repeat;
+            border: 1px solid rgba(91, 138, 245, 0.30);
+            border-radius: 16px;
+            padding: 1.9rem 1.9rem;
+            margin-bottom: 1.4rem;
+            min-height: 260px;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+        }
+        @media (min-width: 1025px) {
+            .wiki-hero {
+                background-image:
+                    linear-gradient(100deg,
+                        rgba(14, 18, 38, 0.92) 0%,
+                        rgba(31, 41, 96, 0.55) 20%,
+                        rgba(91, 138, 245, 0.15) 32%,
+                        rgba(91, 138, 245, 0) 40%),
+                    url('/static/site/wiki-banner-1024.png');
+            }
+        }
+        @media (max-width: 480px) {
+            .wiki-hero {
+                background-image:
+                    linear-gradient(100deg,
+                        rgba(14, 18, 38, 0.95) 0%,
+                        rgba(31, 41, 96, 0.78) 30%,
+                        rgba(91, 138, 245, 0.30) 55%,
+                        rgba(91, 138, 245, 0) 70%),
+                    url('/static/site/wiki-banner-320.png');
+            }
+        }
+        .wiki-hero-body { max-width: 42%; z-index: 1; }
+        .wiki-hero h1 {
+            font-size: 2.1rem;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: -0.015em;
+            margin: 0 0 0.55rem;
+            line-height: 1.05;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+        }
+        .wiki-hero p {
+            font-size: 0.95rem;
+            color: rgba(255, 255, 255, 0.92);
+            margin: 0;
+            max-width: 32rem;
+            line-height: 1.5;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+        }
+        @media (max-width: 700px) {
+            .wiki-hero { min-height: 0; padding: 1.1rem 1.1rem; }
+            .wiki-hero-body { max-width: 80%; }
+            .wiki-hero h1 { font-size: 1.55rem; }
+        }
+
+        /* ── Section headings ─────────────────────────────────────── */
+        .wiki-section-h {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 0.85rem;
+        }
+
+        /* ── Browse Categories grid ───────────────────────────────── */
+        /* Tightened minmax so 5 cards fit in one row at the standard
+           page-wide width (~1000px main column). The previous
+           170px floor forced wrapping to 3 columns; 150px lets a
+           typical 5-category list line up like the reference. Cards
+           still grow to fill leftover space when there are fewer. */
+        .wiki-cat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.7rem;
+            margin-bottom: 1.6rem;
+        }
+        .wiki-cat-card {
+            position: relative;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem 0.95rem 0.85rem;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            transition: border-color 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
+            min-height: 158px;
+        }
+        .wiki-cat-card:hover {
+            border-color: var(--blue);
+            background: var(--bg-elevated);
+            transform: translateY(-2px);
+        }
+        .wiki-cat-card .cc-ico {
+            width: 38px; height: 38px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 10px;
+            margin-bottom: 0.6rem;
+            flex-shrink: 0;
+        }
+        .wiki-cat-card .cc-name {
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.2rem;
+        }
+        .wiki-cat-card .cc-desc {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+            flex: 1;
+            margin-bottom: 0.55rem;
+        }
+        .wiki-cat-card .cc-foot {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.74rem;
+            color: var(--text-muted);
+        }
+        .wiki-cat-card .cc-arrow {
+            color: var(--blue);
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: transform 0.15s ease;
+        }
+        .wiki-cat-card:hover .cc-arrow { transform: translateX(3px); }
+
+        /* Per-slug accent tints for the icon tile. Falls back to a
+           neutral blue when a slug isn't in the lookup. Matches the
+           landing-page mockup's "each folder is a colour" pattern
+           without hard-coding the entire category list — new topics
+           just default to blue until added here. */
+        .cc-ico { background: var(--blue-tint, rgba(91,138,245,0.18)); color: var(--blue); }
+        .wiki-cat-card[data-slug="tools"]   .cc-ico { background: rgba(91,138,245,0.18);  color: #5b8af5; }
+        .wiki-cat-card[data-slug="usenet"]  .cc-ico { background: rgba(245,158,11,0.18);  color: #f59e0b; }
+        .wiki-cat-card[data-slug="guides"]  .cc-ico { background: rgba(168,85,247,0.18);  color: #a855f7; }
+        .wiki-cat-card[data-slug="api"]     .cc-ico { background: rgba(34,197,94,0.18);   color: #22c55e; }
+        .wiki-cat-card[data-slug="policies"]   .cc-ico,
+        .wiki-cat-card[data-slug="security"]   .cc-ico { background: rgba(248,113,113,0.18); color: #f87171; }
+        .wiki-cat-card[data-slug="community"]  .cc-ico { background: rgba(91,138,245,0.18);  color: #5b8af5; }
+
+        /* ── Recent Posts ─────────────────────────────────────────── */
+        .wiki-recent-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:0.5rem; }
+        .wiki-recent-item {
+            display: flex;
+            align-items: center;
+            gap: 0.95rem;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            text-decoration: none;
+            color: inherit;
+            transition: border-color 0.12s ease, background-color 0.12s ease;
+        }
+        .wiki-recent-item:hover { border-color: var(--blue); background: var(--bg-elevated); }
+        .wiki-recent-item .ri-ico {
+            width: 36px; height: 36px;
+            border-radius: 9px;
+            background: rgba(91,138,245,0.15);
+            color: var(--blue);
+            display: inline-flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        /* Per-slug tile colour on the recent-posts list. Matches the
+           Browse Categories grid + left-rail accents so the same
+           category always reads the same colour. */
+        .wiki-recent-item[data-slug="usenet"]   .ri-ico { background: rgba(245,158,11,0.18);  color: #f59e0b; }
+        .wiki-recent-item[data-slug="guides"]   .ri-ico { background: rgba(168,85,247,0.18);  color: #a855f7; }
+        .wiki-recent-item[data-slug="api"]      .ri-ico { background: rgba(34,197,94,0.18);   color: #22c55e; }
+        .wiki-recent-item[data-slug="policies"] .ri-ico,
+        .wiki-recent-item[data-slug="security"] .ri-ico { background: rgba(248,113,113,0.18); color: #f87171; }
+        .wiki-recent-item[data-slug="rules"]    .ri-ico { background: rgba(248,113,113,0.18); color: #f87171; }
+        .wiki-recent-item .ri-body { flex: 1; min-width: 0; }
+        .wiki-recent-item .ri-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 0.2rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .wiki-recent-item .ri-meta {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            flex-wrap: wrap;
+        }
+        .ri-cat-badge {
+            font-size: 0.66rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 1px 7px;
+            border-radius: 999px;
+            background: rgba(91,138,245,0.12);
+            color: var(--blue);
+            border: 1px solid rgba(91,138,245,0.35);
+        }
+        /* Per-slug tint on the category badge so each category reads
+           its accent colour rather than universal blue. */
+        .wiki-recent-item[data-slug="usenet"]   .ri-cat-badge { background: rgba(245,158,11,0.12);  color: #f59e0b; border-color: rgba(245,158,11,0.40); }
+        .wiki-recent-item[data-slug="guides"]   .ri-cat-badge { background: rgba(168,85,247,0.12);  color: #a855f7; border-color: rgba(168,85,247,0.40); }
+        .wiki-recent-item[data-slug="api"]      .ri-cat-badge { background: rgba(34,197,94,0.12);   color: #22c55e; border-color: rgba(34,197,94,0.40); }
+        .wiki-recent-item[data-slug="policies"] .ri-cat-badge,
+        .wiki-recent-item[data-slug="security"] .ri-cat-badge,
+        .wiki-recent-item[data-slug="rules"]    .ri-cat-badge { background: rgba(248,113,113,0.12); color: #f87171; border-color: rgba(248,113,113,0.40); }
+        .wiki-recent-item .ri-when {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
+        .wiki-recent-foot {
+            display: flex;
+            justify-content: center;
+            margin-top: 1rem;
+        }
+        .wiki-view-all {
+            font-size: 0.82rem;
+            color: var(--blue);
+            border: 1px solid var(--border);
+            background: var(--bg-surface);
+            padding: 0.45rem 1.2rem;
+            border-radius: 999px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .wiki-view-all:hover { background: var(--bg-elevated); border-color: var(--blue); }
+
+        /* ── Right rail cards ─────────────────────────────────────── */
+        .wiki-rail-right { display: flex; flex-direction: column; gap: 1rem; }
+        .wiki-rail-card { padding: 1rem 1.05rem; }
+        .wiki-rail-card h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 0.75rem;
+        }
+        .wiki-rail-card p {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin: 0 0 0.85rem;
+            line-height: 1.5;
+        }
+
+        .pop-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:0.5rem; }
+        .pop-item {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            text-decoration: none;
+            color: inherit;
+            padding: 0.45rem 0.45rem;
+            border-radius: 8px;
+            transition: background-color 0.12s ease;
+        }
+        .pop-item:hover { background: var(--bg-elevated); }
+        .pop-item .pop-ico {
+            width: 28px; height: 28px;
+            background: var(--bg-elevated);
+            border-radius: 7px;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: var(--blue);
+            flex-shrink: 0;
+        }
+        .pop-item .pop-body { flex: 1; min-width: 0; }
+        .pop-item .pop-title {
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pop-item .pop-views {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .wiki-rail-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--blue);
+            text-decoration: none;
+            margin-top: 0.7rem;
+            padding-top: 0.7rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .btn-rail-cta {
+            display: inline-block;
+            width: 100%;
+            text-align: center;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 0.55rem 1rem;
+            border-radius: 9px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-rail-cta.is-primary {
+            background: linear-gradient(135deg, var(--blue) 0%, #a855f7 100%);
+            color: #fff;
+        }
+        .btn-rail-cta.is-primary:hover { filter: brightness(1.08); }
+        .btn-rail-cta.is-outline {
+            background: transparent;
+            color: var(--blue);
+            border: 1px solid var(--blue);
+        }
+        .btn-rail-cta.is-outline:hover { background: var(--blue-tint, rgba(91,138,245,0.15)); }
+
+        .wiki-empty { text-align: center; padding: 3rem 1rem; color: var(--text-muted); font-size: 0.9rem; }
+    </style>
+
+    {{/* Icons come in two layers since topics gained an Icon column.
+
+         "wiki-topic-icon" takes a Topic and prefers its explicit Icon key,
+         falling back to "wiki-icon" — the original slug map, unchanged — so
+         every topic that has never been edited draws exactly what it drew
+         before. "wiki-icon" still takes a bare slug because RecentPost only
+         carries TopicSlug and has no icon of its own.
+
+         SVGs use currentColor + viewBox so they pick up the parent's colour
+         from the `.cc-ico` / `.cat-ico` tint classes, or from the inline
+         style when a topic sets its own accent. */}}
+
+    {{/* Key -> glyph. The keys match wiki.TopicIcons in the plugin; adding one
+         means editing both, which is deliberate friction for markup that ships
+         to every reader. */}}
+
+    {{/* Per-slug icon shorthand — the DEFAULT layer. Unchanged: a topic with
+         no explicit icon must keep the one its slug already gives it. */}}
+
+    <div class="container page-wide wiki-page">
+
+        <div class="wiki-shell">
+
+            {{/* ── Left rail — Wiki Explorer ────────────────────── */}}
+            <aside class="wiki-rail-left">
+                <div class="wiki-card wiki-explorer">
+                    <h2 class="wiki-eyebrow">Wiki Explorer</h2>
+
+                    <div class="wiki-search">
+                        <span class="ws-icon">&#128269;</span>
+                        <input id="wiki-search-input" type="text" placeholder="Search the wiki..." autocomplete="off">
+                        <kbd class="ws-kbd">&#8984;K</kbd>
+                    </div>
+
+                    <ul class="wiki-nav" style="margin-bottom: 0.9rem;">
+                        <li><a href="/wiki"        class="{{if not .ActiveNav}}is-active{{end}}"><span class="nav-ico">&#127968;</span>Wiki Home</a></li>
+                        <li><a href="/wiki/recent" class="{{if eq .ActiveNav "recent"}}is-active{{end}}"><span class="nav-ico">&#128338;</span>Recent Changes</a></li>
+                        <li><a href="#categories"><span class="nav-ico">&#127918;</span>All Categories</a></li>
+                        <li><a href="/wiki/random"><span class="nav-ico">&#127922;</span>Random Page</a></li>
+                    </ul>
+
+                    <h2 class="wiki-eyebrow">Categories</h2>
+                    <ul class="wiki-cat-list">
+                        {{range .Topics}}
+                        <li data-slug="{{.Slug}}">
+                            <a href="/wiki/{{.Slug}}">
+                                {{/* An explicit colour beats the data-slug CSS rule
+                                     because inline styles win; no colour and the
+                                     rule (or the blue default) still applies. */}}
+                                <span class="cat-ico"{{if .Color}} style="color:{{.Color}};"{{end}}>{{template "wiki-topic-icon" .}}</span>
+                                <span class="cat-name">{{.Name}}</span>
+                                <span class="cat-count">{{.PostCount}}</span>
+                            </a>
+                        </li>
+                        {{end}}
+                    </ul>
+                </div>
+
+                <div class="wiki-card wiki-contribute-card">
+                    <h4>Help Improve the Wiki!</h4>
+                    <p>Anyone can contribute! Edit pages, fix info, and help the community grow.</p>
+                    <a class="btn-contribute" href="/community/review">Learn How to Contribute</a>
+                    <img class="contribute-mascot" src="/static/site/amebook-320.png" alt="">
+                </div>
+            </aside>
+
+            {{/* ── Centre column ──────────────────────────────── */}}
+            <main class="wiki-main">
+
+                {{/* Hero — full-width gradient panel with mascot
+                     pinned to the right edge. Tagline shrinks on
+                     narrow viewports; the mascot hides under 700px
+                     so the title gets the full row. */}}
+                <div class="wiki-hero">
+                    <div class="wiki-hero-body">
+                        <h1>ameNZB Wiki</h1>
+                        <p>Your go-to resource for everything about ameNZB, Usenet, tools, guides, and more.</p>
+                    </div>
+                </div>
+
+                {{/* Browse Categories grid */}}
+                {{if .Topics}}
+                <h2 id="categories" class="wiki-section-h">Browse Categories</h2>
+                <div class="wiki-cat-grid">
+                    {{range .Topics}}
+                    <a class="wiki-cat-card" data-slug="{{.Slug}}" href="/wiki/{{.Slug}}">
+                        {{/* color-mix derives the tile tint from the chosen accent
+                             at the same 18% the hardcoded rules use, so a custom
+                             colour matches the built-in ones instead of sitting on
+                             a mismatched blue background. */}}
+                        <span class="cc-ico"{{if .Color}} style="color:{{.Color}};background:color-mix(in srgb, {{.Color}} 18%, transparent);"{{end}}>{{template "wiki-topic-icon" .}}</span>
+                        <div class="cc-name">{{.Name}}</div>
+                        <div class="cc-desc">{{if .Description}}{{.Description}}{{else}}Articles, guides and references in this topic.{{end}}</div>
+                        <div class="cc-foot">
+                            <span>{{.PostCount}} article{{if ne .PostCount 1}}s{{end}}</span>
+                            <span class="cc-arrow">&rarr;</span>
+                        </div>
+                    </a>
+                    {{end}}
+                </div>
+                {{end}}
+
+                {{/* Recent Posts — full-width row list */}}
+                <h2 class="wiki-section-h">Recent Posts</h2>
+                {{if .RecentPosts}}
+                <ul class="wiki-recent-list">
+                    {{range .RecentPosts}}
+                    <a class="wiki-recent-item" data-slug="{{.TopicSlug}}" href="/wiki/{{.TopicSlug}}/{{.Slug}}">
+                        <span class="ri-ico">{{template "wiki-icon" .TopicSlug}}</span>
+                        <div class="ri-body">
+                            <div class="ri-title">{{.Title}}</div>
+                            <div class="ri-meta">
+                                <span class="ri-cat-badge">{{.TopicName}}</span>
+                                {{if .CreatedByUsername}}<span>by {{.CreatedByUsername}}</span>{{end}}
+                            </div>
+                        </div>
+                        <span class="ri-when">Updated {{.UpdatedAt.Format "Jan 02"}}</span>
+                    </a>
+                    {{end}}
+                </ul>
+                {{if not .RecentOnlyView}}
+                <div class="wiki-recent-foot">
+                    <a class="wiki-view-all" href="/wiki/recent">View all articles</a>
+                </div>
+                {{end}}
+                {{else}}
+                <div class="wiki-empty">No posts yet.</div>
+                {{end}}
+            </main>
+
+            {{/* ── Right rail — Popular / Need Help / Contribute */}}
+            <aside class="wiki-rail-right">
+
+                {{if .PopularPosts}}
+                <div class="wiki-card wiki-rail-card">
+                    <h3>Popular Articles</h3>
+                    <ul class="pop-list">
+                        {{range .PopularPosts}}
+                        <a class="pop-item" href="/wiki/{{.TopicSlug}}/{{.Slug}}">
+                            {{/* Uniform page glyph for the popularity
+                                 column — the reference design uses
+                                 one icon style here so the list reads
+                                 as "documents ranked", not as a
+                                 per-category remix of the main grid. */}}
+                            <span class="pop-ico">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
+                                </svg>
+                            </span>
+                            <div class="pop-body">
+                                <div class="pop-title">{{.Title}}</div>
+                                <div class="pop-views">&#128065; {{.ViewCount}} view{{if ne .ViewCount 1}}s{{end}}</div>
+                            </div>
+                        </a>
+                        {{end}}
+                    </ul>
+                    <a class="wiki-rail-link" href="/wiki/recent">
+                        <span>View all popular articles</span>
+                        <span>&rarr;</span>
+                    </a>
+                </div>
+                {{end}}
+
+                <div class="wiki-card wiki-rail-card">
+                    <h3>Need Help?</h3>
+                    <p>Can't find what you're looking for? Ask the community!</p>
+                    <a class="btn-rail-cta is-primary" href="/community">Visit the Forums</a>
+                </div>
+
+                <div class="wiki-card wiki-rail-card">
+                    <h3>Contribute to the Wiki</h3>
+                    <p>Spotted an error or want to add something? Your contributions make the wiki better!</p>
+                    <a class="btn-rail-cta is-outline" href="/community/review">Start Contributing</a>
+                </div>
+            </aside>
+
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ⌘K / Ctrl+K focuses the wiki search box. Same shortcut the
+        // mockup hints at via the kbd badge. The search itself is a
+        // pure client-side filter over the visible category + post
+        // names — quick way to scan the page without round-tripping.
+        (function() {
+            const input = document.getElementById('wiki-search-input');
+            if (!input) return;
+
+            // Keyboard shortcut: ⌘K (Mac) / Ctrl+K (Win/Linux).
+            document.addEventListener('keydown', function(e) {
+                if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+                    e.preventDefault();
+                    input.focus();
+                    input.select();
+                }
+            });
+
+            // Live filter — hide non-matching rows in the left rail
+            // categories, the centre grid, and recent posts. Empty
+            // search restores everything.
+            function applyFilter() {
+                const q = input.value.trim().toLowerCase();
+                const sels = ['.wiki-cat-list li', '.wiki-cat-card', '.wiki-recent-item', '.pop-item'];
+                sels.forEach(function(sel) {
+                    document.querySelectorAll(sel).forEach(function(el) {
+                        if (!q) { el.style.display = ''; return; }
+                        const txt = el.textContent.toLowerCase();
+                        el.style.display = txt.indexOf(q) >= 0 ? '' : 'none';
+                    });
+                });
+            }
+            input.addEventListener('input', applyFilter);
+        })();
+    </script>
+{{end}}
+
+{{/* The wiki's inline icons. Sibling defines rather than nested ones:
+     Go templates do not allow {{define}} inside {{define}}, and these
+     only parsed before because the host file had no page wrapper around
+     them. */}}
+    {{define "wiki-topic-icon"}}
+        {{if .Icon}}{{template "wiki-key-icon" .Icon}}{{else}}{{template "wiki-icon" .Slug}}{{end}}
+    {{end}}
+    {{define "wiki-key-icon"}}
+        {{$k := .}}
+        {{if eq $k "book"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        {{else if eq $k "tools"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        {{else if eq $k "server"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+        {{else if eq $k "code"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        {{else if eq $k "shield"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        {{else if eq $k "people"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        {{else if eq $k "star"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        {{else if eq $k "question"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        {{else if eq $k "warning"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        {{else}}<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
+        {{end}}
+    {{end}}
+    {{define "wiki-icon"}}
+        {{$slug := .}}
+        {{if eq $slug "amenzb"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/><path d="M9 11c.5-.7 1.5-1 2.5-1s2 .3 2.5 1c.5.7-.5 1.5-2.5 1.5S8.5 11.7 9 11z" fill="#fff"/></svg>
+        {{else if eq $slug "tools"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        {{else if eq $slug "usenet"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
+        {{else if eq $slug "guides"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        {{else if eq $slug "api"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        {{else if or (eq $slug "policies") (eq $slug "security")}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        {{else if eq $slug "community"}}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        {{else}}<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
+        {{end}}
+    {{end}}

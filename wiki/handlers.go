@@ -77,12 +77,12 @@ func (h *Handlers) Index(c *gin.Context) {
 	// extras. Empty slices render an empty panel naturally.
 	recentPosts, _ := h.store.RecentPosts(ctx, 10)
 	popularPosts, _ := h.store.PopularPosts(ctx, 5)
-	c.HTML(http.StatusOK, "wiki.html", deps.BaseData(c, gin.H{
+	render(c, http.StatusOK, "Wiki", "wiki.html", gin.H{
 		"Topics":       topics,
 		"RecentPosts":  recentPosts,
 		"PopularPosts": popularPosts,
 		"PostsByTopic": h.postsByTopicMap(c),
-	}))
+	})
 }
 
 // RecentChanges renders the full chronological list of the most-
@@ -94,13 +94,13 @@ func (h *Handlers) RecentChanges(c *gin.Context) {
 	// 50 caps the page at one screenful and matches the in-flight
 	// edit feed conventions elsewhere on the site.
 	recentPosts, _ := h.store.RecentPosts(ctx, 50)
-	c.HTML(http.StatusOK, "wiki.html", deps.BaseData(c, gin.H{
+	render(c, http.StatusOK, "Wiki", "wiki.html", gin.H{
 		"Topics":         topics,
 		"RecentPosts":    recentPosts,
 		"PostsByTopic":   h.postsByTopicMap(c),
 		"RecentOnlyView": true,
 		"ActiveNav":      "recent",
-	}))
+	})
 }
 
 // Random picks one wiki post at random and 302s to its canonical
@@ -134,12 +134,12 @@ func (h *Handlers) Topic(c *gin.Context) {
 	// instead of jumping to a stripped-down topic view. Failure here is
 	// non-fatal; the topic page still renders without the sidebar list.
 	allTopics, _ := h.store.Topics(ctx)
-	c.HTML(http.StatusOK, "wiki_topic.html", deps.BaseData(c, gin.H{
+	render(c, http.StatusOK, "Wiki", "wiki_topic.html", gin.H{
 		"Topic":        topic,
 		"Posts":        posts,
 		"AllTopics":    allTopics,
 		"PostsByTopic": h.postsByTopicMap(c),
-	}))
+	})
 }
 
 func (h *Handlers) Post(c *gin.Context) {
@@ -170,14 +170,14 @@ func (h *Handlers) Post(c *gin.Context) {
 	// sidebar comes up empty but the article body still renders.
 	allTopics, _ := h.store.Topics(ctx)
 	siblingPosts, _ := h.store.PostsByTopic(ctx, topic.ID)
-	c.HTML(http.StatusOK, "wiki_post.html", deps.BaseData(c, gin.H{
+	render(c, http.StatusOK, "Wiki", "wiki_post.html", gin.H{
 		"Topic":           topic,
 		"Post":            post,
 		"RenderedContent": deps.Markdown(post.Content),
 		"AllTopics":       allTopics,
 		"Posts":           siblingPosts,
 		"PostsByTopic":    h.postsByTopicMap(c),
-	}))
+	})
 }
 
 // Admin handlers
@@ -193,17 +193,17 @@ func (h *Handlers) AdminIndex(c *gin.Context) {
 		posts, _ := h.store.PostsByTopic(c.Request.Context(), t.ID)
 		postsByTopic[t.ID] = posts
 	}
-	c.HTML(http.StatusOK, "admin_wiki.html", deps.BaseData(c, gin.H{
+	render(c, http.StatusOK, "Wiki — admin", "admin_wiki.html", gin.H{
 		"Topics":       topics,
 		"PostsByTopic": postsByTopic,
-	}))
+	})
 }
 
 func (h *Handlers) NewTopic(c *gin.Context) {
-	c.HTML(http.StatusOK, "admin_wiki_topic_form.html", deps.BaseData(c, gin.H{
+	render(c, http.StatusOK, "Wiki topic", "admin_wiki_topic_form.html", gin.H{
 		"Action": "Create",
 		"Icons":  TopicIcons,
-	}))
+	})
 }
 
 // topicInputFrom reads the shared create/edit form. Icon and colour are
@@ -246,11 +246,11 @@ func (h *Handlers) EditTopic(c *gin.Context) {
 	}
 	for _, t := range topics {
 		if t.ID == id {
-			c.HTML(http.StatusOK, "admin_wiki_topic_form.html", deps.BaseData(c, gin.H{
+			render(c, http.StatusOK, "Wiki topic", "admin_wiki_topic_form.html", gin.H{
 				"Action": "Edit",
 				"Topic":  t,
 				"Icons":  TopicIcons,
-			}))
+			})
 			return
 		}
 	}
@@ -282,10 +282,10 @@ func (h *Handlers) DeleteTopic(c *gin.Context) {
 func (h *Handlers) NewPost(c *gin.Context) {
 	topicIDStr := c.Query("topic_id")
 	topicID, _ := strconv.Atoi(topicIDStr)
-	c.HTML(http.StatusOK, "admin_wiki_post_form.html", deps.BaseData(c, gin.H{
+	render(c, http.StatusOK, "Wiki page", "admin_wiki_post_form.html", gin.H{
 		"Action":  "Create",
 		"TopicID": topicID,
-	}))
+	})
 }
 
 func (h *Handlers) CreatePost(c *gin.Context) {
@@ -314,10 +314,10 @@ func (h *Handlers) EditPost(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/admin/wiki")
 		return
 	}
-	c.HTML(http.StatusOK, "admin_wiki_post_form.html", deps.BaseData(c, gin.H{
+	render(c, http.StatusOK, "Wiki page", "admin_wiki_post_form.html", gin.H{
 		"Action": "Edit",
 		"Post":   post,
-	}))
+	})
 }
 
 func (h *Handlers) UpdatePost(c *gin.Context) {

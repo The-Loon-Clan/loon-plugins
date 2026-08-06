@@ -22,8 +22,22 @@ func init() {
 // assumption the in-tree plugin hardcoded. SetDeps must be called before
 // core.Boot; Provision fails loud otherwise.
 type Deps struct {
-	// BaseData merges the host's page chrome (user, nav, CSRF, ...) into a
-	// template data map — every page render goes through it.
+	// RenderPage wraps a finished fragment in the site chrome. The six pages
+	// are this plugin's markup now, so it needs chrome rather than a data map.
+	//
+	// status is a parameter because the admin forms re-render themselves on a
+	// validation failure, and a seam fixed at 200 would report success while
+	// showing an error.
+	RenderPage func(c *gin.Context, status int, title string, body template.HTML)
+
+	// BaseData is the PREVIOUS contract, kept working while loon-demo-site
+	// migrates. A host that sets this instead of RenderPage gets the old
+	// behaviour: rendered by template NAME out of the host's own directory.
+	//
+	// It exists because loon-demo-site is maintained separately and builds
+	// against this working tree — shipping only the new seam would break a
+	// build in someone else's session for code they did not write. Delete it,
+	// and the legacy branch in views.go, once demo sets RenderPage.
 	BaseData func(c *gin.Context, extra gin.H) gin.H
 	// Markdown renders trusted-editor wiki markdown to HTML. Wiki authors
 	// are mods+, so hosts may allow richer markup here than in user-
@@ -67,8 +81,8 @@ func (p *Plugin) Metadata() core.Metadata {
 // domain-specific paths via Engine(), and moving them would break
 // bookmarks, templates, and sitemap URLs for zero gain.
 func (p *Plugin) Provision(c *core.Core) error {
-	if deps.BaseData == nil || deps.Markdown == nil || deps.Files == nil {
-		return fmt.Errorf("wiki: SetDeps not called (BaseData/Markdown/Files required) — wire it in main() before core.Boot")
+	if (deps.RenderPage == nil && deps.BaseData == nil) || deps.Markdown == nil || deps.Files == nil {
+		return fmt.Errorf("wiki: SetDeps not called (RenderPage or BaseData, plus Markdown/Files — wire it in main() before core.Boot)")
 	}
 	db := c.Storage.DB()
 	if db == nil {

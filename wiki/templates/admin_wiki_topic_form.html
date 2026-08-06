@@ -1,0 +1,83 @@
+{{define "admin_wiki_topic_form.html"}}
+
+    <div class="container mt-4 site-container">
+        <div class="card">
+            <div class="card-header">{{.Action}} Topic</div>
+            <div class="card-body">
+                {{if eq .Action "Edit"}}
+                <form method="POST" action="/admin/wiki/topics/{{.Topic.ID}}/update">
+                {{else}}
+                <form method="POST" action="/admin/wiki/topics">
+                {{end}}
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required
+                            value="{{if .Topic}}{{.Topic.Name}}{{end}}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3">{{if .Topic}}{{.Topic.Description}}{{end}}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="sort_order" class="form-label">Sort Order</label>
+                        <input type="number" class="form-control" id="sort_order" name="sort_order"
+                            value="{{if .Topic}}{{.Topic.SortOrder}}{{else}}0{{end}}">
+                    </div>
+                    {{/* Appearance. Both fields are optional and both read
+                         empty as "leave the default" — the icon falls back to
+                         the slug-derived glyph and the colour to the theme
+                         accent, which is exactly what every topic had before
+                         these columns existed.
+
+                         The icon is a SELECT over a closed set, not a text
+                         field: topic icons render as inline SVG, so accepting
+                         arbitrary markup here would ship stored XSS to every
+                         reader for the sake of a folder picture. */}}
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label for="icon" class="form-label">Icon</label>
+                            <select class="form-select" id="icon" name="icon">
+                                <option value="">Default (from the topic slug)</option>
+                                {{$cur := ""}}{{if .Topic}}{{$cur = .Topic.Icon}}{{end}}
+                                {{range .Icons}}
+                                <option value="{{.Key}}" {{if eq (printf "%s" .Key) $cur}}selected{{end}}>{{.Label}}</option>
+                                {{end}}
+                            </select>
+                            <div class="form-text" style="font-size:0.78rem;">
+                                Leave on Default to keep the icon this topic already gets from its slug.
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label for="color" class="form-label">Accent colour</label>
+                            <div class="d-flex gap-2 align-items-center">
+                                {{/* The colour input cannot express "unset", so the
+                                     text field is the real control and the picker
+                                     writes into it. Clearing the text is how you go
+                                     back to the default. */}}
+                                <input type="color" class="form-control form-control-color"
+                                       id="color_picker" value="{{if and .Topic .Topic.Color}}{{.Topic.Color}}{{else}}#5b8af5{{end}}"
+                                       oninput="document.getElementById('color').value = this.value;"
+                                       title="Pick a colour">
+                                <input type="text" class="form-control" id="color" name="color"
+                                       placeholder="#5b8af5 — blank for default"
+                                       pattern="^#[0-9a-fA-F]{6}$"
+                                       value="{{if .Topic}}{{.Topic.Color}}{{end}}">
+                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        onclick="document.getElementById('color').value = '';">Clear</button>
+                            </div>
+                            <div class="form-text" style="font-size:0.78rem;">
+                                Blank uses the theme default. Anything that is not #rrggbb is ignored.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm">{{.Action}}</button>
+                        <a href="/admin/wiki" class="btn btn-outline-secondary btn-sm">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{{end}}
