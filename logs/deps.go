@@ -11,6 +11,7 @@ package logs
 
 import (
 	"context"
+	"html/template"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -96,12 +97,13 @@ type Bucket struct {
 // writes, and serves the host's own pages), and the plugin has no business
 // holding the write half.
 type Deps struct {
-	// BaseData merges the host's page chrome into a template data map.
-	BaseData func(c *gin.Context, extra gin.H) gin.H
-	// Pagination is the host's paging helper. Typed `any` across the seam:
-	// the value is consumed by the host's pagination partial, so the plugin
-	// hands it straight to the template and never reads it.
-	Pagination func(page, pageSize, totalItems int, baseURL string) any
+	// RenderPagination returns the site's pager as ready HTML.
+	//
+	// The page is a slot FRAGMENT rendered by this plugin's own template set,
+	// which cannot reach the host's partials. Copying the pager in would put
+	// a second version of shared chrome in a second repo, drifting silently;
+	// so the host renders its own and the plugin drops the result in.
+	RenderPagination func(page, pageSize, totalItems int, baseURL string) template.HTML
 
 	// The host's JSON response helpers. Passed rather than reimplemented
 	// because JSONInternalError also records to the very sink this plugin
@@ -138,7 +140,7 @@ func SetJobDeps(d JobDeps) { jobDeps = &d }
 
 // ok reports whether every web-side dependency was supplied.
 func (d *Deps) ok() bool {
-	return d != nil && d.BaseData != nil && d.Pagination != nil &&
+	return d != nil && d.RenderPagination != nil &&
 		d.JSONOK != nil && d.JSONError != nil && d.JSONInternalError != nil &&
 		d.Search != nil && d.Facets != nil && d.Histogram != nil && d.Archive != nil
 }

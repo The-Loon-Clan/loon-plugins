@@ -2,7 +2,6 @@ package logs
 
 import (
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
@@ -74,30 +73,6 @@ func (h *Handlers) run(c *gin.Context) (*searchResult, string, error) {
 		totalPages = 1
 	}
 	return &searchResult{rows, total, page, totalPages, ops, sevs, hist}, bucket, nil
-}
-
-// LogsPage renders /admin/logs — the full search UI.
-func (h *Handlers) LogsPage(c *gin.Context) {
-	res, bucket, err := h.run(c)
-	if err != nil {
-		deps.JSONInternalError(c, "logs/search", err)
-		return
-	}
-	rawQ := c.Query("q")
-	baseURL := "/admin/logs?q=" + url.QueryEscape(rawQ) + "&"
-	pag := deps.Pagination(res.Page, logsPageSize, res.Total, baseURL)
-
-	c.HTML(http.StatusOK, "admin_logs.html", deps.BaseData(c, gin.H{
-		"Query":      rawQ,
-		"Logs":       res.Rows,
-		"Total":      res.Total,
-		"OpFacets":   res.Ops,
-		"SevFacets":  res.Severities,
-		"HistoBars":  buildBars(res.Histogram, bucket),
-		"Pagination": pag,
-		"Page":       res.Page,
-		"TotalPages": res.TotalPages,
-	}))
 }
 
 // histoBar is one server-rendered histogram column: a label, the raw

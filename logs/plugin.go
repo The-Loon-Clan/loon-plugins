@@ -3,6 +3,9 @@ package logs
 import (
 	"context"
 	"fmt"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
 )
@@ -58,14 +61,38 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if engine == nil {
 		return fmt.Errorf("logs: Core.Router.Engine() is nil")
 	}
+	// The PAGE is a view: the host mounts SlotAdminPage at /admin/p/<slug>
+	// inside the site chrome, which is what lets the markup live here rather
+	// than in the host's template directory.
+	if err := c.RegisterView(core.View{
+		Slug:        "logs",
+		Title:       "Log Search",
+		Slot:        core.SlotAdminPage,
+		MinRole:     core.RoleAdmin,
+		Description: "Search the persistent error sink: query DSL, facets, histogram, live tail.",
+		Nav:         core.NavHint{Group: "Operations"},
+		Render:      p.renderPage,
+	}); err != nil {
+		return fmt.Errorf("logs: register page view: %w", err)
+	}
+
+	// The two JSON endpoints stay where they were. They are not pages, so
+	// nothing is gained by moving them under /admin/p, and the live-tail
+	// client that calls them ships in this plugin's own fragment — one URL
+	// changing is enough.
+	//
 	// Error logs can carry internal detail (paths, SQL fragments), so
 	// gate at admin — matching the legacy /admin/errors access level,
 	// stricter than the RoleMod plugins.
 	adm := engine.Group("/admin/logs")
 	adm.Use(c.Auth.RequireUser(core.RoleAdmin)...)
-	adm.GET("", p.handlers.LogsPage)
 	adm.GET("/search.json", p.handlers.LogsSearch)
 	adm.POST("/:id/archive", p.handlers.ArchiveLog)
+	// /admin/logs was this page's address for its whole life. Operators have
+	// it bookmarked; send them on rather than 404.
+	adm.GET("", func(gc *gin.Context) {
+		gc.Redirect(http.StatusMovedPermanently, "/admin/p/logs?"+gc.Request.URL.RawQuery)
+	})
 	return nil
 }
 

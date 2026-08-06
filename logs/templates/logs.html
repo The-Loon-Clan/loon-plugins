@@ -1,0 +1,222 @@
+{{define "logs.html"}}
+    <style>
+        .log-layout { display:grid; grid-template-columns:210px 1fr; gap:1.25rem; }
+        @media (max-width: 900px){ .log-layout{ grid-template-columns:1fr; } }
+        .facet-rail h6 { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em;
+                         color:var(--text-muted); margin:0.9rem 0 0.4rem; }
+        .facet { display:flex; justify-content:space-between; align-items:center; gap:0.5rem;
+                 padding:0.2rem 0.45rem; border-radius:5px; cursor:pointer; font-size:0.82rem; }
+        .facet:hover { background:rgba(255,255,255,0.06); }
+        .facet .k { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:monospace; }
+        .facet .n { font-variant-numeric:tabular-nums; color:var(--text-muted); flex-shrink:0; }
+        .histo { display:flex; align-items:flex-end; gap:2px; height:64px; margin:0.25rem 0 1rem;
+                 padding:0.4rem 0.2rem; background:rgba(255,255,255,0.02); border-radius:6px; overflow-x:auto; }
+        .histo .bar { flex:1 0 6px; min-width:6px; background:var(--accent,#5b8af5); border-radius:2px 2px 0 0;
+                      opacity:0.75; }
+        .histo .bar:hover { opacity:1; }
+        .log-row.archiving { opacity:0.35; transition:opacity 0.3s; }
+        .log-msg { font-family:monospace; font-size:0.78rem; max-width:640px;
+                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+        .log-msg.expanded { white-space:normal; word-break:break-word; max-width:none; }
+        .log-op { font-family:monospace; font-size:0.78rem; cursor:pointer; color:var(--accent,#5b8af5); }
+        .log-count { font-variant-numeric:tabular-nums; }
+        .dsl-help { font-size:0.78rem; background:rgba(255,255,255,0.03); border:1px solid var(--border,#2a2d37);
+                    border-radius:6px; padding:0.75rem 1rem; margin-bottom:1rem; display:none; }
+        .dsl-help.show { display:block; }
+        .dsl-help code { color:var(--accent,#5b8af5); }
+        #tailDot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#3ddc84; margin-right:4px;
+                   animation:pulse 1.2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.25;} }
+    </style>
+    <div class="container mt-4 page-wide">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h4 class="mb-0">Log Search</h4>
+                <div style="font-size:0.78rem;color:var(--text-muted);">
+                    Search the persistent error sink. Rows merge by op + normalised message; counts rise on repeats. Pruned after 30 days.
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-secondary" id="totalBadge">Total: {{.Total}}</span>
+                <button class="btn btn-sm btn-outline-success" id="tailBtn" type="button" title="Auto-refresh newest matches">Live tail</button>
+            </div>
+        </div>
+
+        <form method="get" action="/admin/p/logs" class="mb-2" id="searchForm">
+            <div class="input-group">
+                <input type="text" class="form-control" name="q" id="qInput" value="{{.Query}}"
+                       placeholder='e.g.  timeout op:usenet/*  severity:error  since:24h  sort:count' autofocus>
+                <button class="btn btn-primary" type="submit">Search</button>
+                <button class="btn btn-outline-secondary" type="button" id="helpBtn" title="Query syntax">?</button>
+            </div>
+        </form>
+
+        <div class="dsl-help" id="dslHelp">
+            <code>term</code> message contains &middot;
+            <code>"two words"</code> phrase &middot;
+            <code>-noise</code> exclude &middot;
+            <code>op:usenet/back</code> exact op &middot;
+            <code>op:usenet/*</code> op prefix &middot;
+            <code>severity:error</code> (warning|error|fatal) &middot;
+            <code>path:/admin</code> request path &middot;
+            <code>user:42</code> &middot;
+            <code>count:&gt;=5</code> flappers &middot;
+            <code>since:24h</code> / <code>since:7d</code> / <code>since:2026-07-01</code> &middot;
+            <code>until:1h</code> &middot;
+            <code>is:archived</code> &middot;
+            <code>sort:count</code> (recent|count|first)
+        </div>
+
+        <div class="log-layout">
+            <div class="facet-rail">
+                <h6>Severity</h6>
+                {{range .SevFacets}}
+                <div class="facet" data-add="severity:{{.Key}}">
+                    <span class="k">{{.Key}}</span><span class="n">{{.Count}}</span>
+                </div>
+                {{else}}<div style="font-size:0.8rem;color:var(--text-muted);">—</div>{{end}}
+
+                <h6>Top ops</h6>
+                {{range .OpFacets}}
+                <div class="facet" data-add="op:{{.Key}}" title="{{.Rows}} rows, {{.Count}} occurrences">
+                    <span class="k">{{.Key}}</span><span class="n">{{.Count}}</span>
+                </div>
+                {{else}}<div style="font-size:0.8rem;color:var(--text-muted);">—</div>{{end}}
+            </div>
+
+            <div>
+                {{if .HistoBars}}
+                <div class="histo" title="Occurrences over time">
+                    {{range .HistoBars}}
+                    <div class="bar" style="height:{{.Pct}}%" title="{{.Label}}: {{.Count}}"></div>
+                    {{end}}
+                </div>
+                {{end}}
+
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle">
+                        <thead>
+                            <tr style="font-size:0.75rem;">
+                                <th>Sev</th><th>Op</th><th>Message</th>
+                                <th class="text-end">Count</th><th>Last</th><th>User</th><th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="logBody">
+                            {{range .Logs}}
+                            <tr class="log-row" data-id="{{.ID}}">
+                                <td>
+                                    {{if eq .Severity "fatal"}}<span class="badge bg-danger">fatal</span>
+                                    {{else if eq .Severity "warning"}}<span class="badge bg-warning text-dark">warning</span>
+                                    {{else}}<span class="badge bg-secondary">{{.Severity}}</span>{{end}}
+                                </td>
+                                <td><span class="log-op" data-add="op:{{.Op}}">{{.Op}}</span></td>
+                                <td><div class="log-msg" title="click to expand">{{.Message}}</div>
+                                    {{if .RequestPath}}<div style="font-size:0.7rem;color:var(--text-muted);font-family:monospace;">{{.RequestPath}}</div>{{end}}
+                                </td>
+                                <td class="text-end log-count">{{if gt .Count 1}}<span class="badge bg-dark">{{.Count}}</span>{{else}}{{.Count}}{{end}}</td>
+                                <td style="font-size:0.75rem;white-space:nowrap;">{{.LastAt.Format "01-02 15:04"}}</td>
+                                <td style="font-size:0.75rem;">{{if .UserID}}<a href="/admin/users/{{.UserID}}">#{{.UserID}}</a>{{end}}</td>
+                                <td><button class="btn btn-sm btn-outline-secondary dismiss-btn" title="Dismiss">&times;</button></td>
+                            </tr>
+                            {{else}}
+                            <tr><td colspan="7" class="text-center text-muted py-4">No matching log rows.</td></tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="pager">{{.PaginationHTML}}</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function csrfToken() {
+        var m = document.cookie.split('; ').find(function(c){ return c.indexOf('csrf_tok=') === 0; });
+        return m ? decodeURIComponent(m.split('=')[1]) : '';
+    }
+
+    // Help toggle
+    document.getElementById('helpBtn').addEventListener('click', function(){
+        document.getElementById('dslHelp').classList.toggle('show');
+    });
+
+    // Expand message on click
+    document.getElementById('logBody').addEventListener('click', function(e){
+        if (e.target.classList.contains('log-msg')) e.target.classList.toggle('expanded');
+    });
+
+    // Facet / op chip -> append token to the query and search
+    function addToken(tok){
+        var input = document.getElementById('qInput');
+        var cur = input.value.trim();
+        // Whole-token compare (not substring) so a token that's a
+        // substring of an existing one isn't wrongly treated as present.
+        if (cur.split(/\s+/).indexOf(tok) === -1) input.value = (cur ? cur + ' ' : '') + tok;
+        document.getElementById('searchForm').submit();
+    }
+    document.addEventListener('click', function(e){
+        var el = e.target.closest('[data-add]');
+        if (el) { e.preventDefault(); addToken(el.getAttribute('data-add')); }
+    });
+
+    // Dismiss (archive) a row
+    document.getElementById('logBody').addEventListener('click', function(e){
+        if (!e.target.classList.contains('dismiss-btn')) return;
+        var row = e.target.closest('.log-row');
+        var id = row.getAttribute('data-id');
+        row.classList.add('archiving');
+        fetch('/admin/logs/' + id + '/archive', { method:'POST', headers:{'X-CSRF-Token': csrfToken()} })
+            .then(function(r){ if (r.ok) { row.remove(); } else { row.classList.remove('archiving'); alert('Failed to dismiss'); } })
+            .catch(function(){ row.classList.remove('archiving'); alert('Failed to dismiss'); });
+    });
+
+    // Live tail — poll search.json for the newest matches (page 1) and
+    // re-render the table + total. Pagination hides while tailing.
+    var tailTimer = null;
+    function renderRows(rows){
+        var body = document.getElementById('logBody');
+        if (!rows.length){ body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No matching log rows.</td></tr>'; return; }
+        body.innerHTML = rows.map(function(r){
+            var sev = r.severity === 'fatal' ? '<span class="badge bg-danger">fatal</span>'
+                    : r.severity === 'warning' ? '<span class="badge bg-warning text-dark">warning</span>'
+                    : '<span class="badge bg-secondary">' + esc(r.severity) + '</span>';
+            var when = new Date(r.last_at).toLocaleString([], {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+            var cnt = r.count > 1 ? '<span class="badge bg-dark">' + r.count + '</span>' : r.count;
+            var path = r.request_path ? '<div style="font-size:.7rem;color:var(--text-muted);font-family:monospace;">' + esc(r.request_path) + '</div>' : '';
+            var user = r.user_id ? '<a href="/admin/users/' + r.user_id + '">#' + r.user_id + '</a>' : '';
+            return '<tr class="log-row" data-id="' + r.id + '"><td>' + sev + '</td>' +
+                   '<td><span class="log-op" data-add="op:' + esc(r.op) + '">' + esc(r.op) + '</span></td>' +
+                   '<td><div class="log-msg" title="click to expand">' + esc(r.message) + '</div>' + path + '</td>' +
+                   '<td class="text-end log-count">' + cnt + '</td>' +
+                   '<td style="font-size:.75rem;white-space:nowrap;">' + when + '</td>' +
+                   '<td style="font-size:.75rem;">' + user + '</td>' +
+                   '<td><button class="btn btn-sm btn-outline-secondary dismiss-btn" title="Dismiss">&times;</button></td></tr>';
+        }).join('');
+    }
+    // Escapes < > & AND quotes — some values (op) land in an HTML
+    // attribute context (data-add="op:..."), where an unescaped quote
+    // would break out. Matches the server template's context-aware escaping.
+    function esc(s){ var d = document.createElement('div'); d.textContent = s == null ? '' : s;
+                     return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    function tailPoll(){
+        var q = document.getElementById('qInput').value;
+        fetch('/admin/logs/search.json?q=' + encodeURIComponent(q))
+            .then(function(r){ return r.json(); })
+            .then(function(d){ renderRows(d.rows || []); document.getElementById('totalBadge').textContent = 'Total: ' + d.total; })
+            .catch(function(){});
+    }
+    document.getElementById('tailBtn').addEventListener('click', function(){
+        var btn = this;
+        if (tailTimer){
+            clearInterval(tailTimer); tailTimer = null;
+            btn.classList.replace('btn-success','btn-outline-success'); btn.innerHTML = 'Live tail';
+            document.getElementById('pager').style.display = '';
+        } else {
+            btn.classList.replace('btn-outline-success','btn-success'); btn.innerHTML = '<span id="tailDot"></span>Tailing';
+            document.getElementById('pager').style.display = 'none';
+            tailPoll(); tailTimer = setInterval(tailPoll, 5000);
+        }
+    });
+    </script>
+{{end}}
