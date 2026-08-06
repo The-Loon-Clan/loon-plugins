@@ -169,7 +169,7 @@ func (h *Handlers) Inbox(c *gin.Context) {
 		}
 	}
 
-	c.HTML(http.StatusOK, "inbox.html", deps.BaseData(c, gin.H{
+	h.render(c, "Inbox", "inbox.html", gin.H{
 		"PageTitle":        "Inbox",
 		"ActiveNav":        "inbox",
 		"Items":            items,
@@ -184,7 +184,7 @@ func (h *Handlers) Inbox(c *gin.Context) {
 		"ComposeOk":        c.Query("ok") == "1",
 		"ComposeError":     c.Query("err"),
 		"PrefillRecipient": c.Query("to"),
-	}))
+	})
 }
 
 func (h *Handlers) MarkRead(c *gin.Context) {
@@ -234,14 +234,14 @@ func (h *Handlers) AdminMessages(c *gin.Context) {
 		totalPages = 1
 	}
 
-	c.HTML(http.StatusOK, "admin_messages.html", deps.BaseData(c, gin.H{
-		"Messages":   msgs,
-		"Users":      users,
-		"Total":      total,
-		"Page":       page,
-		"TotalPages": totalPages,
-		"Pagination": newPagination(page, totalPages, "/admin/messages?"),
-	}))
+	h.render(c, "Messages — admin", "admin_messages.html", gin.H{
+		"Messages":       msgs,
+		"Users":          users,
+		"Total":          total,
+		"Page":           page,
+		"TotalPages":     totalPages,
+		"PaginationHTML": deps.RenderPagination(page, msgPageSize, total, "/admin/messages?"),
+	})
 }
 
 func (h *Handlers) AdminSend(c *gin.Context) {

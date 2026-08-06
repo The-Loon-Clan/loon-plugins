@@ -1,0 +1,468 @@
+{{define "inbox.html"}}
+    <style>
+        /* Two-pane: left list always visible, right pane swaps
+           between empty / conversation / compose. Single shell
+           so the grid stays put when the right pane changes. */
+        .inbox-layout {
+            display: grid;
+            grid-template-columns: 360px minmax(0, 1fr);
+            gap: 1rem;
+            align-items: start;
+            min-height: 560px;
+        }
+        @media (max-width: 820px) {
+            .inbox-layout { grid-template-columns: 1fr; }
+        }
+
+        /* ── Left pane ───────────────────────────────────────── */
+        .ib-list-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 0.85rem;
+        }
+        .ib-list-search {
+            position: relative;
+            margin-bottom: 0.7rem;
+        }
+        .ib-list-search input {
+            width: 100%;
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.55rem 0.6rem 0.55rem 2.1rem;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }
+        .ib-list-search input:focus { outline: none; border-color: var(--blue); }
+        .ib-list-search::before {
+            content: "🔍";
+            position: absolute;
+            left: 0.65rem; top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.85rem;
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .ib-list-summary {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            padding: 0 0.2rem 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .ib-row {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.6rem 0.55rem;
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: background-color 0.12s;
+        }
+        .ib-row:hover { background: var(--bg-elevated); }
+        .ib-row.is-active {
+            background: var(--blue-tint-soft);
+        }
+        .ib-row.is-active .ib-name { color: var(--blue); }
+        .ib-avatar {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .ib-avatar-fallback {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: var(--blue-dim);
+            color: var(--blue);
+            display: inline-flex;
+            align-items: center; justify-content: center;
+            font-weight: 700;
+            font-size: 0.95rem;
+            flex-shrink: 0;
+        }
+        .ib-avatar-system {
+            background: var(--blue);
+            color: #fff;
+        }
+        .ib-body { flex: 1; min-width: 0; }
+        .ib-name {
+            font-size: 0.88rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .ib-preview {
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .ib-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.2rem;
+        }
+        .ib-unread {
+            display: inline-flex;
+            align-items: center; justify-content: center;
+            min-width: 18px; height: 18px;
+            padding: 0 5px;
+            border-radius: 9px;
+            background: var(--blue);
+            color: #fff;
+            font-size: 0.65rem;
+            font-weight: 700;
+        }
+
+        /* ── Right pane (shared shell, three modes) ─────────── */
+        .ib-pane {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            min-height: 560px;
+            max-height: 80vh;
+        }
+        .ib-pane-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+        .ib-pane-head .ib-pane-sub {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            margin-top: 2px;
+        }
+        .ib-pane-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+        .ib-pane-foot {
+            padding: 0.75rem 0.9rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* DM stream messages */
+        .ib-stream { display: flex; flex-direction: column; gap: 0.6rem; }
+        .ib-msg {
+            max-width: 70%;
+            padding: 0.55rem 0.85rem;
+            border-radius: 12px;
+            font-size: 0.88rem;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+        .ib-msg p:last-child { margin-bottom: 0; }
+        .ib-msg-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin: 0 0.25rem 0.15rem;
+        }
+        .ib-msg-from-them {
+            align-self: flex-start;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+        }
+        .ib-msg-from-me {
+            align-self: flex-end;
+            background: var(--blue);
+            color: #fff;
+        }
+        .ib-msg-row { display: flex; flex-direction: column; }
+        .ib-msg-row.from-them { align-items: flex-start; }
+        .ib-msg-row.from-me   { align-items: flex-end; }
+
+        /* Empty state */
+        .ib-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center; justify-content: center;
+            text-align: center;
+            padding: 3rem 1.5rem;
+            color: var(--text-muted);
+            flex: 1;
+        }
+        .ib-empty .ib-empty-icon {
+            font-size: 2.5rem;
+            opacity: 0.6;
+            margin-bottom: 0.5rem;
+        }
+        .ib-empty h2 {
+            font-size: 1.15rem;
+            color: var(--text-primary);
+            margin: 0.5rem 0;
+        }
+        .ib-empty p {
+            font-size: 0.88rem;
+            margin: 0 0 1rem;
+        }
+
+        .ib-no-permission {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.75rem 0.9rem;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+        .ib-no-permission strong { color: var(--text-primary); }
+
+        /* Compose form */
+        .ib-compose label {
+            display: block;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 500;
+            margin: 0 0 4px;
+        }
+        .ib-compose input[type="text"] {
+            width: 100%;
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.55rem 0.7rem;
+            color: var(--text-primary);
+            font-size: 0.88rem;
+            font-family: inherit;
+            margin-bottom: 0.9rem;
+        }
+        .ib-compose input[type="text"]:focus { outline: none; border-color: var(--blue); }
+    </style>
+
+    <div class="container mt-4 page">
+
+        <div class="inbox-layout">
+
+            {{/* ── Left pane: combined conversation list ── */}}
+            <aside class="ib-list-card">
+                <div class="ib-list-search">
+                    <input type="text" id="ib-search" placeholder="Search messages…" autocomplete="off">
+                </div>
+                <div class="ib-list-summary">
+                    <span>{{len .Items}} conversation{{if ne (len .Items) 1}}s{{end}}</span>
+                    {{if .CanSendDM}}
+                    <a href="/inbox?compose=1" class="btn btn-primary btn-sm" style="font-size:0.74rem;">
+                        ✏️ Compose
+                    </a>
+                    {{end}}
+                </div>
+                <div id="ib-row-list">
+                    {{range .Items}}
+                    {{$href := ""}}{{$isActive := false}}
+                    {{if eq .Kind "dm"}}
+                        {{$href = printf "/inbox?thread=%d" .ID}}
+                        {{$isActive = eq .ID $.ActiveThreadID}}
+                    {{else}}
+                        {{$href = printf "/inbox?msg=%d" .ID}}
+                        {{if $.ActiveMessage}}{{$isActive = eq .ID $.ActiveMessage.ID}}{{end}}
+                    {{end}}
+                    <a href="{{$href}}"
+                       class="ib-row {{if $isActive}}is-active{{end}}"
+                       data-search="{{.DisplayName}} {{.Subtitle}}">
+                        {{if eq .Kind "dm"}}
+                            {{if .AvatarPath}}
+                            <img src="{{.AvatarPath}}" alt="{{.DisplayName}}" class="ib-avatar">
+                            {{else}}
+                            <span class="ib-avatar-fallback">{{slice .DisplayName 0 1}}</span>
+                            {{end}}
+                        {{else}}
+                            <span class="ib-avatar-fallback ib-avatar-system" title="System message">📣</span>
+                        {{end}}
+                        <div class="ib-body">
+                            <div class="ib-name">{{.DisplayName}}</div>
+                            <div class="ib-preview">{{.Subtitle}}</div>
+                        </div>
+                        <div class="ib-meta">
+                            <span>{{relativeTime .UpdatedAt}}</span>
+                            {{if gt .UnreadCount 0}}
+                            <span class="ib-unread">{{.UnreadCount}}</span>
+                            {{end}}
+                        </div>
+                    </a>
+                    {{else}}
+                    <div style="text-align:center;color:var(--text-muted);font-size:0.82rem;padding:1rem 0.5rem;">
+                        No messages yet.
+                    </div>
+                    {{end}}
+                </div>
+            </aside>
+
+            {{/* ── Right pane: empty | conversation | announcement | compose ── */}}
+            <main class="ib-pane">
+
+                {{if .ComposeOk}}
+                <div class="alert alert-success py-2 m-3 mb-0" style="font-size:0.85rem;">Message sent.</div>
+                {{end}}
+                {{if .ComposeError}}
+                <div class="alert alert-danger py-2 m-3 mb-0" style="font-size:0.85rem;">{{.ComposeError}}</div>
+                {{end}}
+
+                {{if .ComposeMode}}
+                    {{/* ── Compose form ── */}}
+                    {{if .CanSendDM}}
+                    <div class="ib-pane-head">
+                        <div>
+                            <strong>✏️ New Message</strong>
+                            <div class="ib-pane-sub">Compose a new conversation</div>
+                        </div>
+                        <a href="/inbox" class="btn btn-outline-secondary btn-sm">Cancel</a>
+                    </div>
+                    {{/* The CSRF field was missing here from 2026-05-21 until the
+                         lift: the site gate rejects a POST without it, so starting
+                         a new conversation 403'd for 77 days and dm_threads stayed
+                         empty. A test now counts forms against tokens. */}}
+                    <form method="POST" action="/inbox/dm/send" class="ib-compose" style="display:contents;">
+                        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                        <div class="ib-pane-body">
+                            <label for="ib-compose-to">To <span style="color:var(--bs-danger);">*</span></label>
+                            <input type="text" name="recipient" id="ib-compose-to"
+                                   placeholder="Enter username"
+                                   value="{{.PrefillRecipient}}"
+                                   autocomplete="off" required>
+                            <label>Message <span style="color:var(--bs-danger);">*</span></label>
+                            {{.EditorHTML}}
+                        </div>
+                        <div class="ib-pane-foot">
+                            <a href="/inbox" class="btn btn-link" style="color:var(--text-muted);">✕ Cancel</a>
+                            <button type="submit" class="btn btn-primary btn-sm">📤 Send Message</button>
+                        </div>
+                    </form>
+                    {{else}}
+                    <div class="ib-empty">
+                        <div class="ib-empty-icon">🔒</div>
+                        <h2>DMs require a paid rank</h2>
+                        <p>Composing a new conversation requires a moderator role or an active paid rank.
+                           You can still receive messages from anyone who can send.</p>
+                        <a href="/help/donate" class="btn btn-outline-primary btn-sm">View ranks</a>
+                    </div>
+                    {{end}}
+                {{else if .ActiveThreadID}}
+                    {{/* ── Active DM thread ── */}}
+                    <div class="ib-pane-head">
+                        <div>
+                            <strong>{{.ActiveCpName}}</strong>
+                            <div class="ib-pane-sub">{{len .ActiveMessages}} message{{if ne (len .ActiveMessages) 1}}s{{end}}</div>
+                        </div>
+                        <div style="display:flex;gap:0.5rem;align-items:center;">
+                            {{if .ActiveBlocked}}
+                            <form method="POST" action="/inbox/dm/unblock" class="d-inline">
+                                <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                                <input type="hidden" name="user_id" value="{{.ActiveCpID}}">
+                                <button type="submit" class="btn btn-outline-secondary btn-sm">Unblock</button>
+                            </form>
+                            {{else}}
+                            <form method="POST" action="/inbox/dm/block" class="d-inline"
+                                  onsubmit="return confirm('Block this user? Neither side will be able to send DMs to the other until unblocked.');">
+                                <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                                <input type="hidden" name="user_id" value="{{.ActiveCpID}}">
+                                <button type="submit" class="btn btn-outline-warning btn-sm">Block</button>
+                            </form>
+                            {{end}}
+                            <form method="POST" action="/inbox/dm/{{.ActiveThreadID}}/delete" class="d-inline"
+                                  onsubmit="return confirm('Hide this conversation from your inbox? Receiving a new message will bring it back.');">
+                                <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="ib-pane-body ib-stream" id="ib-stream">
+                        {{$me := .ViewerID}}
+                        {{range .ActiveMessages}}
+                        <div class="ib-msg-row {{if eq .SenderID $me}}from-me{{else}}from-them{{end}}">
+                            <div class="ib-msg-meta">
+                                {{relativeTime .CreatedAt}}
+                                {{if eq .SenderID $me}}· you{{else}}· {{.SenderUsername}}{{end}}
+                            </div>
+                            <div class="ib-msg {{if eq .SenderID $me}}ib-msg-from-me{{else}}ib-msg-from-them{{end}}">{{markdown .Body}}</div>
+                        </div>
+                        {{end}}
+                    </div>
+                    {{if and .CanSendDM (not .ActiveBlocked)}}
+                    <form method="POST" action="/inbox/dm/send" class="ib-pane-foot" style="flex-direction:column;align-items:stretch;gap:0.5rem;">
+                        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                        <input type="hidden" name="thread_id" value="{{.ActiveThreadID}}">
+                        {{.EditorHTML}}
+                        <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.74rem;color:var(--text-muted);">
+                            <span>Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to send</span>
+                            <button type="submit" class="btn btn-primary btn-sm">Send</button>
+                        </div>
+                    </form>
+                    {{else if .ActiveBlocked}}
+                    <div class="ib-pane-foot" style="color:var(--text-muted);font-size:0.85rem;justify-content:center;">
+                        Conversation is blocked. Unblock to resume.
+                    </div>
+                    {{end}}
+                {{else if .ActiveMessage}}
+                    {{/* ── Active announcement ── */}}
+                    <div class="ib-pane-head">
+                        <div>
+                            <strong>{{.ActiveMessage.Title}}</strong>
+                            <div class="ib-pane-sub">From {{.ActiveMessage.FromName}} · {{.ActiveMessage.CreatedAt.Format "Jan 02, 2006 15:04"}}</div>
+                        </div>
+                        <form method="POST" action="/inbox/{{.ActiveMessage.ID}}/dismiss" class="d-inline"
+                              onsubmit="return confirm('Dismiss this message?');">
+                            <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                        </form>
+                    </div>
+                    <div class="ib-pane-body" style="color:var(--text-primary);font-size:0.92rem;line-height:1.55;">
+                        {{markdown .ActiveMessage.Body}}
+                    </div>
+                {{else}}
+                    {{/* ── Empty state — default landing ── */}}
+                    <div class="ib-empty">
+                        <div class="ib-empty-icon">💬</div>
+                        <h2>Select a conversation</h2>
+                        <p>Choose a conversation from the list to view messages.</p>
+                        {{if .CanSendDM}}
+                        <a href="/inbox?compose=1" class="btn btn-primary">✏️ Compose New Message</a>
+                        {{end}}
+                    </div>
+                {{end}}
+            </main>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    (function(){
+        // Left-pane search.
+        const input = document.getElementById('ib-search');
+        if (input) {
+            input.addEventListener('input', () => {
+                const q = input.value.trim().toLowerCase();
+                document.querySelectorAll('#ib-row-list .ib-row').forEach(row => {
+                    const hay = (row.getAttribute('data-search') || '').toLowerCase();
+                    row.style.display = !q || hay.indexOf(q) !== -1 ? '' : 'none';
+                });
+            });
+        }
+        // Auto-scroll DM stream to bottom on load.
+        const stream = document.getElementById('ib-stream');
+        if (stream) { stream.scrollTop = stream.scrollHeight; }
+    })();
+    </script>
+{{end}}

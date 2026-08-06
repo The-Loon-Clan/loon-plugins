@@ -29,10 +29,10 @@ Process kinds: `Metadata.Processes` is empty → **web-only** (registers routes;
 
 - **Core services**: `Storage` (`c.Storage.DB()` → builds the `*PGStore`), `Router` (`c.Router.Engine()` for route registration), `Auth` (`Authenticate()` + `RequireUser(core.RoleMod)` middleware chains), `Errors` (`c.Errors` stored on `Handlers.errs` — currently held but not actively called).
 - **Store**: self-contained `*PGStore` built at `Provision` from `c.Storage.DB()` (nil DB → boot error). The `Store` interface has 7 methods (list published / list all / by id / by slug / create / update / delete). SQL is byte-identical to the pre-lift in-tree plugin.
-- **`SetDeps` (required, before `core.Boot`)** — the host seams: `BaseData` (site template chrome) and `Sanitize` (the host's news-body HTML sanitization policy, applied before bodies render unescaped). `Provision` fails loud when unset.
+- **`SetDeps` (required, before `core.Boot`)** — the host seams: `RenderPage` (wraps a finished fragment in the site chrome) and `Sanitize` (the host's news-body HTML sanitization policy, applied before bodies render unescaped). `Provision` fails loud when unset. `Sanitize` crosses the seam rather than being reimplemented here for the usual reason: a second allow-list is a stored-XSS bug waiting on whichever copy is laxer.
 - **Config**: none. No `plugins.news.*` keys.
 - **Metadata.Requires**: none (no peer plugins).
-- **Host templates (the template contract)** — the plugin renders the HOST's templates by name: `news.html`, `news_detail.html`, `admin_news.html`, `admin_news_form.html`. An adopting host supplies those four in its template set.
+- **Templates are the plugin's**, embedded under `templates/`: `news.html`, `news_detail.html`, `admin_news.html`, `admin_news_form.html`. They were the host's until this lift, which meant the plugin could not change its own pages and the site could not delete them. An adopting host supplies chrome through `RenderPage`, not four page templates.
 
 ## Hooks & Callbacks
 
@@ -51,10 +51,13 @@ Process kinds: `Metadata.Processes` is empty → **web-only** (registers routes;
 - `models.go` — `NewsPost` struct (db tags).
 - `store.go` — `Store` interface (7 methods).
 - `store_pg.go` — `PGStore`, the sqlx-backed production implementation.
+- `views.go` — the embedded templates and `render`.
+- `templates/` — the four pages, as fragments.
 
 ## Testing
 
 - **Unit-tested** (`news_test.go`): `slugify` — the one pure helper. Table-driven cases cover lowercasing, non-alphanumeric run collapsing to a single dash, leading/trailing dash trimming, empty/whitespace input, and Unicode stripping. It mirrors the ameNZB host `admin_handler` slug helper byte-for-byte so new-post slugs keep a consistent shape.
+- **Unit-tested** (`views_test.go`): all four pages, **executed** rather than only parsed — a lift needs that, because html/template streams and a field the markup wants but the data lacks aborts the render part way through and returns half a page with nothing logged. Fixtures mirror the keys the handlers actually pass.
 - **Needs integration tests (live DB)**: `PGStore` is a thin SQL passthrough — every method is a direct sqlx `Select/Get/QueryRow/Exec`. Its correctness (the `slug UNIQUE` constraint, `published = true` filter, `created_at DESC` ordering, `RETURNING` scan, `updated_at = NOW()` bump) can only be verified against a real Postgres. There is no in-memory store; a MemStore built solely to test map delegation would be coverage theater, so none was added.
 
 ## Notes / gotchas

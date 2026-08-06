@@ -1,0 +1,69 @@
+{{define "admin_messages.html"}}
+
+    <div class="container mt-4 site-container">
+        <div class="card mb-4">
+            <div class="card-header">Compose Message</div>
+            <div class="card-body">
+                <form method="POST" action="/admin/messages">
+                    <div class="mb-3">
+                        <label class="form-label">To</label>
+                        <select name="target" class="form-select">
+                            <option value="all">Everyone</option>
+                            <option value="admin">All Admins</option>
+                            {{range .Users}}
+                            <option value="user:{{.ID}}">{{.Username}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Title</label>
+                        <input type="text" name="title" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Message</label>
+                        <textarea name="body" class="form-control" rows="4" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Send Message</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Sent Messages</span>
+                <small style="color:var(--text-muted);">{{.Total}} total</small>
+            </div>
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>From</th>
+                        <th>Title</th>
+                        <th>To</th>
+                        <th>Sent</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Messages}}
+                    <tr>
+                        <td>{{.FromName}}</td>
+                        <td>{{.Title}}</td>
+                        <td>{{.Target}}</td>
+                        <td style="white-space:nowrap;">{{.CreatedAt.Format "Jan 02 15:04"}}</td>
+                        <td>
+                            <form method="POST" action="/admin/messages/{{.ID}}/delete" style="display:inline;">
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr><td colspan="5" class="text-center" style="color:var(--text-muted);">No messages sent yet.</td></tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{.PaginationHTML}}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{{end}}

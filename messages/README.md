@@ -69,24 +69,34 @@ Host seams (`SetDeps`, before `core.Boot`):
 
 ```go
 messages.SetDeps(messages.Deps{
-    Store:    messages.NewPGStore(db),       // or your own Store
-    BaseData: handlers.BaseData,             // required — page chrome
-    ListUsers: nil,                          // optional — composer picker
+    Store:            messages.NewPGStore(db), // optional — defaults to PG over core
+    RenderPage:       …,                       // required — chrome around a fragment
+    CSRFToken:        …,                       // required — host middleware mints it
+    RenderEditor:     …,                       // required — the shared prose editor
+    Markdown:         …,                       // required — the site's ONE sanitiser
+    RelativeTime:     …,                       // required — site-wide wording
+    RenderPagination: …,                       // required — the site's pager
+    ListUsers:        nil,                     // optional — composer picker
 })
 ```
 
-`BaseData` is **required**: these pages render inside the host's layout, and
-without it a signed-in reader gets logged-out chrome, which looks like a broken
-session rather than a missing seam.
+The six render seams are all **required**, and Provision refuses to boot
+without them rather than leaving a page to fail at first view. Three are
+required for a reason beyond convenience: `Markdown` **sanitises**, so a
+second allow-list in here would be a stored-XSS bug waiting on whichever copy
+is laxer; `CSRFToken` can only be answered by the middleware that minted it;
+and `RenderEditor` / `RenderPagination` are shared widgets whose plugin-local
+copies would drift from the other pages using them. `RelativeTime` is the weak
+one — it crosses for consistency of wording, not for safety.
 
 `ListUsers` is **optional**. Core has no "list every user" method — on a site of
 any size that is a page-breaking query — so a host that wants the composer's
 recipient dropdown supplies one, and a host that does not gets the username
 field the template falls back to. The send path resolves by username either way.
 
-Templates are the **host's**, by name: `inbox.html` and `admin_messages.html`.
-Same convention as the forum plugin — a portable plugin cannot ship a site's
-chrome, so it renders through the host's.
+Templates are the **plugin's**, embedded: `templates/inbox.html` and
+`templates/admin_messages.html`. The host used to carry both, which meant the
+plugin could not change its own pages and the site could not delete them.
 
 ## Hooks & Callbacks
 
@@ -99,7 +109,9 @@ chrome, so it renders through the host's.
 
 ## Lifecycle
 
-**Provision** refuses to boot without `Store` or `BaseData`, builds the
+**Provision** refuses to boot without the render seams, parses the embedded
+templates (deferred to here, because `Markdown` and `RelativeTime` are Deps
+functions and a stubbed sanitiser would be worse than a missing one), builds the
 handlers over core's services, and registers every route. All nine `/inbox`
 routes go on **one** group: split across groups, Gin's tree lets the
 parameterised routes shadow the literal ones.
@@ -121,6 +133,14 @@ keep talking at them.
 from your inbox does not touch the other party's copy, and their next message
 brings it back — otherwise "delete" would read as "block" to the sender.
 
+**The compose form had no CSRF field.** From 2026-05-21 until this lift, the
+one form that can start a new conversation omitted `_csrf`, and the host gate
+rejects a POST without it — so starting a DM 403'd for 77 days and the origin
+site's `dm_threads` table was still empty when the markup came across. Fixed
+here, and `TestEveryPostFormCarriesTheCSRFField` counts forms against tokens in
+all three right-pane modes so a form added later fails a test rather than a
+user.
+
 ## Files
 
 - `plugin.go` — registration, `Deps`, routes.
@@ -130,6 +150,8 @@ brings it back — otherwise "delete" would read as "block" to the sender.
 - `pg.go` — Postgres implementation, SQL lifted verbatim.
 - `viewer.go` — the session user, and the int64/int adapter.
 - `web.go` — the lifted JSON + pagination helpers.
+- `views.go` — the embedded templates, the bound FuncMap, and `render`.
+- `templates/` — the two pages, as fragments.
 - `consts.go` — the entitlement and notification keys.
 - `schema.sql` — DDL for a host that lacks the tables.
 
@@ -140,6 +162,14 @@ through the role baseline, a plain user cannot until a group grants it, it
 fails closed with no service, and a mod keeps access when their paid tier
 lapses. Those run against loon's **real** `core.Entitlements` composition
 rather than a stand-in, so they exercise the wiring a host actually gets.
+
+Also unit-tested: both pages, **executed** rather than only parsed. That is
+what a lift needs — html/template streams, so a field the markup wants and the
+data lacks aborts the render part way through and returns half a page with
+nothing logged. The fixtures mirror the keys the handlers actually pass, read
+off the render calls. The thread view is rendered from both participants'
+sides, because `$me` deciding which side a message sits on is exactly the kind
+of map lookup that fails silently.
 
 Needs work: there is **no `MemStore` yet**, so the handlers themselves are
 untested here and a demo host has to supply Postgres. That is the next slice —

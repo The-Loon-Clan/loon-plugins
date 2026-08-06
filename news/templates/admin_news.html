@@ -1,0 +1,101 @@
+{{define "admin_news.html"}}
+    <div class="container mt-4 site-container">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0" style="color:var(--text-muted);">News Posts</h6>
+            <button class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#new-post-form">
+                + New Post
+            </button>
+        </div>
+
+        {{/* ── Create form ── */}}
+        <div class="collapse mb-4" id="new-post-form">
+            <div class="card">
+                <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">New Post</div>
+                <div class="card-body">
+                    <form method="POST" action="/admin/news">
+                        <div class="mb-3">
+                            <label class="form-label" style="font-size:0.85rem;">Title</label>
+                            <input type="text" name="title" class="form-control" required maxlength="255" id="new-title">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" style="font-size:0.85rem;">
+                                Slug
+                                <span style="color:var(--text-muted);font-size:0.78rem;">(leave blank to auto-generate)</span>
+                            </label>
+                            <input type="text" name="slug" class="form-control" maxlength="255" id="new-slug" placeholder="e.g. new-feature-announcement">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" style="font-size:0.85rem;">Body (HTML allowed)</label>
+                            <textarea name="body" class="form-control" rows="8" required
+                                style="font-family:monospace;font-size:0.82rem;"></textarea>
+                            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
+                                You can use HTML tags: &lt;p&gt;, &lt;strong&gt;, &lt;em&gt;, &lt;a href=""&gt;, &lt;ul&gt;, &lt;li&gt;, etc.
+                            </div>
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" name="published" value="1" id="new-published" checked>
+                            <label class="form-check-label" for="new-published" style="font-size:0.85rem;">Published (visible to users)</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">Create Post</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {{/* ── Posts list ── */}}
+        <div class="card">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th style="width:90px;">Status</th>
+                        <th style="width:130px;">Date</th>
+                        <th style="width:120px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Posts}}
+                    <tr>
+                        <td>
+                            <a href="/news/{{.Slug}}" target="_blank" style="color:var(--text-primary);">{{.Title}}</a>
+                            <div style="font-size:0.75rem;color:var(--text-muted);">/news/{{.Slug}}</div>
+                        </td>
+                        <td>
+                            {{if .Published}}
+                            <span class="badge bg-success bg-opacity-25 text-success">Published</span>
+                            {{else}}
+                            <span class="badge bg-secondary">Draft</span>
+                            {{end}}
+                        </td>
+                        <td style="font-size:0.82rem;color:var(--text-muted);">{{.CreatedAt.Format "Jan 02, 2006"}}</td>
+                        <td class="text-end">
+                            <a href="/admin/news/{{.ID}}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+                            <form method="POST" action="/admin/news/{{.ID}}/delete" class="d-inline"
+                                  onsubmit="return confirm('Delete this post?')">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr><td colspan="4" class="text-center" style="color:var(--text-muted);padding:2rem;">No posts yet.</td></tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    // Auto-generate slug from title
+    document.getElementById('new-title').addEventListener('input', function() {
+        var slugEl = document.getElementById('new-slug');
+        if (slugEl.dataset.manual) return;
+        slugEl.value = this.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    });
+    document.getElementById('new-slug').addEventListener('input', function() {
+        this.dataset.manual = '1';
+    });
+    </script>
+{{end}}

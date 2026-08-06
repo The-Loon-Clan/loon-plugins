@@ -1,0 +1,49 @@
+{{define "admin_news_form.html"}}
+    <div class="container mt-4 site-container">
+
+        <div class="d-flex align-items-center gap-3 mb-4">
+            <h6 class="mb-0" style="color:var(--text-muted);">Edit News Post</h6>
+            <a href="/admin/news" class="btn btn-outline-secondary btn-sm ms-auto">← Back</a>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="/admin/news/{{.Post.ID}}/update">
+                    <div class="mb-3">
+                        <label class="form-label" style="font-size:0.85rem;">Title</label>
+                        <input type="text" name="title" class="form-control" required maxlength="255"
+                               value="{{.Post.Title}}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" style="font-size:0.85rem;">Slug</label>
+                        <input type="text" name="slug" class="form-control" maxlength="255"
+                               value="{{.Post.Slug}}" placeholder="e.g. new-feature-announcement">
+                        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:3px;">
+                            URL: /news/{{.Post.Slug}}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" style="font-size:0.85rem;">Body (HTML allowed)</label>
+                        <textarea name="body" class="form-control" rows="12" required
+                            style="font-family:monospace;font-size:0.82rem;">{{.Post.Body}}</textarea>
+                        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
+                            You can use HTML tags: &lt;p&gt;, &lt;strong&gt;, &lt;em&gt;, &lt;a href=""&gt;, &lt;ul&gt;, &lt;li&gt;, etc.
+                        </div>
+                    </div>
+                    <div class="mb-4 form-check">
+                        <input type="checkbox" class="form-check-input" name="published" value="1" id="edit-published"
+                               {{if .Post.Published}}checked{{end}}>
+                        <label class="form-check-label" for="edit-published" style="font-size:0.85rem;">Published (visible to users)</label>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                        <a href="/news/{{.Post.Slug}}" target="_blank" class="btn btn-outline-secondary">Preview</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{{end}}

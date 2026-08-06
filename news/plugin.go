@@ -26,9 +26,10 @@ func init() {
 // Deps are the host seams the news plugin renders through. SetDeps
 // must be called before core.Boot; Provision fails loud otherwise.
 type Deps struct {
-	// BaseData merges the host's page chrome (user, nav, CSRF, ...)
-	// into a template data map — every page render goes through it.
-	BaseData func(c *gin.Context, extra gin.H) gin.H
+	// RenderPage wraps a finished fragment in the site chrome. The four pages
+	// are this plugin's markup now, so what it needs from the host is chrome
+	// rather than a data map.
+	RenderPage func(c *gin.Context, title string, body template.HTML)
 	// Sanitize cleans admin-authored news body HTML before it is
 	// rendered unescaped (the host's news sanitization policy).
 	Sanitize func(html string) string
@@ -68,8 +69,8 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
-	if deps.BaseData == nil || deps.Sanitize == nil {
-		return fmt.Errorf("news: SetDeps not called (BaseData/Sanitize required) — wire it in main() before core.Boot")
+	if deps.RenderPage == nil || deps.Sanitize == nil {
+		return fmt.Errorf("news: SetDeps not called (RenderPage/Sanitize required) — wire it in main() before core.Boot")
 	}
 	db := c.Storage.DB()
 	if db == nil {
@@ -139,7 +140,7 @@ func (h *Handlers) NewsAll(c *gin.Context) {
 	for _, p := range news {
 		safe = append(safe, safePost{p.ID, p.Title, p.Slug, template.HTML(deps.Sanitize(p.Body)), p.CreatedAt})
 	}
-	c.HTML(http.StatusOK, "news.html", deps.BaseData(c, gin.H{"News": safe}))
+	render(c, "News", "news.html", gin.H{"News": safe})
 }
 
 func (h *Handlers) NewsDetail(c *gin.Context) {
@@ -157,7 +158,7 @@ func (h *Handlers) NewsDetail(c *gin.Context) {
 		CreatedAt interface{}
 	}
 	safe := safePost{post.ID, post.Title, post.Slug, template.HTML(deps.Sanitize(post.Body)), post.CreatedAt}
-	c.HTML(http.StatusOK, "news_detail.html", deps.BaseData(c, gin.H{"Post": safe}))
+	render(c, "News", "news_detail.html", gin.H{"Post": safe})
 }
 
 func (h *Handlers) NewsList(c *gin.Context) {
@@ -166,7 +167,7 @@ func (h *Handlers) NewsList(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed to get news posts")
 		return
 	}
-	c.HTML(http.StatusOK, "admin_news.html", deps.BaseData(c, gin.H{"Posts": posts}))
+	render(c, "News — admin", "admin_news.html", gin.H{"Posts": posts})
 }
 
 func (h *Handlers) CreateNews(c *gin.Context) {
@@ -194,7 +195,7 @@ func (h *Handlers) EditNewsPage(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/admin/news")
 		return
 	}
-	c.HTML(http.StatusOK, "admin_news_form.html", deps.BaseData(c, gin.H{"Post": post}))
+	render(c, "News post", "admin_news_form.html", gin.H{"Post": post})
 }
 
 func (h *Handlers) UpdateNews(c *gin.Context) {

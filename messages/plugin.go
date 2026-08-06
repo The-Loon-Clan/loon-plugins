@@ -21,6 +21,7 @@ package messages
 import (
 	"context"
 	"fmt"
+	"html/template"
 
 	"github.com/gin-gonic/gin"
 
@@ -43,11 +44,25 @@ type Deps struct {
 	// or an adapter over a host's existing repositories.
 	Store Store
 
-	// BaseData merges the host's page chrome (signed-in user, nav counts,
-	// CSRF token, theme) into a template context. Required, because these
-	// pages render inside the host's layout: without it the templates render
-	// logged-out chrome to a signed-in reader.
-	BaseData func(c *gin.Context, extra gin.H) gin.H
+	// RenderPage wraps a finished fragment in the site chrome. Both pages are
+	// this plugin's markup now, so it needs chrome rather than a data map.
+	RenderPage func(c *gin.Context, title string, body template.HTML)
+	// CSRFToken for the compose and reply forms — minted by host middleware.
+	CSRFToken func(c *gin.Context) string
+	// RenderEditor is the site's shared markdown editor as ready HTML, for
+	// the options given. Seven pages across the site use it, so it stays
+	// host-rendered; only the per-call options cross.
+	RenderEditor func(opts map[string]any) template.HTML
+	// Markdown renders a message body. It SANITISES, so it crosses rather
+	// than being reimplemented: a second allow-list in here is a stored-XSS
+	// bug waiting on whichever copy is laxer.
+	Markdown func(string) template.HTML
+	// RelativeTime formats a timestamp as "2 hours ago". Passed rather than
+	// copied for consistency of wording across the site, not for safety —
+	// this is the weaker reason of the two, and worth saying so.
+	RelativeTime func(any) string
+	// RenderPagination is the site's pager as finished HTML.
+	RenderPagination func(page, pageSize, totalItems int, baseURL string) template.HTML
 
 	// ListUsers is OPTIONAL: it backs the admin composer's recipient picker.
 	//
@@ -102,12 +117,18 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if deps == nil {
 		return fmt.Errorf("messages: SetDeps was not called before core.Boot — wire it in main()")
 	}
-	if deps.BaseData == nil {
+	if deps.RenderPage == nil || deps.CSRFToken == nil || deps.RenderEditor == nil ||
+		deps.Markdown == nil || deps.RelativeTime == nil || deps.RenderPagination == nil {
 		// Not optional: without the host's chrome these pages render as though
 		// nobody is signed in, which looks like a broken session rather than a
 		// missing seam.
-		return fmt.Errorf("messages: Deps.BaseData is required — it supplies the host's page chrome")
+		return fmt.Errorf("messages: Deps is missing a render seam — RenderPage, CSRFToken, " +
+			"RenderEditor, Markdown, RelativeTime and RenderPagination are all required")
 	}
+	// Parsed here, not at package init: markdown and relativeTime are Deps
+	// functions. Forgetting this call leaves pageTmpl nil and panics on the
+	// first page view rather than failing at boot.
+	parseTemplates()
 	// Default the store to Postgres over the host's handle, the same way the
 	// forum plugin does. A host that has the schema (see schema.sql) wires
 	// nothing; one that wants a different backing supplies Deps.Store.
