@@ -42,12 +42,12 @@ func (h *Handlers) StorePage(c *gin.Context) {
 	if user, ok := h.auth.CurrentUser(c); ok && user != nil {
 		balance, _ = h.points.Balance(ctx, user.ID)
 	}
-	c.HTML(http.StatusOK, "store.html", deps.BaseData(c, gin.H{
+	renderPage(c, "Store", "store.html", gin.H{
 		"Items":   items,
 		"Balance": balance,
 		"Error":   c.Query("error"),
 		"Ok":      c.Query("ok"),
-	}))
+	})
 }
 
 // historyPageSize is the ledger rows per page on /store/history.
@@ -86,19 +86,19 @@ func (h *Handlers) HistoryPage(c *gin.Context) {
 		// The ledger is the whole page; an empty table here would read as
 		// "you have never earned a point", which is a plausible lie.
 		h.errs.Report(ctx, "store/history", err)
-		c.HTML(http.StatusOK, "store_history.html", deps.BaseData(c, gin.H{
+		renderPage(c, "Purchase history", "store_history.html", gin.H{
 			"Error": "Could not load your points history. Try again shortly.",
-		}))
+		})
 		return
 	}
 	balance, _ := h.points.Balance(ctx, user.ID)
 
-	c.HTML(http.StatusOK, "store_history.html", deps.BaseData(c, gin.H{
-		"Entries":    entries,
-		"Total":      total,
-		"Balance":    balance,
-		"Pagination": deps.Paginate(page, historyPageSize, total, "/store/history"),
-	}))
+	renderPage(c, "Purchase history", "store_history.html", gin.H{
+		"Entries":        entries,
+		"Total":          total,
+		"Balance":        balance,
+		"PaginationHTML": deps.RenderPagination(page, historyPageSize, total, "/store/history?"),
+	})
 }
 
 // errOutOfStock is returned by purchase when the item sold out between
@@ -239,11 +239,11 @@ func (h *Handlers) AdminStorePage(c *gin.Context) {
 	if err != nil {
 		h.errs.Report(c.Request.Context(), "store/admin-list", err)
 	}
-	c.HTML(http.StatusOK, "admin_store.html", deps.BaseData(c, gin.H{
+	renderPage(c, "Store — admin", "admin_store.html", gin.H{
 		"Items": items,
 		"Error": c.Query("error"),
 		"Ok":    c.Query("ok") == "1",
-	}))
+	})
 }
 
 func (h *Handlers) CreateItem(c *gin.Context) {

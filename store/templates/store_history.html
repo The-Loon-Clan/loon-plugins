@@ -1,0 +1,61 @@
+{{define "store_history.html"}}
+    <div class="container mt-4 page-narrow">
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h5 class="mb-0" style="font-weight:600;">Points</h5>
+            <span class="badge bg-warning text-dark" style="font-size:0.82rem;">{{.Balance}} pts</span>
+        </div>
+
+        {{/* Page links rather than Bootstrap's JS tabs: the ledger pages
+             server-side, so both panes can't be rendered up front. */}}
+        <ul class="nav tabs mb-3">
+            <li class="nav-item"><a class="nav-link" href="/store">Store</a></li>
+            <li class="nav-item">
+                <a class="nav-link active" href="/store/history">History
+                    {{if .Total}}<span class="tab-count">{{.Total}}</span>{{end}}
+                </a>
+            </li>
+        </ul>
+
+        {{if .Error}}<div class="alert alert-danger py-1 mb-3" style="font-size:0.82rem;">{{.Error}}</div>{{end}}
+
+        {{if .Entries}}
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0" style="font-size:0.78rem;">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th class="text-end" style="width:70px;">Amount</th>
+                            <th class="text-end" style="width:70px;">Balance</th>
+                            <th style="width:110px;">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Entries}}
+                        <tr>
+                            <td style="color:var(--text-muted);">
+                                {{.Description}}
+                                {{if .ReferenceID}}<span style="font-size:0.7rem;color:var(--text-muted);">#{{deref64 .ReferenceID}}</span>{{end}}
+                            </td>
+                            <td class="text-end {{if gt .Amount 0}}text-success{{else}}text-danger{{end}}">
+                                {{if gt .Amount 0}}+{{end}}{{.Amount}}
+                            </td>
+                            <td class="text-end" style="color:var(--text-muted);">{{.Balance}}</td>
+                            <td style="color:var(--text-muted);">{{.CreatedAt.Format "Jan 02, 15:04"}}</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {{.PaginationHTML}}
+        {{else}}
+        <div class="card"><div class="card-body" style="color:var(--text-muted);font-size:0.85rem;">
+            No transactions yet. Points come in from uploads, grabs, reviews and wiki edits.
+        </div></div>
+        {{end}}
+
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{{end}}

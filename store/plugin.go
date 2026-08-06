@@ -10,6 +10,7 @@ import (
 	"embed"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"html/template"
 
 	"github.com/the-loon-clan/loon-plugins/pluginapi"
 	"github.com/the-loon-clan/loon/core"
@@ -47,11 +48,20 @@ type Deps struct {
 	// BaseData merges the host's page chrome (user, nav, CSRF, notification
 	// counts, ...) into a template data map — every page render goes through
 	// it, exactly as host-side handlers do.
-	BaseData func(c *gin.Context, extra gin.H) gin.H
+	// RenderPage wraps a finished fragment in the site chrome. The pages are
+	// this plugin's markup now, so it needs chrome rather than a data map.
+	RenderPage func(c *gin.Context, title string, body template.HTML)
+	// CSRFToken for the store and admin forms. Host-owned: the token is
+	// minted and validated by host middleware.
+	CSRFToken func(c *gin.Context) string
 	// Paginate builds the view-model the host's pagination partial consumes.
 	// Returned as `any` so the plugin never learns the host's type — the
 	// template reads it by field name.
-	Paginate func(page, pageSize, totalItems int, baseURL string) any
+	// RenderPagination returns the site's pager as ready HTML. A fragment is
+	// rendered by this plugin's own template set and cannot reach the host's
+	// partials, so the host renders its own rather than a second copy living
+	// here.
+	RenderPagination func(page, pageSize, totalItems int, baseURL string) template.HTML
 	// PageOffset is the SQL offset for a page. A separate seam from Paginate
 	// because the offset is needed BEFORE the query and the view-model after
 	// it — the host's PaginationFromTotal returns both at once, which only
@@ -123,7 +133,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 		}
 	}
 
-	if deps.BaseData == nil || deps.Paginate == nil || deps.PageOffset == nil {
+	if deps.RenderPage == nil || deps.CSRFToken == nil ||
+		deps.RenderPagination == nil || deps.PageOffset == nil {
 		return fmt.Errorf("store: SetDeps not called (BaseData/Paginate/PageOffset required) — wire it in cmd/main.go before core.Boot")
 	}
 	p.handlers = &Handlers{

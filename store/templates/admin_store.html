@@ -1,0 +1,160 @@
+{{define "admin_store.html"}}
+    <div class="container mt-4 page">
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h5 class="mb-0" style="font-weight:600;">Store Catalog</h5>
+            <button class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#create-item-form">+ New Item</button>
+        </div>
+
+        {{if .Error}}<div class="alert alert-danger py-1 mb-3" style="font-size:0.82rem;">{{.Error}}</div>{{end}}
+        {{if .Ok}}<div class="alert alert-success py-1 mb-3" style="font-size:0.82rem;">Item saved.</div>{{end}}
+
+        <div class="collapse mb-4" id="create-item-form">
+            <div class="card">
+                <div class="card-header" style="font-size:0.85rem;">Create Item</div>
+                <div class="card-body">
+                    <form method="POST" action="/admin/store/create">
+                        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-4">
+                                <label class="form-label" style="font-size:0.85rem;">Name <span class="text-danger">*</span></label>
+                                <input type="text" name="name" class="form-control form-control-sm" required maxlength="80" placeholder="e.g. VIP for 30 days">
+                            </div>
+                            <div class="col-sm-2">
+                                <label class="form-label" style="font-size:0.85rem;">Cost (pts) <span class="text-danger">*</span></label>
+                                <input type="number" name="points_cost" class="form-control form-control-sm" value="100" min="1">
+                            </div>
+                            <div class="col-sm-2">
+                                <label class="form-label" style="font-size:0.85rem;">Reward</label>
+                                <select name="reward_type" class="form-select form-select-sm">
+                                    <option value="rank">Rank</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-2">
+                                <label class="form-label" style="font-size:0.85rem;">Rank ID</label>
+                                <input type="number" name="reward_ref" class="form-control form-control-sm" min="1" placeholder="see /admin/p/groups">
+                            </div>
+                            <div class="col-sm-2">
+                                <label class="form-label" style="font-size:0.85rem;">Days</label>
+                                <input type="number" name="reward_days" class="form-control form-control-sm" value="30" min="0">
+                            </div>
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-6">
+                                <label class="form-label" style="font-size:0.85rem;">Description</label>
+                                <input type="text" name="description" class="form-control form-control-sm" maxlength="240" placeholder="Shown on the store card">
+                            </div>
+                            <div class="col-sm-2">
+                                <label class="form-label" style="font-size:0.85rem;">Stock</label>
+                                <input type="number" name="stock" class="form-control form-control-sm" placeholder="&#8734;">
+                                <div style="font-size:0.68rem;color:var(--text-muted);">blank = unlimited</div>
+                            </div>
+                            <div class="col-sm-2">
+                                <label class="form-label" style="font-size:0.85rem;">Sort Order</label>
+                                <input type="number" name="sort_order" class="form-control form-control-sm" value="0" min="0">
+                            </div>
+                            <div class="col-sm-2 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input type="checkbox" name="active" class="form-check-input" id="new-active" checked>
+                                    <label class="form-check-label" for="new-active" style="font-size:0.85rem;">Active</label>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">Create</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-0">
+                {{if .Items}}
+                <table class="table table-sm mb-0" style="font-size:0.82rem;">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Reward</th>
+                            <th class="text-center" style="width:70px;">Cost</th>
+                            <th class="text-center" style="width:70px;">Stock</th>
+                            <th class="text-center" style="width:60px;">Active</th>
+                            <th class="text-center" style="width:50px;">Order</th>
+                            <th style="width:120px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Items}}
+                        <tr>
+                            <td>{{.Name}}</td>
+                            <td style="color:var(--text-muted);">{{.RewardType}} #{{.RewardRef}}{{if .RewardDays}} · {{.RewardDays}}d{{end}}</td>
+                            <td class="text-center"><span style="color:var(--bs-warning);">{{.PointsCost}}</span></td>
+                            <td class="text-center">{{if lt .Stock 0}}<span style="color:var(--text-muted);">&#8734;</span>{{else}}{{.Stock}}{{end}}</td>
+                            <td class="text-center">{{if .Active}}<span class="badge bg-success">yes</span>{{else}}<span class="badge bg-secondary">no</span>{{end}}</td>
+                            <td class="text-center" style="color:var(--text-muted);">{{.SortOrder}}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary py-0 px-1" style="font-size:0.7rem;"
+                                        data-bs-toggle="collapse" data-bs-target="#edit-{{.ID}}">Edit</button>
+                                <form method="POST" action="/admin/store/{{.ID}}/delete" class="d-inline"
+                                      onsubmit="return confirm('Delete {{.Name}}?')">
+                                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size:0.7rem;">Del</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <tr class="collapse" id="edit-{{.ID}}">
+                            <td colspan="7" style="background:var(--bg-elevated);">
+                                <form method="POST" action="/admin/store/{{.ID}}/update" class="d-flex gap-2 align-items-end flex-wrap p-2">
+                                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                                    <div>
+                                        <label style="font-size:0.72rem;">Name</label>
+                                        <input type="text" name="name" class="form-control form-control-sm" value="{{.Name}}" style="width:150px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.72rem;">Description</label>
+                                        <input type="text" name="description" class="form-control form-control-sm" value="{{.Description}}" style="width:200px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.72rem;">Cost</label>
+                                        <input type="number" name="points_cost" class="form-control form-control-sm" value="{{.PointsCost}}" style="width:70px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.72rem;">Reward</label>
+                                        <select name="reward_type" class="form-select form-select-sm" style="width:80px;">
+                                            <option value="rank" {{if eq .RewardType "rank"}}selected{{end}}>Rank</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.72rem;">Rank ID</label>
+                                        <input type="number" name="reward_ref" class="form-control form-control-sm" value="{{.RewardRef}}" style="width:70px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.72rem;">Days</label>
+                                        <input type="number" name="reward_days" class="form-control form-control-sm" value="{{.RewardDays}}" style="width:60px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.72rem;">Stock (-1=&#8734;)</label>
+                                        <input type="number" name="stock" class="form-control form-control-sm" value="{{.Stock}}" style="width:80px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.72rem;">Order</label>
+                                        <input type="number" name="sort_order" class="form-control form-control-sm" value="{{.SortOrder}}" style="width:60px;">
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" name="active" class="form-check-input" id="act-{{.ID}}" {{if .Active}}checked{{end}}>
+                                        <label class="form-check-label" for="act-{{.ID}}" style="font-size:0.72rem;">Active</label>
+                                    </div>
+                                    <button type="submit" class="btn btn-sm btn-primary py-0">Save</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+                {{else}}
+                <div class="p-3" style="color:var(--text-muted);font-size:0.82rem;">No items yet. Create one above.</div>
+                {{end}}
+            </div>
+        </div>
+
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{{end}}
