@@ -32,6 +32,16 @@ TARGETS=(
     "loon-plugins tests|$HERE|go test ./... -count=1"
     "loon-demo-site|$SIBLINGS/loon-demo-site|go build ./..."
     "indexer-site|$SIBLINGS/Indexer/indexer-site|go build ./..."
+    # `go vet` and not just `go build`, because build ignores _test.go
+    # files. A consumer's test FAKE implements our interfaces, so widening
+    # one breaks it -- and that break is invisible to a build. It happened
+    # on 2026-08-07: AdminStore gained a method, every consumer reported
+    # "ok", and the host's fakeRewardsAdmin had been broken for two
+    # commits. vet type-checks tests, which is the cheapest way to see it.
+    # Compile only -- running those tests needs databases these consumers
+    # do not have here.
+    "loon-demo-site tests|$SIBLINGS/loon-demo-site|go vet ./..."
+    "indexer-site tests|$SIBLINGS/Indexer/indexer-site|go vet ./..."
 )
 
 fails=()
