@@ -99,6 +99,13 @@ func (p *Plugin) claim(c *gin.Context) {
 		return
 	}
 	if claimed {
+		// After the claim committed, and only when it did: `claimed` false
+		// means somebody already took today's, and announcing that would
+		// credit a member for a second claim they never made.
+		p.core.Emit(c.Request.Context(), core.Event{
+			Name: EventClaimed, UserID: u.ID,
+			Data: Claimed{Streak: streak, Reward: reward},
+		})
 		if _, err := p.core.Points.Award(c.Request.Context(), u.ID, reward, "earn_daily",
 			fmt.Sprintf("Daily login reward (streak %d)", streak), 0); err != nil {
 			p.core.LoggerFor("dailyreward").Error("award", "err", err)

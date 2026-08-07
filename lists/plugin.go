@@ -33,6 +33,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.handlers = &Handlers{}
 
+	// Announce what members do with lists, so achievements and stats can react
+	// without this plugin knowing they exist.
+	busCore = c
+	if err := declareEvents(c); err != nil {
+		return err
+	}
+
 	engine := c.Router.Engine()
 	if engine == nil {
 		return fmt.Errorf("lists: Core.Router.Engine() is nil")

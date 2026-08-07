@@ -430,8 +430,9 @@ func validateCatalogue(cat SourceCatalog, rewards []Reward, achievements []Achie
 			out = append(out, Finding{
 				Severity: SeverityWarn,
 				Subject:  "source " + d.Key,
-				Problem:  "is declared as a counter but no MetricSource is registered, so achievements on it stay at zero",
-				Fix:      "register one under " + MetricSourcePrefix + d.Key + ", or clear its Counts flag",
+				Problem: "is declared as a counter but no MetricSource is registered, so an " +
+					"achievement on it counts only what happens from now on and can never reflect history",
+				Fix: "register one under " + MetricSourcePrefix + d.Key + ", or clear its Counts flag",
 			})
 		}
 	}

@@ -175,6 +175,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 		granter: granter,
 		invites: invites,
 		errs:    c.Errors,
+		core:    c,
+	}
+
+	// Announce purchases so achievements and stats can react without the store
+	// knowing they exist.
+	if err := declareEvents(c); err != nil {
+		return err
 	}
 
 	shop := engine.Group("/store")

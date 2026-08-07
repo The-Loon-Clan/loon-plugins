@@ -55,11 +55,17 @@ func (h *Handlers) FollowList(c *gin.Context) {
 	listID, _ := strconv.Atoi(c.Param("id"))
 	userID, username, _ := deps.Viewer(c)
 	ctx := c.Request.Context()
-	if err := deps.Follow(ctx, userID, listID); err == nil && deps.NotifyFollow != nil {
-		// Resolve the list owner so we know who to notify. Skipped on
-		// any error so a slow lookup doesn't break the redirect.
-		if list, err := deps.ByID(ctx, listID); err == nil && list != nil {
-			deps.NotifyFollow(ctx, list.UserID, userID, username, list.Name, int64(listID))
+	if err := deps.Follow(ctx, userID, listID); err == nil {
+		// UserID is the FOLLOWER. The owner is notified below and is
+		// deliberately not the event's subject: they did not do anything.
+		emit(ctx, EventFollowed, userID, strconv.Itoa(listID), Followed{ListID: listID})
+
+		if deps.NotifyFollow != nil {
+			// Resolve the list owner so we know who to notify. Skipped on
+			// any error so a slow lookup doesn't break the redirect.
+			if list, err := deps.ByID(ctx, listID); err == nil && list != nil {
+				deps.NotifyFollow(ctx, list.UserID, userID, username, list.Name, int64(listID))
+			}
 		}
 	}
 	c.Redirect(http.StatusFound, "/lists/"+strconv.Itoa(listID))
@@ -178,6 +184,8 @@ func (h *Handlers) AddToList(c *gin.Context) {
 		deps.JSONError(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	emit(c.Request.Context(), EventItemAdded, userID, strconv.FormatInt(nzbID, 10),
+		ItemAdded{ListID: listID, NzbID: nzbID})
 	deps.JSONOK(c, nil)
 }
 

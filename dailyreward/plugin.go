@@ -109,6 +109,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// so a host looking it up cannot race the widget's own registration.
 	c.Register(StatusExtension, StatusFunc(p.status))
 
+	// Announce the claim so achievements and stats can react without this
+	// plugin knowing they exist. A duplicate declaration is a wiring bug worth
+	// failing Provision for, not a warning.
+	if err := declareEvents(c); err != nil {
+		return err
+	}
+
 	if err := c.RegisterView(core.View{
 		Slug: "daily-reward", Title: "Daily reward", Slot: core.SlotSiteWidget,
 		MinRole: core.RoleUser, // logged-in only

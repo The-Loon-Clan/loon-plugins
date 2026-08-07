@@ -24,6 +24,9 @@ type Handlers struct {
 	store   Store
 	points  core.PointsService
 	granter pluginapi.RankGranter
+	// core is held only to Emit. Nil in tests, so every emit goes through
+	// h.emit rather than touching it.
+	core *core.Core
 	// invites may be nil: it is published by the host, not a plugin, so it
 	// cannot be declared in Metadata.Requires and a host without an invite
 	// system is legitimate. Only invite items need it — see grantReward.
@@ -128,6 +131,15 @@ func (h *Handlers) BuyItem(c *gin.Context) {
 	reward, err := h.purchase(ctx, int(user.ID), item)
 	switch {
 	case err == nil:
+		// After the purchase committed, and only on the success leg. The
+		// out-of-stock and insufficient-points branches below are members who
+		// bought nothing, and announcing those would credit them for it.
+		if h.core != nil {
+			h.core.Emit(ctx, core.Event{
+				Name: EventPurchased, UserID: user.ID, Subject: strconv.Itoa(item.ID),
+				Data: Purchased{ItemID: item.ID, Name: item.Name, Cost: item.PointsCost, Reward: reward},
+			})
+		}
 		c.Redirect(http.StatusFound, "/store?ok="+neturl.QueryEscape(reward))
 	case errors.Is(err, errOutOfStock):
 		c.Redirect(http.StatusFound, "/store?error=out+of+stock")
