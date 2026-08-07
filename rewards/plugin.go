@@ -139,26 +139,31 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// per_unit reward is a reward row plus one host registration and no change
 	// here. A source registered for a reward that does not exist is harmless —
 	// GrantUnits looks the reward up and finds nothing.
-	// The two prefixes below are CALLBACKS: the host registers, this plugin
-	// calls. That direction is invisible in a Go type and is exactly what the
-	// directory's Kind column exists to say -- but the names are dynamic
-	// (one per reward slug), so what gets described is the convention rather
-	// than each instance.
+	// The two below are CALLBACKS: the host registers, this plugin calls. That
+	// direction is invisible in a Go type and is what the directory's Kind
+	// column exists to say. The real names are dynamic — one per reward slug,
+	// one per metric — so these describe the CONVENTION.
+	//
+	// Registered WITHOUT the trailing dot, and that is load-bearing rather
+	// than tidy. The discovery loops below scan by `HasPrefix(name,
+	// "rewards.units.")` and type-assert whatever they find; a placeholder
+	// under the real prefix matches the scan, fails the assertion, and takes
+	// Boot down. It did exactly that in production on 2026-08-07. "rewards.units"
+	// cannot match "rewards.units." — that is the whole trick, and it is why
+	// these names look truncated.
 	_ = c.RegisterDef(core.ExtensionDef{
-		Name:    UnitSourcePrefix + "<reward-slug>",
-		Summary: "HOST SUPPLIES: current counter value per member, for a per_unit reward",
+		Name:    strings.TrimSuffix(UnitSourcePrefix, "."),
+		Summary: "HOST SUPPLIES, one per reward slug as rewards.units.<slug>: the current counter value per member for a per_unit reward",
 		Kind:    core.ExtCallback, Stable: true,
 	}, unitSourceDoc{})
 	_ = c.RegisterDef(core.ExtensionDef{
-		Name:    MetricSourcePrefix + "<metric>",
-		Summary: "HOST SUPPLIES: current counter value per member, for scoring achievements",
+		Name:    strings.TrimSuffix(MetricSourcePrefix, "."),
+		Summary: "HOST SUPPLIES, one per metric as rewards.metrics.<metric>: the current counter value per member for scoring achievements",
 		Kind:    core.ExtCallback,
 	}, metricSourceDoc{})
-	_ = c.RegisterDef(core.ExtensionDef{
-		Name:    SourceCatalogExtension,
-		Summary: "HOST SUPPLIES: the seed vocabulary for the trigger and metric pickers",
-		Kind:    core.ExtData, Stable: true,
-	}, SourceCatalog{})
+	// SourceCatalogExtension is deliberately NOT described here: the host
+	// registers the real one, and a second registration of the same name is a
+	// duplicate the registry refuses.
 
 	p.units = map[string]UnitSource{}
 	for _, name := range c.ExtensionNames() {
