@@ -21,11 +21,18 @@ func TestEmbeddedJunkRulesParse(t *testing.T) {
 		"mid_alnum_token", "js_template_leak", "single_token_20",
 		"long_digit_run", "bare_numeric_token", "high_special_chars", "random_words",
 		"word_word_hex", "tiny_no_space", "short_lowercase_token",
-		"long_no_space", "chaotic_specials_small", "par2_volume",
+		// garbled_no_space is the FIRST rule here that prod does not have.
+		// Added 2026-08-07 for a title that reached the site matching nothing:
+		// long_no_space wanted its exact shape but caps at 2 MiB, and
+		// high_special_chars wanted 15% where it scored 14.4%. Placed AFTER
+		// long_no_space so that rule keeps winning inside its own band and
+		// existing hit counters keep reporting the same names.
+		"long_no_space", "garbled_no_space",
+		"chaotic_specials_small", "par2_volume",
 		"short_random_token", "under_1mib", "under_5mib",
 	}
 	if len(specs) != len(wantOrder) {
-		t.Fatalf("got %d rules, want %d (the full prod set)", len(specs), len(wantOrder))
+		t.Fatalf("got %d rules, want %d (prod's set plus garbled_no_space)", len(specs), len(wantOrder))
 	}
 	for i, s := range specs {
 		if s.Name != wantOrder[i] {

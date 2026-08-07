@@ -66,6 +66,10 @@ type junkParams struct {
 	MaxLen       int  `json:"max_len,omitempty"`
 	MinSegLen    int  `json:"min_seg_len,omitempty"`
 	MinChaotic   int  `json:"min_chaotic,omitempty"`
+	// MinGarbled is a COUNT of spam-grade punctuation marks, not a ratio.
+	// high_special_chars already owns the ratio, and a ratio is exactly what
+	// let a 111-char title carrying 18 marks through at 14.4%.
+	MinGarbled int `json:"min_garbled,omitempty"`
 	// Size gates. A rule with MaxSizeBytes > 0 fires only when the caller
 	// supplied a size AND size < MaxSizeBytes; MinSizeBytes additionally
 	// requires size >= MinSizeBytes. Rules with either set are skipped
@@ -178,6 +182,7 @@ var junkHeuristics = map[string]bool{
 	"random_words":        true, // 70%+ of non-punct chars from random-looking words
 	"tiny_no_space":       true, // sized: no whitespace at all under the size cap
 	"long_no_space":       true, // sized: 60+ chars, no whitespace, 5+ garbled
+	"garbled_no_space":    true, // ANY size: 60+ chars, no whitespace, min_garbled+
 	"chaotic_specials":    true, // sized: 30+ chars, HAS whitespace, 3+ garbled
 	"size_catchall":       true, // sized: everything in a size band is junk
 }
@@ -344,6 +349,12 @@ func runJunkHeuristic(id, t string, p junkParams) bool {
 	case "long_no_space":
 		return len(t) >= max(p.MinLen, 1) && !strings.ContainsAny(t, " \t\r\n\v\f") &&
 			countGarbledPunct(t) >= 5
+	case "garbled_no_space":
+		// long_no_space's unsized sibling with a higher bar. Both exist because
+		// long_no_space is capped at 2 MiB, so a big random-string post matched
+		// nothing at all. See the seed TSV entry for the measurement.
+		return len(t) >= max(p.MinLen, 1) && !strings.ContainsAny(t, " \t\r\n\v\f") &&
+			countGarbledPunct(t) >= max(p.MinGarbled, 1)
 	case "chaotic_specials":
 		return len(t) >= max(p.MinLen, 1) && strings.ContainsAny(t, " \t") &&
 			countGarbledPunct(t) >= 3
