@@ -69,6 +69,37 @@ type Deps struct {
 	// writing (page-1)*size inline keeps the plugin on the host's one
 	// implementation, which is the rule on the host side too.
 	PageOffset func(page, pageSize int) int
+	// ExtraTabs lets the HOST add entries to the store's tab strip, for pages
+	// that belong to the points area without belonging to this plugin — a
+	// rewards claim page, say. Optional: nil means the strip is Store and
+	// History, exactly as before.
+	//
+	// The host supplies tabs rather than this plugin linking to them, because
+	// the alternative is a hardcoded URL to a page that may not exist. A site
+	// running store WITHOUT whatever serves that page would render a tab that
+	// 404s, and store cannot know which those are.
+	ExtraTabs func(c *gin.Context) []Tab
+}
+
+// Tab is one host-supplied entry on the store's tab strip.
+//
+// Active is the host's call: it owns the routes these point at, so it is the
+// only side that can say which one the reader is on. The store's own two tabs
+// mark themselves.
+type Tab struct {
+	Label  string
+	Href   string
+	Active bool
+}
+
+// extraTabs resolves the host's tabs for a request, tolerating an unset seam.
+// Returns nil rather than an empty slice so `{{if}}` in a template reads the
+// way it looks.
+func extraTabs(c *gin.Context) []Tab {
+	if deps.ExtraTabs == nil {
+		return nil
+	}
+	return deps.ExtraTabs(c)
 }
 
 var deps Deps

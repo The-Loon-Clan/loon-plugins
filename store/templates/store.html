@@ -11,6 +11,12 @@
         <ul class="nav tabs mb-3">
             <li class="nav-item"><a class="nav-link active" href="/store">Store</a></li>
             <li class="nav-item"><a class="nav-link" href="/store/history">History</a></li>
+            {{/* Host-supplied tabs (Deps.ExtraTabs) — pages in the points area
+                 that are not this plugin's. Absent seam, absent key, no
+                 iterations. */}}
+            {{range .ExtraTabs}}
+            <li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Href}}">{{.Label}}</a></li>
+            {{end}}
         </ul>
 
         {{if .Error}}<div class="alert alert-danger py-1 mb-3" style="font-size:0.82rem;">{{.Error}}</div>{{end}}

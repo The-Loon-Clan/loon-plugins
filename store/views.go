@@ -45,6 +45,10 @@ func renderPage(c *gin.Context, title, name string, data gin.H) {
 		data = gin.H{}
 	}
 	data["CSRFToken"] = deps.CSRFToken(c)
+	// Set here rather than in each handler: the tab strip is on every store
+	// page, and a handler that forgot would drop the host's tabs on one page
+	// only — the kind of gap you find by clicking, not by reading.
+	data["ExtraTabs"] = extraTabs(c)
 
 	var sb strings.Builder
 	if err := pageTmpl.ExecuteTemplate(&sb, name, data); err != nil {
