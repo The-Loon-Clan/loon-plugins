@@ -239,6 +239,12 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if err := p.registerAchievements(c); err != nil {
 		return err
 	}
+	// Listen to the site. Done AFTER every plugin has provisioned would be
+	// better -- an emitter declaring later is not seen here -- but Boot
+	// provisions in dependency order and there is no post-Boot hook, so an
+	// emitter this plugin wants must be declared in Metadata.Requires. The
+	// directory shows anything missed as an event with no listener.
+	p.subscribeAchievements(c)
 
 	// The admin page is web-only: the worker has no router, and registering a
 	// view there would be a boot error rather than a harmless no-op.

@@ -35,6 +35,9 @@ type AdminStore interface {
 	ListEventStats(ctx context.Context, at time.Time) ([]EventStats, error)
 	ListRewards(ctx context.Context) ([]Reward, error)
 	ListAchievementDefs(ctx context.Context) ([]AchievementDef, error)
+	// AchievementDefsByMetric backs the event subscriber: one indexed read
+	// per event, rather than filtering the whole catalogue per post.
+	AchievementDefsByMetric(ctx context.Context, metric string) ([]AchievementDef, error)
 	// The source catalogue: configuration, not code. See sources.go.
 	ListSources(ctx context.Context) (SourceCatalog, error)
 	CountSources(ctx context.Context) (int, error)

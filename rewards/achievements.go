@@ -252,6 +252,35 @@ func (s *PGStore) RecordProgress(ctx context.Context, achievementID, userID, val
 	return reached, err
 }
 
+// IncrementProgress adds to a member's progress and reports whether the
+// threshold is now met.
+//
+// Separate from RecordProgress, which SETS an absolute value, because the two
+// sources of progress are different in kind. An event says "one more happened"
+// and can only add; a MetricSource says "the total is 613" and can only set.
+// Collapsing them would mean an event handler had to read the total first —
+// a round trip per event on a hot path, and a race with every other event for
+// the same member.
+//
+// The reached flag is computed in the same statement as the write, so it
+// cannot be answered from a value that has already moved.
+func (s *PGStore) IncrementProgress(ctx context.Context, achievementID, userID, delta int64) (reached bool, err error) {
+	if delta <= 0 {
+		return false, nil
+	}
+	err = s.get(ctx, &reached, `
+		INSERT INTO user_achievements (achievement_id, user_id, progress, updated_at)
+		VALUES ($1, $2, $3, now())
+		ON CONFLICT (achievement_id, user_id) DO UPDATE
+		   SET progress = user_achievements.progress + $3, updated_at = now()
+		RETURNING (
+		    SELECT user_achievements.progress >= a.threshold
+		           AND user_achievements.completed_at IS NULL
+		      FROM achievements a WHERE a.id = $1
+		)`, achievementID, userID, delta)
+	return reached, err
+}
+
 // CompleteAchievement records a completion and creates its reward grant in ONE
 // transaction.
 //
