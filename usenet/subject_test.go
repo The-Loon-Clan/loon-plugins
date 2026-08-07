@@ -207,3 +207,58 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+// A par2 set named for the archive volume it protects must land on the SAME
+// base as that archive.
+//
+// Found on the demo index: one release arrived as two, a 194 MB payload and a
+// 20 MB splinter, from these two subjects:
+//
+//	"…Big Boobs.part11.rar"  yEnc (1/10)   -> "…Big Boobs"
+//	"…Big Boobs.part01.par2" yEnc (1/1)    -> "…Big Boobs.part01"
+//
+// reArchivePart requires a rar/7z/zip immediately after the ".partNN", so
+// neither par form reaches it: ".par2" comes off via reExt and ".vol315+16"
+// via reVolSuffix, leaving ".partNN" welded to the base. The par files break
+// away and the set they protect loses its recovery data — the same failure the
+// reVolSuffix fix addressed for the ".volNNN+NN.par2" naming, in a second
+// convention that fix did not reach.
+func TestParVolumeNamedForItsArchivePartSharesTheBase(t *testing.T) {
+	const want = "Some.Release.Name"
+
+	for _, subject := range []string{
+		// The payload, which was always right — pinned so a change to the
+		// archive rule cannot quietly move the target the par files aim at.
+		`"Some.Release.Name.part11.rar" yEnc (1/10)`,
+		`"Some.Release.Name.part01.rar" yEnc (1/10)`,
+		// The two par namings that were not.
+		`"Some.Release.Name.part01.par2" yEnc (1/1)`,
+		`"Some.Release.Name.part01.vol315+16.par2" yEnc (1/9)`,
+		`"Some.Release.Name.part007.vol000+001.par2" yEnc (1/2)`,
+		// The plain recovery forms, already covered by reVolSuffix. Here so
+		// this test states the whole rule: every par file of a release lands
+		// on the release's base, whatever the poster called it.
+		`"Some.Release.Name.par2" yEnc (1/1)`,
+		`"Some.Release.Name.vol000+001.par2" yEnc (1/2)`,
+	} {
+		if got, _, _, _, _, _, _ := parseSubject(subject); got != want {
+			t.Errorf("parseSubject(%s)\n  base = %q\n  want = %q", subject, got, want)
+		}
+	}
+}
+
+// The scoping is the risky half, so it is asserted directly: a title whose own
+// last token looks like an archive marker must survive when it is NOT a par
+// file. Stripping it unscoped would merge two halves of a film into one base —
+// the opposite mistake, and a quieter one.
+func TestPartSuffixIsNotStrippedFromNonParSubjects(t *testing.T) {
+	for _, tc := range []struct{ subject, want string }{
+		{`"Nymphomaniac.2013.Part2.1080p.BluRay" yEnc (1/40)`, "Nymphomaniac.2013.Part2.1080p.BluRay"},
+		{`"Some.Documentary.Part2" yEnc (1/9)`, "Some.Documentary.Part2"},
+		{`"Some.Release.Name.part01.mkv" yEnc (1/40)`, "Some.Release.Name.part01"},
+	} {
+		if got, _, _, _, _, _, _ := parseSubject(tc.subject); got != tc.want {
+			t.Errorf("parseSubject(%s)\n  base = %q\n  want = %q", tc.subject, got, tc.want)
+		}
+	}
+}

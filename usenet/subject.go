@@ -37,6 +37,25 @@ var (
 	reYencSize = regexp.MustCompile(`(?i)\byenc\b\s+\d+(\s+bytes)?`)
 	// A par2 recovery-volume suffix, once the .par2 extension is already off.
 	reVolSuffix = regexp.MustCompile(`(?i)\.vol\d+\+\d+$`)
+	// A recovery extension, tested BEFORE reExt removes it. Its only job is to
+	// tell stripAllMarkers that what it is holding is a par file, which decides
+	// whether a trailing ".partNN" is an archive marker or part of the name.
+	reParExt = regexp.MustCompile(`(?i)\.par[23]?\b`)
+	// A trailing split-archive marker with NO archive extension after it.
+	//
+	// Only ever applied to a par file. Recovery sets are commonly named for the
+	// volume they protect — "Release.part01.par2", "Release.part01.vol315+16.par2"
+	// — and neither form reaches reArchivePart below, which requires a rar/7z/zip
+	// immediately after the ".partNN". The ".par2" comes off via reExt and the
+	// ".vol315+16" via reVolSuffix, leaving ".part01" welded to the base, so the
+	// par files break away into a release of their own and the set they protect
+	// loses its recovery data. Same failure the reVolSuffix comment below
+	// describes; a second naming convention that fix did not reach.
+	//
+	// Scoped to par files ON PURPOSE. Unscoped, this would also strip a real
+	// title ending in ".Part2" and merge two halves of a film into one base —
+	// the opposite mistake, and a harder one to notice.
+	rePartSuffix = regexp.MustCompile(`(?i)\.part\d{1,4}$`)
 	// Split-archive suffixes: ".part07.rar", ".7z.001". Each volume of a split
 	// archive is one file of ONE release, so the suffix must come off or every
 	// volume derives its own base, the set never satisfies completeness, and it
@@ -178,6 +197,8 @@ func parseSubject(subject string) (base string, partNum, totalParts, segTotal, f
 // stripAllMarkers removes segment/file markers, the yEnc keyword, quotes, and a
 // trailing extension — used to derive a single-file base from the whole subject.
 func stripAllMarkers(s string) string {
+	// Tested first: reExt below removes the extension this asks about.
+	isPar := reParExt.MatchString(s)
 	s = reFileOf.ReplaceAllString(s, " ")
 	s = reFileOfWords.ReplaceAllString(s, " ")
 	s = reFileOfBare.ReplaceAllString(s, " ")
@@ -199,6 +220,12 @@ func stripAllMarkers(s string) string {
 	// ENTIRELY recovery volumes is payload-free, and only the assembled set
 	// knows that. See allRecoveryVolumes.
 	s = reVolSuffix.ReplaceAllString(cleanBase(s), "")
+	// AFTER the volume suffix: "Release.part01.vol315+16.par2" only exposes its
+	// ".part01" once ".par2" and ".vol315+16" are both off. See rePartSuffix
+	// for why this is scoped to par files rather than applied to everything.
+	if isPar {
+		s = cleanBase(rePartSuffix.ReplaceAllString(s, ""))
+	}
 	return s
 }
 
