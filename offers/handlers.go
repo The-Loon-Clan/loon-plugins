@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon/core"
 )
 
 // Handlers serves the offer-system surfaces. Deps carries the
@@ -27,6 +29,8 @@ import (
 // Core seams are Errors (persistent 500s) and Router/Auth at
 // registration time.
 type Handlers struct {
+	// core is the mediator, for announcing requests and deliveries. Nil in tests.
+	core *core.Core
 }
 
 // resolveAPIUser pulls the API key from `?apikey=` or
@@ -303,6 +307,13 @@ func (h *Handlers) DeliverRequest(c *gin.Context) {
 		deps.ReportError(c, "offer-api/deliver", err)
 		return
 	}
+	// Only on a real delivery. ok2 false means the claim had already been
+	// served or released, and announcing it would credit an offerer twice for
+	// one file.
+	if ok2 {
+		h.emit(c.Request.Context(), EventRequestDelivered, user.ID,
+			RequestDelivered{RequestID: reqID, NzbID: body.NzbID})
+	}
 	if ok2 && deps.NotifyRequest != nil {
 		go func(rid int, nid int64) {
 			bg := context.Background()
@@ -391,6 +402,8 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 			deps.NotifyRequest(bgCtx, ids, requesterID, name, bucketID, requestID)
 		}(body.BucketID, id, user.ID, user.Username)
 	}
+	h.emit(ctx, EventRequestCreated, user.ID,
+		RequestCreated{RequestID: id, BucketID: body.BucketID, Points: body.Points})
 	deps.JSONOK(c, gin.H{"request_id": id})
 }
 

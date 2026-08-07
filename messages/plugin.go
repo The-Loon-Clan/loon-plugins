@@ -97,6 +97,8 @@ type Handlers struct {
 	// ranks — the messaging surface should not have to know that paid ranks
 	// exist, only whether this person is allowed.
 	ents core.EntitlementsService
+	// core is the mediator, for announcing what members do. Nil in tests.
+	core *core.Core
 }
 
 type Plugin struct {
@@ -143,6 +145,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.handlers = &Handlers{
 		store: store, auth: c.Auth, users: c.Users,
 		notify: c.Notifications, errs: c.Errors, ents: c.Entitlements,
+	}
+	p.handlers.WithCore(c)
+	if err := declareEvents(c); err != nil {
+		return err
 	}
 
 	engine := c.Router.Engine()

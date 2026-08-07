@@ -88,7 +88,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if db == nil {
 		return fmt.Errorf("wiki: Core.Storage.DB() is nil")
 	}
-	p.handlers = NewHandlers(NewPGStore(db), c.Auth)
+	p.handlers = NewHandlers(NewPGStore(db), c.Auth).WithCore(c)
+	if err := declareEvents(c); err != nil {
+		return err
+	}
 
 	engine := c.Router.Engine()
 	if engine == nil {

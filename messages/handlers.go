@@ -265,7 +265,15 @@ func (h *Handlers) AdminSend(c *gin.Context) {
 		}
 	}
 
-	_, _ = h.store.SendMessage(c.Request.Context(), fromName, title, body, target, nil)
+	// The error was discarded here until the event went in, which meant an
+	// announcement that failed to save still redirected as though it had sent.
+	ctx := c.Request.Context()
+	if _, err := h.store.SendMessage(ctx, fromName, title, body, target, nil); err != nil {
+		h.errs.Report(ctx, "messages/admin-send", err)
+		c.Redirect(http.StatusFound, "/admin/messages?err=Could+not+send")
+		return
+	}
+	h.emit(ctx, EventBroadcastSent, sender.ID, BroadcastSent{Title: title, Target: target})
 	c.Redirect(http.StatusFound, "/admin/messages")
 }
 
@@ -391,6 +399,7 @@ func (h *Handlers) SendDM(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/inbox?err=Internal+error")
 		return
 	}
+	h.emit(ctx, EventDMSent, user.ID, DMSent{ThreadID: threadID, RecipientID: recipientID})
 
 	// Notification fan-out — recipient gets an inbox NotifDM entry.
 	// Best-effort; failure doesn't block the message send.

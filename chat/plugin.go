@@ -34,7 +34,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if !deps.ok() {
 		return fmt.Errorf("chat: SetDeps was not called with a full Deps before core.Boot")
 	}
-	p.handlers = NewHandlers()
+	p.handlers = NewHandlers().WithCore(c)
+	if err := declareEvents(c); err != nil {
+		return err
+	}
 
 	engine := c.Router.Engine()
 	if engine == nil {

@@ -95,7 +95,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if db == nil {
 		return fmt.Errorf("playlists: no schema DB")
 	}
-	p.handlers = &Handlers{store: NewPGStore(db), auth: c.Auth}
+	p.handlers = &Handlers{store: NewPGStore(db), auth: c.Auth, core: c}
+	if err := declareEvents(c); err != nil {
+		return err
+	}
 
 	engine := c.Router.Engine()
 	if engine == nil {
@@ -132,6 +135,8 @@ type Handlers struct {
 	// off a gin context key: the key is the host's private detail, and guessing
 	// it yields a silent anonymous-for-everyone bug rather than a compile error.
 	auth core.AuthService
+	// core is the mediator, for announcing what members curate. Nil in tests.
+	core *core.Core
 }
 
 // viewer returns the signed-in user id, or 0 for anonymous. 0 is a real value
@@ -224,6 +229,8 @@ func (h *Handlers) Create(c *gin.Context) {
 			"Action": "Create", "Error": "Could not create the playlist.",
 		}))
 	default:
+		h.emit(c.Request.Context(), EventPlaylistCreated, p.UserID,
+			PlaylistCreated{PlaylistID: p.ID, Slug: p.Slug, Name: p.Name, Public: p.Public})
 		c.Redirect(http.StatusFound, "/playlists/"+p.Slug)
 	}
 }
@@ -285,6 +292,7 @@ func (h *Handlers) AddItem(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "could not add")
 		return
 	}
+	h.emit(c.Request.Context(), EventItemAdded, p.UserID, ItemAdded{PlaylistID: p.ID, ReleaseID: releaseID})
 	c.Redirect(http.StatusFound, "/playlists/"+p.Slug)
 }
 

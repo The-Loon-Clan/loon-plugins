@@ -37,6 +37,13 @@ func (p *Plugin) Metadata() core.Metadata {
 func (p *Plugin) Provision(c *core.Core) error {
 	p.process = c.Process
 
+	// Declared before the per-process branches below: the worker returns early
+	// and would otherwise disagree with the web process about what this plugin
+	// announces, which is the kind of split-brain a directory exists to prevent.
+	if err := declareEvents(c); err != nil {
+		return err
+	}
+
 	if p.process == "worker" || p.process == "all" {
 		if !jobDeps.ok() {
 			return fmt.Errorf("offers: SetJobDeps was not called with a full JobDeps before core.Boot")
@@ -58,7 +65,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	} else if !deps.okWeb() {
 		return fmt.Errorf("offers: SetDeps was not called with a full Deps before core.Boot")
 	}
-	p.handlers = &Handlers{}
+	p.handlers = &Handlers{core: c}
 
 	engine := c.Router.Engine()
 	if engine == nil {

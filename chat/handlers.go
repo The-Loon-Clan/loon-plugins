@@ -11,6 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/the-loon-clan/loon/core"
+
 	"github.com/the-loon-clan/loon/httpclient"
 )
 
@@ -19,6 +21,8 @@ type Handlers struct {
 	// Simple per-user rate limiter: max 1 message per 2 seconds.
 	rateMu  sync.Mutex
 	rateMap map[int]time.Time
+	// core is the mediator, for announcing sends. Nil in tests.
+	core *core.Core
 }
 
 func NewHandlers() *Handlers {
@@ -93,6 +97,7 @@ func (h *Handlers) Send(c *gin.Context) {
 		return
 	}
 
+	h.emit(c.Request.Context(), EventMessageSent, user.ID, MessageSent{Length: len(body)})
 	deps.JSONOK(c, nil)
 }
 

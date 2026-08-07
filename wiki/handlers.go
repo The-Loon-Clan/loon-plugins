@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"context"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -27,10 +28,32 @@ func jsonError(c *gin.Context, code int, msg string) {
 type Handlers struct {
 	store Store
 	auth  core.AuthService
+	// core is the mediator, for announcing edits. Nil in tests.
+	core *core.Core
 }
 
 func NewHandlers(store Store, auth core.AuthService) *Handlers {
 	return &Handlers{store: store, auth: auth}
+}
+
+// report sends a failed write to the host's error sink. Reached through the
+// mediator rather than a constructor argument so the existing callers and
+// tests keep compiling; a Handlers without one logs nowhere, which is what a
+// test wants and what production never has.
+func (h *Handlers) report(ctx context.Context, op string, err error) {
+	if h.core == nil || h.core.Errors == nil {
+		return
+	}
+	h.core.Errors.Report(ctx, op, err)
+}
+
+// editorID is the signed-in editor, or 0. Every route that calls it is behind
+// the mod gate, so 0 means the host wired no auth rather than "anonymous".
+func (h *Handlers) editorID(c *gin.Context) int {
+	if u, ok := h.auth.CurrentUser(c); ok && u != nil {
+		return int(u.ID)
+	}
+	return 0
 }
 
 var (
@@ -228,7 +251,20 @@ func topicInputFrom(c *gin.Context) TopicInput {
 }
 
 func (h *Handlers) CreateTopic(c *gin.Context) {
-	_, _ = h.store.CreateTopic(c.Request.Context(), topicInputFrom(c))
+	// All three write handlers here discarded their error until the events
+	// went in. That is worse than untidy: a failed save redirected to the
+	// index looking exactly like a successful one, so the editor's only clue
+	// that their page had not been written was noticing it missing. Emitting
+	// after a discarded error compounds it — the announcement claims a page
+	// that does not exist, and a subscriber counts it.
+	ctx := c.Request.Context()
+	t, err := h.store.CreateTopic(ctx, topicInputFrom(c))
+	if err != nil {
+		h.report(ctx, "wiki/create-topic", err)
+		c.Redirect(http.StatusFound, "/admin/wiki?err=1")
+		return
+	}
+	h.emit(ctx, EventTopicCreated, h.editorID(c), TopicCreated{TopicID: t.ID, Title: t.Name, Slug: t.Slug})
 	c.Redirect(http.StatusFound, "/admin/wiki")
 }
 
@@ -294,11 +330,16 @@ func (h *Handlers) CreatePost(c *gin.Context) {
 	title := c.PostForm("title")
 	content := c.PostForm("content")
 	slug := makeSlug(title)
-	createdBy := 0
-	if u, ok := h.auth.CurrentUser(c); ok {
-		createdBy = int(u.ID)
+	createdBy := h.editorID(c)
+	ctx := c.Request.Context()
+	post, err := h.store.CreatePost(ctx, topicID, title, slug, content, createdBy)
+	if err != nil {
+		h.report(ctx, "wiki/create-post", err)
+		c.Redirect(http.StatusFound, "/admin/wiki?err=1")
+		return
 	}
-	_, _ = h.store.CreatePost(c.Request.Context(), topicID, title, slug, content, createdBy)
+	h.emit(ctx, EventPostCreated, createdBy,
+		PostCreated{PostID: post.ID, TopicID: topicID, Title: title, Slug: slug})
 	c.Redirect(http.StatusFound, "/admin/wiki")
 }
 
@@ -330,7 +371,13 @@ func (h *Handlers) UpdatePost(c *gin.Context) {
 	title := c.PostForm("title")
 	content := c.PostForm("content")
 	slug := makeSlug(title)
-	_ = h.store.UpdatePost(c.Request.Context(), id, title, slug, content)
+	ctx := c.Request.Context()
+	if err := h.store.UpdatePost(ctx, id, title, slug, content); err != nil {
+		h.report(ctx, "wiki/update-post", err)
+		c.Redirect(http.StatusFound, "/admin/wiki?err=1")
+		return
+	}
+	h.emit(ctx, EventPostUpdated, h.editorID(c), PostUpdated{PostID: id, Title: title, Slug: slug})
 	c.Redirect(http.StatusFound, "/admin/wiki")
 }
 

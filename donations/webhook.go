@@ -209,6 +209,13 @@ func (h *Handlers) BTCPayWebhook(c *gin.Context) {
 
 	log.Printf("btcpay-webhook: recorded donation $%.2f (%s) invoice=%s user=%v",
 		d.AmountUSD, d.Asset, p.InvoiceID, d.DonorUserID)
+	// After the row commits, and NOT in the dedup branch above: a redelivery
+	// that finds the donation already recorded must not announce it a second
+	// time.
+	h.emit(ctx, EventDonationReceived, DonationReceived{
+		DonationID: d.ID, DonorUserID: d.DonorUserID, AmountUSD: d.AmountUSD,
+		Asset: d.Asset, PackageID: d.PackageID,
+	})
 	c.JSON(http.StatusOK, gin.H{"ok": true, "donation_id": d.ID})
 }
 

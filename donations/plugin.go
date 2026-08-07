@@ -61,8 +61,10 @@ func SetDeps(d Deps) { deps = &d }
 type Handlers struct {
 	deps  Deps
 	store Store
-	auth  core.AuthService
-	errs  core.ErrorReporter
+	// core is the mediator, for announcing settled donations. Nil in tests.
+	core *core.Core
+	auth core.AuthService
+	errs core.ErrorReporter
 }
 
 type Plugin struct {
@@ -90,6 +92,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return fmt.Errorf("donations: Core.Storage.DB() is nil")
 	}
 	p.handlers = &Handlers{deps: *deps, store: NewPGStore(db), auth: c.Auth, errs: c.Errors}
+	p.handlers.WithCore(c)
+	if err := declareEvents(c); err != nil {
+		return err
+	}
 
 	engine := c.Router.Engine()
 	if engine == nil {
