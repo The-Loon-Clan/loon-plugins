@@ -252,6 +252,16 @@ carries the same rule as a `CHECK ((completed_at IS NULL) = (grant_id IS
 NULL))`, so a future writer that sets one without the other is rejected rather
 than merely wrong.
 
+**Creating an achievement BACKFILLS it.** One scored on a counter is awarded
+retroactively to everyone who already meets the threshold, on the next job
+tick, and each of them is notified. That is the point of an absolute counter —
+"100 posts" should recognise people who already wrote a hundred — but it means
+creating a row is an action with an immediate, member-visible blast radius.
+Count the qualifying set before creating it; there is no way to suppress the
+backfill's notifications yet. On 2026-08-07 a threshold-1 achievement awarded
+23 members and sent 23 notifications within seconds of the INSERT. See
+`docs/ACHIEVEMENTS.md` in the ameNZB repo.
+
 **Metrics** are host-registered under `rewards.metrics.<name>`, the same shape
 as `rewards.units.<slug>`, and a metric with no source is **inert** rather than
 a boot error — the configuration check reports it instead, so a half-deployed
