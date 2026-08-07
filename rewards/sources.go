@@ -3,6 +3,8 @@ package rewards
 import (
 	"context"
 	"fmt"
+
+	"github.com/the-loon-clan/loon/core"
 	"strings"
 )
 
@@ -326,3 +328,46 @@ func (s *PGStore) SeedSources(ctx context.Context, cat SourceCatalog) error {
 // and nothing reports it.
 type unitSourceDoc struct{}
 type metricSourceDoc struct{}
+
+// docExtension is one documented convention: the definition and the
+// placeholder value registered under it.
+type docExtension struct {
+	def   core.ExtensionDef
+	value any
+}
+
+// docExtensions is the single source of truth for the callback conventions
+// this plugin publishes to the extension directory.
+//
+// A function rather than inline in Provision so a TEST can read the names
+// Provision will actually register. The first attempt at that test computed
+// the expected names itself, which meant it asserted a property of a string in
+// the test file and would have passed while production burned — a mutation
+// proved it. This is the shape that makes the test real.
+//
+// The names deliberately stop BEFORE the dot. Provision scans the registry
+// with HasPrefix(name, "rewards.units.") and type-asserts what it finds, so a
+// placeholder inside that namespace matches the scan, fails the assertion and
+// takes Boot down. It did, on 2026-08-07. "rewards.units" cannot match
+// "rewards.units." — that is the whole trick, and it is why these look
+// truncated.
+func docExtensions() []docExtension {
+	return []docExtension{
+		{core.ExtensionDef{
+			Name:    strings.TrimSuffix(UnitSourcePrefix, "."),
+			Summary: "HOST SUPPLIES, one per reward slug as rewards.units.<slug>: the current counter value per member for a per_unit reward",
+			Kind:    core.ExtCallback, Stable: true,
+		}, unitSourceDoc{}},
+		{core.ExtensionDef{
+			Name:    strings.TrimSuffix(MetricSourcePrefix, "."),
+			Summary: "HOST SUPPLIES, one per metric as rewards.metrics.<metric>: the current counter value per member for scoring achievements",
+			Kind:    core.ExtCallback,
+		}, metricSourceDoc{}},
+	}
+}
+
+// scannedPrefixes are the namespaces Provision walks and type-asserts. Nothing
+// this plugin registers may land inside one.
+func scannedPrefixes() []string {
+	return []string{UnitSourcePrefix, MetricSourcePrefix}
+}
