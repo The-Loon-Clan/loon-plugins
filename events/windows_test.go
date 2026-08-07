@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -230,5 +231,51 @@ func TestNextStartLooksPastTheHorizon(t *testing.T) {
 	off := pluginapi.ScheduledEvent{Slug: "off", Cron: "0 0 * * *", Enabled: false}
 	if next, _ := NextStart(off, at("2026-08-07T00:00:00Z")); !next.IsZero() {
 		t.Errorf("a disabled event reports next=%s, want never", next)
+	}
+}
+
+// The occurrence key is what other plugins store, so its properties matter more
+// than its format: stable for one occurrence, different between occurrences, and
+// derived from the slug rather than from a row id.
+//
+// The operator rejected a bare timestamp for exactly this reason — an identifier
+// several systems share should carry the name, so a row in some other plugin's
+// table says WHICH event it belongs to without a join.
+func TestOccurrenceKeyIsSlugQualifiedAndStable(t *testing.T) {
+	ev := pluginapi.ScheduledEvent{Slug: "summer-2026", Cron: "0 0 1 * *", Enabled: true, Timezone: "UTC"}
+	ws, err := GenerateWindows(ev, at("2026-06-01T00:00:00Z"), at("2026-09-02T00:00:00Z"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ws) < 2 {
+		t.Fatalf("got %d windows, want at least 2 to compare occurrences", len(ws))
+	}
+
+	// Carries the name, so a stored key is self-describing.
+	if !strings.HasPrefix(ws[0].Key(), "summer-2026@") {
+		t.Errorf("key %q does not name its event", ws[0].Key())
+	}
+	// Distinct per occurrence — the property a recurring payout depends on. Keyed
+	// on the event alone it would pay once ever.
+	if ws[0].Key() == ws[1].Key() {
+		t.Errorf("two occurrences share the key %q", ws[0].Key())
+	}
+	// Stable: regenerating the same range must reproduce the same keys, or a
+	// consumer's stored reference stops matching and pays again.
+	again, err := GenerateWindows(ev, at("2026-06-01T00:00:00Z"), at("2026-09-02T00:00:00Z"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range ws {
+		if ws[i].Key() != again[i].Key() {
+			t.Fatalf("regeneration changed key %d: %q became %q", i, ws[i].Key(), again[i].Key())
+		}
+	}
+	// Timezone-independent: the same instant in a different zone is the same
+	// occurrence, so the key must not shift with the operator's zone.
+	tokyo := pluginapi.EventWindow{Slug: "x", Starts: at("2026-08-01T00:00:00Z").In(time.FixedZone("JST", 9*3600))}
+	utc := pluginapi.EventWindow{Slug: "x", Starts: at("2026-08-01T00:00:00Z")}
+	if tokyo.Key() != utc.Key() {
+		t.Errorf("the same instant keyed two ways: %q vs %q", tokyo.Key(), utc.Key())
 	}
 }

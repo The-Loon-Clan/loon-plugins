@@ -36,7 +36,7 @@ router.
 Schema `events`, migration `001_init.sql`:
 
 - **`events`** — the definitions: `slug`, `name`, `description`, `cron`,
-  `duration`, `starts_at`, `timezone`, `enabled`.
+  `duration_seconds`, `starts_at`, `timezone`, `enabled`.
 - **`event_windows`** — materialised occurrences: `event_id`, `starts_at`,
   `ends_at`, with `UNIQUE (event_id, starts_at)` and an index on
   `(event_id, starts_at DESC, ends_at)`.
@@ -56,6 +56,16 @@ and it is what an operator picks from a dropdown.
 
 The last two are the same rule: with no cron there is no next firing, so "runs
 until the next firing" means forever.
+
+`duration_seconds` is a plain **INTEGER**, not an `INTERVAL` (migration `002`).
+INTERVAL came across with the lift and never paid for itself: lib/pq cannot scan
+it into a `time.Duration`, so every read went through `EXTRACT(EPOCH FROM …)` and
+every write built a `"%d seconds"` string for Postgres to re-parse — two grammars
+to move one number. It also removes a real trap, because `'1 month'` is a legal
+interval and is *not* a fixed length of time, so `start.Add(duration)` in Go
+could disagree with what Postgres would have computed. NULL still means "no
+duration"; zero would be a window of no length, which is a different and useless
+thing, so the column stays nullable and a positive-value CHECK rejects the rest.
 
 A never-closing window is stored with `ends_at` at the far future
 (`PerpetualEnd`), **not** as NULL. Every "is this open" query is then one range
@@ -94,6 +104,22 @@ across a plugin boundary. `OpenWindows` exists alongside it for callers that mus
 record *which occurrence* they acted on — a recurring payout keyed on "the event
 is open" would pay once ever, where one keyed on the window pays once per
 occurrence.
+
+### Identifying one occurrence
+
+`EventWindow.Key()` is `"<slug>@<start in RFC3339 UTC>"` — e.g.
+`summer-2026@2026-08-01T00:00:00Z`. This is **the** cross-system identifier for
+"this event, this time round": rewards needs one so a recurring payout pays once
+per occurrence rather than once ever, news needs one to say which run a post
+belongs to, a leaderboard needs one to scope a season.
+
+Derived from the slug, never from a row id. An id is private to this schema, so a
+consumer holding one is coupled to this table — and the id changes if the table is
+rebuilt or restored from another host's dump, silently detaching every consumer.
+The slug and the start do not change, because they are what the operator
+configured. It is readable for the same reason it exists: the value lands in other
+plugins' rows, so somebody will read it in psql while working out why a member was
+or was not paid.
 
 `NextOpen` answers from the **definition**, not the window table: the table only
 reaches to the generation horizon, so reading "next" from it would report "never"

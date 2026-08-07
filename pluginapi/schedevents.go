@@ -77,6 +77,28 @@ func (w EventWindow) Contains(t time.Time) bool {
 	return !t.Before(w.Starts) && t.Before(w.Ends)
 }
 
+// Key names this occurrence: "<slug>@<start in RFC3339 UTC>".
+//
+// THE cross-system identifier for "this event, this time round". Rewards needs
+// one so a recurring payout pays once per occurrence rather than once ever; news
+// needs one to say which run of an event a post belongs to; a leaderboard needs
+// one to scope a season's standings. One string all of them can hold.
+//
+// Derived rather than stored, and derived from the SLUG rather than from a row
+// id, which is the whole point. A window id is private to the events schema, so
+// a consumer holding one is coupled to this plugin's table — and the id changes
+// if the table is ever rebuilt or restored from another host's dump, silently
+// detaching every consumer. The slug and the start do not change, because they
+// are what the operator configured.
+//
+// Readable on purpose. This value ends up in other plugins' rows, so it will be
+// read in a psql session by somebody debugging why a member was or was not paid,
+// and "summer-2026@2026-08-01T00:00:00Z" answers that where an opaque integer
+// starts another query.
+func (w EventWindow) Key() string {
+	return w.Slug + "@" + w.Starts.UTC().Format(time.RFC3339)
+}
+
 // Perpetual reports whether this window never closes. A never-closing window is
 // stored with Ends at the far future rather than as a NULL, so every query can
 // use one range comparison and no caller needs a special case.

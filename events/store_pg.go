@@ -46,21 +46,26 @@ func (s *PGStore) exec(ctx context.Context, q string, args ...any) (int64, error
 	return n, err
 }
 
-// eventCols reads INTERVAL as seconds. lib/pq cannot scan INTERVAL into a
-// time.Duration, and the alternative — a string parsed in Go — reproduces
-// Postgres's interval grammar badly. Same reason rewards did it this way.
+// duration_seconds is a plain INTEGER, read and written as one. It was an
+// INTERVAL when this came across from rewards, which cost a round trip through
+// two grammars to move a single number — EXTRACT(EPOCH FROM …) on the way out
+// and a "%d seconds" string for Postgres to re-parse on the way in.
+//
+// NULL means no duration, which is not zero: contiguous for a recurring event,
+// never closing for a one-off. A zero-length window is a different (and useless)
+// thing, which is why the column stays nullable.
 const eventCols = `slug, name, description, coalesce(cron,'') AS cron,
-	EXTRACT(EPOCH FROM duration) AS duration_secs, starts_at, timezone, enabled`
+	duration_seconds, starts_at, timezone, enabled`
 
 type eventRow struct {
-	Slug         string     `db:"slug"`
-	Name         string     `db:"name"`
-	Description  string     `db:"description"`
-	Cron         string     `db:"cron"`
-	DurationSecs *float64   `db:"duration_secs"`
-	StartsAt     *time.Time `db:"starts_at"`
-	Timezone     string     `db:"timezone"`
-	Enabled      bool       `db:"enabled"`
+	Slug            string     `db:"slug"`
+	Name            string     `db:"name"`
+	Description     string     `db:"description"`
+	Cron            string     `db:"cron"`
+	DurationSeconds *int64     `db:"duration_seconds"`
+	StartsAt        *time.Time `db:"starts_at"`
+	Timezone        string     `db:"timezone"`
+	Enabled         bool       `db:"enabled"`
 }
 
 func (r eventRow) toEvent() pluginapi.ScheduledEvent {
@@ -68,8 +73,8 @@ func (r eventRow) toEvent() pluginapi.ScheduledEvent {
 		Slug: r.Slug, Name: r.Name, Description: r.Description,
 		Cron: r.Cron, StartsAt: r.StartsAt, Timezone: r.Timezone, Enabled: r.Enabled,
 	}
-	if r.DurationSecs != nil {
-		ev.Duration = time.Duration(*r.DurationSecs) * time.Second
+	if r.DurationSeconds != nil {
+		ev.Duration = time.Duration(*r.DurationSeconds) * time.Second
 	}
 	return ev
 }
@@ -105,20 +110,18 @@ func (s *PGStore) UpsertEvent(ctx context.Context, ev pluginapi.ScheduledEvent) 
 	}
 	var dur any
 	if ev.Duration > 0 {
-		// Seconds as an interval, so the value round-trips through eventCols
-		// unchanged rather than through Postgres's interval text grammar.
-		dur = fmt.Sprintf("%d seconds", int64(ev.Duration/time.Second))
+		dur = int64(ev.Duration / time.Second)
 	}
 	tz := ev.Timezone
 	if tz == "" {
 		tz = "UTC"
 	}
 	_, err := s.exec(ctx, `
-		INSERT INTO events (slug, name, description, cron, duration, starts_at, timezone, enabled)
-		VALUES ($1, $2, $3, $4, $5::interval, $6, $7, $8)
+		INSERT INTO events (slug, name, description, cron, duration_seconds, starts_at, timezone, enabled)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (slug) DO UPDATE SET
 			name = EXCLUDED.name, description = EXCLUDED.description,
-			cron = EXCLUDED.cron, duration = EXCLUDED.duration,
+			cron = EXCLUDED.cron, duration_seconds = EXCLUDED.duration_seconds,
 			starts_at = EXCLUDED.starts_at, timezone = EXCLUDED.timezone,
 			enabled = EXCLUDED.enabled`,
 		ev.Slug, ev.Name, ev.Description, cron, dur, ev.StartsAt, tz, ev.Enabled)
