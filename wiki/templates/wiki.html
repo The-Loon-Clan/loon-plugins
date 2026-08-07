@@ -40,7 +40,7 @@
                banner art and the 38px icon tiles don't crowd the
                text. */
             .wiki-hero { padding: 1rem 0.95rem; }
-            .wiki-hero h1 { font-size: 1.35rem; }
+            .wiki-hero h2 { font-size: 1.35rem; }
             .wiki-hero-body { max-width: 100%; }
             .wiki-cat-grid { grid-template-columns: minmax(0, 1fr); }
             .wiki-cat-card { min-height: 0; }
@@ -177,7 +177,7 @@
             position: relative;
             overflow: hidden;
         }
-        .wiki-contribute-card h4 { font-size: 0.95rem; margin: 0 0 0.35rem; color: var(--text-primary); font-weight: 700; }
+        .wiki-contribute-card h2 { font-size: 0.95rem; margin: 0 0 0.35rem; color: var(--text-primary); font-weight: 700; }
         .wiki-contribute-card p { font-size: 0.78rem; color: var(--text-muted); margin: 0 0 0.85rem; line-height: 1.45; }
         /* Multi-stop blue → purple gradient — matches the right-rail
            "Visit the Forums" CTA so the two primary buttons feel
@@ -271,7 +271,7 @@
             }
         }
         .wiki-hero-body { max-width: 42%; z-index: 1; }
-        .wiki-hero h1 {
+        .wiki-hero h2 {
             font-size: 2.1rem;
             font-weight: 800;
             color: #fff;
@@ -291,7 +291,7 @@
         @media (max-width: 700px) {
             .wiki-hero { min-height: 0; padding: 1.1rem 1.1rem; }
             .wiki-hero-body { max-width: 80%; }
-            .wiki-hero h1 { font-size: 1.55rem; }
+            .wiki-hero h2 { font-size: 1.55rem; }
         }
 
         /* ── Section headings ─────────────────────────────────────── */
@@ -597,7 +597,8 @@
 
                     <div class="wiki-search">
                         <span class="ws-icon">&#128269;</span>
-                        <input id="wiki-search-input" type="text" placeholder="Search the wiki..." autocomplete="off">
+                        <input id="wiki-search-input" type="text" placeholder="Search the wiki..."
+                               aria-label="Search the wiki" autocomplete="off">
                         <kbd class="ws-kbd">&#8984;K</kbd>
                     </div>
 
@@ -626,7 +627,7 @@
                 </div>
 
                 <div class="wiki-card wiki-contribute-card">
-                    <h4>Help Improve the Wiki!</h4>
+                    <h2>Help Improve the Wiki!</h2>
                     <p>Anyone can contribute! Edit pages, fix info, and help the community grow.</p>
                     <a class="btn-contribute" href="/community/forums">Learn How to Contribute</a>
                     <img class="contribute-mascot" src="/static/site/amebook-320.png" alt="">
@@ -642,7 +643,7 @@
                      so the title gets the full row. */}}
                 <div class="wiki-hero">
                     <div class="wiki-hero-body">
-                        <h1>ameNZB Wiki</h1>
+                        <h2>ameNZB Wiki</h2>
                         <p>Your go-to resource for everything about ameNZB, Usenet, tools, guides, and more.</p>
                     </div>
                 </div>

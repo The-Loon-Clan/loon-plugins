@@ -15,16 +15,16 @@
             <div class="card-body">
                 <form method="POST" action="/support">
                     <div class="mb-3">
-                        <label class="form-label">Subject</label>
-                        <input type="text" name="subject" class="form-control" maxlength="200" required placeholder="Brief summary of your issue">
+                        <label class="form-label" for="ticket-subject">Subject</label>
+                        <input type="text" name="subject" id="ticket-subject" class="form-control" maxlength="200" required placeholder="Brief summary of your issue">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Description</label>
                         {{.EditorHTML}}
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Priority</label>
-                        <select name="priority" class="form-select" style="width:160px;">
+                        <label class="form-label" for="ticket-priority">Priority</label>
+                        <select name="priority" id="ticket-priority" class="form-select" style="width:160px;">
                             <option value="low">Low</option>
                             <option value="normal" selected>Normal</option>
                             <option value="high">High</option>

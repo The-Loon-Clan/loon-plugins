@@ -259,7 +259,8 @@
             {{/* ── Left pane: combined conversation list ── */}}
             <aside class="ib-list-card">
                 <div class="ib-list-search">
-                    <input type="text" id="ib-search" placeholder="Search messages…" autocomplete="off">
+                    <input type="text" id="ib-search" placeholder="Search messages…"
+                           aria-label="Search messages" autocomplete="off">
                 </div>
                 <div class="ib-list-summary">
                     <span>{{len .Items}} conversation{{if ne (len .Items) 1}}s{{end}}</span>
