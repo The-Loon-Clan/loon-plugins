@@ -248,9 +248,8 @@ func TestParVolumeNamedForItsArchivePartSharesTheBase(t *testing.T) {
 }
 
 // The scoping is the risky half, so it is asserted directly: a title whose own
-// last token looks like an archive marker must survive when it is NOT a par
-// file. Stripping it unscoped would merge two halves of a film into one base —
-// the opposite mistake, and a quieter one.
+// last token looks like an archive marker must survive. Stripping it merges two
+// halves of a film into one base — the opposite mistake, and a quieter one.
 func TestPartSuffixIsNotStrippedFromNonParSubjects(t *testing.T) {
 	for _, tc := range []struct{ subject, want string }{
 		{`"Nymphomaniac.2013.Part2.1080p.BluRay" yEnc (1/40)`, "Nymphomaniac.2013.Part2.1080p.BluRay"},
@@ -260,5 +259,77 @@ func TestPartSuffixIsNotStrippedFromNonParSubjects(t *testing.T) {
 		if got, _, _, _, _, _, _ := parseSubject(tc.subject); got != tc.want {
 			t.Errorf("parseSubject(%s)\n  base = %q\n  want = %q", tc.subject, got, tc.want)
 		}
+	}
+}
+
+// The other half of that argument, and the one the first version of this fix
+// got wrong: a par file must land on its PAYLOAD's base, which is not always
+// the payload's base with ".partNN" removed.
+//
+// Both groups below used to group correctly and were split by a rule that took
+// a trailing ".partNN" off any base derived from a subject mentioning ".par2".
+// Each pair is asserted as a pair — payload and recovery deriving one base —
+// because that, not the spelling of either base, is what decides whether the
+// release assembles.
+func TestParLandsOnItsPayloadBaseWhicheverEndsInPartNN(t *testing.T) {
+	for _, group := range []struct {
+		name     string
+		want     string
+		subjects []string
+	}{
+		{
+			// par2cmdline and QuickPar name recovery files after the full data
+			// filename, extension included. The ".part01" is the PAYLOAD's, so
+			// it stays on both sides rather than coming off one.
+			name: "recovery named for a .partNN media payload",
+			want: "Some.Release.Name.part01",
+			subjects: []string{
+				`"Some.Release.Name.part01.mkv" yEnc (1/40)`,
+				`"Some.Release.Name.part01.mkv.par2" yEnc (1/1)`,
+				`"Some.Release.Name.part01.mkv.vol000+001.par2" yEnc (1/2)`,
+			},
+		},
+		{
+			// A real two-part release. Its ".Part2" is a title token, and the
+			// recovery set of Part2 must not collapse onto Part1's base.
+			name: "release whose own last token is PartN",
+			want: "Some.Documentary.Part2",
+			subjects: []string{
+				`"Some.Documentary.Part2.mkv" yEnc (1/40)`,
+				`"Some.Documentary.Part2.par2" yEnc (1/1)`,
+				`"Some.Documentary.Part2.vol000+001.par2" yEnc (1/2)`,
+			},
+		},
+		{
+			// The same title in the multi-file form, where a disagreement is
+			// not merely cosmetic: completeness needs j distinct file numbers
+			// under ONE base, so a par on its own base means the set never
+			// completes, never assembles, and expires from staging unlogged.
+			name: "multi-file form of the same",
+			want: "Some.Documentary.Part2",
+			subjects: []string{
+				`Some.Documentary.Part2 [01/10] - "video.mkv" yEnc (1/40)`,
+				`Some.Documentary.Part2 [10/10] - "video.par2" yEnc (1/1)`,
+			},
+		},
+	} {
+		for _, subject := range group.subjects {
+			if got, _, _, _, _, _, _ := parseSubject(subject); got != group.want {
+				t.Errorf("%s\n  parseSubject(%s)\n  base = %q\n  want = %q",
+					group.name, subject, got, group.want)
+			}
+		}
+	}
+}
+
+// Part1 and Part2 of the same release must NOT share a base. Stated separately
+// from the pairing test above because it is a different failure: not a release
+// that fails to assemble, but two releases merged into one, with half the
+// recovery data attributed to the wrong film.
+func TestTwoHalvesOfAReleaseKeepSeparateBases(t *testing.T) {
+	one, _, _, _, _, _, _ := parseSubject(`"Some.Documentary.Part1.par2" yEnc (1/1)`)
+	two, _, _, _, _, _, _ := parseSubject(`"Some.Documentary.Part2.par2" yEnc (1/1)`)
+	if one == two {
+		t.Errorf("Part1 and Part2 recovery sets share base %q — two releases merged into one", one)
 	}
 }
