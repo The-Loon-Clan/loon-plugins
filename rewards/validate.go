@@ -94,6 +94,7 @@ func (p *Plugin) Validate(ctx context.Context) ([]Finding, error) {
 		rewardsByID[r.ID] = r
 	}
 	out = append(out, validateAchievements(achievements, rewardsByID, p.metricNames())...)
+	out = append(out, validateCatalogue(p.Catalogue(), rewards, achievements, p.metricNames())...)
 
 	if stale > 0 {
 		out = append(out, Finding{
@@ -336,6 +337,97 @@ func validateAchievements(defs []AchievementDef, rewards map[int64]Reward, metri
 				Subject:  "achievement " + d.Slug,
 				Problem:  fmt.Sprintf("scored by metric %q, which no source is registered for — progress will never move", d.Metric),
 				Fix:      "register a MetricSource under " + MetricSourcePrefix + d.Metric + ", or retire the achievement",
+			})
+		}
+	}
+	return out
+}
+
+// validateCatalogue cross-checks the declared vocabulary against what is
+// actually configured and actually registered.
+//
+// Three ways a catalogue and a configuration drift apart, all of them silent:
+// a reward or achievement pointing at a key the catalogue does not contain
+// (usually a rename, and the row simply stops working); a source that says it
+// Counts but has no MetricSource behind it, so every achievement on it sits at
+// zero forever; and a catalogue that is empty, which is not an error but is
+// worth saying, because it means every picker is still free text.
+func validateCatalogue(cat SourceCatalog, rewards []Reward, achievements []AchievementDef, metrics map[string]bool) []Finding {
+	if len(cat) == 0 {
+		if len(rewards) == 0 && len(achievements) == 0 {
+			return nil // nothing configured yet; nothing to say
+		}
+		return []Finding{{
+			Severity: SeverityInfo,
+			Subject:  "catalogue",
+			Problem:  "no source catalogue is registered, so the trigger and metric pickers are free text",
+			Fix:      "register a rewards.SourceCatalog under " + SourceCatalogExtension + " (see StockSources)",
+		}}
+	}
+
+	known := map[string]SourceDef{}
+	for _, d := range cat {
+		known[d.Key] = d
+	}
+
+	var out []Finding
+	for _, r := range rewards {
+		if !r.Enabled || r.Trigger == "" {
+			continue
+		}
+		d, ok := known[r.Trigger]
+		if !ok {
+			out = append(out, Finding{
+				Severity: SeverityError,
+				Subject:  "reward " + r.Slug,
+				Problem:  fmt.Sprintf("fires on %q, which the catalogue does not declare — nothing will ever fire it", r.Trigger),
+				Fix:      "pick a declared trigger, or add it to the catalogue",
+			})
+			continue
+		}
+		if !d.Fires {
+			out = append(out, Finding{
+				Severity: SeverityError,
+				Subject:  "reward " + r.Slug,
+				Problem:  fmt.Sprintf("fires on %q, which is a counter rather than an event", d.Key),
+				Fix:      "pick a source that fires, or make this a per_unit reward scored by the counter",
+			})
+		}
+	}
+
+	for _, a := range achievements {
+		if !a.Enabled || a.Metric == "" {
+			continue
+		}
+		d, ok := known[a.Metric]
+		if !ok {
+			out = append(out, Finding{
+				Severity: SeverityError,
+				Subject:  "achievement " + a.Slug,
+				Problem:  fmt.Sprintf("scored by %q, which the catalogue does not declare", a.Metric),
+				Fix:      "pick a declared metric, or add it to the catalogue",
+			})
+			continue
+		}
+		if !d.Counts {
+			out = append(out, Finding{
+				Severity: SeverityError,
+				Subject:  "achievement " + a.Slug,
+				Problem:  fmt.Sprintf("scored by %q, which is an event rather than a counter — a threshold needs something to count", d.Key),
+				Fix:      "pick a source that counts",
+			})
+		}
+	}
+
+	// A declared counter with nothing behind it. Warn rather than error: this
+	// is what a half-deployed host looks like during a rollout.
+	for _, d := range cat {
+		if d.Counts && !metrics[d.Key] {
+			out = append(out, Finding{
+				Severity: SeverityWarn,
+				Subject:  "source " + d.Key,
+				Problem:  "is declared as a counter but no MetricSource is registered, so achievements on it stay at zero",
+				Fix:      "register one under " + MetricSourcePrefix + d.Key + ", or clear its Counts flag",
 			})
 		}
 	}

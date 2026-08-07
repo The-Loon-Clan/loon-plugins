@@ -170,6 +170,50 @@ already left the building.
 itself. That is deliberate: a mock that let a double-book through would hide the
 one thing the whole model rests on.
 
+## The catalogue — why the pickers are dropdowns
+
+`rewards.trigger` and `achievements.metric` name what the site does. They used
+to be free text, and the picker was assembled from whatever was **already
+configured** plus a hardcoded `"login"` — a list that is empty exactly when it
+is most needed, setting up the first one. A typo then produced a reward that
+looked perfectly healthy and could never fire, because nothing anywhere knew
+what the valid names were.
+
+So the host declares a `SourceCatalog` once, under `rewards.sources`, and every
+picker reads it:
+
+```go
+c.Register(rewards.SourceCatalogExtension, rewards.StockSources())
+```
+
+Each `SourceDef` carries a stable `Key`, the dropdown `Label`, a `Group` to
+bucket it, and two independent flags:
+
+- **`Fires`** — a surface announces it the moment it happens, so it can be a
+  reward's trigger.
+- **`Counts`** — a running total exists, so it can score an achievement
+  threshold. A counting source must also register a `MetricSource` under
+  `rewards.metrics.<key>`; the configuration check reports one that does not.
+
+They are separate because most things are both and some are only one: a post
+announces itself AND is counted for a lifetime, "days registered" only counts,
+"password changed" only fires. One flag could not say that.
+
+`Unit`/`Units` exist so achievements name themselves — `SuggestName` gives
+**"First post"** at a threshold of one and **"100 posts"** above. A suggestion,
+not a rule: the field stays editable, because "Centurion" beats "100 posts" and
+no generator will think of it. But an empty name field is how a catalogue fills
+up with achievements called `achievement-3`.
+
+`Schedules()` is the same idea for cadence: an operator picks **Hourly** rather
+than typing a cron expression, whose mistakes are silent — a stray field in
+`0 0 * * *` does not fail, it runs at the wrong time.
+
+A host that declares nothing keeps the old derived picker, so an install
+predating the catalogue still works. Keys already in use are always merged into
+the options, so renaming one in the catalogue cannot make an existing reward's
+own trigger vanish from the dropdown that edits it.
+
 ## Achievements
 
 An achievement is a **criterion attached to a reward**. That split is the whole

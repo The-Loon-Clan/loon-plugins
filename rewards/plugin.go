@@ -73,6 +73,11 @@ type Plugin struct {
 	// Snapshotted for the same reason units are: the registry is written
 	// during boot and read on a worker tick.
 	metrics map[string]MetricSource
+
+	// The host's declared catalogue of what this site rewards and counts.
+	// Empty is legal: the pickers fall back to free text, which is what every
+	// install did before the catalogue existed.
+	sources SourceCatalog
 }
 
 var _ core.Plugin = (*Plugin)(nil)
@@ -159,6 +164,25 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// A metric with no source is INERT rather than an error — the validator
 	// reports it, so a half-deployed site says so on the admin page instead of
 	// refusing to boot.
+	// The catalogue the pickers read. Registered as ONE list because it is a
+	// single editorial decision about what this site rewards; assembling it
+	// from fragments makes "what can I pick?" unanswerable without booting.
+	if v, ok := c.Lookup(SourceCatalogExtension); ok {
+		cat, ok := v.(SourceCatalog)
+		if !ok {
+			return fmt.Errorf("rewards: extension %q is %T, want rewards.SourceCatalog", SourceCatalogExtension, v)
+		}
+		for _, d := range cat {
+			if err := d.Valid(); err != nil {
+				// Refuse at boot rather than offer a dropdown row that cannot
+				// work. An operator picking it would configure something that
+				// looks right and never fires.
+				return fmt.Errorf("rewards: source catalogue: %w", err)
+			}
+		}
+		p.sources = cat
+	}
+
 	p.metrics = map[string]MetricSource{}
 	for _, name := range c.ExtensionNames() {
 		if !strings.HasPrefix(name, MetricSourcePrefix) {

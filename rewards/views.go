@@ -160,7 +160,7 @@ func (p *Plugin) renderPage(ctx context.Context, tmpl string, pickedEvent int64,
 	if vm.Grants, err = p.admin.RecentGrants(ctx, 50); err != nil {
 		return "", err
 	}
-	vm.Triggers = knownTriggers(vm.Rewards)
+	vm.Triggers = p.triggerOptions(vm.Rewards)
 	if pickedEvent != 0 {
 		for _, e := range vm.Events {
 			if e.ID == pickedEvent {
@@ -396,14 +396,43 @@ func (p *Plugin) actionTestGrant(gc *gin.Context) (template.HTML, error) {
 	return p.redirect(gc, rewardsPage, fmt.Sprintf("granted+%d+(ref+%d,+%s)", g.ID, g.Reference, g.State), "")
 }
 
-// knownTriggers is the suggestion list for the trigger picker: every surface
-// name already configured, plus the ones a stock host fires.
+// triggerOptions is what the trigger picker offers.
+//
+// The host's DECLARED catalogue when there is one — that is the whole point of
+// declaring it, and it is the only list that can contain a trigger nobody has
+// configured yet. Falling back to the derived list otherwise, because an
+// install that predates the catalogue must keep working; keys already in use
+// are merged in either way, so a rename in the catalogue does not make an
+// existing reward's trigger vanish from the dropdown that edits it.
+func (p *Plugin) triggerOptions(rewards []Reward) []string {
+	declared := p.Catalogue().Triggers().Keys()
+	if len(declared) == 0 {
+		return knownTriggers(rewards)
+	}
+	seen := map[string]bool{}
+	for _, k := range declared {
+		seen[k] = true
+	}
+	for _, r := range rewards {
+		if r.Trigger != "" {
+			seen[r.Trigger] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for t := range seen {
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// knownTriggers is the pre-catalogue fallback: every surface name already
+// configured, plus the ones a stock host fires.
 //
 // Seeded rather than purely derived because the list is empty exactly when it
 // is most needed — configuring the FIRST trigger-driven reward, when there is
-// nothing to derive from. "login" is what the reference host fires
-// (handlers.fireLoginRewards passes it on both login paths); an install that
-// fires something else will see it here as soon as one reward uses it.
+// nothing to derive from. Superseded by the catalogue, kept for hosts that
+// have not declared one.
 func knownTriggers(rewards []Reward) []string {
 	seen := map[string]bool{"login": true}
 	for _, r := range rewards {
