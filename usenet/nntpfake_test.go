@@ -21,6 +21,11 @@ import (
 type fakeNNTP struct {
 	ln     net.Listener
 	silent bool // accept and say nothing: the black-holed-host shape
+	// stallStat greets and answers everything EXCEPT STAT, which it swallows.
+	// That is the shape a provider leaves behind when it has quietly stopped
+	// serving: the socket is open, the session looks alive, and the one
+	// command you care about never comes back.
+	stallStat bool
 
 	mu    sync.Mutex
 	conns []net.Conn
@@ -65,6 +70,11 @@ func (s *fakeNNTP) serve(c net.Conn) {
 		switch strings.ToUpper(strings.Fields(strings.TrimRight(line, "\r\n") + " x")[0]) {
 		case "GROUP":
 			fmt.Fprint(c, "411 No such group\r\n")
+		case "STAT":
+			if s.stallStat {
+				continue // swallow it; the caller's deadline is the only way out
+			}
+			fmt.Fprint(c, "223 0 <x> article exists\r\n")
 		case "QUIT":
 			fmt.Fprint(c, "205 Bye\r\n")
 			_ = c.Close()
@@ -85,6 +95,19 @@ func (s *fakeNNTP) shutdown() {
 		_ = c.Close()
 	}
 	s.conns = nil
+}
+
+// newStallingNNTP greets and serves normally but never answers a STAT.
+func newStallingNNTP(t *testing.T) *fakeNNTP {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	s := &fakeNNTP{ln: ln, stallStat: true}
+	go s.acceptLoop()
+	t.Cleanup(s.shutdown)
+	return s
 }
 
 // asProvider describes the fake as a provider row.

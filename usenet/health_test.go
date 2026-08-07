@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/the-loon-clan/loon/nntp"
 )
@@ -507,4 +508,70 @@ func TestPassYieldTakesARunNotOneBadRelease(t *testing.T) {
 			}
 		}
 	})
+}
+
+// The saving that makes the sweep viable, measured rather than asserted.
+//
+// The sweep borrows the crawler's pool and inherited its OpTimeout, which is
+// sized for a 3000-article OVER. A socket the provider had quietly closed
+// therefore cost a full minute to discover — and up to three times per release
+// before the release was abandoned. A measured production pass spent 19
+// minutes to check ONE release of fifty.
+//
+// A STAT is a single short line. If it has not answered in seconds the
+// connection is dead, and the entire value of learning that is learning it
+// cheaply.
+func TestStatBatchUsesItsOwnDeadlineNotThePoolsOpTimeout(t *testing.T) {
+	s := newStallingNNTP(t)
+	pool := nntp.NewPool(nntp.PoolConfig{
+		Addr: s.ln.Addr().String(), Size: 1,
+		DialTimeout: 2 * time.Second,
+		// Stand in for the crawler's 60s: long enough that falling back to it
+		// is unmistakable in the elapsed time.
+		OpTimeout: 10 * time.Second,
+	})
+	if err := pool.Open(context.Background()); err != nil {
+		t.Fatalf("open pool: %v", err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+
+	p := &Plugin{}
+	const statTimeout = 300 * time.Millisecond
+	start := time.Now()
+	_, err := p.statBatch(context.Background(), pool, []string{"<a@x>"}, statTimeout)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("a STAT that was never answered returned no error")
+	}
+	// Generous ceiling: the point is 300ms-ish versus the pool's 10s, not a
+	// tight bound that would flake on a loaded CI box.
+	if elapsed > 3*time.Second {
+		t.Errorf("statBatch took %v — it fell back to the pool's OpTimeout instead of "+
+			"its own per-STAT deadline, which is what made a sweep spend a minute "+
+			"per dead socket", elapsed)
+	}
+}
+
+// And zero must mean "no deadline of our own", not "expire immediately" — a
+// caller that skipped config defaulting would otherwise fail every STAT.
+func TestStatBatchZeroTimeoutFallsBackToThePool(t *testing.T) {
+	s := newFakeNNTP(t, false)
+	pool := nntp.NewPool(nntp.PoolConfig{
+		Addr: s.ln.Addr().String(), Size: 1,
+		DialTimeout: 2 * time.Second, OpTimeout: 5 * time.Second,
+	})
+	if err := pool.Open(context.Background()); err != nil {
+		t.Fatalf("open pool: %v", err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+
+	p := &Plugin{}
+	res, err := p.statBatch(context.Background(), pool, []string{"<a@x>"}, 0)
+	if err != nil {
+		t.Fatalf("statBatch with no deadline of its own: %v", err)
+	}
+	if len(res) != 1 || res[0] != statPresent {
+		t.Errorf("res = %v, want one statPresent — the server answered 223", res)
+	}
 }

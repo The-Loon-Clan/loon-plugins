@@ -155,6 +155,16 @@ type Config struct {
 	HealthRecheckDays int `json:"health_recheck_days"`  // re-check a release this often (default 30)
 	HealthMinAgeHours int `json:"health_min_age_hours"` // propagation guard: skip releases newer than this (default 24)
 	HealthStatChunk   int `json:"health_stat_chunk"`    // segments STATted per connection lease (default 200)
+	// HealthStatTimeoutSec bounds ONE STAT, as opposed to OpTimeoutSec which
+	// bounds a whole command exchange and is sized for a 3000-article OVER.
+	//
+	// The sweep borrows the crawler's pool and inherited its 60s, so a socket
+	// the provider had already closed cost a full minute to discover — three
+	// times per release before the release was abandoned. A measured pass
+	// spent 19 minutes to check ONE release. A STAT is a single short line:
+	// if it has not answered in seconds the connection is dead, and the whole
+	// value of finding that out is finding it out cheaply.
+	HealthStatTimeoutSec int `json:"health_stat_timeout_sec"` // per-STAT deadline (default 10)
 	// HealthTransportYield: how many releases in a row may fail on TRANSPORT
 	// (the provider timed out mid-STAT) before the pass gives up. Not the same
 	// as the pool being busy, which still yields on the first refusal so the
@@ -314,6 +324,9 @@ func (c *Config) applyDefaults() {
 	if c.HealthTransportYield <= 0 {
 		c.HealthTransportYield = 5
 	}
+	if c.HealthStatTimeoutSec <= 0 {
+		c.HealthStatTimeoutSec = 10
+	}
 	if c.DialTimeoutSec <= 0 {
 		c.DialTimeoutSec = 30
 	}
@@ -406,6 +419,7 @@ func (c *Config) knobFields() map[string]*int {
 		"health_min_age_hours":          &c.HealthMinAgeHours,
 		"health_stat_chunk":             &c.HealthStatChunk,
 		"health_transport_yield":        &c.HealthTransportYield,
+		"health_stat_timeout_sec":       &c.HealthStatTimeoutSec,
 		"backfill_pressure_high_pct":    &c.BackfillPressureHighPct,
 		"crawl_pressure_high_pct":       &c.CrawlPressureHighPct,
 		"backfill_pressure_low_pct":     &c.BackfillPressureLowPct,

@@ -188,7 +188,7 @@ func healthVerdict(missingData, par2Total, par2Missing int) string {
 // responses (including 430) are recorded and the connection kept; a transport
 // failure aborts the chunk and discards the connection, and every id not yet
 // answered stays unknown rather than being assumed missing.
-func (p *Plugin) statBatch(ctx context.Context, pool *nntp.Pool, ids []string) ([]statResult, error) {
+func (p *Plugin) statBatch(ctx context.Context, pool *nntp.Pool, ids []string, statTimeout time.Duration) ([]statResult, error) {
 	out := make([]statResult, len(ids))
 	for i := range out {
 		out[i] = statUnknown
@@ -197,6 +197,17 @@ func (p *Plugin) statBatch(ctx context.Context, pool *nntp.Pool, ids []string) (
 		for i, id := range ids {
 			if ctx.Err() != nil {
 				return nil // keep the connection; the rest stay unknown
+			}
+			// Per STAT, not per lease. The pool applied the crawler's
+			// OpTimeout on the way in — sized for a 3000-article OVER — and a
+			// socket the provider had quietly closed therefore cost a full
+			// minute to discover, three times per release. A STAT is one
+			// short line; the point of the deadline is to learn the
+			// connection is dead cheaply. The pool clears whatever deadline
+			// is set when the lease ends, so this cannot follow the
+			// connection to the crawler's next use.
+			if statTimeout > 0 {
+				_ = c.SetDeadline(time.Now().Add(statTimeout))
 			}
 			_, _, serr := c.Stat(id)
 			out[i] = classifyStat(serr)
@@ -247,7 +258,7 @@ const (
 
 // checkOne STATs an entire release and returns its verdict plus what should be
 // persisted.
-func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, chunk int) (verdict string, totalSegs, missingData, par2Total int, outcome healthOutcome) {
+func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, chunk int, statTimeout time.Duration) (verdict string, totalSegs, missingData, par2Total int, outcome healthOutcome) {
 	segs, err := parseNzbSegments(row.Data)
 	if err != nil {
 		// A blob we can't parse is a storage problem, not evidence about the
@@ -256,7 +267,7 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 		return "", 0, 0, 0, healthSkipPermanent
 	}
 	return checkSegments(ctx, segs, chunk, row.Total, func(ids []string) ([]statResult, error) {
-		return p.statBatch(ctx, pool, ids)
+		return p.statBatch(ctx, pool, ids, statTimeout)
 	})
 }
 
@@ -548,7 +559,8 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 		if ctx.Err() != nil {
 			break
 		}
-		verdict, total, missing, par2, outcome := p.checkOne(ctx, pool, row, cfg.HealthStatChunk)
+		verdict, total, missing, par2, outcome := p.checkOne(ctx, pool, row, cfg.HealthStatChunk,
+			time.Duration(cfg.HealthStatTimeoutSec)*time.Second)
 		switch outcome {
 		case healthWritten:
 			if err := backend.setVerdict(ctx, row.ID, verdict, total, missing, par2); err != nil {

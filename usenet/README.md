@@ -513,6 +513,16 @@ plausible "connection pool busy or failing":
 | we held a connection and the provider failed the read | `healthSkipTransport` | **abandons that release**, tries the next; the pass ends only after `health_transport_yield` of them in a row |
 | the server answered, but too much of the answer was unusable | `healthSkipRow` | abandons that release; it will be exactly as inconclusive next pass, so ending the pass on it starved every other check |
 
+`health_stat_timeout_sec` (default 10) bounds ONE STAT, and is the other half
+of the same problem. The sweep borrows the crawler's pool and inherited its
+`op_timeout_sec` — 60s, sized for a 3000-article OVER. A socket the provider
+had quietly closed therefore cost a full minute to discover, up to three times
+per release, so a measured pass spent **19 minutes to check one release of
+fifty**. A STAT is a single short line; the whole value of learning the
+connection is dead is learning it cheaply. The deadline is set per STAT inside
+the lease, and the pool clears whatever deadline it finds when the lease ends,
+so it cannot follow the connection to the crawler's next use.
+
 The middle row is the fix. It used to be the first: one release timing out
 ended the whole pass, and against a provider that times out routinely the
 FIRST release tripped it on every single pass. `health_transport_yield`
