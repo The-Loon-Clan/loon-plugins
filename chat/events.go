@@ -8,11 +8,22 @@ import (
 
 // What the shoutbox announces.
 //
-// Not countable. The rate limiter allows one message every two seconds, which
-// is forty-three thousand a day, and the plugin stores nothing — the message
-// goes straight to a Discord webhook and is gone from here. So a count would
-// be both farmable and unauditable: there is no row anywhere on this site to
-// check a badge against afterwards.
+// Not countable, though the reason is narrower than it first looks and worth
+// stating precisely, because the obvious version of it is wrong.
+//
+// THIS PLUGIN stores nothing — the message goes straight to a Discord webhook.
+// But on a host with the relay wired, it comes back through the bridge and
+// lands in a chat_messages row, so the messages generally ARE persisted
+// somewhere; they are just not persisted here, and not with a user id.
+//
+// That round trip is the actual hazard. One site message produces both this
+// event and a stored row that arrives labelled as having come from Discord, so
+// anything counting both counts every site message twice. Add the rate limiter
+// (one message per two seconds, forty-three thousand a day) and a count off
+// this event is farmable as well as doubled.
+//
+// The honest counter is a query over those rows once they carry a user id, at
+// which point this event's job is to say "look again" and nothing more.
 //
 // Announced anyway because "is this member active in chat" is a genuine
 // signal, and a one-off reward hung off the first message is a reasonable
@@ -21,10 +32,10 @@ const EventMessageSent = "chat.message.sent"
 
 // MessageSent is the Data payload of EventMessageSent.
 //
-// Length rather than the text. The message has already left for Discord and
-// this plugin keeps no copy; handing the body to arbitrary in-process
-// subscribers would create the first durable record of it, somewhere the
-// author has no idea exists.
+// Length rather than the text. This plugin keeps no copy, and handing the body
+// to arbitrary in-process subscribers would put a durable record of it
+// somewhere nobody chose. The relay's own row is a separate decision, made by
+// the host that wired it, and visible to the people in the channel.
 type MessageSent struct {
 	Length int
 }
