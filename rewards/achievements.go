@@ -10,6 +10,20 @@ import (
 
 // Achievements — the per-user read behind a host's achievements page.
 //
+// PLACEHOLDER. This is a read-only view over the rewards that happen to carry
+// an `achievement` payout, written so a UI pass had something to render. It is
+// deliberately NOT the achievements system: nothing here can award anything,
+// because there is no criterion to satisfy, and there is no progress — "63 of
+// 100 uploads" is most of what an achievements page is for and cannot be said.
+// An admin also cannot define one; they define a reward and hope.
+//
+// The design that replaces it is docs/ACHIEVEMENTS.md in the ameNZB repo:
+// achievements get their own defs with a criterion (metric + threshold) and a
+// reward_id for what they pay, plus a user_achievements table whose completion
+// and whose reward grant are written in ONE transaction. This query survives
+// that change — repointed at the new tables — which is why it is kept rather
+// than deleted.
+//
 // The DATA has always been here: an achievement is a reward carrying a payout
 // of kind 'achievement', and reward_grants already records who was granted
 // what and in which state. What was missing was a way to ASK, so a host could
