@@ -340,5 +340,13 @@ func (p *Plugin) registerAchievements(c *core.Core) error {
 		// A memory store backs the tests; there is no page there to serve.
 		return nil
 	}
-	return c.Register(AchievementsExtension, AchievementsFunc(st.Achievements))
+	return c.RegisterDef(core.ExtensionDef{
+		Name:    AchievementsExtension,
+		Summary: "one member's standing on every achievement: progress, state, earned-at",
+		Kind:    core.ExtService,
+		// Not stable: the trigger path and the job that complete an
+		// achievement are not built, so the states this can return are not
+		// yet the full set. Saying so is kinder than letting a host find out.
+		Stable: false,
+	}, AchievementsFunc(st.Achievements))
 }

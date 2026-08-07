@@ -313,3 +313,16 @@ func (s *PGStore) SeedSources(ctx context.Context, cat SourceCatalog) error {
 	}
 	return nil
 }
+
+// unitSourceDoc and metricSourceDoc exist ONLY to be registered against the
+// two callback conventions, so the extension directory can list them.
+//
+// The real registrations are dynamic — one per reward slug, one per metric —
+// and are made by the HOST, so there is no single value to describe. A
+// placeholder under the pattern name is how a directory built from a flat
+// registry can still say "this shape exists, and you are the one who supplies
+// it". Registering nothing would leave the most easily-missed seam in the
+// plugin invisible: a callback nobody knows to implement simply never fires,
+// and nothing reports it.
+type unitSourceDoc struct{}
+type metricSourceDoc struct{}

@@ -139,6 +139,27 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// per_unit reward is a reward row plus one host registration and no change
 	// here. A source registered for a reward that does not exist is harmless —
 	// GrantUnits looks the reward up and finds nothing.
+	// The two prefixes below are CALLBACKS: the host registers, this plugin
+	// calls. That direction is invisible in a Go type and is exactly what the
+	// directory's Kind column exists to say -- but the names are dynamic
+	// (one per reward slug), so what gets described is the convention rather
+	// than each instance.
+	_ = c.RegisterDef(core.ExtensionDef{
+		Name:    UnitSourcePrefix + "<reward-slug>",
+		Summary: "HOST SUPPLIES: current counter value per member, for a per_unit reward",
+		Kind:    core.ExtCallback, Stable: true,
+	}, unitSourceDoc{})
+	_ = c.RegisterDef(core.ExtensionDef{
+		Name:    MetricSourcePrefix + "<metric>",
+		Summary: "HOST SUPPLIES: current counter value per member, for scoring achievements",
+		Kind:    core.ExtCallback,
+	}, metricSourceDoc{})
+	_ = c.RegisterDef(core.ExtensionDef{
+		Name:    SourceCatalogExtension,
+		Summary: "HOST SUPPLIES: the seed vocabulary for the trigger and metric pickers",
+		Kind:    core.ExtData, Stable: true,
+	}, SourceCatalog{})
+
 	p.units = map[string]UnitSource{}
 	for _, name := range c.ExtensionNames() {
 		if !strings.HasPrefix(name, UnitSourcePrefix) {
@@ -211,11 +232,24 @@ func (p *Plugin) Provision(c *core.Core) error {
 		})
 	}
 
-	// The host's login path calls Fire and Available through this.
-	c.Register(TriggerExtension, p.engine)
-	// ...and the ops API reads and writes configuration through this.
-	c.Register(AdminExtension, p.admin)
-	c.Register(ValidatorExtension, Validator(p))
+	// Described rather than bare, so /admin/plugins can answer "what is this
+	// and am I meant to call it or supply it" without anyone reading this
+	// file. The three below are all services -- the host calls them.
+	_ = c.RegisterDef(core.ExtensionDef{
+		Name:    TriggerExtension,
+		Summary: "fire a surface's rewards for one member, and list what they could earn there",
+		Kind:    core.ExtService, Stable: true,
+	}, p.engine)
+	_ = c.RegisterDef(core.ExtensionDef{
+		Name:    AdminExtension,
+		Summary: "read and write reward configuration; backs the ops API",
+		Kind:    core.ExtService, Stable: true,
+	}, p.admin)
+	_ = c.RegisterDef(core.ExtensionDef{
+		Name:    ValidatorExtension,
+		Summary: "cross-check the whole configuration and report what cannot pay",
+		Kind:    core.ExtService, Stable: true,
+	}, Validator(p))
 	// ...and a host achievements page reads member standing through this.
 	if err := p.registerAchievements(c); err != nil {
 		return err
