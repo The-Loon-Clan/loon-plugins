@@ -267,7 +267,16 @@ func (p *Plugin) Provision(c *core.Core) error {
 // windows would race, and while ON CONFLICT makes that harmless it is pointless
 // contention on a table every login reads.
 func (p *Plugin) Start(ctx context.Context) error {
-	if p.core.Process != "worker" {
+	// "all" counts as the worker, because on a single-process deployment it IS
+	// the worker — there is no other process to run this. Gating on "worker"
+	// alone meant the job never registered there, so achievements never scored,
+	// grants never expired, and windows were never materialised: the whole
+	// maintenance half of this plugin was silently absent on the simplest way
+	// to run it, with the admin page and the claim card working fine.
+	//
+	// Same test the sibling plugins use — usenet/plugin.go and stats/plugin.go
+	// both say `== "worker" || == "all"`.
+	if p.core.Process != "worker" && p.core.Process != "all" {
 		return nil
 	}
 	p.job = schedule.RegisterJob("Reward Windows", "Materialise event windows ahead and expire lapsed grants")
