@@ -70,10 +70,32 @@ type Handlers struct {
 	auth   core.AuthService
 	users  core.UsersService
 	notify core.NotificationsService
+	// core is held only to Emit. Nil in tests that do not care, so every
+	// emit goes through h.emit rather than touching it directly.
+	core *core.Core
 }
 
 func NewHandlers(store Store, auth core.AuthService, users core.UsersService, notify core.NotificationsService) *Handlers {
 	return &Handlers{store: store, auth: auth, users: users, notify: notify}
+}
+
+// WithCore attaches the mediator so this plugin can announce what members do.
+// Separate from the constructor so every existing caller — and every test —
+// keeps compiling and simply emits nothing.
+func (h *Handlers) WithCore(c *core.Core) *Handlers { h.core = c; return h }
+
+// emit announces an event, if there is anywhere to announce it to.
+//
+// ALWAYS called after the write has committed, never before and never inside
+// a transaction that can still roll back: the event says a thing happened, and
+// a subscriber that acted on a post which then vanished has no way to find out.
+func (h *Handlers) emit(c *gin.Context, name string, userID int, subject string, data any) {
+	if h.core == nil {
+		return
+	}
+	h.core.Emit(c.Request.Context(), core.Event{
+		Name: name, UserID: int64(userID), Subject: subject, Data: data,
+	})
 }
 
 // currentUser returns the viewer's id and mod-or-above flag —
@@ -347,6 +369,9 @@ func (h *Handlers) CreateThread(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed to create thread")
 		return
 	}
+	// After the write, not before: the row exists now.
+	h.emit(c, EventThreadCreated, userID, strconv.Itoa(thread.ID),
+		ThreadCreated{CategoryID: catID, ThreadID: thread.ID, Title: title, Type: threadType})
 	c.Redirect(http.StatusFound, "/community/forums/thread/"+strconv.Itoa(thread.ID))
 }
 
@@ -398,6 +423,8 @@ func (h *Handlers) ReplyThread(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed to post reply")
 		return
 	}
+	h.emit(c, EventPostCreated, userID, strconv.FormatInt(post.ID, 10),
+		PostCreated{ThreadID: threadID, PostID: post.ID})
 	// Forum-quote notification: only fires when this reply quoted
 	// another post AND the quoted post still exists. Look up the
 	// quoted post's author so we know who to ping; the self-quote
@@ -465,6 +492,15 @@ func (h *Handlers) ReactPost(c *gin.Context) {
 				ActorID:   int64(userID),
 				ActorName: actorName,
 			})
+			// UserID is the REACTOR, not the author. There are two members in
+			// this event and only one can be the subject; the reactor did the
+			// thing, so a "reacted 100 times" achievement credits them. Put
+			// the author in Data and get it backwards and you build a badge
+			// that rewards the wrong person — and it looks right until
+			// somebody checks whose count went up.
+			h.emit(c, EventPostReacted, userID, strconv.FormatInt(postID, 10),
+				PostReacted{PostID: postID, ThreadID: ctxPost.ThreadID,
+					AuthorID: ctxPost.AuthorID, Emoji: emoji})
 		}
 	}
 	counts, err := h.store.GetForumPostReactionCounts(c.Request.Context(), postID)

@@ -129,7 +129,18 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return fmt.Errorf("forum: Core.Storage.DB() is nil")
 	}
 	store := NewPGStore(db)
-	p.handlers = NewHandlers(store, c.Auth, c.Users, c.Notifications)
+	p.handlers = NewHandlers(store, c.Auth, c.Users, c.Notifications).WithCore(c)
+
+	// Announce what members do here, so plugins that care — achievements,
+	// stats — can listen without the forum knowing they exist. Declared
+	// (rather than only emitted) so they appear in the directory before
+	// anything fires; a subscriber cannot discover an event by waiting for it.
+	//
+	// A duplicate declaration fails Provision on purpose: two plugins both
+	// believing they own "forum.post.created" is a wiring bug, not a warning.
+	if err := declareEvents(c); err != nil {
+		return err
+	}
 
 	engine := c.Router.Engine()
 	if engine == nil {
