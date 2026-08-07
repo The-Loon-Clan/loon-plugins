@@ -75,6 +75,10 @@ func (p *Plugin) Validate(ctx context.Context) ([]Finding, error) {
 	if err != nil {
 		return nil, err
 	}
+	catalogue, err := p.Catalogue(ctx)
+	if err != nil {
+		return nil, err
+	}
 	stale, err := p.admin.CountStalePending(ctx, now)
 	if err != nil {
 		return nil, err
@@ -94,7 +98,7 @@ func (p *Plugin) Validate(ctx context.Context) ([]Finding, error) {
 		rewardsByID[r.ID] = r
 	}
 	out = append(out, validateAchievements(achievements, rewardsByID, p.metricNames())...)
-	out = append(out, validateCatalogue(p.Catalogue(), rewards, achievements, p.metricNames())...)
+	out = append(out, validateCatalogue(catalogue, rewards, achievements, p.metricNames())...)
 
 	if stale > 0 {
 		out = append(out, Finding{

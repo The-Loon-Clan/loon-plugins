@@ -1,8 +1,8 @@
 package rewards
 
 import (
+	"context"
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -86,23 +86,31 @@ func (d SourceDef) SuggestName(threshold int64) string {
 	return fmt.Sprintf("%d %s", threshold, units)
 }
 
-// SourceCatalogExtension is the registry key a host publishes its catalogue
-// under. One registration, not one per entry: the set is a single editorial
-// decision about what this site rewards, and assembling it from fragments
-// makes "what can I pick?" unanswerable without booting.
+// SourceCatalogExtension is the registry key a host publishes its SEED
+// catalogue under.
+//
+// A seed, not the catalogue itself: the catalogue is the reward_sources table,
+// and this is only what gets written into it the first time the plugin boots
+// against an empty one. Code proposes, configuration disposes — after the
+// first boot an operator owns the list, and a host changing its seed will not
+// silently rewrite what they edited.
 const SourceCatalogExtension = "rewards.sources"
 
-// SourceCatalog is what a host registers.
+// SourceCatalog is a set of source definitions.
 type SourceCatalog []SourceDef
 
 // StockSources is the set a general-purpose site is likely to want, offered so
-// a host declares its catalogue by editing a list rather than inventing the
-// vocabulary. It is NOT registered automatically: a site with no forum should
-// not show forum achievements in its dropdowns, and only the host knows.
+// a host seeds its catalogue by editing a list rather than inventing the
+// vocabulary from nothing.
 //
-// A host takes these, drops what it does not have, adds its own, and registers
-// the result. The keys are the contract — changing one orphans every reward
-// and achievement already pointing at it.
+// Seeded ONCE, into an empty table, and then it is configuration: an operator
+// disables what this site does not have and adds what it does, without a
+// deploy. A site with no forum turns the forum rows off; only the operator
+// knows that, and now they can act on it.
+//
+// The keys are the contract — changing one orphans every reward and
+// achievement already pointing at it, which is why the table makes key its
+// primary key rather than something renameable.
 func StockSources() SourceCatalog {
 	return SourceCatalog{
 		{Key: "login", Label: "Logged in", Group: "Account",
@@ -122,29 +130,59 @@ func StockSources() SourceCatalog {
 	}
 }
 
-// Catalogue returns the host's declared sources, sorted for display: by group,
-// then label. Empty when the host declared none, which every picker must
-// tolerate — an install can run without one, it just cannot offer a dropdown.
-func (p *Plugin) Catalogue() SourceCatalog {
-	out := make(SourceCatalog, len(p.sources))
-	copy(out, p.sources)
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Group != out[j].Group {
-			return out[i].Group < out[j].Group
-		}
-		return out[i].Label < out[j].Label
-	})
-	return out
+// Catalogue reads the configured sources, enabled ones only, sorted for
+// display.
+//
+// Read live rather than snapshotted at boot, unlike the metric SOURCES: those
+// are code and cannot change while the process runs, but this is configuration
+// and an edit must take effect on the next page render. It is an admin-page
+// read of a table with a handful of rows, so the cost is not the concern —
+// serving a stale dropdown after someone just fixed it is.
+func (p *Plugin) Catalogue(ctx context.Context) (SourceCatalog, error) {
+	if p.admin == nil {
+		return nil, nil
+	}
+	return p.admin.ListSources(ctx)
 }
 
 // Source looks one up by key.
-func (p *Plugin) Source(key string) (SourceDef, bool) {
-	for _, d := range p.sources {
+func (p *Plugin) Source(ctx context.Context, key string) (SourceDef, bool) {
+	cat, err := p.Catalogue(ctx)
+	if err != nil {
+		return SourceDef{}, false
+	}
+	for _, d := range cat {
 		if d.Key == key {
 			return d, true
 		}
 	}
 	return SourceDef{}, false
+}
+
+// seedSources writes the host's seed catalogue into an EMPTY table, once.
+//
+// Only when empty: a host that changes its seed must not overwrite what an
+// operator edited, and re-seeding on every boot would resurrect rows they
+// deliberately deleted. Returns how many were written so the boot log can say
+// it happened — a silent seed is indistinguishable from a migration that did
+// not run.
+func (p *Plugin) seedSources(ctx context.Context, seed SourceCatalog) (int, error) {
+	if len(seed) == 0 || p.admin == nil {
+		return 0, nil
+	}
+	existing, err := p.admin.CountSources(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if existing > 0 {
+		return 0, nil
+	}
+	for _, d := range seed {
+		if err := d.Valid(); err != nil {
+			return 0, fmt.Errorf("seed catalogue: %w", err)
+		}
+	}
+	return len(seed), p.admin.SeedSources(ctx, seed)
 }
 
 // Triggers is the reward trigger picker's options: everything that fires.
@@ -210,4 +248,68 @@ func Schedule(key string) (ScheduleDef, bool) {
 		}
 	}
 	return ScheduleDef{}, false
+}
+
+// sourceRow is the table's shape. Separate from SourceDef because `group` is a
+// reserved word in SQL and the column is `grp`; letting that spelling leak
+// into the type every caller uses would be the tail wagging the dog.
+type sourceRow struct {
+	Key     string `db:"key"`
+	Label   string `db:"label"`
+	Group   string `db:"grp"`
+	Fires   bool   `db:"fires"`
+	Counts  bool   `db:"counts"`
+	Unit    string `db:"unit"`
+	Units   string `db:"units"`
+	Ordinal int    `db:"ordinal"`
+	Enabled bool   `db:"enabled"`
+	Stock   bool   `db:"stock"`
+}
+
+func (r sourceRow) def() SourceDef {
+	return SourceDef{Key: r.Key, Label: r.Label, Group: r.Group,
+		Fires: r.Fires, Counts: r.Counts, Unit: r.Unit, Units: r.Units}
+}
+
+// ListSources returns the enabled catalogue, ordered the way a dropdown wants
+// it: by group, then the operator's ordinal, then label.
+func (s *PGStore) ListSources(ctx context.Context) (SourceCatalog, error) {
+	var rows []sourceRow
+	if err := s.sel(ctx, &rows, `
+		SELECT key, label, grp, fires, counts, unit, units, ordinal, enabled, stock
+		  FROM reward_sources
+		 WHERE enabled
+		 ORDER BY grp, ordinal, label`); err != nil {
+		return nil, err
+	}
+	out := make(SourceCatalog, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.def())
+	}
+	return out, nil
+}
+
+// CountSources counts every row, enabled or not. The seed asks this, and it
+// must see a disabled row: an operator who turned every stock source off did
+// not ask for them back on the next boot.
+func (s *PGStore) CountSources(ctx context.Context) (int, error) {
+	var n int
+	err := s.get(ctx, &n, `SELECT count(*) FROM reward_sources`)
+	return n, err
+}
+
+// SeedSources writes the initial catalogue. ON CONFLICT DO NOTHING rather than
+// upsert: two workers booting together must not fight over it, and the loser
+// writing nothing is the correct outcome.
+func (s *PGStore) SeedSources(ctx context.Context, cat SourceCatalog) error {
+	for i, d := range cat {
+		if _, err := s.exec(ctx, `
+			INSERT INTO reward_sources (key, label, grp, fires, counts, unit, units, ordinal, stock)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
+			ON CONFLICT (key) DO NOTHING`,
+			d.Key, d.Label, d.Group, d.Fires, d.Counts, d.Unit, d.Units, i); err != nil {
+			return fmt.Errorf("seed source %q: %w", d.Key, err)
+		}
+	}
+	return nil
 }

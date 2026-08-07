@@ -160,7 +160,7 @@ func (p *Plugin) renderPage(ctx context.Context, tmpl string, pickedEvent int64,
 	if vm.Grants, err = p.admin.RecentGrants(ctx, 50); err != nil {
 		return "", err
 	}
-	vm.Triggers = p.triggerOptions(vm.Rewards)
+	vm.Triggers = p.triggerOptions(ctx, vm.Rewards)
 	if pickedEvent != 0 {
 		for _, e := range vm.Events {
 			if e.ID == pickedEvent {
@@ -404,8 +404,14 @@ func (p *Plugin) actionTestGrant(gc *gin.Context) (template.HTML, error) {
 // install that predates the catalogue must keep working; keys already in use
 // are merged in either way, so a rename in the catalogue does not make an
 // existing reward's trigger vanish from the dropdown that edits it.
-func (p *Plugin) triggerOptions(rewards []Reward) []string {
-	declared := p.Catalogue().Triggers().Keys()
+func (p *Plugin) triggerOptions(ctx context.Context, rewards []Reward) []string {
+	cat, err := p.Catalogue(ctx)
+	if err != nil {
+		// A picker is not worth failing a page render for; the derived list
+		// still edits what exists.
+		return knownTriggers(rewards)
+	}
+	declared := cat.Triggers().Keys()
 	if len(declared) == 0 {
 		return knownTriggers(rewards)
 	}

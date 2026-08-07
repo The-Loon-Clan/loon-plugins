@@ -1,6 +1,8 @@
 package rewards
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -117,15 +119,27 @@ func TestStockSourcesAreValid(t *testing.T) {
 	}
 }
 
-// The picker prefers the declaration, and never drops a key already in use —
-// a rename in the catalogue must not make an existing reward's own trigger
-// vanish from the dropdown that edits it.
+// catalogueStub is an AdminStore that answers only the catalogue reads, which
+// is all the picker touches.
+type catalogueStub struct {
+	AdminStore
+	cat SourceCatalog
+	err error
+}
+
+func (c catalogueStub) ListSources(context.Context) (SourceCatalog, error) {
+	return c.cat, c.err
+}
+
+// The picker prefers the configured catalogue, and never drops a key already
+// in use — a rename must not make an existing reward's own trigger vanish from
+// the dropdown that edits it.
 func TestTriggerOptionsPreferTheCatalogue(t *testing.T) {
-	p := &Plugin{sources: SourceCatalog{
+	p := &Plugin{admin: catalogueStub{cat: SourceCatalog{
 		{Key: "posts.created", Label: "Posts", Fires: true, Counts: true, Unit: "post"},
 		{Key: "counter-only", Label: "Counter", Counts: true, Unit: "y"},
-	}}
-	got := p.triggerOptions([]Reward{{Slug: "legacy", Trigger: "old.name"}})
+	}}}
+	got := p.triggerOptions(context.Background(), []Reward{{Slug: "legacy", Trigger: "old.name"}})
 
 	has := func(k string) bool {
 		for _, g := range got {
@@ -136,7 +150,7 @@ func TestTriggerOptionsPreferTheCatalogue(t *testing.T) {
 		return false
 	}
 	if !has("posts.created") {
-		t.Error("a declared trigger is missing from the picker")
+		t.Error("a configured trigger is missing from the picker")
 	}
 	if has("counter-only") {
 		t.Error("a counter-only source was offered as a trigger")
@@ -145,10 +159,16 @@ func TestTriggerOptionsPreferTheCatalogue(t *testing.T) {
 		t.Error("a trigger already in use vanished from the picker that edits it")
 	}
 
-	// With nothing declared, the old derived behaviour stands.
-	empty := &Plugin{}
-	if got := empty.triggerOptions(nil); len(got) == 0 {
+	// An empty catalogue falls back to the derived list, so an install that
+	// predates the table still edits what it has.
+	empty := &Plugin{admin: catalogueStub{}}
+	if got := empty.triggerOptions(context.Background(), nil); len(got) == 0 {
 		t.Error("an install with no catalogue got an empty picker")
+	}
+	// And a database that will not answer must not take the page down with it.
+	broken := &Plugin{admin: catalogueStub{err: errors.New("db down")}}
+	if got := broken.triggerOptions(context.Background(), []Reward{{Trigger: "login"}}); len(got) == 0 {
+		t.Error("a failed catalogue read emptied the picker instead of degrading")
 	}
 }
 

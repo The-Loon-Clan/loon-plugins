@@ -35,6 +35,10 @@ type AdminStore interface {
 	ListEventStats(ctx context.Context, at time.Time) ([]EventStats, error)
 	ListRewards(ctx context.Context) ([]Reward, error)
 	ListAchievementDefs(ctx context.Context) ([]AchievementDef, error)
+	// The source catalogue: configuration, not code. See sources.go.
+	ListSources(ctx context.Context) (SourceCatalog, error)
+	CountSources(ctx context.Context) (int, error)
+	SeedSources(ctx context.Context, cat SourceCatalog) error
 	RecentGrants(ctx context.Context, limit int) ([]GrantRow, error)
 
 	CreateEvent(ctx context.Context, ev Event) (int64, error)

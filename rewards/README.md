@@ -179,12 +179,19 @@ is most needed, setting up the first one. A typo then produced a reward that
 looked perfectly healthy and could never fire, because nothing anywhere knew
 what the valid names were.
 
-So the host declares a `SourceCatalog` once, under `rewards.sources`, and every
-picker reads it:
+So the catalogue is a **table** — `reward_sources` — and every picker reads it
+live. A host registers a SEED under `rewards.sources`:
 
 ```go
 c.Register(rewards.SourceCatalogExtension, rewards.StockSources())
 ```
+
+which is written **once, into an empty table, and never again**. Code proposes,
+configuration disposes: after the first boot the operator owns the list, adds
+what this site has and disables what it does not, and a host changing its seed
+cannot silently rewrite their edits or resurrect rows they deleted. That is the
+difference between a default and a declaration — the previous version of this
+was a Go slice, so adding a countable thing meant a deploy.
 
 Each `SourceDef` carries a stable `Key`, the dropdown `Label`, a `Group` to
 bucket it, and two independent flags:
