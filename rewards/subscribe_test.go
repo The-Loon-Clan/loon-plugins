@@ -25,9 +25,15 @@ func (m *metricStub) AchievementDefsByMetric(_ context.Context, metric string) (
 func TestOnlyCountableEventsAreSubscribed(t *testing.T) {
 	c := &core.Core{}
 	_ = c.DeclareEvent(core.EventDef{Name: "forum.post.created", Summary: "s",
-		Emitter: "forum", Countable: true})
+		Emitter: "forum", Kind: core.EventMember, Countable: true})
+	// A member event that is deliberately not countable — nobody should get a
+	// badge for closing their account.
 	_ = c.DeclareEvent(core.EventDef{Name: "account.deleted", Summary: "s",
-		Emitter: "auth"})
+		Emitter: "auth", Kind: core.EventMember})
+	// And a SYSTEM event, which can never be countable and so can never be
+	// subscribed to by the achievement path at all.
+	_ = c.DeclareEvent(core.EventDef{Name: "usenet.indexed", Summary: "s",
+		Emitter: "usenet", Kind: core.EventSystem})
 
 	p := &Plugin{core: c}
 	p.subscribeAchievements(c)
@@ -37,6 +43,10 @@ func TestOnlyCountableEventsAreSubscribed(t *testing.T) {
 	}
 	if subs := c.EventSubscribers("account.deleted"); len(subs) != 0 {
 		t.Errorf("subscribed to a non-countable event: %v", subs)
+	}
+	if subs := c.EventSubscribers("usenet.indexed"); len(subs) != 0 {
+		t.Errorf("subscribed to a system event: %v — there is no member to "+
+			"count it against, which is why core refuses to let one be countable", subs)
 	}
 }
 

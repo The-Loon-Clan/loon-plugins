@@ -56,13 +56,13 @@ type PostReacted struct {
 // "forum.post.created" is a wiring bug worth stopping for, not a warning.
 func declareEvents(c *core.Core) error {
 	for _, d := range []core.EventDef{
-		{Name: EventThreadCreated, Emitter: "forum", Countable: true, Stable: true,
+		{Name: EventThreadCreated, Emitter: "forum", Kind: core.EventMember, Countable: true, Stable: true,
 			Summary: "a member started a thread",
 			Payload: "forum.ThreadCreated"},
-		{Name: EventPostCreated, Emitter: "forum", Countable: true, Stable: true,
+		{Name: EventPostCreated, Emitter: "forum", Kind: core.EventMember, Countable: true, Stable: true,
 			Summary: "a member replied to a thread",
 			Payload: "forum.PostCreated"},
-		{Name: EventPostReacted, Emitter: "forum", Countable: true, Stable: true,
+		{Name: EventPostReacted, Emitter: "forum", Kind: core.EventMember, Countable: true, Stable: true,
 			Summary: "a member reacted to a post (UserID is the reactor, not the author)",
 			Payload: "forum.PostReacted"},
 	} {
