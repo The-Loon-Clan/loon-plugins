@@ -97,3 +97,35 @@ type failingAdmin struct{ AdminStore }
 func (failingAdmin) AchievementDefsByMetric(context.Context, string) ([]AchievementDef, error) {
 	return nil, context.DeadlineExceeded
 }
+
+// metricSrc is a counter with a fixed answer.
+type metricSrc map[int64]int64
+
+func (m metricSrc) Values(context.Context) (map[int64]int64, error) {
+	return map[int64]int64(m), nil
+}
+
+// A metric source is a query over the WHOLE membership. Running one on every
+// tick for an achievement nobody created is pure cost, so the defs are read
+// first and the counter only if something is scored on it.
+func TestScoreMetricDoesNotReadTheCounterWhenNothingScoresIt(t *testing.T) {
+	read := false
+	src := readTrackingSrc{&read}
+	p := &Plugin{admin: &metricStub{byMetric: map[string][]AchievementDef{}}}
+
+	n, err := p.scoreMetric(context.Background(), "tenure.years", src)
+	if err != nil || n != 0 {
+		t.Fatalf("scoreMetric = %d, %v", n, err)
+	}
+	if read {
+		t.Error("the counter was read for a metric no achievement uses — that is a " +
+			"membership-wide query per tick to learn nothing")
+	}
+}
+
+type readTrackingSrc struct{ read *bool }
+
+func (r readTrackingSrc) Values(context.Context) (map[int64]int64, error) {
+	*r.read = true
+	return nil, nil
+}

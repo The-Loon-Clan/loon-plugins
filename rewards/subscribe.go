@@ -22,6 +22,41 @@ import (
 // apart about. A metric with no matching event still works; it simply gets its
 // progress from the job reading a MetricSource instead.
 
+// subscribeRewards fires trigger-driven rewards from events.
+//
+// Before this, a reward's trigger only fired when the HOST called Engine.Fire
+// by hand — which the host does exactly once, for "login". Every other trigger
+// in the dropdown was a value an operator could pick and nothing would ever
+// send. The reward looked configured and simply never paid.
+//
+// Now a reward whose trigger names a declared event fires when that event
+// happens, with no host wiring at all. The two systems finally work the same
+// way: an achievement and a reward both name an event in their definition, and
+// both are driven by it.
+//
+// ALL declared events, not only countable ones. Countable is about whether a
+// running total is meaningful — a threshold question, and achievements'
+// business. A reward is "when X happens, pay", and plenty of things worth
+// paying for are not worth counting.
+func (p *Plugin) subscribeRewards(c *core.Core) {
+	for _, d := range c.EventDefs() {
+		c.On(d.Name, "rewards", p.onRewardEvent)
+	}
+}
+
+// onRewardEvent grants any auto-delivery reward triggered by this event.
+//
+// Engine.Fire already does the work — resolving what is available, skipping
+// what is claimed, letting the UNIQUE constraint arbitrate a race. This is
+// only the wire from the bus to it, which is the point: the granting rules did
+// not need to change to gain a second way of being triggered.
+func (p *Plugin) onRewardEvent(ctx context.Context, e core.Event) {
+	if e.UserID == 0 || p.engine == nil {
+		return
+	}
+	p.engine.Fire(ctx, e.UserID, e.Name)
+}
+
 // subscribeAchievements listens to every countable event the host declared.
 //
 // Only countable ones. "Member deleted their account" carries a UserID and is
@@ -143,4 +178,65 @@ func (p *Plugin) completeAchievement(ctx context.Context, st *PGStore, d Achieve
 		}
 	}
 	return nil
+}
+
+// scoreMetric reads one counter and settles every achievement it scores.
+//
+// The counterpart to the event path, and the reason both exist. An event says
+// "one more" and is lost if anything drops it; this says "the total is 613"
+// and is therefore self-healing — a member whose increment went missing is
+// corrected on the next tick rather than being permanently one short.
+//
+// It is also the ONLY way an achievement on something nothing emits can move.
+// Tenure is the example: no plugin announces an anniversary, and none should,
+// because the member does not do anything on the day.
+//
+// One counter read for the whole membership, then one write per member who
+// moved — the same shape as GrantUnits, and for the same reason: a per-member
+// read to discover that almost nobody changed is thousands of queries to learn
+// nothing.
+func (p *Plugin) scoreMetric(ctx context.Context, metric string, src MetricSource) (completed int, err error) {
+	st, ok := p.store.(*PGStore)
+	if !ok || p.admin == nil {
+		return 0, nil
+	}
+	defs, err := p.admin.AchievementDefsByMetric(ctx, metric)
+	if err != nil {
+		return 0, err
+	}
+	if len(defs) == 0 {
+		// Nothing is scored on it. Do not read the counter — a metric source
+		// is a query over the whole membership, and running one per tick for
+		// an achievement nobody created is pure cost.
+		return 0, nil
+	}
+
+	values, err := src.Values(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for userID, v := range values {
+		if userID == 0 || v <= 0 {
+			continue
+		}
+		for _, d := range defs {
+			// SET, not add: this is the absolute total, and adding it every
+			// tick would multiply a member's progress by the number of ticks.
+			reached, err := st.RecordProgress(ctx, d.ID, userID, v)
+			if err != nil {
+				return completed, err
+			}
+			if !reached {
+				continue
+			}
+			if err := p.completeAchievement(ctx, st, d, userID); err != nil {
+				// One member's failure must not abandon the rest of the
+				// membership for this tick.
+				log.Printf("achievements: completing %q for user %d: %v", d.Slug, userID, err)
+				continue
+			}
+			completed++
+		}
+	}
+	return completed, nil
 }

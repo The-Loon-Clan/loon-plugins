@@ -290,3 +290,61 @@ func TestSchemaRefusesAnUnusableSource(t *testing.T) {
 		t.Errorf("a fires-only source was refused: %v", err)
 	}
 }
+
+// The two progress paths must not be confused, and the difference is only
+// visible against a real database.
+//
+// An event ADDS ("one more happened"); a metric SETS ("the total is 613").
+// Adding the absolute total on every tick would multiply a member's progress
+// by the number of ticks — they would cross a 100-post threshold in an
+// afternoon with three posts, and the badge would look earned.
+func TestMetricPathSetsAndEventPathAdds(t *testing.T) {
+	db := testDB(t)
+	st := testStore(t, db)
+	ctx := context.Background()
+
+	achID, _ := seedAchievement(t, db, "hundred", 100)
+	const userID = int64(7)
+
+	// The metric path, run twice with the same total. Progress must land on
+	// the total, not twice it.
+	for i := 0; i < 2; i++ {
+		if _, err := st.RecordProgress(ctx, achID, userID, 40); err != nil {
+			t.Fatalf("RecordProgress: %v", err)
+		}
+	}
+	if got := progressOf(t, db, achID, userID); got != 40 {
+		t.Fatalf("after two identical metric reads progress = %d, want 40 — "+
+			"the tick is accumulating an absolute total", got)
+	}
+
+	// The event path, twice. Each says "one more", so they add.
+	for i := 0; i < 2; i++ {
+		if _, err := st.IncrementProgress(ctx, achID, userID, 1); err != nil {
+			t.Fatalf("IncrementProgress: %v", err)
+		}
+	}
+	if got := progressOf(t, db, achID, userID); got != 42 {
+		t.Errorf("after two increments progress = %d, want 42", got)
+	}
+
+	// And the metric wins when it next runs: it is the reconciling source, so
+	// a drifted count is corrected rather than compounded.
+	if _, err := st.RecordProgress(ctx, achID, userID, 40); err != nil {
+		t.Fatalf("RecordProgress: %v", err)
+	}
+	if got := progressOf(t, db, achID, userID); got != 40 {
+		t.Errorf("progress = %d after reconciliation, want the counter's 40 — "+
+			"the absolute total is what makes a dropped event self-heal", got)
+	}
+}
+
+func progressOf(t *testing.T, db *sqlx.DB, achID, userID int64) int64 {
+	t.Helper()
+	var n int64
+	if err := db.Get(&n, `SELECT progress FROM rewards.user_achievements
+	                       WHERE achievement_id = $1 AND user_id = $2`, achID, userID); err != nil {
+		t.Fatalf("read progress: %v", err)
+	}
+	return n
+}

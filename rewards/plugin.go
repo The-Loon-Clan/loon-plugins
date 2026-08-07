@@ -245,6 +245,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// emitter this plugin wants must be declared in Metadata.Requires. The
 	// directory shows anything missed as an event with no listener.
 	p.subscribeAchievements(c)
+	p.subscribeRewards(c)
 
 	// The admin page is web-only: the worker has no router, and registering a
 	// view there would be a boot error rather than a harmless no-op.
@@ -370,6 +371,23 @@ func (p *Plugin) maintain(ctx context.Context) error {
 		}
 		if n > 0 {
 			p.job.Log("%s: granted %d member(s)", slug, n)
+		}
+	}
+
+	// Achievement metrics. The other half of how progress moves: events give
+	// increments live, this gives the ABSOLUTE total on a tick. Both are
+	// needed and neither is redundant — an event stream drifts the moment one
+	// is dropped, and a counter alone cannot react to anything. This pass is
+	// what makes a dropped event self-heal, and the only way an achievement on
+	// something nothing emits (tenure years) can ever progress at all.
+	for metric, src := range p.metrics {
+		n, err := p.scoreMetric(ctx, metric, src)
+		if err != nil {
+			p.job.Log("metric %q: %v", metric, err)
+			continue
+		}
+		if n > 0 {
+			p.job.Log("%s: completed %d achievement(s)", metric, n)
 		}
 	}
 
