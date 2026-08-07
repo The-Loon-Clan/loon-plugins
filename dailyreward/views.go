@@ -134,11 +134,38 @@ type Status struct {
 	// claim control should hide it.
 	Claimed bool
 	Streak  int
+	// LastClaim is the civil date of the most recent claim ("YYYY-MM-DD"), or
+	// "" if the member has never claimed.
+	//
+	// It ships with Streak because Streak ALONE is uninterpretable: the stored
+	// count does not decay on read, so a member who last claimed a year ago
+	// still reports the streak they had then, and only resets when they claim
+	// again. A host that labels a control "12 day streak" off Streak by itself
+	// is stating something that stopped being true eleven months ago. With the
+	// date the host can tell a live streak from a stale one — and can place
+	// the run on a calendar, since the claimed days are the Streak days ending
+	// on LastClaim.
+	LastClaim string
 	// Reward is what a claim made RIGHT NOW would pay, so a host can label
 	// its control. When Claimed is already true there is no such claim, and
 	// this reports today's payout rather than tomorrow's — read it only when
 	// Claimed is false, which is the only time a host draws the control.
 	Reward int
+}
+
+// LiveStreak reports the streak only when it is still running — the member
+// claimed today, or claimed yesterday and can still keep it alive today.
+// Anything older is a lapsed run that the next claim will reset to 1, so it is
+// reported as 0 rather than as a number a caller would display as current.
+func (s Status) LiveStreak(now time.Time) int {
+	if s.Streak <= 0 || s.LastClaim == "" {
+		return 0
+	}
+	switch s.LastClaim {
+	case now.UTC().Format("2006-01-02"), now.UTC().AddDate(0, 0, -1).Format("2006-01-02"):
+		return s.Streak
+	}
+	return 0
 }
 
 // StatusFunc is the extension's type.
@@ -151,8 +178,9 @@ func (p *Plugin) status(ctx context.Context, userID int64) (Status, error) {
 		return Status{}, err
 	}
 	return Status{
-		Claimed: st.LastClaim == today(),
-		Streak:  st.Streak,
-		Reward:  rewardFor(nextStreak(st)),
+		Claimed:   st.LastClaim == today(),
+		Streak:    st.Streak,
+		LastClaim: st.LastClaim,
+		Reward:    rewardFor(nextStreak(st)),
 	}, nil
 }

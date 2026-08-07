@@ -38,6 +38,31 @@ type Item struct {
 // InStock reports whether the item can still be bought.
 func (i *Item) InStock() bool { return i.Stock < 0 || i.Stock > 0 }
 
+// Icon is the sprite id the store card draws beside an item's name.
+//
+// DERIVED from RewardType rather than stored. What an item is is already
+// recorded in the row, and an icon column would be a second, hand-maintained
+// answer to the same question — free to disagree with the first, and one more
+// field an admin has to get right on every item they add.
+//
+// The ids are the HOST's sprite symbols. That is the same coupling this
+// plugin's markup already has to --text-muted and --bs-warning: it renders
+// inside host chrome through RenderPage, so it draws with the host's assets.
+// A host missing a symbol renders an empty <use>, which is why the card does
+// not reserve space around it.
+func (i *Item) Icon() string {
+	switch RewardType(i.RewardType) {
+	case RewardRank:
+		return "shield"
+	case RewardInvite:
+		return "envelope"
+	}
+	// Deliberately generic. The migration comments name freeleech and points
+	// bonuses as the next reward types; until they exist, a neutral tag reads
+	// better than a specific icon that turns out to mean the wrong thing.
+	return "tag"
+}
+
 // Purchase is one row of the buy ledger.
 type Purchase struct {
 	ID          int       `db:"id"`

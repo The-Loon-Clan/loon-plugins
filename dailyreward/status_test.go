@@ -90,3 +90,50 @@ func TestStatusPropagatesStoreFailure(t *testing.T) {
 		t.Error("a store failure was swallowed; the host would offer a claim that cannot succeed")
 	}
 }
+
+// A streak count that does not decay on read is the trap this guards: the
+// stored number survives a lapse untouched and only resets on the NEXT claim,
+// so a caller that renders Streak directly will report a run that ended months
+// ago as if it were live. LiveStreak is the check that has to be right, and
+// its whole surface is the boundary between "yesterday" and "the day before".
+func TestLiveStreakHidesALapsedRun(t *testing.T) {
+	// A fixed instant, so this does not change meaning at a UTC midnight.
+	now := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	day := func(d int) string { return now.AddDate(0, 0, d).Format("2006-01-02") }
+
+	for _, tc := range []struct {
+		name      string
+		lastClaim string
+		streak    int
+		want      int
+	}{
+		{"claimed today, still running", day(0), 7, 7},
+		{"claimed yesterday, can still be kept alive", day(-1), 7, 7},
+		{"claimed two days ago — the run is over", day(-2), 7, 0},
+		{"lapsed months ago, count untouched", day(-200), 12, 0},
+		{"never claimed", "", 0, 0},
+		// A stored count of zero with a date is not a run, whatever the date.
+		{"claimed today but no streak recorded", day(0), 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := Status{Streak: tc.streak, LastClaim: tc.lastClaim}
+			if got := s.LiveStreak(now); got != tc.want {
+				t.Errorf("LiveStreak(last=%q, streak=%d) = %d, want %d",
+					tc.lastClaim, tc.streak, got, tc.want)
+			}
+		})
+	}
+}
+
+// The date the host places on a calendar has to come back out of the seam;
+// dropping it would leave Streak uninterpretable again.
+func TestStatusCarriesTheClaimDate(t *testing.T) {
+	p := &Plugin{st: stubStore{st: State{LastClaim: "2026-08-01", Streak: 3}}}
+	got, err := p.status(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if got.LastClaim != "2026-08-01" {
+		t.Errorf("LastClaim = %q, want 2026-08-01", got.LastClaim)
+	}
+}
