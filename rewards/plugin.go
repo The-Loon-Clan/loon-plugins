@@ -26,6 +26,8 @@ import (
 
 	"github.com/the-loon-clan/loon/core"
 	"github.com/the-loon-clan/loon/schedule"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 //go:embed migrations/*.sql
@@ -73,6 +75,14 @@ type Plugin struct {
 	// Snapshotted for the same reason units are: the registry is written
 	// during boot and read on a worker tick.
 	metrics map[string]MetricSource
+
+	// events answers which scheduled events exist and which are open. Looked up
+	// off the extension registry, so nil on a host with no events plugin —
+	// which makes every event-gated reward permanently unearnable rather than
+	// permanently earnable. That is the safe direction: paying a seasonal
+	// reward because nobody could say whether the season was running is the
+	// failure worth designing against.
+	events pluginapi.ScheduledEvents
 }
 
 var _ core.Plugin = (*Plugin)(nil)
@@ -96,6 +106,25 @@ func (p *Plugin) Provision(c *core.Core) error {
 	pg := NewPGStore(c.Storage.SchemaDB("rewards"))
 	p.store, p.admin = pg, pg
 	p.engine = NewEngine(p.store, log.Printf)
+
+	// The scheduled-events capability, if the host wired the events plugin.
+	//
+	// A failed type assertion aborts boot rather than being swallowed. The two
+	// cases look identical from here and are not: no events plugin at all is a
+	// host that has chosen not to schedule anything, and every event-gated
+	// reward is simply never earnable. Something registered under this key with
+	// the WRONG shape is a wiring bug, and booting past it would silently make
+	// every seasonal reward dead while the admin page showed it enabled.
+	if v, ok := c.Lookup(pluginapi.ScheduledEventsName); ok {
+		ev, ok := v.(pluginapi.ScheduledEvents)
+		if !ok {
+			return fmt.Errorf("rewards: extension %q is %T, which does not implement "+
+				"pluginapi.ScheduledEvents — refusing to boot rather than silently disabling every event-gated reward",
+				pluginapi.ScheduledEventsName, v)
+		}
+		p.events = ev
+		p.engine.WithEvents(ev)
+	}
 
 	// Points is the one payout kind this plugin implements itself, because it
 	// is the one loon already has a ledger facade for. Without it every
@@ -332,40 +361,10 @@ func (p *Plugin) maintain(ctx context.Context) error {
 	p.job.SetRunning()
 	defer p.job.SetIdle(time.Time{})
 
-	now := time.Now()
-	events, err := p.store.EventsWithCron(ctx)
-	if err != nil {
-		return fmt.Errorf("list events: %w", err)
-	}
-
-	var totalNew int
-	for _, ev := range events {
-		// Resume from where the last window ends rather than from now, or a
-		// contiguous reset would grow a hole every time the generator runs
-		// late — and a hole in a reset is a day the reward does not exist.
-		from := now
-		last, err := p.store.LastWindowEnd(ctx, ev.ID)
-		if err != nil {
-			p.job.Log("event %q: last window: %v", ev.Slug, err)
-			continue
-		}
-		if !last.IsZero() {
-			from = last
-		}
-		windows, err := GenerateWindows(ev, from, now.Add(windowHorizon))
-		if err != nil {
-			// One malformed event must not stop the others: a bad cron
-			// expression should cost that event its windows, not the site its
-			// daily reward.
-			p.job.Log("event %q: %v", ev.Slug, err)
-			continue
-		}
-		n, err := p.store.InsertWindows(ctx, windows)
-		if err != nil {
-			return fmt.Errorf("insert windows for %q: %w", ev.Slug, err)
-		}
-		totalNew += n
-	}
+	// Window generation lived here and belongs to the events plugin's own "Event
+	// Windows" job now. What is left on this tick is paying per_unit rewards and
+	// expiring lapsed grants — both "keep the world consistent" work, neither
+	// urgent.
 
 	// Per-unit rewards: pay whatever each counter has moved by. Runs on the
 	// same tick as window generation because both are "keep the world
@@ -400,12 +399,12 @@ func (p *Plugin) maintain(ctx context.Context) error {
 		}
 	}
 
-	expired, err := p.store.ExpireGrants(ctx, now, expireBatch)
+	expired, err := p.store.ExpireGrants(ctx, time.Now(), expireBatch)
 	if err != nil {
 		return fmt.Errorf("expire grants: %w", err)
 	}
-	if totalNew > 0 || expired > 0 {
-		p.job.Log("%d window(s) materialised, %d grant(s) expired", totalNew, expired)
+	if expired > 0 {
+		p.job.Log("%d grant(s) expired", expired)
 	}
 	return nil
 }

@@ -162,11 +162,14 @@ func (p *Plugin) completeAchievementSilent(ctx context.Context, st *PGStore, d A
 	}
 	if r.Kind != KindOneOff {
 		return fmt.Errorf("achievement %q pays reward %q of kind %s; only one_off is supported "+
-			"and reference=0 below would be wrong for anything else", d.Slug, r.Slug, r.Kind)
+			"and the empty reference below would be wrong for anything else", d.Slug, r.Slug, r.Kind)
 	}
 
 	g := Grant{
-		RewardID: r.ID, UserID: userID, Reference: 0,
+		// Empty reference: an achievement is earned once, so there is only one
+		// entitlement and it needs no name. The pay-once UNIQUE on
+		// (reward, user, reference) is what makes that correct rather than lazy.
+		RewardID: r.ID, UserID: userID, Reference: "",
 		State: StatePending, Reason: "achievement: " + d.Slug,
 		Silent: silent,
 	}

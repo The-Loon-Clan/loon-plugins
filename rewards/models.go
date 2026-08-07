@@ -51,29 +51,11 @@ const (
 	StateExpired  GrantState = "expired"
 )
 
-// Event is a thing that happens; its windows are when.
-type Event struct {
-	ID          int64          `db:"id"`
-	Slug        string         `db:"slug"`
-	Name        string         `db:"name"`
-	Description string         `db:"description"`
-	Cron        *string        `db:"cron"`
-	Duration    *time.Duration `db:"-"`
-	Timezone    string         `db:"timezone"`
-	Enabled     bool           `db:"enabled"`
-}
-
-// Window is one concrete occurrence, half-open: a member acting exactly at
-// ends_at belongs to the next window, not this one. Closed-closed would make
-// the boundary instant belong to both, which for a contiguous reset is a
-// second free claim every midnight.
-type Window struct {
-	ID       int64     `db:"id"`
-	EventID  int64     `db:"event_id"`
-	StartsAt time.Time `db:"starts_at"`
-	EndsAt   time.Time `db:"ends_at"`
-}
-
+// Event and Window used to live here. They are the events plugin's now
+// (pluginapi.ScheduledEvent / pluginapi.EventWindow), because a season or a reset
+// period is a site fact several systems reference and this one was only the first
+// to need it. Rewards holds a SLUG and asks.
+//
 // Payout is one line of what a reward hands over.
 type Payout struct {
 	ID       int64      `db:"id"`
@@ -91,11 +73,15 @@ type Payout struct {
 
 // Reward is what is earnable and on what terms. What it PAYS is Payouts.
 type Reward struct {
-	ID           int64          `db:"id"`
-	Slug         string         `db:"slug"`
-	Name         string         `db:"name"`
-	Kind         Kind           `db:"kind"`
-	EventID      *int64         `db:"event_id"`
+	ID   int64  `db:"id"`
+	Slug string `db:"slug"`
+	Name string `db:"name"`
+	Kind Kind   `db:"kind"`
+	// EventSlug names a scheduled event from the events plugin, or is empty for
+	// a reward earnable at any time. A slug rather than an id: an id belongs to
+	// the schema that owns it, and one stored here would break the moment that
+	// table were rebuilt or restored from another host's dump.
+	EventSlug    string         `db:"scheduled_event_slug"`
 	Trigger      string         `db:"trigger"`
 	ExpiresAfter *time.Duration `db:"-"`
 	Delivery     Delivery       `db:"delivery"`
@@ -112,14 +98,25 @@ type Grant struct {
 	// only reward_id. It exists so a payout handler can attribute what it hands
 	// over — a ledger row that says which reward paid is the difference between
 	// an auditable credit and 30,000 points labelled "reward".
-	RewardSlug string     `db:"reward_slug"`
-	UserID     int64      `db:"user_id"`
-	Reference  int64      `db:"reference"`
-	State      GrantState `db:"state"`
-	Reason     string     `db:"reason"`
-	CreatedAt  time.Time  `db:"created_at"`
-	ExpiresAt  *time.Time `db:"expires_at"`
-	SettledAt  *time.Time `db:"settled_at"`
+	RewardSlug string `db:"reward_slug"`
+	UserID     int64  `db:"user_id"`
+	// Reference is WHICH entitlement this grant is for, and it is what the
+	// pay-once UNIQUE is built on. The occurrence key of a scheduled event
+	// window for a recurring reward ("summer-2026@2026-08-01T00:00:00Z"), empty
+	// for a one_off, because there is only one and it needs no name.
+	//
+	// It used to be a BIGINT meaning three unrelated things by kind: 0, a window
+	// id, or a high-water mark. The mark moved to its own column because a
+	// number compared as text makes "9" greater than "10".
+	Reference string `db:"reference"`
+	// HighWater is HOW FAR we have paid, for per_unit rewards only. Zero
+	// everywhere else.
+	HighWater int64      `db:"high_water"`
+	State     GrantState `db:"state"`
+	Reason    string     `db:"reason"`
+	CreatedAt time.Time  `db:"created_at"`
+	ExpiresAt *time.Time `db:"expires_at"`
+	SettledAt *time.Time `db:"settled_at"`
 
 	// Frozen at grant time — see reward_grant_payouts. Reading these back
 	// through the reward would let an admin's edit change what an
@@ -143,9 +140,10 @@ type Grant struct {
 // fetched, and a caller that renders a stale "not yet claimed".
 type Offer struct {
 	Reward Reward
-	// WindowID is which window this would be claimed against, 0 for rewards
-	// with no event. It is the reference the claim will key on.
-	WindowID int64
+	// WindowKey names the occurrence this would be claimed against, empty for
+	// rewards with no event. It IS the reference the claim will key on, which is
+	// why it is the key rather than a display string.
+	WindowKey string
 	// Claimed is ADVISORY. It decides whether the button renders live or
 	// greyed; it may be stale by the time it is read. Claim is the only
 	// authority, because only the UNIQUE constraint sees both racers.

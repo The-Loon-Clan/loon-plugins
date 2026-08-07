@@ -1,3 +1,35 @@
+{{/* The findings banner. It lived in rewards_events.html until the Events page
+     moved to the events plugin, and deleting that file took this shared define
+     with it -- the rewards page then failed to render at all with "no such
+     template findings". Kept as a define rather than inlined because the next
+     page to want it should include it, not copy it. */}}
+{{define "findings"}}
+{{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
+{{if .Findings}}
+<div class="card mb-3">
+  <div class="card-header"><strong>Configuration check</strong>
+    <span class="text-muted small">cross-table &mdash; each row is individually valid</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <tbody>
+      {{range .Findings}}
+        <tr>
+          <td style="width:5rem">
+            <span class="badge bg-{{if eq .Severity "error"}}danger{{else if eq .Severity "warn"}}warning text-dark{{else}}secondary{{end}}">{{.Severity}}</span>
+          </td>
+          <td style="width:14rem"><code>{{.Subject}}</code></td>
+          <td>{{.Problem}}{{if .Fix}}<br><span class="text-muted small">&rarr; {{.Fix}}</span>{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}
+{{end}}
+
 {{define "rewards_admin.html"}}
 {{template "findings" .}}
 <div class="card mb-3">
@@ -14,7 +46,7 @@
           <td>{{.ID}}</td>
           <td><code>{{.Slug}}</code></td>
           <td>{{.Kind}}</td>
-          <td>{{if .EventID}}#{{.EventID}}{{else}}<span class="text-muted">none</span>{{end}}</td>
+          <td>{{if .EventSlug}}<code>{{.EventSlug}}</code>{{else}}<span class="text-muted">none</span>{{end}}</td>
           <td>{{if .Trigger}}<code>{{.Trigger}}</code>{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
           <td>{{.Delivery}}</td>
           <td>{{payouts .Payouts}}</td>
@@ -54,15 +86,16 @@
            select can only offer events that exist, and shows each one's cron
            so "is there a schedule behind this?" is answerable here rather than
            on the other page. */}}
-      <div class="col-md-3"><label class="form-label small mb-0">Event <span class="text-muted">(gates when it can be earned)</span></label>
-        <select name="event_id" class="form-select form-select-sm">
-          <option value="">— none (not gated by a window) —</option>
-          {{range .Events}}
-            <option value="{{.ID}}">
-              {{.Slug}}{{if .Cron}} — cron {{.Cron}}{{else}} — manual windows{{end}}{{if not .Enabled}} (DISABLED){{end}}
+      <div class="col-md-3"><label class="form-label small mb-0">Scheduled event <span class="text-muted">(gates when it can be earned)</span></label>
+        <select name="scheduled_event_slug" class="form-select form-select-sm">
+          <option value="">&mdash; none (not gated by a window) &mdash;</option>
+          {{range .ScheduledEvents}}
+            <option value="{{.Slug}}">
+              {{.Slug}}{{if .Cron}} &mdash; cron {{.Cron}}{{else}} &mdash; one-off{{end}}{{if not .Enabled}} (DISABLED){{end}}
             </option>
           {{end}}
-        </select></div>
+        </select>
+        <div class="form-text">Defined in <a href="/admin/p/events">Scheduled events</a>. Empty here when no events plugin is wired.</div></div>
       {{/* A datalist, not a select: Fire() takes any string and the HOST
            decides what it fires, so the plugin must not pretend to know the
            full set. Suggestions come from what is already configured plus what

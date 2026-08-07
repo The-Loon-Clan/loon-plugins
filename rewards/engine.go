@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // ErrNotOffered means the reward is disabled, gated by a closed event, or not
@@ -36,7 +38,18 @@ type Engine struct {
 	// notify tells a member a claim is waiting. nil is fine: the grant still
 	// exists and the card still shows it, they just are not nudged.
 	notify func(ctx context.Context, userID int64, title, body, link string)
+	// events answers "is this scheduled event open, and which occurrence". nil
+	// on a host with no events plugin, which makes every event-gated reward
+	// permanently unearnable — the safe direction, since the alternative is
+	// paying a seasonal reward because nobody could say whether the season was
+	// running.
+	events pluginapi.ScheduledEvents
 }
+
+// WithEvents attaches the scheduled-events capability. Separate from the
+// constructor so every existing caller and test keeps compiling; a reward with
+// no event is unaffected either way.
+func (e *Engine) WithEvents(s pluginapi.ScheduledEvents) *Engine { e.events = s; return e }
 
 func NewEngine(store Store, logf func(string, ...any)) *Engine {
 	return &Engine{
@@ -108,16 +121,18 @@ func (e *Engine) Available(ctx context.Context, userID int64, trigger string) ([
 		return nil, nil
 	}
 
-	now := e.now()
-	eventIDs := make([]int64, 0, len(rewards))
+	slugs := make([]string, 0, len(rewards))
 	rewardIDs := make([]int64, 0, len(rewards))
 	for _, r := range rewards {
 		rewardIDs = append(rewardIDs, r.ID)
-		if r.EventID != nil {
-			eventIDs = append(eventIDs, *r.EventID)
+		if r.EventSlug != "" {
+			slugs = append(slugs, r.EventSlug)
 		}
 	}
-	windows, err := e.store.OpenWindowsFor(ctx, eventIDs, now)
+	// ONE call for every event-gated reward on this trigger, not one per reward.
+	// The capability takes a slice for exactly this reason: asking per reward
+	// would be an N+1 across a plugin boundary on a page render.
+	windows, err := e.openWindows(ctx, slugs)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +149,7 @@ func (e *Engine) Available(ctx context.Context, userID int64, trigger string) ([
 			// so it is not an offer rather than an unavailable one.
 			continue
 		}
-		o := Offer{Reward: r, WindowID: windowIDFor(r, windows)}
+		o := Offer{Reward: r, WindowKey: windowKeyFor(r, windows)}
 		if g, seen := grants[r.ID]; seen {
 			// Same reference means this exact entitlement is spoken for — in
 			// ANY state, including expired. The UNIQUE constraint has no state
@@ -156,45 +171,71 @@ func (e *Engine) Available(ctx context.Context, userID int64, trigger string) ([
 	return out, nil
 }
 
-func windowIDFor(r Reward, windows map[int64]Window) int64 {
-	if r.EventID == nil {
-		return 0
+func windowKeyFor(r Reward, windows map[string]pluginapi.EventWindow) string {
+	if r.EventSlug == "" {
+		return ""
 	}
-	return windows[*r.EventID].ID
+	return windows[r.EventSlug].Key()
+}
+
+// openWindows asks the events plugin which of these slugs are open.
+//
+// A host with no events plugin wired gets an empty map rather than an error, and
+// the consequence is deliberate: an event-gated reward is then never earnable,
+// which is the safe direction. Paying a seasonal reward because nobody could
+// tell us whether the season was running would be the unsafe one.
+func (e *Engine) openWindows(ctx context.Context, slugs []string) (map[string]pluginapi.EventWindow, error) {
+	if len(slugs) == 0 || e.events == nil {
+		return map[string]pluginapi.EventWindow{}, nil
+	}
+	return e.events.OpenWindows(ctx, slugs)
 }
 
 // reference computes the idempotency key for a reward right now, and reports
 // whether the reward is earnable at all.
 //
-// This is the single place the kind taxonomy turns into a number, which is the
-// entire point of the taxonomy: no reward author ever writes this logic again,
-// and there is one implementation to get right rather than one per rule.
-func (e *Engine) reference(r Reward, windows map[int64]Window) (int64, bool) {
-	if r.EventID != nil {
-		w, open := windows[*r.EventID]
+// This is the single place the kind taxonomy turns into an entitlement key, which
+// is the entire point of the taxonomy: no reward author ever writes this logic
+// again, and there is one implementation to get right rather than one per rule.
+func (e *Engine) reference(r Reward, windows map[string]pluginapi.EventWindow) (string, bool) {
+	if r.EventSlug != "" {
+		w, open := windows[r.EventSlug]
 		if !open {
-			return 0, false
+			return "", false
 		}
 		if r.Kind == KindRecurring {
-			// The window IS the period. A real row, so two subsystems cannot
-			// compute it differently.
-			return w.ID, true
+			// The occurrence IS the period, named by the events plugin so two
+			// subsystems cannot derive it differently. Slug-qualified rather
+			// than a bare id or timestamp: this string is stored in a grant row
+			// somebody will one day read while working out why a member was or
+			// was not paid.
+			return w.Key(), true
 		}
 	}
 	switch r.Kind {
 	case KindOneOff:
-		return 0, true
+		// No name, because there is only one entitlement ever. The UNIQUE on
+		// (reward, user, reference) makes the empty string exactly right.
+		return "", true
 	case KindRecurring:
 		// Guarded by a CHECK in the schema, so reaching here means a row was
 		// written around it.
-		return 0, false
+		return "", false
 	case KindPerUnit:
 		// The high-water mark is the caller's to supply — only the counting
 		// system knows how far it has got. GrantPerUnit takes it explicitly.
-		return 0, false
+		return "", false
 	}
-	return 0, false
+	return "", false
 }
+
+// perUnitRef renders a high-water mark as an entitlement name.
+//
+// Zero-padded so the strings sort in the same order as the numbers. Nothing
+// depends on that today -- the mark is compared as an integer from its own
+// column -- but a reference that sorts wrongly is the kind of thing a later
+// ORDER BY picks up silently, and 19 digits covers int64.
+func perUnitRef(mark int64) string { return fmt.Sprintf("mark:%019d", mark) }
 
 // Claim settles one offer for a member. Authoritative: it inserts and lets the
 // UNIQUE constraint arbitrate rather than asking first, because asking first is
@@ -209,9 +250,9 @@ func (e *Engine) Claim(ctx context.Context, userID, rewardID int64) (Grant, erro
 	}
 	now := e.now()
 
-	var windows map[int64]Window
-	if r.EventID != nil {
-		windows, err = e.store.OpenWindowsFor(ctx, []int64{*r.EventID}, now)
+	var windows map[string]pluginapi.EventWindow
+	if r.EventSlug != "" {
+		windows, err = e.openWindows(ctx, []string{r.EventSlug})
 		if err != nil {
 			return Grant{}, err
 		}
@@ -220,7 +261,7 @@ func (e *Engine) Claim(ctx context.Context, userID, rewardID int64) (Grant, erro
 	if !ok {
 		return Grant{}, ErrNotOffered
 	}
-	return e.grant(ctx, *r, userID, ref, "", now)
+	return e.grant(ctx, *r, userID, ref, 0, "", now)
 }
 
 // ErrNothingOwed means a per_unit reward has already paid up to this mark.
@@ -255,14 +296,24 @@ func (e *Engine) GrantPerUnit(ctx context.Context, userID, rewardID, highWaterMa
 		// fewer grabs than last time, so the floor is "nothing", never a debit.
 		return Grant{}, ErrNothingOwed
 	}
-	return e.grant(ctx, *r, userID, highWaterMark, "", e.now(), units)
+	// The reference has to differ between successive per_unit payments or the
+	// pay-once UNIQUE would refuse the second one, so it carries the mark. Named
+	// rather than bare, matching every other reference on the table: a grant row
+	// reading "mark:63" says what it is where "63" would need the reward's kind
+	// to interpret.
+	return e.grant(ctx, *r, userID, perUnitRef(highWaterMark), highWaterMark, "", e.now(), units)
 }
 
 // grant creates the row and, for auto delivery, settles it immediately.
 //
 // units scales the payout for a per_unit reward (variadic so the one_off and
 // recurring callers, where scaling is meaningless, cannot pass one by mistake).
-func (e *Engine) grant(ctx context.Context, r Reward, userID, ref int64, reason string, now time.Time, units ...int64) (Grant, error) {
+// ref names WHICH entitlement (the occurrence key, or empty for a one_off);
+// highWater is HOW FAR a per_unit reward has paid. They were one int64 parameter
+// until the reference column split, and it was the same conflation: a caller had
+// to know which meaning applied to the reward it was granting, and nothing
+// stopped it passing the wrong one.
+func (e *Engine) grant(ctx context.Context, r Reward, userID int64, ref string, highWater int64, reason string, now time.Time, units ...int64) (Grant, error) {
 	if len(r.Payouts) == 0 {
 		// A reward with no payout lines pays nothing while looking perfectly
 		// healthy — the exact failure that would otherwise be discovered by a
@@ -278,7 +329,7 @@ func (e *Engine) grant(ctx context.Context, r Reward, userID, ref int64, reason 
 		}
 	}
 
-	g := Grant{RewardID: r.ID, UserID: userID, Reference: ref, State: StatePending, Reason: reason}
+	g := Grant{RewardID: r.ID, UserID: userID, Reference: ref, HighWater: highWater, State: StatePending, Reason: reason}
 	if r.ExpiresAfter != nil {
 		exp := now.Add(*r.ExpiresAfter)
 		g.ExpiresAt = &exp

@@ -33,12 +33,11 @@ type Store interface {
 	// RewardByID returns one reward with its payouts, or nil if unknown.
 	RewardByID(ctx context.Context, id int64) (*Reward, error)
 
-	// OpenWindowsFor resolves, in ONE query, which window of each given event
-	// contains `at`. Returns eventID -> window for those that have one.
-	//
-	// Plural because the alternative is a query per reward on the login path,
-	// and a per-item round trip is how a 6-reward login becomes 13 queries.
-	OpenWindowsFor(ctx context.Context, eventIDs []int64, at time.Time) (map[int64]Window, error)
+	// Open windows are NOT read here any more. The engine asks the events
+	// plugin's capability, because a scheduled event is a site fact several
+	// systems reference and rewards was only the first to need it. The plural
+	// shape survived the move for the same reason it existed: one call for every
+	// event-gated reward on a trigger, not one per reward on the login path.
 
 	// PreviousMark is how far a per_unit reward has already paid this member:
 	// the highest reference it has granted, or the baseline recorded when the
@@ -97,17 +96,6 @@ type Store interface {
 	// fine today and is not a habit worth forming.
 	ExpireGrants(ctx context.Context, now time.Time, limit int) (int, error)
 
-	// ── Events and windows ─────────────────────────────────────────────────
-
-	// EventsWithCron returns enabled events that generate their own windows.
-	EventsWithCron(ctx context.Context) ([]Event, error)
-
-	// LastWindowEnd returns when an event's furthest-ahead window closes, so
-	// the generator knows where to resume. Zero if it has none.
-	LastWindowEnd(ctx context.Context, eventID int64) (time.Time, error)
-
-	// InsertWindows adds generated windows, ignoring any that already exist.
-	// Returns how many were new — the number that makes a generator run
-	// legible in a job log.
-	InsertWindows(ctx context.Context, ws []Window) (int, error)
+	// Events and windows used to be here, along with a generator this plugin
+	// ran. Both belong to the events plugin now.
 }

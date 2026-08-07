@@ -63,7 +63,7 @@ func uniqueViolation(err error) bool {
 // rewardCols selects INTERVAL columns as seconds. lib/pq cannot scan INTERVAL
 // into time.Duration, and the alternative — a string parsed in Go — reproduces
 // Postgres's interval grammar badly.
-const rewardCols = `id, slug, name, kind, event_id, trigger, delivery, enabled,
+const rewardCols = `id, slug, name, kind, scheduled_event_slug, trigger, delivery, enabled,
 	EXTRACT(EPOCH FROM expires_after) AS expires_secs`
 
 type rewardRow struct {
@@ -71,7 +71,7 @@ type rewardRow struct {
 	Slug        string   `db:"slug"`
 	Name        string   `db:"name"`
 	Kind        string   `db:"kind"`
-	EventID     *int64   `db:"event_id"`
+	EventSlug   *string  `db:"scheduled_event_slug"`
 	Trigger     string   `db:"trigger"`
 	Delivery    string   `db:"delivery"`
 	Enabled     bool     `db:"enabled"`
@@ -81,8 +81,11 @@ type rewardRow struct {
 func (r rewardRow) toReward() Reward {
 	out := Reward{
 		ID: r.ID, Slug: r.Slug, Name: r.Name, Kind: Kind(r.Kind),
-		EventID: r.EventID, Trigger: r.Trigger,
+		Trigger:  r.Trigger,
 		Delivery: Delivery(r.Delivery), Enabled: r.Enabled,
+	}
+	if r.EventSlug != nil {
+		out.EventSlug = *r.EventSlug
 	}
 	if r.ExpiresSecs != nil {
 		d := time.Duration(*r.ExpiresSecs * float64(time.Second))
@@ -159,40 +162,13 @@ func (s *PGStore) RewardByID(ctx context.Context, id int64) (*Reward, error) {
 	return s.rewardWhere(ctx, "id = $1", id)
 }
 
-// OpenWindowsFor finds the window of each event containing `at`.
-//
-// DISTINCT ON with ORDER BY starts_at DESC takes the latest window that has
-// opened and not yet closed. Half-open on purpose: at exactly ends_at the
-// member belongs to the next window, so a contiguous reset hands over cleanly
-// instead of granting one free extra claim on every boundary.
-func (s *PGStore) OpenWindowsFor(ctx context.Context, eventIDs []int64, at time.Time) (map[int64]Window, error) {
-	if len(eventIDs) == 0 {
-		return map[int64]Window{}, nil
-	}
-	var rows []Window
-	err := s.sel(ctx, &rows, `
-		SELECT DISTINCT ON (event_id) id, event_id, starts_at, ends_at
-		  FROM event_windows
-		 WHERE event_id = ANY($1) AND starts_at <= $2 AND ends_at > $2
-		 ORDER BY event_id, starts_at DESC`,
-		pq.Array(eventIDs), at)
-	if err != nil {
-		return nil, fmt.Errorf("open windows: %w", err)
-	}
-	out := make(map[int64]Window, len(rows))
-	for _, w := range rows {
-		out[w.EventID] = w
-	}
-	return out, nil
-}
-
 func (s *PGStore) GrantsForUser(ctx context.Context, userID int64, rewardIDs []int64) (map[int64]Grant, error) {
 	if len(rewardIDs) == 0 {
 		return map[int64]Grant{}, nil
 	}
 	var rows []Grant
 	err := s.sel(ctx, &rows, `
-		SELECT id, reward_id, user_id, reference, state, reason, created_at, expires_at, settled_at
+		SELECT id, reward_id, user_id, reference, high_water, state, reason, created_at, expires_at, settled_at
 		  FROM reward_grants
 		 WHERE user_id = $1 AND reward_id = ANY($2)
 		 ORDER BY reward_id, id DESC`,
@@ -231,9 +207,9 @@ func (s *PGStore) CreateGrant(ctx context.Context, g Grant, payouts []Payout) (G
 // payout lines.
 func insertGrantTx(ctx context.Context, tx *sqlx.Tx, g *Grant, payouts []Payout) error {
 	err := tx.QueryRowContext(ctx, `
-		INSERT INTO reward_grants (reward_id, user_id, reference, state, reason, expires_at, silent)
-		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at`,
-		g.RewardID, g.UserID, g.Reference, string(g.State), g.Reason, g.ExpiresAt, g.Silent,
+		INSERT INTO reward_grants (reward_id, user_id, reference, high_water, state, reason, expires_at, silent)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at`,
+		g.RewardID, g.UserID, g.Reference, g.HighWater, string(g.State), g.Reason, g.ExpiresAt, g.Silent,
 	).Scan(&g.ID, &g.CreatedAt)
 	if uniqueViolation(err) {
 		// The constraint arbitrated: someone else got there first. Not an
@@ -266,7 +242,7 @@ func (s *PGStore) GrantByID(ctx context.Context, id int64) (*Grant, error) {
 	// payout handlers so a ledger row can say WHICH reward paid. The grant row
 	// itself never stores the slug; renaming a reward renames its history.
 	err := s.get(ctx, &g, `
-		SELECT g.id, g.reward_id, r.slug AS reward_slug, g.user_id, g.reference,
+		SELECT g.id, g.reward_id, r.slug AS reward_slug, g.user_id, g.reference, g.high_water,
 		       g.state, g.reason, g.created_at, g.expires_at, g.settled_at, g.silent
 		  FROM reward_grants g JOIN rewards r ON r.id = g.reward_id
 		 WHERE g.id = $1`, id)
@@ -331,81 +307,6 @@ func (s *PGStore) ExpireGrants(ctx context.Context, now time.Time, limit int) (i
 	return int(n), nil
 }
 
-type eventRow struct {
-	ID          int64    `db:"id"`
-	Slug        string   `db:"slug"`
-	Name        string   `db:"name"`
-	Description string   `db:"description"`
-	Cron        *string  `db:"cron"`
-	DurSecs     *float64 `db:"duration_secs"`
-	Timezone    string   `db:"timezone"`
-	Enabled     bool     `db:"enabled"`
-}
-
-func (r eventRow) toEvent() Event {
-	out := Event{
-		ID: r.ID, Slug: r.Slug, Name: r.Name, Description: r.Description,
-		Cron: r.Cron, Timezone: r.Timezone, Enabled: r.Enabled,
-	}
-	if r.DurSecs != nil {
-		d := time.Duration(*r.DurSecs * float64(time.Second))
-		out.Duration = &d
-	}
-	return out
-}
-
-func (s *PGStore) EventsWithCron(ctx context.Context) ([]Event, error) {
-	var rows []eventRow
-	err := s.sel(ctx, &rows, `
-		SELECT id, slug, name, description, cron,
-		       EXTRACT(EPOCH FROM duration) AS duration_secs, timezone, enabled
-		  FROM events WHERE enabled AND cron IS NOT NULL ORDER BY id`)
-	if err != nil {
-		return nil, fmt.Errorf("events with cron: %w", err)
-	}
-	out := make([]Event, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, r.toEvent())
-	}
-	return out, nil
-}
-
-func (s *PGStore) LastWindowEnd(ctx context.Context, eventID int64) (time.Time, error) {
-	var t sql.NullTime
-	err := s.get(ctx, &t,
-		`SELECT max(ends_at) FROM event_windows WHERE event_id = $1`, eventID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, fmt.Errorf("last window end: %w", err)
-	}
-	return t.Time, nil
-}
-
-// InsertWindows is idempotent through ON CONFLICT DO NOTHING against
-// UNIQUE (event_id, starts_at), which is what lets the generator run on every
-// tick with overlapping ranges and stay cheap.
-func (s *PGStore) InsertWindows(ctx context.Context, ws []Window) (int, error) {
-	if len(ws) == 0 {
-		return 0, nil
-	}
-	var inserted int
-	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		inserted = 0 // guard against a re-invoked fn ever double-counting
-		for _, w := range ws {
-			res, err := tx.ExecContext(ctx, `
-				INSERT INTO event_windows (event_id, starts_at, ends_at) VALUES ($1, $2, $3)
-				ON CONFLICT (event_id, starts_at) DO NOTHING`, w.EventID, w.StartsAt, w.EndsAt)
-			if err != nil {
-				return fmt.Errorf("insert window: %w", err)
-			}
-			if n, _ := res.RowsAffected(); n > 0 {
-				inserted++
-			}
-		}
-		return nil
-	})
-	return inserted, err
-}
-
 // PreviousMark takes the greater of "what has been granted" and "where we were
 // told to start". Both in one statement, because two round trips could see
 // different states and the larger of the two is the only safe answer: paying
@@ -414,7 +315,7 @@ func (s *PGStore) PreviousMark(ctx context.Context, rewardID, userID int64) (int
 	var mark int64
 	err := s.get(ctx, &mark, `
 		SELECT GREATEST(
-		    COALESCE((SELECT max(reference) FROM reward_grants
+		    COALESCE((SELECT max(high_water) FROM reward_grants
 		               WHERE reward_id = $1 AND user_id = $2), 0),
 		    COALESCE((SELECT value FROM reward_baselines
 		               WHERE reward_id = $1 AND user_id = $2), 0))`, rewardID, userID)
@@ -452,7 +353,7 @@ func (s *PGStore) PreviousMarks(ctx context.Context, rewardID int64, userIDs []i
 	err := s.sel(ctx, &rows, `
 		SELECT u.id AS user_id,
 		       GREATEST(
-		           COALESCE((SELECT max(reference) FROM reward_grants g
+		           COALESCE((SELECT max(high_water) FROM reward_grants g
 		                      WHERE g.reward_id = $1 AND g.user_id = u.id), 0),
 		           COALESCE((SELECT value FROM reward_baselines b
 		                      WHERE b.reward_id = $1 AND b.user_id = u.id), 0)
@@ -475,7 +376,7 @@ func (s *PGStore) PreviousMarks(ctx context.Context, rewardID int64, userIDs []i
 func (s *PGStore) PendingGrantsFor(ctx context.Context, userID int64, limit int) ([]Grant, error) {
 	var grants []Grant
 	err := s.sel(ctx, &grants, `
-		SELECT id, reward_id, user_id, reference, state, reason, created_at, expires_at, settled_at
+		SELECT id, reward_id, user_id, reference, high_water, state, reason, created_at, expires_at, settled_at
 		  FROM reward_grants
 		 WHERE user_id = $1 AND state = 'pending'
 		 ORDER BY id DESC LIMIT $2`, userID, limit)

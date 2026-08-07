@@ -17,8 +17,6 @@ type MemStore struct {
 	mu sync.Mutex
 
 	Rewards []Reward
-	Events  []Event
-	Windows []Window
 
 	grants     []Grant
 	grantLines map[int64][]Payout // grant id -> frozen lines
@@ -42,8 +40,10 @@ func (m *MemStore) PreviousMark(ctx context.Context, rewardID, userID int64) (in
 	defer m.mu.Unlock()
 	mark := m.baselines[[2]int64{rewardID, userID}]
 	for _, g := range m.grants {
-		if g.RewardID == rewardID && g.UserID == userID && g.Reference > mark {
-			mark = g.Reference
+		// HighWater, not Reference. They were the same field until the column
+		// split, and reading the reference here now would compare a name.
+		if g.RewardID == rewardID && g.UserID == userID && g.HighWater > mark {
+			mark = g.HighWater
 		}
 	}
 	return mark, nil
@@ -109,30 +109,6 @@ func (m *MemStore) RewardByID(ctx context.Context, id int64) (*Reward, error) {
 		}
 	}
 	return nil, nil
-}
-
-// OpenWindowsFor mirrors the SQL's half-open comparison exactly: starts_at <=
-// at < ends_at. A mock that used <= on both ends would let a boundary-instant
-// test pass while production granted twice.
-func (m *MemStore) OpenWindowsFor(ctx context.Context, eventIDs []int64, at time.Time) (map[int64]Window, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	want := map[int64]bool{}
-	for _, id := range eventIDs {
-		want[id] = true
-	}
-	out := map[int64]Window{}
-	for _, w := range m.Windows {
-		if !want[w.EventID] {
-			continue
-		}
-		if !w.StartsAt.After(at) && w.EndsAt.After(at) {
-			if cur, seen := out[w.EventID]; !seen || w.StartsAt.After(cur.StartsAt) {
-				out[w.EventID] = w
-			}
-		}
-	}
-	return out, nil
 }
 
 func (m *MemStore) GrantsForUser(ctx context.Context, userID int64, rewardIDs []int64) (map[int64]Grant, error) {
@@ -260,52 +236,6 @@ func (m *MemStore) ExpireGrants(ctx context.Context, now time.Time, limit int) (
 			g.State = StateExpired
 			n++
 		}
-	}
-	return n, nil
-}
-
-func (m *MemStore) EventsWithCron(ctx context.Context) ([]Event, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var out []Event
-	for _, e := range m.Events {
-		if e.Enabled && e.Cron != nil {
-			out = append(out, e)
-		}
-	}
-	return out, nil
-}
-
-func (m *MemStore) LastWindowEnd(ctx context.Context, eventID int64) (time.Time, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var latest time.Time
-	for _, w := range m.Windows {
-		if w.EventID == eventID && w.EndsAt.After(latest) {
-			latest = w.EndsAt
-		}
-	}
-	return latest, nil
-}
-
-func (m *MemStore) InsertWindows(ctx context.Context, ws []Window) (int, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var n int
-	for _, w := range ws {
-		var dup bool
-		for _, ex := range m.Windows {
-			if ex.EventID == w.EventID && ex.StartsAt.Equal(w.StartsAt) {
-				dup = true
-				break
-			}
-		}
-		if dup {
-			continue
-		}
-		w.ID = m.id()
-		m.Windows = append(m.Windows, w)
-		n++
 	}
 	return n, nil
 }

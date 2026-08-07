@@ -15,6 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 //go:embed templates/*.html
@@ -25,7 +27,11 @@ var viewFS embed.FS
 // windows being materialised?), and is anything actually being granted.
 
 type adminVM struct {
-	Events  []EventStats
+	// ScheduledEvents feeds the reward form's event picker, read from the events
+	// plugin. Empty on a host with no events plugin, which renders as a select
+	// with only "none" — honest, since nothing there could be gated anyway.
+	ScheduledEvents []pluginapi.ScheduledEvent
+
 	Rewards []Reward
 	Grants  []GrantRow
 	Now     time.Time
@@ -34,9 +40,7 @@ type adminVM struct {
 
 	// The event whose windows are being authored, when one is selected.
 	// Zero means the windows panel is collapsed.
-	PickedEvent int64
-	PickedSlug  string
-	Windows     []Window
+	PickedSlug string
 	// Pre-formatted for <input type="datetime-local">, which will not accept
 	// an RFC3339 string with a zone.
 	DefaultStart string
@@ -61,36 +65,16 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	if err := p.parseTemplates(); err != nil {
 		return err
 	}
-	// Two pages, not one with three cards. Events are not reward-specific —
-	// the table is deliberately named `events`, because a season or an outage
-	// window is a site fact other systems can reference — so burying them
-	// inside a Rewards page would misrepresent what they are. It also keeps
-	// each page to one job: Events is WHEN, Rewards is WHAT.
-	if err := c.RegisterView(core.View{
-		Slug: "rewards-events", Title: "Events", Slot: core.SlotAdminPage,
-		Description: "When rewards are earnable: campaign windows and reset periods.",
-		Nav:         core.NavHint{Group: "Operations"},
-		Render: func(gc *gin.Context) (template.HTML, error) {
-			// event id reaches SQL as a bound parameter; an unknown value
-			// simply lists no windows.
-			ev, _ := strconv.ParseInt(gc.Query("event"), 10, 64)
-			return p.renderPage(gc.Request.Context(), "rewards_events.html", ev, gc.Query("msg"), gc.Query("err"))
-		},
-		Actions: map[string]func(*gin.Context) (template.HTML, error){
-			"event-create": p.actionCreateEvent,
-			"event-toggle": p.actionToggleEvent,
-			"window-add":   p.actionAddWindow,
-			"window-del":   p.actionDeleteWindow,
-		},
-	}); err != nil {
-		return err
-	}
+	// One page now. The Events page moved to the events plugin, which owns the
+	// tables -- the comment that used to sit here explained why it should:
+	// "Events are not reward-specific ... it also keeps each page to one job:
+	// Events is WHEN, Rewards is WHAT." This page is the WHAT.
 	return c.RegisterView(core.View{
 		Slug: "rewards", Title: "Rewards", Slot: core.SlotAdminPage,
 		Description: "What is earnable, what it pays, and what has actually been granted.",
 		Nav:         core.NavHint{Group: "Operations"},
 		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.renderPage(gc.Request.Context(), "rewards_admin.html", 0, gc.Query("msg"), gc.Query("err"))
+			return p.renderPage(gc.Request.Context(), "rewards_admin.html", gc.Query("msg"), gc.Query("err"))
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			"reward-create": p.actionCreateReward,
@@ -132,13 +116,6 @@ func (p *Plugin) parseTemplates() error {
 			}
 			return strings.Join(parts, " + ")
 		},
-		"window": func(w *Window) string {
-			if w == nil {
-				return "—"
-			}
-			return fmt.Sprintf("#%d %s → %s", w.ID,
-				w.StartsAt.UTC().Format("01-02 15:04"), w.EndsAt.UTC().Format("01-02 15:04"))
-		},
 	}).ParseFS(viewFS, "templates/*.html")
 	if err != nil {
 		return err
@@ -147,13 +124,18 @@ func (p *Plugin) parseTemplates() error {
 	return nil
 }
 
-func (p *Plugin) renderPage(ctx context.Context, tmpl string, pickedEvent int64, msg, errMsg string) (template.HTML, error) {
+func (p *Plugin) renderPage(ctx context.Context, tmpl string, msg, errMsg string) (template.HTML, error) {
 	now := time.Now()
-	vm := adminVM{Now: now, Msg: msg, Err: errMsg, PickedEvent: pickedEvent}
-	var err error
-	if vm.Events, err = p.admin.ListEventStats(ctx, now); err != nil {
-		return "", err
+	vm := adminVM{Now: now, Msg: msg, Err: errMsg}
+	if p.events != nil {
+		// Non-fatal: a page that cannot list events is still worth rendering,
+		// and the picker degrading to "none" is a visible symptom where a 500
+		// would hide every other thing on the page.
+		if evs, err := p.events.Events(ctx); err == nil {
+			vm.ScheduledEvents = evs
+		}
 	}
+	var err error
 	if vm.Rewards, err = p.admin.ListRewards(ctx); err != nil {
 		return "", err
 	}
@@ -161,20 +143,6 @@ func (p *Plugin) renderPage(ctx context.Context, tmpl string, pickedEvent int64,
 		return "", err
 	}
 	vm.Triggers = p.triggerOptions(ctx, vm.Rewards)
-	if pickedEvent != 0 {
-		for _, e := range vm.Events {
-			if e.ID == pickedEvent {
-				vm.PickedSlug = e.Slug
-			}
-		}
-		if vm.Windows, err = p.admin.ListWindows(ctx, pickedEvent, 50); err != nil {
-			return "", err
-		}
-		// Sensible defaults so the picker opens on today rather than 1970.
-		start := now.UTC().Truncate(24 * time.Hour)
-		vm.DefaultStart = start.Format(localTimeLayout)
-		vm.DefaultEnd = start.Add(24 * time.Hour).Format(localTimeLayout)
-	}
 	// Deliberately not fatal: a validator that can take the page down with it
 	// is worse than no validator, and the page's first job is to show state.
 	if vm.Findings, err = p.Validate(ctx); err != nil {
@@ -216,92 +184,6 @@ const (
 	rewardsPage = "/admin/p/rewards"
 )
 
-func (p *Plugin) actionAddWindow(gc *gin.Context) (template.HTML, error) {
-	eventID, err := strconv.ParseInt(gc.PostForm("event_id"), 10, 64)
-	if err != nil {
-		return p.redirect(gc, eventsPage, "", "bad event id")
-	}
-	start, err := time.ParseInLocation(localTimeLayout, gc.PostForm("starts_at"), time.UTC)
-	if err != nil {
-		return p.redirect(gc, eventsPage, "", "bad start time")
-	}
-	end, err := time.ParseInLocation(localTimeLayout, gc.PostForm("ends_at"), time.UTC)
-	if err != nil {
-		return p.redirect(gc, eventsPage, "", "bad end time")
-	}
-	if !end.After(start) {
-		return p.redirect(gc, eventsPage, "", "the window must end after it starts")
-	}
-	if err := p.admin.AddWindow(gc.Request.Context(), Window{EventID: eventID, StartsAt: start, EndsAt: end}); err != nil {
-		return p.redirect(gc, eventsPage, "", err.Error())
-	}
-	return p.redirect(gc, eventsPage, "window added", "")
-}
-
-func (p *Plugin) actionDeleteWindow(gc *gin.Context) (template.HTML, error) {
-	id, err := strconv.ParseInt(gc.PostForm("id"), 10, 64)
-	if err != nil {
-		return p.redirect(gc, eventsPage, "", "bad window id")
-	}
-	if err := p.admin.DeleteWindow(gc.Request.Context(), id); err != nil {
-		return p.redirect(gc, eventsPage, "", err.Error())
-	}
-	return p.redirect(gc, eventsPage, "window deleted", "")
-}
-
-func (p *Plugin) actionCreateEvent(gc *gin.Context) (template.HTML, error) {
-	slug := strings.TrimSpace(gc.PostForm("slug"))
-	if slug == "" {
-		return p.redirect(gc, eventsPage, "", "slug is required")
-	}
-	cron := strings.TrimSpace(gc.PostForm("cron"))
-	// Validate here rather than at generation time: a bad expression caught on
-	// the form is a message someone reads, and one caught at 3am inside the
-	// generator is an event that silently never produces windows.
-	if cron != "" {
-		if err := ValidateCron(cron); err != nil {
-			return p.redirect(gc, eventsPage, "", "bad cron: "+err.Error())
-		}
-	}
-	tz := strings.TrimSpace(gc.PostForm("timezone"))
-	if tz == "" {
-		tz = "UTC"
-	}
-	if _, err := time.LoadLocation(tz); err != nil {
-		return p.redirect(gc, eventsPage, "", "unknown timezone "+tz)
-	}
-
-	ev := Event{Slug: slug, Name: strings.TrimSpace(gc.PostForm("name")), Timezone: tz, Enabled: true}
-	if cron != "" {
-		ev.Cron = &cron
-	}
-	// Blank duration is the WHOLE point of a reset: the window runs until the
-	// next firing rather than closing.
-	if raw := strings.TrimSpace(gc.PostForm("duration")); raw != "" {
-		d, err := time.ParseDuration(raw)
-		if err != nil || d <= 0 {
-			return p.redirect(gc, eventsPage, "", "duration must be a positive Go duration like 1536h")
-		}
-		if cron == "" {
-			return p.redirect(gc, eventsPage, "", "a duration needs a cron — 'closes after' has no 'starting when'")
-		}
-		ev.Duration = &d
-	}
-	if _, err := p.admin.CreateEvent(gc.Request.Context(), ev); err != nil {
-		return p.redirect(gc, eventsPage, "", err.Error())
-	}
-	return p.redirect(gc, eventsPage, "event+"+slug+"+created", "")
-}
-
-func (p *Plugin) actionToggleEvent(gc *gin.Context) (template.HTML, error) {
-	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
-	on := gc.PostForm("enabled") == "1"
-	if err := p.admin.SetEventEnabled(gc.Request.Context(), id, on); err != nil {
-		return p.redirect(gc, eventsPage, "", err.Error())
-	}
-	return p.redirect(gc, eventsPage, "event+updated", "")
-}
-
 func (p *Plugin) actionCreateReward(gc *gin.Context) (template.HTML, error) {
 	ctx := gc.Request.Context()
 	slug := strings.TrimSpace(gc.PostForm("slug"))
@@ -327,15 +209,22 @@ func (p *Plugin) actionCreateReward(gc *gin.Context) (template.HTML, error) {
 		// and un-paying is not a thing.
 		Enabled: false,
 	}
-	if raw := strings.TrimSpace(gc.PostForm("event_id")); raw != "" && raw != "0" {
-		id, err := strconv.ParseInt(raw, 10, 64)
+	// A slug from the events plugin's dropdown, not an id. Existence is checked
+	// against the capability rather than assumed: a typo'd slug would otherwise
+	// create a reward that looks configured and can never be earned, and the
+	// validator would only surface it later.
+	r.EventSlug = strings.TrimSpace(gc.PostForm("scheduled_event_slug"))
+	if r.EventSlug != "" && p.events != nil {
+		_, known, err := p.events.Event(gc.Request.Context(), r.EventSlug)
 		if err != nil {
-			return p.redirect(gc, rewardsPage, "", "bad event id")
+			return p.redirect(gc, rewardsPage, "", "could not check the scheduled event: "+err.Error())
 		}
-		r.EventID = &id
+		if !known {
+			return p.redirect(gc, rewardsPage, "", "no scheduled event called "+r.EventSlug)
+		}
 	}
-	if kind == KindRecurring && r.EventID == nil {
-		return p.redirect(gc, rewardsPage, "", "a recurring reward needs an event — that is its reset")
+	if kind == KindRecurring && r.EventSlug == "" {
+		return p.redirect(gc, rewardsPage, "", "a recurring reward needs a scheduled event — that is its reset")
 	}
 	if raw := strings.TrimSpace(gc.PostForm("expires_after")); raw != "" {
 		d, err := time.ParseDuration(raw)
@@ -393,7 +282,13 @@ func (p *Plugin) actionTestGrant(gc *gin.Context) (template.HTML, error) {
 		// a failure.
 		return p.redirect(gc, rewardsPage, "", err.Error())
 	}
-	return p.redirect(gc, rewardsPage, fmt.Sprintf("granted+%d+(ref+%d,+%s)", g.ID, g.Reference, g.State), "")
+	// The reference is a name now, and an empty one (a one_off) reads better as
+	// "-" than as a gap in the sentence.
+	ref := g.Reference
+	if ref == "" {
+		ref = "-"
+	}
+	return p.redirect(gc, rewardsPage, fmt.Sprintf("granted+%d+(ref+%s,+%s)", g.ID, ref, g.State), "")
 }
 
 // triggerOptions is what the trigger picker offers.

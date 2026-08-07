@@ -6,6 +6,16 @@ import (
 	"time"
 )
 
+// Window-coverage validation (a one-off with no windows, an exhausted or
+// short runway, gaps in a contiguous event) MOVED with the tables to the events
+// plugin, along with the three tests that covered it. It is not checked from
+// this side any more on purpose: the events plugin owns the generator and
+// reports coverage per event, so a second opinion computed here could only ever
+// disagree with the authority.
+//
+// What rewards still validates is its own half — that a reward's event slug
+// names something real and enabled.
+
 func findingFor(fs []Finding, subject, contains string) *Finding {
 	for i := range fs {
 		if fs[i].Subject == subject && strings.Contains(fs[i].Problem, contains) {
@@ -19,110 +29,28 @@ func findingFor(fs []Finding, subject, contains string) *Finding {
 // something is one an operator learns to ignore, and then it stops working the
 // day it matters.
 func TestValidateSilentOnHealthyConfig(t *testing.T) {
-	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	day := now.Truncate(24 * time.Hour)
-	cur := Window{ID: 10, EventID: 1, StartsAt: day, EndsAt: day.Add(24 * time.Hour)}
-	eid := int64(1)
-
-	events := []EventStats{{
-		Event:   Event{ID: 1, Slug: "daily", Cron: str("0 0 * * *"), Timezone: "UTC", Enabled: true},
-		Windows: 45, Current: &cur,
-	}}
-	cov := map[int64]Coverage{1: {EventID: 1, Windows: 45, LastEnd: now.Add(45 * 24 * time.Hour)}}
 	rewards := []Reward{{
-		ID: 100, Slug: "daily-login", Kind: KindRecurring, EventID: &eid,
+		ID: 100, Slug: "daily-login", Kind: KindRecurring, EventSlug: "daily",
 		Trigger: "login", Delivery: DeliveryAuto, Enabled: true,
 		Payouts: []Payout{{Kind: PayoutPoints, Amount: 10}},
 	}}
 	handled := map[PayoutKind]bool{PayoutPoints: true}
+	known := map[string]bool{"daily": true}
 
-	got := append(validateEvents(events, cov, now), validateRewards(rewards, mapEvents(events), handled)...)
+	got := validateRewards(rewards, known, handled)
 	if len(got) != 0 {
 		t.Errorf("healthy config produced %d finding(s): %+v", len(got), got)
 	}
 }
 
-func mapEvents(events []EventStats) map[int64]EventStats {
-	m := make(map[int64]EventStats, len(events))
-	for _, e := range events {
-		m[e.ID] = e
-	}
-	return m
-}
-
-// The headline case: a one-off event created and never given windows. Valid
-// rows, valid reward, pays nobody, and nothing else in the system says so.
-func TestValidateCatchesOneOffWithNoWindows(t *testing.T) {
-	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	events := []EventStats{{Event: Event{ID: 3, Slug: "launch", Timezone: "UTC", Enabled: true}}}
-
-	got := validateEvents(events, map[int64]Coverage{}, now)
-	f := findingFor(got, "event launch", "no windows")
-	if f == nil {
-		t.Fatalf("no finding for a one-off event with no windows: %+v", got)
-	}
-	if f.Severity != SeverityError {
-		t.Errorf("severity = %s, want error — it can never be earned", f.Severity)
-	}
-	if !strings.Contains(f.Fix, "by hand") {
-		t.Errorf("fix does not say to author windows: %q", f.Fix)
-	}
-}
-
-// A cron event whose windows have run out reads as healthy from every other
-// angle: the event is enabled, the reward is enabled, the counts are non-zero.
-func TestValidateCatchesExhaustedAndShortRunway(t *testing.T) {
-	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	events := []EventStats{
-		{Event: Event{ID: 1, Slug: "expired", Cron: str("0 0 * * *"), Timezone: "UTC", Enabled: true}, Windows: 10},
-		{Event: Event{ID: 2, Slug: "shortly", Cron: str("0 0 * * *"), Timezone: "UTC", Enabled: true}, Windows: 10},
-	}
-	cov := map[int64]Coverage{
-		1: {EventID: 1, Windows: 10, LastEnd: now.Add(-time.Hour)},
-		2: {EventID: 2, Windows: 10, LastEnd: now.Add(3 * 24 * time.Hour)},
-	}
-	got := validateEvents(events, cov, now)
-
-	if f := findingFor(got, "event expired", "in the past"); f == nil || f.Severity != SeverityError {
-		t.Errorf("exhausted event: got %+v, want an error finding", f)
-	}
-	if f := findingFor(got, "event shortly", "run out in"); f == nil || f.Severity != SeverityWarn {
-		t.Errorf("short runway: got %+v, want a warn finding", f)
-	}
-}
-
-// Gaps are the point of a season and a bug in a reset, so the same shape of
-// data must produce a finding in one case and silence in the other.
-func TestValidateGapsOnlyMatterForResets(t *testing.T) {
-	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	season := 1536 * time.Hour
-	events := []EventStats{
-		{Event: Event{ID: 1, Slug: "reset", Cron: str("0 0 * * *"), Timezone: "UTC", Enabled: true}},
-		{Event: Event{ID: 2, Slug: "season", Cron: str("0 0 1 7 *"), Duration: &season, Timezone: "UTC", Enabled: true}},
-	}
-	cov := map[int64]Coverage{
-		1: {EventID: 1, Windows: 10, Gaps: 3, LastEnd: now.Add(45 * 24 * time.Hour)},
-		2: {EventID: 2, Windows: 10, Gaps: 9, LastEnd: now.Add(45 * 24 * time.Hour)},
-	}
-	got := validateEvents(events, cov, now)
-
-	if findingFor(got, "event reset", "gap") == nil {
-		t.Error("a contiguous reset with gaps produced no finding")
-	}
-	if f := findingFor(got, "event season", "gap"); f != nil {
-		t.Errorf("a season's gaps were reported as a problem: %+v", f)
-	}
-}
-
 // The two ways an enabled reward is guaranteed to be refused at grant time.
 func TestValidateCatchesUngrantableRewards(t *testing.T) {
-	events := []EventStats{{Event: Event{ID: 1, Slug: "daily", Enabled: true}}}
 	rewards := []Reward{
 		{ID: 1, Slug: "hollow", Kind: KindOneOff, Trigger: "login", Delivery: DeliveryAuto, Enabled: true},
 		{ID: 2, Slug: "fancy", Kind: KindOneOff, Trigger: "login", Delivery: DeliveryAuto, Enabled: true,
 			Payouts: []Payout{{Kind: PayoutUsernameFX, Target: "rainbow"}}},
 	}
-	got := validateRewards(rewards, mapEvents(events), map[PayoutKind]bool{PayoutPoints: true})
+	got := validateRewards(rewards, map[string]bool{"daily": true}, map[PayoutKind]bool{PayoutPoints: true})
 
 	if f := findingFor(got, "reward hollow", "no payout lines"); f == nil || f.Severity != SeverityError {
 		t.Errorf("payout-less reward: got %+v, want an error", f)
@@ -132,28 +60,24 @@ func TestValidateCatchesUngrantableRewards(t *testing.T) {
 	}
 }
 
-// A reward gated by a disabled event, and one gated by an event whose reset
-// window has vanished. Both are enabled and look fine in the rewards table.
+// A reward gated by a disabled event, and one naming an event that does not
+// exist. Both are enabled and look fine in the rewards table.
+//
+// The third case this test used to cover -- an event with no window open right
+// now -- moved to the events plugin with the generator. Window health is the
+// authority's to report.
 func TestValidateCatchesBrokenEventGating(t *testing.T) {
-	e1, e2, e3 := int64(1), int64(2), int64(99)
-	season := 1536 * time.Hour
-	events := []EventStats{
-		{Event: Event{ID: 1, Slug: "off", Enabled: false}},
-		{Event: Event{ID: 2, Slug: "reset", Timezone: "UTC", Enabled: true}}, // no Current
-	}
+	known := map[string]bool{"off": false, "reset": true}
 	rewards := []Reward{
-		{ID: 1, Slug: "gated-off", Kind: KindRecurring, EventID: &e1, Trigger: "login", Enabled: true,
+		{ID: 1, Slug: "gated-off", Kind: KindRecurring, EventSlug: "off", Trigger: "login", Enabled: true,
 			Delivery: DeliveryAuto, Payouts: []Payout{{Kind: PayoutPoints, Amount: 1}}},
-		{ID: 2, Slug: "no-window", Kind: KindRecurring, EventID: &e2, Trigger: "login", Enabled: true,
-			Delivery: DeliveryAuto, Payouts: []Payout{{Kind: PayoutPoints, Amount: 1}}},
-		{ID: 3, Slug: "ghost-event", Kind: KindRecurring, EventID: &e3, Trigger: "login", Enabled: true,
+		{ID: 3, Slug: "ghost-event", Kind: KindRecurring, EventSlug: "no-such-season", Trigger: "login", Enabled: true,
 			Delivery: DeliveryAuto, Payouts: []Payout{{Kind: PayoutPoints, Amount: 1}}},
 	}
-	got := validateRewards(rewards, mapEvents(events), map[PayoutKind]bool{PayoutPoints: true})
+	got := validateRewards(rewards, known, map[PayoutKind]bool{PayoutPoints: true})
 
 	for _, tc := range []struct{ subject, want string }{
 		{"reward gated-off", "is disabled"},
-		{"reward no-window", "no window open right now"},
 		{"reward ghost-event", "does not exist"},
 	} {
 		if f := findingFor(got, tc.subject, tc.want); f == nil || f.Severity != SeverityError {
@@ -161,14 +85,22 @@ func TestValidateCatchesBrokenEventGating(t *testing.T) {
 		}
 	}
 
-	// A CLOSED SEASON is not a problem — that is what a season does.
-	seasonEvents := []EventStats{{Event: Event{ID: 5, Slug: "summer", Duration: &season, Enabled: true}}}
-	eid := int64(5)
-	seasonal := []Reward{{ID: 9, Slug: "summer-bonus", Kind: KindRecurring, EventID: &eid,
+	// A CLOSED SEASON is not a problem — that is what a season does. Enabled and
+	// existing is all rewards asks about; whether a window happens to be open
+	// right now is not a configuration fault and is not this validator's call.
+	seasonal := []Reward{{ID: 9, Slug: "summer-bonus", Kind: KindRecurring, EventSlug: "summer",
 		Trigger: "login", Enabled: true, Delivery: DeliveryAuto,
 		Payouts: []Payout{{Kind: PayoutPoints, Amount: 1}}}}
-	if got := validateRewards(seasonal, mapEvents(seasonEvents), map[PayoutKind]bool{PayoutPoints: true}); len(got) != 0 {
+	if got := validateRewards(seasonal, map[string]bool{"summer": true}, map[PayoutKind]bool{PayoutPoints: true}); len(got) != 0 {
 		t.Errorf("an out-of-season reward was reported as broken: %+v", got)
+	}
+
+	// And with NO events plugin wired (nil, not empty) the validator stays quiet
+	// rather than declaring every gated reward broken. Nil means "cannot tell";
+	// an empty map means "asked, and there are none", and only the second is
+	// grounds for a finding.
+	if got := validateRewards(seasonal, nil, map[PayoutKind]bool{PayoutPoints: true}); len(got) != 0 {
+		t.Errorf("with no events plugin the validator invented %d finding(s): %+v", len(got), got)
 	}
 }
 
@@ -176,7 +108,7 @@ func TestValidateCatchesBrokenEventGating(t *testing.T) {
 // the live ones.
 func TestValidateIgnoresDisabledRewards(t *testing.T) {
 	rewards := []Reward{{ID: 1, Slug: "draft", Kind: KindOneOff, Enabled: false}}
-	if got := validateRewards(rewards, map[int64]EventStats{}, map[PayoutKind]bool{}); len(got) != 0 {
+	if got := validateRewards(rewards, map[string]bool{}, map[PayoutKind]bool{}); len(got) != 0 {
 		t.Errorf("disabled reward produced %d finding(s): %+v", len(got), got)
 	}
 }
@@ -185,17 +117,16 @@ func TestValidateIgnoresDisabledRewards(t *testing.T) {
 // that actually stop a payment.
 func TestValidateGradesAdviceAsInfo(t *testing.T) {
 	expiry := 720 * time.Hour
-	eid := int64(1)
-	events := []EventStats{{Event: Event{ID: 1, Slug: "daily", Enabled: true, Duration: &expiry}}}
+	known := map[string]bool{"daily": true}
 	rewards := []Reward{
 		{ID: 1, Slug: "auto-expiry", Kind: KindOneOff, Trigger: "login", Delivery: DeliveryAuto,
 			Enabled: true, ExpiresAfter: &expiry, Payouts: []Payout{{Kind: PayoutPoints, Amount: 1}}},
-		{ID: 2, Slug: "gated-delta", Kind: KindPerUnit, EventID: &eid, Trigger: "upload",
+		{ID: 2, Slug: "gated-delta", Kind: KindPerUnit, EventSlug: "daily", Trigger: "upload",
 			Delivery: DeliveryAuto, Enabled: true, Payouts: []Payout{{Kind: PayoutPoints, Amount: 1}}},
 		{ID: 3, Slug: "unreachable", Kind: KindOneOff, Delivery: DeliveryClaim,
 			Enabled: true, Payouts: []Payout{{Kind: PayoutPoints, Amount: 1}}},
 	}
-	got := validateRewards(rewards, mapEvents(events), map[PayoutKind]bool{PayoutPoints: true})
+	got := validateRewards(rewards, known, map[PayoutKind]bool{PayoutPoints: true})
 
 	if f := findingFor(got, "reward auto-expiry", "expiry never applies"); f == nil || f.Severity != SeverityInfo {
 		t.Errorf("auto+expiry: got %+v, want info", f)
@@ -220,7 +151,7 @@ func TestValidateAllowsPerUnitWithNoTrigger(t *testing.T) {
 		Delivery: DeliveryClaim, Enabled: true,
 		Payouts: []Payout{{Kind: PayoutPoints, Amount: 30000}},
 	}}
-	got := validateRewards(rewards, map[int64]EventStats{}, map[PayoutKind]bool{PayoutPoints: true})
+	got := validateRewards(rewards, map[string]bool{}, map[PayoutKind]bool{PayoutPoints: true})
 	if len(got) != 0 {
 		t.Errorf("job-driven per_unit reward produced %d finding(s): %+v", len(got), got)
 	}
@@ -228,7 +159,7 @@ func TestValidateAllowsPerUnitWithNoTrigger(t *testing.T) {
 	// The same shape as one_off IS worth warning about: nothing would ever
 	// create the grant.
 	rewards[0].Kind = KindOneOff
-	if got := validateRewards(rewards, map[int64]EventStats{}, map[PayoutKind]bool{PayoutPoints: true}); len(got) != 1 {
+	if got := validateRewards(rewards, map[string]bool{}, map[PayoutKind]bool{PayoutPoints: true}); len(got) != 1 {
 		t.Errorf("one_off with no trigger produced %d finding(s), want 1", len(got))
 	}
 }

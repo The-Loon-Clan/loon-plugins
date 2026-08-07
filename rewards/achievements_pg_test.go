@@ -70,7 +70,9 @@ func TestCompleteAchievementIsAtomic(t *testing.T) {
 		t.Fatal("100 of 100 did not report the threshold as reached")
 	}
 
-	g := Grant{RewardID: rewardID, UserID: userID, Reference: 0, State: StatePending}
+	// Empty reference: an achievement is earned once, so its single entitlement
+	// needs no name and the pay-once UNIQUE does the rest.
+	g := Grant{RewardID: rewardID, UserID: userID, Reference: "", State: StatePending}
 	got, err := st.CompleteAchievement(ctx, achID, g, []Payout{{Kind: PayoutPoints, Amount: 50}})
 	if err != nil {
 		t.Fatalf("CompleteAchievement: %v", err)

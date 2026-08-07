@@ -172,9 +172,14 @@ MemStore cannot prove.
 
 ## Adoption status
 
-**Rewards still owns its own copy of these tables and has not been rewired yet.**
-Until it is, a `recurring` reward gates on `rewards.events`, not on this plugin.
-Do not define a recurring reward in the meantime — the extraction is currently
-free because every rewards event table is empty in production, and it stops being
-free the moment one row exists, since `reward_grants.reference` *is* a window id
-and a later move would have to rewrite payment history.
+**Rewards is wired onto this plugin** as of 2026-08-07. `rewards.rewards` holds a
+`scheduled_event_slug`, its engine resolves open windows through
+`ScheduledEvents.OpenWindows`, and its own `events`/`event_windows` tables are
+dropped (rewards migration `005`). There is one definition of a scheduled event
+on the site again.
+
+A recurring reward keys its grant on `EventWindow.Key()`, so it pays once per
+occurrence. If no events plugin is wired, rewards reads the capability as absent
+and every event-gated reward becomes permanently unearnable — the safe direction,
+since the alternative is paying a seasonal reward because nobody could say whether
+the season was running.

@@ -44,49 +44,69 @@ settles claims; worker materialises event windows and expires lapsed grants.
 
 ## Data
 
-Owns eight tables in the `rewards` schema (`migrations/001_init.sql`):
+Owns six tables in the `rewards` schema (`migrations/001_init.sql`, plus `005`
+for the events move):
 
 | table | holds |
 |---|---|
-| `events` | slug, name, and the window *generator*: cron + nullable duration + timezone |
-| `event_windows` | concrete `[starts_at, ends_at)` rows — the truth every query reads |
-| `rewards` | kind, event, trigger, delivery, expiry |
+| `rewards` | kind, `scheduled_event_slug`, trigger, delivery, expiry |
 | `reward_payouts` | the ordered lines a reward hands over |
 | `reward_grants` | what is owed or was paid, with `UNIQUE (reward_id, user_id, reference)` |
 | `reward_grant_payouts` | those lines **frozen** at grant time, each settled independently |
 | `reward_baselines` | a `per_unit` reward's starting point, so it does not pay for history |
 | `reward_issuances` | deliberate retroactive grants, named cohorts only |
 
-No foreign keys to the host's `users`: it lives in a schema this plugin does
-not own, and a plugin that hard-links to host tables cannot be uninstalled.
+`events` and `event_windows` were here until migration `005`. They belong to the
+[events plugin](../events/) now — a season or a reset period is a site fact
+several systems reference, and this one was only the first to need it. Rewards
+holds a **slug** and asks through `pluginapi.ScheduledEvents`; it stores no id
+belonging to another schema.
+
+No foreign keys to the host's `users`, or to any other plugin's tables: they live
+in schemas this plugin does not own, and a plugin that hard-links out cannot be
+uninstalled.
 
 ### The three kinds, and what `reference` means
 
+`reference` is TEXT and names WHICH entitlement a grant is for. It is what
+`UNIQUE (reward_id, user_id, reference)` is built on.
+
 | kind | reference | means |
 |---|---|---|
-| `one_off` | `0` | at most once, ever |
-| `recurring` | `event_windows.id` | at most once per window |
-| `per_unit` | high-water mark | the delta since last paid |
+| `one_off` | `''` | at most once, ever — one entitlement needs no name |
+| `recurring` | the occurrence key, `summer-2026@2026-08-01T00:00:00Z` | at most once per occurrence |
+| `per_unit` | `mark:0000000000000000063` | the delta since last paid |
+
+It used to be a BIGINT meaning three unrelated things. The **high-water mark
+moved to its own `high_water` column** in migration `005`, because a mark
+compared as text makes `"9"` greater than `"10"` — one column doing two jobs is
+why the type could not simply change. `reference` answers *which entitlement*;
+`high_water` answers *how far we have paid*.
+
+The occurrence key comes from the events plugin, slug-qualified rather than a row
+id or a bare timestamp: an id couples rewards to another schema and changes if
+that table is rebuilt, and a bare number tells nobody reading a grant row which
+event paid.
 
 `per_unit` pays **rate x delta**, and only countable lines scale: "2 points and
 the Uploader medal" for 500 new grabs owes 1000 points and ONE medal. A mark
 that moves backwards (a purge, a recount) pays nothing rather than debiting.
 
-For `recurring` the reference is a real row, not a computed period ordinal, so
-no two subsystems can compute the period differently.
+For `recurring` the reference is derived by the events plugin from data the
+operator configured — the slug and the window start — so no two subsystems can
+compute the period differently, and it survives that plugin's table being
+rebuilt.
 
 ### Seasons and resets are one concept
 
-An event's `duration` is the only difference:
+Still true, and now documented where it lives — see the events plugin's README
+for the duration rule. From here the only thing that matters is that both produce
+windows, so nothing in rewards knows which it is looking at.
 
-- **set** — the window *closes* after it. Summer runs 64 days, then there is no
-  window at all until next July. Gaps.
-- **NULL** — the window runs until the next firing. Midnight to midnight,
-  contiguous, forever. That is a reset.
-
-Both produce `event_windows` rows, so nothing downstream knows which it is
-looking at. A `duration` with no `cron` is refused: "closes 64 days after" has
-no answer without a "starting when".
+If no events plugin is wired, every event-gated reward is permanently
+**unearnable** rather than permanently earnable. That is the safe direction:
+paying a seasonal reward because nobody could say whether the season was running
+is the failure worth designing against.
 
 ## Dependencies
 

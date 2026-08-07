@@ -10,6 +10,11 @@ import (
 
 // fixture builds an engine over a MemStore with a recording points handler.
 type fixture struct {
+	// clock drives BOTH the engine and the fake events plugin. Set it with
+	// f.travel; assigning f.eng.now directly desynchronises them.
+	clock  time.Time
+	events *fakeEvents
+
 	eng   *Engine
 	store *MemStore
 	paid  map[int64]int    // userID -> points credited
@@ -22,8 +27,14 @@ func newFixture(t *testing.T, now time.Time) *fixture {
 	t.Helper()
 	f := &fixture{store: NewMemStore(), paid: map[int64]int{}, slugs: map[int64]string{}}
 	f.store.Now = now
-	f.eng = NewEngine(f.store, func(string, ...any) {})
-	f.eng.now = func() time.Time { return now }
+	f.clock = now
+	f.events = newFakeEvents(now)
+	// ONE clock behind both. The old tests moved only the engine's, and the mem
+	// store answered window questions from a separate instant -- which worked by
+	// accident and would now let "tomorrow" ask about today's windows.
+	f.events.now = func() time.Time { return f.clock }
+	f.eng = NewEngine(f.store, func(string, ...any) {}).WithEvents(f.events)
+	f.eng.now = func() time.Time { return f.clock }
 	f.eng.Handle(PayoutPoints, func(ctx context.Context, g Grant, p Payout) error {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -43,19 +54,36 @@ func (f *fixture) points(userID int64) int {
 	return f.paid[userID]
 }
 
-func eventID(id int64) *int64 { return &id }
+// travel moves the one clock both the engine and the events plugin read.
+func (f *fixture) travel(to time.Time) {
+	f.clock = to
+	f.store.Now = to
+}
+
+// dailyKey is the occurrence key of the daily event's window containing t.
+// Spelled out here rather than hardcoded, so the tests assert the CONTRACT (the
+// reference is the occurrence key) and not a string literal that a format change
+// would break in nine places.
+func dailyKey(t time.Time) string {
+	day := t.Truncate(24 * time.Hour)
+	w := win(day, day.Add(24*time.Hour))
+	// The slug matters: Key() is slug-qualified, which is the whole reason it is
+	// a name rather than a timestamp. Building one without it produced
+	// "@2026-03-01T00:00:00Z" and the tests caught it immediately.
+	w.Slug = "daily"
+	return w.Key()
+}
 
 // addDaily wires the canonical shape: a contiguous daily event, one recurring
 // reward paying points on login.
 func (f *fixture) addDaily(now time.Time, delivery Delivery, amount int) Reward {
-	f.store.Events = append(f.store.Events, Event{ID: 1, Slug: "daily", Cron: str("0 0 * * *"), Timezone: "UTC", Enabled: true})
 	day := now.Truncate(24 * time.Hour)
-	f.store.Windows = append(f.store.Windows,
-		Window{ID: 10, EventID: 1, StartsAt: day, EndsAt: day.Add(24 * time.Hour)},
-		Window{ID: 11, EventID: 1, StartsAt: day.Add(24 * time.Hour), EndsAt: day.Add(48 * time.Hour)},
+	f.events.add("daily",
+		win(day, day.Add(24*time.Hour)),
+		win(day.Add(24*time.Hour), day.Add(48*time.Hour)),
 	)
 	r := Reward{
-		ID: 100, Slug: "daily-login", Kind: KindRecurring, EventID: eventID(1),
+		ID: 100, Slug: "daily-login", Kind: KindRecurring, EventSlug: "daily",
 		Trigger: "login", Delivery: delivery, Enabled: true,
 		Payouts: []Payout{{RewardID: 100, Kind: PayoutPoints, Amount: amount}},
 	}
@@ -74,8 +102,8 @@ func TestClaimRecurringIsOncePerWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first claim: %v", err)
 	}
-	if g.Reference != 10 {
-		t.Errorf("reference = %d, want 10 (the open window id)", g.Reference)
+	if want := dailyKey(now); g.Reference != want {
+		t.Errorf("reference = %q, want %q (the open occurrence)", g.Reference, want)
 	}
 
 	if _, err := f.eng.Claim(context.Background(), 7, r.ID); !errors.Is(err, ErrAlreadyGranted) {
@@ -100,14 +128,17 @@ func TestClaimRecurringPaysAgainNextWindow(t *testing.T) {
 	}
 	// Move into the next window. Nothing is cleared or expired.
 	tomorrow := now.Add(24 * time.Hour)
-	f.eng.now = func() time.Time { return tomorrow }
+	f.travel(tomorrow)
 
 	g, err := f.eng.Claim(context.Background(), 7, r.ID)
 	if err != nil {
 		t.Fatalf("day two: %v", err)
 	}
-	if g.Reference != 11 {
-		t.Errorf("day two reference = %d, want 11 (the next window)", g.Reference)
+	if want := dailyKey(tomorrow); g.Reference != want {
+		t.Errorf("day two reference = %q, want %q (the next occurrence)", g.Reference, want)
+	}
+	if g.Reference == dailyKey(now) {
+		t.Error("day two reused day one's reference; the pay-once UNIQUE would have refused it")
 	}
 }
 
@@ -119,15 +150,16 @@ func TestWindowBoundaryIsHalfOpen(t *testing.T) {
 	f.addDaily(now, DeliveryClaim, 10)
 
 	boundary := now.Truncate(24 * time.Hour).Add(24 * time.Hour)
-	got, err := f.store.OpenWindowsFor(context.Background(), []int64{1}, boundary)
+	f.travel(boundary)
+	got, err := f.events.OpenWindows(context.Background(), []string{"daily"})
 	if err != nil {
 		t.Fatalf("open windows: %v", err)
 	}
 	if len(got) != 1 {
-		t.Fatalf("windows containing the boundary = %d, want exactly 1", len(got))
+		t.Fatalf("events open at the boundary = %d, want exactly 1", len(got))
 	}
-	if got[1].ID != 11 {
-		t.Errorf("boundary belongs to window %d, want 11 (the NEXT one)", got[1].ID)
+	if key := got["daily"].Key(); key != dailyKey(boundary) {
+		t.Errorf("boundary belongs to %q, want %q (the NEXT window)", key, dailyKey(boundary))
 	}
 }
 
@@ -135,14 +167,10 @@ func TestWindowBoundaryIsHalfOpen(t *testing.T) {
 func TestAvailableExcludesClosedEvent(t *testing.T) {
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	f := newFixture(t, now)
-	f.store.Events = append(f.store.Events, Event{ID: 2, Slug: "summer", Enabled: true})
-	f.store.Windows = append(f.store.Windows, Window{
-		ID: 20, EventID: 2,
-		StartsAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
-		EndsAt:   time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC),
-	})
+	summerStart := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	f.events.add("summer", win(summerStart, time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)))
 	f.store.Rewards = append(f.store.Rewards, Reward{
-		ID: 200, Slug: "summer-bonus", Kind: KindRecurring, EventID: eventID(2),
+		ID: 200, Slug: "summer-bonus", Kind: KindRecurring, EventSlug: "summer",
 		Trigger: "login", Delivery: DeliveryClaim, Enabled: true,
 		Payouts: []Payout{{Kind: PayoutPoints, Amount: 500}},
 	})
@@ -156,18 +184,21 @@ func TestAvailableExcludesClosedEvent(t *testing.T) {
 	}
 
 	inSummer := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
-	f.eng.now = func() time.Time { return inSummer }
+	f.travel(inSummer)
 	offers, err = f.eng.Available(context.Background(), 7, "login")
 	if err != nil {
 		t.Fatalf("available in July: %v", err)
 	}
-	if len(offers) != 1 || offers[0].WindowID != 20 {
-		t.Fatalf("offers in July = %d, want 1 against window 20", len(offers))
+	wantSummer := win(summerStart, time.Time{})
+	wantSummer.Slug = "summer"
+	wantKey := wantSummer.Key()
+	if len(offers) != 1 || offers[0].WindowKey != wantKey {
+		t.Fatalf("offers in July = %d, want 1 against %q", len(offers), wantKey)
 	}
 
 	// And a claim outside the season is refused, not merely unrendered: the
 	// surface is advisory, the engine is authoritative.
-	f.eng.now = func() time.Time { return now }
+	f.travel(now)
 	if _, err := f.eng.Claim(context.Background(), 7, 200); !errors.Is(err, ErrNotOffered) {
 		t.Errorf("claim outside the season: %v, want ErrNotOffered", err)
 	}
@@ -190,7 +221,7 @@ func TestAvailableClaimedIsPerWindow(t *testing.T) {
 	}
 
 	tomorrow := now.Add(24 * time.Hour)
-	f.eng.now = func() time.Time { return tomorrow }
+	f.travel(tomorrow)
 	offers, _ = f.eng.Available(context.Background(), 7, "login")
 	if len(offers) != 1 || offers[0].Claimed {
 		t.Fatalf("next window: offers=%d claimed=%v, want 1/false", len(offers), offers[0].Claimed)
@@ -562,5 +593,43 @@ func TestSettleRefusesAnExpiredGrant(t *testing.T) {
 	}
 	if got := f.points(7); got != 0 {
 		t.Errorf("expired grant paid %d, want 0", got)
+	}
+}
+
+// Available must ask the events plugin ONCE for a whole trigger, not once per
+// reward.
+//
+// The capability takes a slice for exactly this reason. Per-reward lookups are an
+// N+1 across a plugin boundary on the login path, which is where the old store
+// comment warned that "a 6-reward login becomes 13 queries" — and the boundary
+// makes it worse, since the events plugin is free to answer over a network one
+// day.
+func TestAvailableAsksEventsOncePerTrigger(t *testing.T) {
+	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+	f := newFixture(t, now)
+	day := now.Truncate(24 * time.Hour)
+
+	// Three event-gated rewards on one trigger, across two events.
+	f.events.add("daily", win(day, day.Add(24*time.Hour)))
+	f.events.add("weekly", win(day, day.Add(7*24*time.Hour)))
+	for i, slug := range []string{"daily", "weekly", "daily"} {
+		f.store.Rewards = append(f.store.Rewards, Reward{
+			ID: int64(300 + i), Slug: "gated-" + slug + string(rune('a'+i)),
+			Kind: KindRecurring, EventSlug: slug, Trigger: "login",
+			Delivery: DeliveryClaim, Enabled: true,
+			Payouts: []Payout{{Kind: PayoutPoints, Amount: 1}},
+		})
+	}
+
+	before := f.events.callCount()
+	offers, err := f.eng.Available(context.Background(), 7, "login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(offers) != 3 {
+		t.Fatalf("offers = %d, want 3", len(offers))
+	}
+	if n := f.events.callCount() - before; n != 1 {
+		t.Errorf("asked the events plugin %d times for one trigger, want 1 — that is an N+1 across a plugin boundary", n)
 	}
 }

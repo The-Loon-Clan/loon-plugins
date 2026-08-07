@@ -24,6 +24,8 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 func testDB(t *testing.T) *sqlx.DB {
@@ -83,7 +85,7 @@ func testDB(t *testing.T) *sqlx.DB {
 	// public, the session scoping is doing the work and an unscoped store
 	// would pass every test below -- which is precisely how the bug shipped.
 	var leaked *string
-	if err := db.Get(&leaked, "SELECT to_regclass('public.events')::text"); err != nil {
+	if err := db.Get(&leaked, "SELECT to_regclass('public.reward_grants')::text"); err != nil {
 		t.Fatalf("check schema isolation: %v", err)
 	}
 	if leaked != nil {
@@ -100,32 +102,26 @@ func testStore(t *testing.T, db *sqlx.DB) *PGStore {
 	return NewPGStore(core.NewStorage(db).SchemaDB("rewards"))
 }
 
-// seedDaily creates a contiguous daily event with two windows and one
-// recurring points reward, returning the reward and the two window ids.
-func seedDaily(t *testing.T, db *sqlx.DB, day time.Time) (int64, int64, int64) {
+// seedDaily creates one recurring points reward and returns it with the
+// occurrence keys of two consecutive days.
+//
+// It no longer inserts an event or its windows: rewards has no such tables. The
+// keys are built the way the events plugin builds them, because what these tests
+// exercise is the GRANT side -- the pay-once constraint over (reward, user,
+// reference) -- and the reference is now a name supplied from outside.
+func seedDaily(t *testing.T, db *sqlx.DB, day time.Time) (int64, string, string) {
 	t.Helper()
-	var eventID int64
-	if err := db.QueryRow(`INSERT INTO rewards.events (slug, cron, timezone) VALUES ('daily','0 0 * * *','UTC') RETURNING id`).Scan(&eventID); err != nil {
-		t.Fatalf("insert event: %v", err)
-	}
-	var w1, w2 int64
-	if err := db.QueryRow(`INSERT INTO rewards.event_windows (event_id, starts_at, ends_at) VALUES ($1,$2,$3) RETURNING id`,
-		eventID, day, day.Add(24*time.Hour)).Scan(&w1); err != nil {
-		t.Fatalf("insert window 1: %v", err)
-	}
-	if err := db.QueryRow(`INSERT INTO rewards.event_windows (event_id, starts_at, ends_at) VALUES ($1,$2,$3) RETURNING id`,
-		eventID, day.Add(24*time.Hour), day.Add(48*time.Hour)).Scan(&w2); err != nil {
-		t.Fatalf("insert window 2: %v", err)
-	}
 	var rewardID int64
-	if err := db.QueryRow(`INSERT INTO rewards.rewards (slug, kind, event_id, trigger, delivery)
-	                       VALUES ('daily-login','recurring',$1,'login','claim') RETURNING id`, eventID).Scan(&rewardID); err != nil {
+	if err := db.QueryRow(`INSERT INTO rewards.rewards (slug, kind, scheduled_event_slug, trigger, delivery)
+	                       VALUES ('daily-login','recurring','daily','login','claim') RETURNING id`).Scan(&rewardID); err != nil {
 		t.Fatalf("insert reward: %v", err)
 	}
 	if _, err := db.Exec(`INSERT INTO rewards.reward_payouts (reward_id, kind, amount) VALUES ($1,'points',10)`, rewardID); err != nil {
 		t.Fatalf("insert payout: %v", err)
 	}
-	return rewardID, w1, w2
+	k1 := pluginapi.EventWindow{Slug: "daily", Starts: day, Ends: day.Add(24 * time.Hour)}.Key()
+	k2 := pluginapi.EventWindow{Slug: "daily", Starts: day.Add(24 * time.Hour), Ends: day.Add(48 * time.Hour)}.Key()
+	return rewardID, k1, k2
 }
 
 // The constraint, exercised through genuinely concurrent transactions. This is
@@ -168,51 +164,6 @@ func TestPGConcurrentGrantsHitTheConstraint(t *testing.T) {
 	_ = db.QueryRow(`SELECT count(*) FROM rewards.reward_grant_payouts`).Scan(&lines)
 	if grants != 1 || lines != 1 {
 		t.Errorf("rows: grants=%d frozen lines=%d, want 1/1", grants, lines)
-	}
-}
-
-// The half-open comparison, in SQL rather than in Go. At exactly ends_at the
-// member must be in the NEXT window; matching both would be a free extra claim
-// at every boundary.
-func TestPGOpenWindowIsHalfOpen(t *testing.T) {
-	db := testDB(t)
-	store := testStore(t, db)
-	day := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
-	_, w1, w2 := seedDaily(t, db, day)
-	ctx := context.Background()
-
-	var eventID int64
-	_ = db.QueryRow(`SELECT id FROM rewards.events WHERE slug='daily'`).Scan(&eventID)
-
-	for _, tc := range []struct {
-		name string
-		at   time.Time
-		want int64
-	}{
-		{"just after open", day.Add(time.Second), w1},
-		{"one ns before the boundary", day.Add(24*time.Hour - time.Microsecond), w1},
-		{"exactly at the boundary", day.Add(24 * time.Hour), w2},
-		{"inside the second", day.Add(30 * time.Hour), w2},
-		{"after everything", day.Add(72 * time.Hour), 0},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := store.OpenWindowsFor(ctx, []int64{eventID}, tc.at)
-			if err != nil {
-				t.Fatalf("open windows: %v", err)
-			}
-			if tc.want == 0 {
-				if len(got) != 0 {
-					t.Errorf("windows = %d, want none", len(got))
-				}
-				return
-			}
-			if len(got) != 1 {
-				t.Fatalf("windows = %d, want exactly 1", len(got))
-			}
-			if got[eventID].ID != tc.want {
-				t.Errorf("window = %d, want %d", got[eventID].ID, tc.want)
-			}
-		})
 	}
 }
 
@@ -270,45 +221,6 @@ func TestPGGrantByIDSkipsSettledLines(t *testing.T) {
 	}
 	if len(got.Payouts) != 1 || got.Payouts[0].Kind != PayoutMedal {
 		t.Errorf("unsettled lines = %v, want just the medal", got.Payouts)
-	}
-}
-
-// The window generator's idempotency is ON CONFLICT DO NOTHING against
-// UNIQUE (event_id, starts_at) -- which is what lets it run every tick over
-// overlapping ranges.
-func TestPGInsertWindowsIsIdempotent(t *testing.T) {
-	db := testDB(t)
-	store := testStore(t, db)
-	ctx := context.Background()
-	var eventID int64
-	if err := db.QueryRow(`INSERT INTO rewards.events (slug, cron, timezone) VALUES ('daily','0 0 * * *','UTC') RETURNING id`).Scan(&eventID); err != nil {
-		t.Fatalf("insert event: %v", err)
-	}
-	ev := Event{ID: eventID, Slug: "daily", Cron: str("0 0 * * *"), Timezone: "UTC"}
-	from := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
-
-	ws, err := GenerateWindows(ev, from, from.Add(5*24*time.Hour))
-	if err != nil {
-		t.Fatalf("generate: %v", err)
-	}
-	n, err := store.InsertWindows(ctx, ws)
-	if err != nil || n != len(ws) {
-		t.Fatalf("first insert: n=%d err=%v, want %d", n, err, len(ws))
-	}
-	n, err = store.InsertWindows(ctx, ws)
-	if err != nil || n != 0 {
-		t.Errorf("re-insert: n=%d err=%v, want 0/nil", n, err)
-	}
-
-	// An overlapping range adds only what is new, which is the generator's
-	// steady state: every tick regenerates ground it has already covered.
-	ws2, _ := GenerateWindows(ev, from.Add(3*24*time.Hour), from.Add(8*24*time.Hour))
-	n, err = store.InsertWindows(ctx, ws2)
-	if err != nil {
-		t.Fatalf("overlapping insert: %v", err)
-	}
-	if n != 3 {
-		t.Errorf("overlapping insert added %d, want 3", n)
 	}
 }
 
@@ -400,9 +312,11 @@ func TestPGPreviousMarkAndBaseline(t *testing.T) {
 		t.Errorf("after baseline mark = %d, want 10000", mark)
 	}
 
-	// A grant past the baseline wins.
+	// A grant past the baseline wins. The mark lives in high_water now, not in
+	// the reference -- that split is exactly what stops PreviousMark comparing
+	// "9" against "10" as text.
 	if _, err := store.CreateGrant(ctx,
-		Grant{RewardID: rewardID, UserID: 7, Reference: 10500, State: StateCredited},
+		Grant{RewardID: rewardID, UserID: 7, Reference: perUnitRef(10500), HighWater: 10500, State: StateCredited},
 		[]Payout{{Kind: PayoutPoints, Amount: 1000}}); err != nil {
 		t.Fatalf("create grant: %v", err)
 	}

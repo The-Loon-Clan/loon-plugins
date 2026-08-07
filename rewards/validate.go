@@ -59,17 +59,27 @@ const windowRunway = 7 * 24 * time.Hour
 // Validate cross-checks the whole configuration. Read-only.
 func (p *Plugin) Validate(ctx context.Context) ([]Finding, error) {
 	now := time.Now()
-	events, err := p.admin.ListEventStats(ctx, now)
-	if err != nil {
-		return nil, err
-	}
 	rewards, err := p.admin.ListRewards(ctx)
 	if err != nil {
 		return nil, err
 	}
-	coverage, err := p.admin.EventCoverage(ctx)
-	if err != nil {
-		return nil, err
+	// Which scheduled events exist, asked of the plugin that owns them.
+	//
+	// nil when there is no events plugin wired, and that is NOT the same as an
+	// empty set: nil means "cannot tell", empty means "asked, and there are
+	// none". validateRewards reports a dangling slug only in the second case,
+	// because complaining that an event is missing when nobody can see the list
+	// is noise an operator cannot act on.
+	var knownEvents map[string]bool
+	if p.events != nil {
+		evs, err := p.events.Events(ctx)
+		if err != nil {
+			return nil, err
+		}
+		knownEvents = make(map[string]bool, len(evs))
+		for _, ev := range evs {
+			knownEvents[ev.Slug] = ev.Enabled
+		}
 	}
 	achievements, err := p.admin.ListAchievementDefs(ctx)
 	if err != nil {
@@ -84,14 +94,11 @@ func (p *Plugin) Validate(ctx context.Context) ([]Finding, error) {
 		return nil, err
 	}
 
-	byID := make(map[int64]EventStats, len(events))
-	for _, e := range events {
-		byID[e.ID] = e
-	}
-
+	// Event window coverage is no longer checked here. The events plugin owns
+	// its own generator and its admin page reports coverage per event, so a
+	// second opinion computed from this side could only ever disagree.
 	var out []Finding
-	out = append(out, validateEvents(events, coverage, now)...)
-	out = append(out, validateRewards(rewards, byID, p.handlerKinds())...)
+	out = append(out, validateRewards(rewards, knownEvents, p.handlerKinds())...)
 
 	rewardsByID := make(map[int64]Reward, len(rewards))
 	for _, r := range rewards {
@@ -136,54 +143,11 @@ func (p *Plugin) handlerKinds() map[PayoutKind]bool {
 	return out
 }
 
-func validateEvents(events []EventStats, coverage map[int64]Coverage, now time.Time) []Finding {
-	var out []Finding
-	for _, e := range events {
-		if !e.Enabled {
-			continue
-		}
-		cov := coverage[e.ID]
-		subject := "event " + e.Slug
-
-		if cov.Windows == 0 {
-			if e.Cron == nil {
-				out = append(out, Finding{SeverityError, subject,
-					"one-off event with no windows — nothing generates windows for an event with no cron",
-					"author its windows by hand, or give it a cron"})
-			} else {
-				out = append(out, Finding{SeverityError, subject,
-					"has a cron but no windows at all",
-					"trigger the Reward Windows job in /admin/jobs"})
-			}
-			continue
-		}
-
-		// A contiguous reset must have no gaps: every instant belongs to a
-		// window, so a gap is a period during which the reward did not exist.
-		if e.Duration == nil && cov.Gaps > 0 {
-			out = append(out, Finding{SeverityWarn, subject,
-				fmt.Sprintf("%d gap(s) between windows, but this event has no duration so its windows should be contiguous", cov.Gaps),
-				"the generator was interrupted; the gaps are past periods nobody could earn and cannot be back-filled safely once grants exist"})
-		}
-
-		if e.Cron != nil {
-			runway := cov.LastEnd.Sub(now)
-			switch {
-			case runway <= 0:
-				out = append(out, Finding{SeverityError, subject,
-					"every window is in the past — nothing is earnable on this event now",
-					"trigger the Reward Windows job in /admin/jobs"})
-			case runway < windowRunway:
-				out = append(out, Finding{SeverityWarn, subject,
-					fmt.Sprintf("windows run out in %s", runway.Round(time.Hour)),
-					"the generator keeps 45 days ahead; this short means it has not run in a while"})
-			}
-		}
-	}
-	return out
-}
-
-func validateRewards(rewards []Reward, events map[int64]EventStats, handled map[PayoutKind]bool) []Finding {
+// knownEvents is the set of scheduled-event slugs the events plugin reports, or
+// nil when there is no events plugin wired. Nil and empty mean different things
+// here and the distinction matters: nil means "cannot tell", where an empty set
+// means "asked, and there are none".
+func validateRewards(rewards []Reward, knownEvents map[string]bool, handled map[PayoutKind]bool) []Finding {
 	var out []Finding
 	for _, r := range rewards {
 		if !r.Enabled {
@@ -206,28 +170,24 @@ func validateRewards(rewards []Reward, events map[int64]EventStats, handled map[
 			}
 		}
 
-		if r.EventID != nil {
-			ev, known := events[*r.EventID]
+		// The scheduled event, checked against what the events plugin reports.
+		//
+		// knownEvents nil means there is no events plugin to ask, and silence is
+		// right then: telling an operator their event does not exist when nobody
+		// can see the list is a finding they cannot act on. Window coverage is no
+		// longer checked from this side either -- the events plugin owns the
+		// generator and reports coverage on its own page, so a second opinion
+		// computed here could only ever disagree with the authority.
+		if r.EventSlug != "" && knownEvents != nil {
+			enabled, known := knownEvents[r.EventSlug]
 			if !known {
 				out = append(out, Finding{SeverityError, subject,
-					fmt.Sprintf("references event %d, which does not exist", *r.EventID),
-					"point it at a real event"})
-			} else if !ev.Enabled {
+					fmt.Sprintf("gated by scheduled event %q, which does not exist", r.EventSlug),
+					"point it at a real event in /admin/p/events, or clear the event"})
+			} else if !enabled {
 				out = append(out, Finding{SeverityError, subject,
-					fmt.Sprintf("gated by event %q, which is disabled — it can never be earned", ev.Slug),
+					fmt.Sprintf("gated by scheduled event %q, which is disabled — it can never be earned", r.EventSlug),
 					"enable the event, or the reward is dead weight"})
-			} else if ev.Current == nil && ev.Duration == nil {
-				// A season being closed is normal. A contiguous reset having
-				// no open window is not: some window should always contain now.
-				//
-				// Two causes share this symptom, and only one is cured by the
-				// job: a stalled generator, or an event created MID-period.
-				// The generator starts from now and cannot step a cron
-				// backwards, so a daily reset created at 3pm has no window
-				// until midnight no matter how often the job runs.
-				out = append(out, Finding{SeverityError, subject,
-					fmt.Sprintf("event %q has no window open right now, and it is a reset, so one always should be", ev.Slug),
-					"trigger the Reward Windows job in /admin/jobs; if windows exist but only in the future, the event was created mid-period — author the current window by hand (add-window) or wait for the first firing"})
 			}
 		}
 
@@ -246,9 +206,9 @@ func validateRewards(rewards []Reward, events map[int64]EventStats, handled map[
 				"per_unit with delivery=claim and an expiry — a member who misses the window loses those units forever, because the mark advances whether or not the grant was collected",
 				"drop the expiry (a claim that waits costs nothing), or make delivery=auto"})
 		}
-		if r.Kind == KindPerUnit && r.EventID != nil {
+		if r.Kind == KindPerUnit && r.EventSlug != "" {
 			out = append(out, Finding{SeverityInfo, subject,
-				"is per_unit AND gated by an event — the event still gates earning, but the reference is the high-water mark, not the window",
+				"is per_unit AND gated by a scheduled event — the event still gates earning, but the reference names the high-water mark, not the occurrence",
 				"usually per_unit rewards want no event at all"})
 		}
 		// A per_unit reward is granted by a job reading its UnitSource, never
