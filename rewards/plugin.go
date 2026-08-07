@@ -167,6 +167,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// ...and the ops API reads and writes configuration through this.
 	c.Register(AdminExtension, p.admin)
 	c.Register(ValidatorExtension, Validator(p))
+	// ...and a host achievements page reads member standing through this.
+	if err := p.registerAchievements(c); err != nil {
+		return err
+	}
 
 	// The admin page is web-only: the worker has no router, and registering a
 	// view there would be a boot error rather than a harmless no-op.
