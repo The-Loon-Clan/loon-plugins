@@ -231,9 +231,9 @@ func (s *PGStore) CreateGrant(ctx context.Context, g Grant, payouts []Payout) (G
 // payout lines.
 func insertGrantTx(ctx context.Context, tx *sqlx.Tx, g *Grant, payouts []Payout) error {
 	err := tx.QueryRowContext(ctx, `
-		INSERT INTO reward_grants (reward_id, user_id, reference, state, reason, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
-		g.RewardID, g.UserID, g.Reference, string(g.State), g.Reason, g.ExpiresAt,
+		INSERT INTO reward_grants (reward_id, user_id, reference, state, reason, expires_at, silent)
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at`,
+		g.RewardID, g.UserID, g.Reference, string(g.State), g.Reason, g.ExpiresAt, g.Silent,
 	).Scan(&g.ID, &g.CreatedAt)
 	if uniqueViolation(err) {
 		// The constraint arbitrated: someone else got there first. Not an
@@ -267,7 +267,7 @@ func (s *PGStore) GrantByID(ctx context.Context, id int64) (*Grant, error) {
 	// itself never stores the slug; renaming a reward renames its history.
 	err := s.get(ctx, &g, `
 		SELECT g.id, g.reward_id, r.slug AS reward_slug, g.user_id, g.reference,
-		       g.state, g.reason, g.created_at, g.expires_at, g.settled_at
+		       g.state, g.reason, g.created_at, g.expires_at, g.settled_at, g.silent
 		  FROM reward_grants g JOIN rewards r ON r.id = g.reward_id
 		 WHERE g.id = $1`, id)
 	if errors.Is(err, sql.ErrNoRows) {

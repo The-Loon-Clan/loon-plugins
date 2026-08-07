@@ -252,7 +252,20 @@ carries the same rule as a `CHECK ((completed_at IS NULL) = (grant_id IS
 NULL))`, so a future writer that sets one without the other is rejected rather
 than merely wrong.
 
-**Creating an achievement BACKFILLS it.** One scored on a counter is awarded
+**Creating an achievement BACKFILLS it — silently.** The first scoring pass
+after an achievement is created awards it to everyone already past the
+threshold and tells none of them: they earned it before the thing existed, and
+announcing to three thousand people at once about something they did months ago
+is a mailshot rather than a notification. The pass then stamps
+`achievements.backfilled_at`, and every completion after that is announced
+normally. The badge is awarded either way — only the telling is suppressed.
+
+The mechanism is `reward_grants.silent`, not an achievement concept:
+`reward_issuances` (deliberate retroactive grants to a cohort) wants exactly
+the same thing, and an operator back-paying six months of a reward should not
+fire six months of notifications either.
+
+**The award itself is the point, so it is never suppressed.** One scored on a counter is awarded
 retroactively to everyone who already meets the threshold, on the next job
 tick, and each of them is notified. That is the point of an absolute counter —
 "100 posts" should recognise people who already wrote a hundred — but it means

@@ -132,6 +132,13 @@ func (p *Plugin) onCountableEvent(ctx context.Context, e core.Event) {
 // per window if it were ever relaxed without revisiting the line below, so the
 // kind is re-checked here rather than trusted.
 func (p *Plugin) completeAchievement(ctx context.Context, st *PGStore, d AchievementDef, userID int64) error {
+	// An achievement that has never been scored is being backfilled right now,
+	// so this member earned it before it existed. Award it, do not announce
+	// it. See MarkBackfilled for when that stops being true.
+	return p.completeAchievementSilent(ctx, st, d, userID, d.BackfilledAt == nil)
+}
+
+func (p *Plugin) completeAchievementSilent(ctx context.Context, st *PGStore, d AchievementDef, userID int64, silent bool) error {
 	r, err := p.store.RewardByID(ctx, d.RewardID)
 	if err != nil {
 		return err
@@ -161,6 +168,7 @@ func (p *Plugin) completeAchievement(ctx context.Context, st *PGStore, d Achieve
 	g := Grant{
 		RewardID: r.ID, UserID: userID, Reference: 0,
 		State: StatePending, Reason: "achievement: " + d.Slug,
+		Silent: silent,
 	}
 	if r.ExpiresAfter != nil {
 		exp := time.Now().Add(*r.ExpiresAfter)
@@ -227,6 +235,13 @@ func (p *Plugin) scoreMetric(ctx context.Context, metric string, src MetricSourc
 	if err != nil {
 		return 0, err
 	}
+	// Which of these defs are being scored for the FIRST time. Captured before
+	// the loop, because MarkBackfilled below flips it and a member scored late
+	// in the same pass must be treated the same as one scored early.
+	backfilling := make(map[int64]bool, len(defs))
+	for _, d := range defs {
+		backfilling[d.ID] = d.BackfilledAt == nil
+	}
 	for userID, v := range values {
 		if userID == 0 || v <= 0 {
 			continue
@@ -241,13 +256,29 @@ func (p *Plugin) scoreMetric(ctx context.Context, metric string, src MetricSourc
 			if !reached {
 				continue
 			}
-			if err := p.completeAchievement(ctx, st, d, userID); err != nil {
+			if err := p.completeAchievementSilent(ctx, st, d, userID, backfilling[d.ID]); err != nil {
 				// One member's failure must not abandon the rest of the
 				// membership for this tick.
 				log.Printf("achievements: completing %q for user %d: %v", d.Slug, userID, err)
 				continue
 			}
 			completed++
+		}
+	}
+
+	// The backfill is over. Stamped AFTER the whole pass, so every member the
+	// counter named is treated alike -- stamping per completion would announce
+	// to whoever happened to be scored second.
+	//
+	// Stamped even when nobody qualified: an achievement nobody meets yet has
+	// still had its backfill, and the first person to earn it later should
+	// hear about it.
+	for id, wasBackfilling := range backfilling {
+		if !wasBackfilling {
+			continue
+		}
+		if err := st.MarkBackfilled(ctx, id); err != nil {
+			log.Printf("achievements: marking %d backfilled: %v", id, err)
 		}
 	}
 	return completed, nil

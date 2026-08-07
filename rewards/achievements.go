@@ -169,17 +169,22 @@ func (s *PGStore) Achievements(ctx context.Context, userID int64) ([]Achievement
 // AchievementDef is an achievement as configured, without any member's
 // standing. The evaluator reads these; the admin page edits them.
 type AchievementDef struct {
-	ID          int64  `db:"id"`
-	Slug        string `db:"slug"`
-	Name        string `db:"name"`
-	Description string `db:"description"`
-	RewardID    int64  `db:"reward_id"`
-	Metric      string `db:"metric"`
-	Threshold   int64  `db:"threshold"`
-	Trigger     string `db:"trigger"`
-	Ordinal     int    `db:"ordinal"`
-	Hidden      bool   `db:"hidden"`
-	Enabled     bool   `db:"enabled"`
+	ID int64 `db:"id"`
+	// BackfilledAt is when the first scoring pass finished. Nil means it has
+	// never been scored, so the NEXT pass is the backfill and its completions
+	// are silent — everyone earning it before it existed gets the badge
+	// without being told about something that happened months ago.
+	BackfilledAt *time.Time `db:"backfilled_at"`
+	Slug         string     `db:"slug"`
+	Name         string     `db:"name"`
+	Description  string     `db:"description"`
+	RewardID     int64      `db:"reward_id"`
+	Metric       string     `db:"metric"`
+	Threshold    int64      `db:"threshold"`
+	Trigger      string     `db:"trigger"`
+	Ordinal      int        `db:"ordinal"`
+	Hidden       bool       `db:"hidden"`
+	Enabled      bool       `db:"enabled"`
 }
 
 // AchievementDefsByTrigger returns the enabled achievements a surface can
@@ -189,7 +194,7 @@ func (s *PGStore) AchievementDefsByTrigger(ctx context.Context, trigger string) 
 	var defs []AchievementDef
 	err := s.sel(ctx, &defs, `
 		SELECT id, slug, name, description, reward_id, metric, threshold,
-		       trigger, ordinal, hidden, enabled
+		       trigger, ordinal, hidden, enabled, backfilled_at
 		  FROM achievements
 		 WHERE enabled AND trigger = $1
 		 ORDER BY ordinal, name`, trigger)
@@ -202,7 +207,7 @@ func (s *PGStore) AchievementDefsByMetric(ctx context.Context, metric string) ([
 	var defs []AchievementDef
 	err := s.sel(ctx, &defs, `
 		SELECT id, slug, name, description, reward_id, metric, threshold,
-		       trigger, ordinal, hidden, enabled
+		       trigger, ordinal, hidden, enabled, backfilled_at
 		  FROM achievements
 		 WHERE enabled AND metric = $1
 		 ORDER BY threshold`, metric)
@@ -215,7 +220,7 @@ func (s *PGStore) ListAchievementDefs(ctx context.Context) ([]AchievementDef, er
 	var defs []AchievementDef
 	err := s.sel(ctx, &defs, `
 		SELECT id, slug, name, description, reward_id, metric, threshold,
-		       trigger, ordinal, hidden, enabled
+		       trigger, ordinal, hidden, enabled, backfilled_at
 		  FROM achievements
 		 ORDER BY ordinal, name`)
 	return defs, err
@@ -378,4 +383,17 @@ func (p *Plugin) registerAchievements(c *core.Core) error {
 		// yet the full set. Saying so is kinder than letting a host find out.
 		Stable: false,
 	}, AchievementsFunc(st.Achievements))
+}
+
+// MarkBackfilled stamps the end of an achievement's first scoring pass.
+//
+// Everything completed before this ran was earned before the achievement
+// existed and was awarded silently; everything after is announced normally.
+// Stamped once — the WHERE clause makes a second pass a no-op rather than
+// resetting the mark and re-silencing a later cohort.
+func (s *PGStore) MarkBackfilled(ctx context.Context, achievementID int64) error {
+	_, err := s.exec(ctx, `
+		UPDATE achievements SET backfilled_at = now()
+		 WHERE id = $1 AND backfilled_at IS NULL`, achievementID)
+	return err
 }

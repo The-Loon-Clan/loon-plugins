@@ -125,6 +125,14 @@ type Grant struct {
 	// through the reward would let an admin's edit change what an
 	// already-offered claim pays.
 	Payouts []Payout `db:"-"`
+	// Silent hands the reward over without announcing it.
+	//
+	// Set for a retroactive award: an achievement backfilled to people who
+	// earned it before it existed, or an issuance back-paying a cohort.
+	// Payout handlers skip the notifying part and do the paying part
+	// regardless -- the member gets what they are owed, they just are not
+	// told about something that happened months ago.
+	Silent bool `db:"silent"`
 }
 
 // Offer is a Reward resolved FOR one member at one moment.

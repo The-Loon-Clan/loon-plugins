@@ -403,3 +403,79 @@ func TestAchievementRefusesAPayoutlessReward(t *testing.T) {
 		t.Error("the completion was stamped despite the refusal")
 	}
 }
+
+// Creating an achievement awards it to everyone already past the threshold and
+// notified every one of them — 23 people within seconds of an INSERT on
+// 2026-08-07. The award is right; the announcement is not, for somebody who
+// earned it before the thing existed.
+//
+// The first scoring pass is therefore silent, and only the first.
+func TestFirstScoringPassIsSilentAndOnlyTheFirst(t *testing.T) {
+	db := testDB(t)
+	st := testStore(t, db)
+	ctx := context.Background()
+
+	achID, rewardID := seedAchievement(t, db, "silent", 1)
+	p := &Plugin{store: st, admin: st}
+
+	// Someone who already qualifies: the backfill cohort.
+	if _, err := st.RecordProgress(ctx, achID, 7, 5); err != nil {
+		t.Fatalf("progress: %v", err)
+	}
+	defs, err := st.AchievementDefsByMetric(ctx, "uploads")
+	if err != nil {
+		t.Fatalf("defs: %v", err)
+	}
+	if len(defs) != 1 || defs[0].BackfilledAt != nil {
+		t.Fatalf("setup: a fresh achievement should have no backfill mark: %+v", defs)
+	}
+	if err := p.completeAchievement(ctx, st, defs[0], 7); err != nil {
+		t.Fatalf("backfill completion: %v", err)
+	}
+	if !grantSilent(t, db, rewardID, 7) {
+		t.Error("a backfilled completion was not marked silent — the member would be " +
+			"told about something they did months ago")
+	}
+
+	// The pass ends; the mark goes on.
+	if err := st.MarkBackfilled(ctx, achID); err != nil {
+		t.Fatalf("mark: %v", err)
+	}
+
+	// The next member to earn it is a live earner and must hear about it.
+	defs, _ = st.AchievementDefsByMetric(ctx, "uploads")
+	if defs[0].BackfilledAt == nil {
+		t.Fatal("the backfill mark did not stick")
+	}
+	if _, err := st.RecordProgress(ctx, achID, 9, 5); err != nil {
+		t.Fatalf("progress: %v", err)
+	}
+	if err := p.completeAchievement(ctx, st, defs[0], 9); err != nil {
+		t.Fatalf("live completion: %v", err)
+	}
+	if grantSilent(t, db, rewardID, 9) {
+		t.Error("a member who earned it AFTER the backfill was silenced — they did " +
+			"the thing just now and heard nothing")
+	}
+
+	// And the mark is stamped once: a second call must not reset it and
+	// re-silence a later cohort.
+	before := defs[0].BackfilledAt
+	if err := st.MarkBackfilled(ctx, achID); err != nil {
+		t.Fatalf("second mark: %v", err)
+	}
+	again, _ := st.AchievementDefsByMetric(ctx, "uploads")
+	if !again[0].BackfilledAt.Equal(*before) {
+		t.Error("MarkBackfilled moved an existing mark; a later cohort would be re-silenced")
+	}
+}
+
+func grantSilent(t *testing.T, db *sqlx.DB, rewardID, userID int64) bool {
+	t.Helper()
+	var silent bool
+	if err := db.Get(&silent, `SELECT silent FROM rewards.reward_grants
+	                            WHERE reward_id = $1 AND user_id = $2`, rewardID, userID); err != nil {
+		t.Fatalf("read grant: %v", err)
+	}
+	return silent
+}
