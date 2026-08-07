@@ -80,11 +80,20 @@ func (w EventWindow) Contains(t time.Time) bool {
 // Perpetual reports whether this window never closes. A never-closing window is
 // stored with Ends at the far future rather than as a NULL, so every query can
 // use one range comparison and no caller needs a special case.
-func (w EventWindow) Perpetual() bool { return w.Ends.After(perpetualThreshold) }
+func (w EventWindow) Perpetual() bool { return IsPerpetual(w.Ends) }
 
-// perpetualThreshold is the "obviously not a real end date" line. Any window
-// ending past it is perpetual by construction.
-var perpetualThreshold = time.Date(9000, 1, 1, 0, 0, 0, 0, time.UTC)
+// PerpetualAfter is the "obviously not a real end date" line: any window ending
+// past it never closes.
+//
+// Exported and lives HERE, with the type, because three places need the same
+// answer — the generator that writes the sentinel, the window that reports
+// itself perpetual, and the admin page that must print "never" instead of the
+// year 9999. Three copies of one magic date is three chances for one of them to
+// drift by a digit.
+var PerpetualAfter = time.Date(9000, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// IsPerpetual reports whether an end instant means "never closes".
+func IsPerpetual(end time.Time) bool { return end.After(PerpetualAfter) }
 
 // ScheduledEvents is looked up off the extension registry under
 // ScheduledEventsName. Every method is safe to call from any process.

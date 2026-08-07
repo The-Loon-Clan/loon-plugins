@@ -1,0 +1,136 @@
+{{define "events_admin.html"}}
+{{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
+
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Scheduled events</strong>
+    <span class="text-muted small">windows are materialised by the <em>Event Windows</em> job &mdash; trigger it from /admin/jobs to see them immediately</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 align-middle">
+      <thead><tr>
+        <th>Slug</th><th>Name</th><th>Shape</th><th>Cron</th><th>TZ</th>
+        <th>Windows</th><th>Open now</th><th>Next opens</th><th>Covered to</th><th></th>
+      </tr></thead>
+      <tbody>
+      {{range .Events}}
+        <tr class="{{if not .Enabled}}text-muted{{end}}">
+          <td><code>{{.Slug}}</code></td>
+          <td>{{.Name}}</td>
+          <td><span class="text-muted small">{{.Shape}}</span></td>
+          <td>{{if .Cron}}<code>{{.Cron}}</code>{{else}}<span class="text-muted">one-off</span>{{end}}</td>
+          <td>{{.Timezone}}</td>
+          <td><a href="?event={{.Slug}}">{{.Windows}}</a></td>
+          <td>
+            {{if not .Enabled}}<span class="badge bg-secondary">disabled</span>
+            {{else if .OpenNow}}<span class="badge bg-success">open</span>
+            {{else}}<span class="badge bg-secondary">closed</span>{{end}}
+          </td>
+          <td>{{ts .NextOpen}}</td>
+          <td>{{ts .LastEnds}}</td>
+          <td class="text-nowrap">
+            <form method="post" action="?action=event-toggle" class="d-inline">
+              <input type="hidden" name="slug" value="{{.Slug}}">
+              <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
+              <button class="btn btn-sm btn-outline-secondary">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+            </form>
+            <form method="post" action="?action=event-delete" class="d-inline"
+                  onsubmit="return confirm('Delete {{.Slug}} and all its windows? Anything referencing this slug will see it as absent.');">
+              <input type="hidden" name="slug" value="{{.Slug}}">
+              <button class="btn btn-sm btn-outline-danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {{else}}
+        <tr><td colspan="10" class="text-muted">No events yet. Create one below.</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{{if .Picked}}
+<div class="card mb-3">
+  <div class="card-header"><strong>Windows</strong>
+    <span class="text-muted small">of <code>{{.Picked}}</code> &mdash; newest first</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Starts</th><th>Ends</th><th>State</th></tr></thead>
+      <tbody>
+      {{range .Windows}}
+        <tr>
+          <td>{{ts .Starts}}</td>
+          <td>{{ts .Ends}}</td>
+          <td>{{if .Contains $.Now}}<span class="badge bg-success">open now</span>
+              {{else if .Starts.After $.Now}}<span class="text-muted">future</span>
+              {{else}}<span class="text-muted">past</span>{{end}}</td>
+        </tr>
+      {{else}}
+        <tr><td colspan="3" class="text-muted">
+          No windows yet &mdash; the generator has not run since this event was created.
+        </td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}
+
+<div class="card">
+  <div class="card-header"><strong>Create or update an event</strong>
+    <span class="text-muted small">saving an existing slug replaces it</span>
+  </div>
+  <div class="card-body">
+    <form method="post" action="?action=event-save" class="row g-2">
+      <div class="col-md-3">
+        <label class="form-label small mb-0">Slug</label>
+        <input name="slug" class="form-control form-control-sm" required placeholder="summer-2026">
+        <div class="form-text">How other systems reference it. Changing it detaches them.</div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small mb-0">Name</label>
+        <input name="name" class="form-control form-control-sm" placeholder="Summer 2026">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small mb-0">Description</label>
+        <input name="description" class="form-control form-control-sm">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label small mb-0">Cron</label>
+        <input name="cron" class="form-control form-control-sm" placeholder="0 0 * * *">
+        <div class="form-text">Leave blank for a one-off, and set a start date instead.</div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small mb-0">Start (one-off)</label>
+        <input type="datetime-local" name="starts_at" class="form-control form-control-sm">
+        <div class="form-text">Read in the timezone below, not UTC.</div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small mb-0">Duration (minutes)</label>
+        <input name="duration_minutes" class="form-control form-control-sm" placeholder="blank">
+        <div class="form-text">
+          Blank on a recurring event means each window runs until the next firing.
+          Blank on a one-off means it <strong>never closes</strong>.
+        </div>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-0">Timezone</label>
+        <input name="timezone" class="form-control form-control-sm" value="UTC">
+      </div>
+      <div class="col-md-1 d-flex align-items-end">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="enabled" value="1" id="ev-enabled" checked>
+          <label class="form-check-label small" for="ev-enabled">On</label>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <button class="btn btn-sm btn-primary">Save event</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

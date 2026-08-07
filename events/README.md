@@ -16,12 +16,20 @@ into rewards to ask.
 
 ## Surface
 
-No routes. This plugin has no HTTP surface of its own — it is consumed through
-the extension registry, and admin CRUD is a follow-up.
+One admin page, registered as a `SlotAdminPage` view under slug **`events`**
+("Scheduled events", nav group Operations): the definitions table with live
+open/closed state and next-opens, a windows panel per event, and a create/update
+form. Actions: `event-save`, `event-toggle`, `event-delete`.
+
+Ported from the rewards plugin, whose own comment said why it should never have
+lived there — *"Events are not reward-specific … burying them inside a Rewards
+page would misrepresent what they are. It also keeps each page to one job: Events
+is WHEN, Rewards is WHAT."* This is the WHEN, where the WHEN is owned.
 
 Process kinds: `web`, `worker`. Both register the capability, because a consumer
 on the worker asking "is the season open" is the same question as one on web.
-Only `worker` runs the generator.
+Only `worker` runs the generator; the page is skipped on the worker, which has no
+router.
 
 ## Data
 
@@ -111,6 +119,7 @@ cron costs that event its windows, not the site its daily reset.
 ## Files
 
 - `plugin.go` — registration, capability publication, the generator job.
+- `views.go` + `templates/events_admin.html` — the admin page.
 - `service.go` — the published capability, thin over the store, with an
   injectable clock so window-boundary tests are not flaky.
 - `windows.go` — `GenerateWindows` and `NextStart`; the cron parsing and the
@@ -125,6 +134,11 @@ the horizon, missing start date), recurring contiguity end-to-start, the
 `from`-lands-on-a-firing off-by-one, malformed cron, disabled events, `NextStart`
 past the horizon, and the MemStore honouring the schema's uniqueness and cascade.
 The perpetual-window assertion was mutation-checked.
+
+Render-tested against every event shape, including the streamed-abort signature
+(a field the view model lacks truncates `html/template` mid-page, so the test
+asserts on content at the END of the template). Mutation-checked by adding a
+bogus field and watching it fail.
 
 Needs integration (live DB): `PGStore` — the INTERVAL-as-seconds round trip, the
 `unnest`-based batch insert, and `DISTINCT ON` window selection are SQL shapes a

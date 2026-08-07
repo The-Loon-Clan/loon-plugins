@@ -17,6 +17,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"html/template"
 	"time"
 
 	"github.com/the-loon-clan/loon/core"
@@ -37,6 +38,7 @@ type Plugin struct {
 	store Store
 	svc   *Service
 	job   *schedule.JobInfo
+	tmpl  *template.Template
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -71,6 +73,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 		Since:   "0.1.0",
 		Summary: "scheduled time windows: which events exist, which are open now, when one next opens",
 	}, pluginapi.ScheduledEvents(p.svc))
+
+	// The admin page. Registered on any process that has a router — the worker
+	// has none, so registerViews is skipped there rather than failing.
+	if c.Process != "worker" {
+		if err := p.registerViews(c); err != nil {
+			return fmt.Errorf("events: register views: %w", err)
+		}
+	}
 
 	if c.Process == "worker" || c.Process == "all" {
 		// Manually triggerable from /admin/jobs, which matters here: the
