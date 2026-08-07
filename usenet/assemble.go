@@ -402,6 +402,7 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			// plugin table records this, and the host table mixes in agent
 			// uploads — the ring is what the crawlers page shows.
 			p.tel.noteBuilt(title, k.Group, size)
+			p.emitIndexed(ctx, title, k.Group, size)
 			p.resolutions.note(k.Group, k.Base, "built", len(arts), spanLo, spanHi)
 		}
 	}
@@ -659,6 +660,7 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			salvaged++
 			p.tel.noteSalvaged(1)
 			p.tel.noteBuilt(title, k.Group, size)
+			p.emitIndexed(ctx, title, k.Group, size)
 		}
 	}
 	if salvaged+dead+junked > 0 {

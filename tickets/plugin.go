@@ -37,7 +37,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if db == nil {
 		return fmt.Errorf("tickets: Core.Storage.DB() is nil")
 	}
-	p.handlers = &Handlers{deps: *deps, store: NewPGStore(db), errs: c.Errors}
+	p.handlers = &Handlers{deps: *deps, store: NewPGStore(db), errs: c.Errors, core: c}
+
+	// Announce tickets. Opening one is not countable -- nobody should be
+	// rewarded for needing help -- but a STAFF reply is a real contribution.
+	if err := declareEvents(c); err != nil {
+		return err
+	}
 
 	engine := c.Router.Engine()
 	if engine == nil {

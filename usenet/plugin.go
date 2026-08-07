@@ -163,6 +163,13 @@ func (p *Plugin) Metadata() core.Metadata {
 
 func (p *Plugin) Provision(c *core.Core) error {
 	p.core = c
+
+	// Announce assembled releases. A SYSTEM event -- the crawler did this, not
+	// a member -- so nothing can score an achievement on it, which core
+	// enforces rather than leaves to good sense.
+	if err := declareEvents(c); err != nil {
+		return err
+	}
 	pg := NewPGStore(c.Storage.SchemaDB("usenet"))
 	p.st = pg
 	if err := c.Config.PluginInto("usenet", &p.cfg); err != nil {

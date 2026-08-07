@@ -27,6 +27,8 @@ type Handlers struct {
 	deps  Deps
 	store Store
 	errs  core.ErrorReporter
+	// core is held only to Emit; nil in tests, so emits go through h.emit.
+	core *core.Core
 }
 
 func (h *Handlers) SupportPage(c *gin.Context) {
@@ -73,6 +75,10 @@ func (h *Handlers) SubmitTicket(c *gin.Context) {
 			"Error":      "Failed to submit ticket. Please try again.",
 		})
 		return
+	}
+	if ticket != nil {
+		h.emit(ctx, EventTicketCreated, user.ID,
+			TicketCreated{TicketID: ticket.ID, Subject: subject, Priority: priority})
 	}
 	if h.deps.NotifyNewTicket != nil && ticket != nil {
 		h.deps.NotifyNewTicket(ctx, int(ticket.ID), user.Username, subject, body, user.ID)
@@ -198,7 +204,16 @@ func (h *Handlers) ReplyTicket(c *gin.Context) {
 		return
 	}
 	isAdmin := user.Staff
-	_, _ = h.store.CreateTicketReply(ctx, id, user.ID, user.Username, body, isAdmin)
+	// The error was discarded. Capturing it matters now: emitting after a
+	// swallowed failure would announce a reply that does not exist, and a
+	// subscriber counting staff replies would credit somebody for it.
+	if _, err := h.store.CreateTicketReply(ctx, id, user.ID, user.Username, body, isAdmin); err == nil && isAdmin {
+		// STAFF only. The achievement subscriber does not filter -- it adds
+		// one for every countable event -- so firing on every reply would
+		// badge whoever answered their own ticket most.
+		h.emit(ctx, EventStaffReplied, user.ID,
+			StaffReplied{TicketID: id, OwnerID: ticket.UserID})
+	}
 	if h.deps.NotifyReply != nil {
 		h.deps.NotifyReply(ctx, int(id), ticket.UserID, ticket.UserID, user.ID, user.Username, ticket.Subject, isAdmin)
 	}
