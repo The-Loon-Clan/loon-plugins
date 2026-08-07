@@ -104,6 +104,11 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// (/plugin/dailyreward/claim) that inherits the host middleware stack.
 	c.Router.Mount("dailyreward").POST("/claim", p.claim)
 
+	// Per-user claim state, for hosts that want a compact control of their own
+	// rather than (or as well as) the card below. Registered before the views
+	// so a host looking it up cannot race the widget's own registration.
+	c.Register(StatusExtension, StatusFunc(p.status))
+
 	if err := c.RegisterView(core.View{
 		Slug: "daily-reward", Title: "Daily reward", Slot: core.SlotSiteWidget,
 		MinRole: core.RoleUser, // logged-in only

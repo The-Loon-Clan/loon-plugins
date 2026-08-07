@@ -2,6 +2,7 @@ package dailyreward
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -112,4 +113,46 @@ func (p *Plugin) claim(c *gin.Context) {
 		})
 	}
 	c.Redirect(http.StatusSeeOther, "/")
+}
+
+// StatusExtension is the registry key the per-user claim state is published
+// under. A host looks it up after Boot, the way it looks up news.home.
+//
+// It exists because the claim state was reachable only from INSIDE this
+// plugin's own widget: the host could render the card but could not answer
+// "may this member claim right now?", so it had no way to show a compact
+// indicator anywhere else — a stat-bar button, a nav badge — without either
+// duplicating the once-per-day rule or reading this plugin's table.
+const StatusExtension = "dailyreward.status"
+
+// Status is what a host needs to decide whether to offer a claim, and nothing
+// more. Deliberately not the whole record: Longest and Total belong to the
+// cards that display them, and a seam that hands over everything is one that
+// has to change every time the record does.
+type Status struct {
+	// Claimed is true once today's reward has been taken. A host showing a
+	// claim control should hide it.
+	Claimed bool
+	Streak  int
+	// Reward is what a claim made RIGHT NOW would pay, so a host can label
+	// its control. When Claimed is already true there is no such claim, and
+	// this reports today's payout rather than tomorrow's — read it only when
+	// Claimed is false, which is the only time a host draws the control.
+	Reward int
+}
+
+// StatusFunc is the extension's type.
+type StatusFunc func(ctx context.Context, userID int64) (Status, error)
+
+// status reports one member's claim state.
+func (p *Plugin) status(ctx context.Context, userID int64) (Status, error) {
+	st, err := p.st.Get(ctx, userID)
+	if err != nil {
+		return Status{}, err
+	}
+	return Status{
+		Claimed: st.LastClaim == today(),
+		Streak:  st.Streak,
+		Reward:  rewardFor(nextStreak(st)),
+	}, nil
 }
