@@ -71,7 +71,7 @@ func (r *PGStore) GetCommunityBySlug(ctx context.Context, slug string, viewerID 
 		             WHERE vs.community_id = c.id AND vs.user_id = $2
 		        ) THEN TRUE ELSE FALSE END) AS is_subscribed
 		FROM communities c
-		LEFT JOIN users u ON u.id = c.owner_user_id
+		LEFT JOIN user_display u ON u.id = c.owner_user_id
 		WHERE c.slug = $1`, slug, viewerID)
 	return &c, err
 }
@@ -83,7 +83,7 @@ func (r *PGStore) GetCommunityByID(ctx context.Context, id int) (*Community, err
 		       COALESCE(u.username, '')    AS owner_username,
 		       COALESCE(u.avatar_path, '') AS owner_avatar_path
 		FROM communities c
-		LEFT JOIN users u ON u.id = c.owner_user_id
+		LEFT JOIN user_display u ON u.id = c.owner_user_id
 		WHERE c.id = $1`, id)
 	return &c, err
 }
@@ -102,7 +102,7 @@ func (r *PGStore) ListCommunities(ctx context.Context, limit, offset int) ([]*Co
 		       COALESCE(s.cnt, 0)          AS subscriber_count,
 		       COALESCE(t.cnt, 0)          AS thread_count
 		FROM communities c
-		LEFT JOIN users u ON u.id = c.owner_user_id
+		LEFT JOIN user_display u ON u.id = c.owner_user_id
 		LEFT JOIN (
 		    SELECT community_id, COUNT(*)::int AS cnt
 		      FROM community_subscribers GROUP BY community_id
@@ -130,7 +130,7 @@ func (r *PGStore) ListSubscribedCommunities(ctx context.Context, userID int) ([]
 		       TRUE                        AS is_subscribed
 		FROM community_subscribers sub
 		JOIN communities c ON c.id = sub.community_id
-		LEFT JOIN users u ON u.id = c.owner_user_id
+		LEFT JOIN user_display u ON u.id = c.owner_user_id
 		LEFT JOIN (
 		    SELECT community_id, COUNT(*)::int AS cnt
 		      FROM community_subscribers GROUP BY community_id
@@ -217,10 +217,10 @@ func (r *PGStore) ListCommunityMods(ctx context.Context, communityID int) ([]*Co
 	var rows []*CommunityMod
 	err := r.db.SelectContext(ctx, &rows, `
 		SELECT cm.community_id, cm.user_id, cm.added_by, cm.added_at,
-		       u.username, COALESCE(u.role, 'user') AS role,
+		       u.username, u.role AS role,
 		       COALESCE(u.avatar_path, '') AS avatar_path
 		FROM community_mods cm
-		JOIN users u ON u.id = cm.user_id
+		JOIN user_display u ON u.id = cm.user_id
 		WHERE cm.community_id = $1
 		ORDER BY cm.added_at ASC`, communityID)
 	return rows, err
@@ -288,7 +288,7 @@ const communityThreadCols = `ct.id, ct.community_id, ct.user_id, ct.title, ct.bo
 	ct.hidden_at, ct.hidden_by, ct.hidden_reason,
 	ct.created_at, ct.updated_at,
 	u.username                                 AS username,
-	COALESCE(u.role, 'user')                   AS user_role,
+	u.role                                     AS user_role,
 	COALESCE(u.reputation_tier, 0)             AS reputation_tier,
 	COALESCE(u.avatar_path, '')                AS avatar_path,
 	c.name                                     AS community_name,
@@ -315,7 +315,7 @@ func (r *PGStore) ListCommunityThreads(ctx context.Context, communityID, limit, 
 	err := r.db.SelectContext(ctx, &rows, `
 		SELECT `+communityThreadCols+`
 		FROM community_threads ct
-		JOIN users u       ON u.id = ct.user_id
+		JOIN user_display u       ON u.id = ct.user_id
 		JOIN communities c ON c.id = ct.community_id
 		WHERE ct.community_id = $1`+visibilityFilter+`
 		ORDER BY ct.pinned DESC, ct.last_post_at DESC
@@ -328,7 +328,7 @@ func (r *PGStore) GetCommunityThread(ctx context.Context, threadID int) (*Commun
 	err := r.db.GetContext(ctx, &t, `
 		SELECT `+communityThreadCols+`
 		FROM community_threads ct
-		JOIN users u       ON u.id = ct.user_id
+		JOIN user_display u       ON u.id = ct.user_id
 		JOIN communities c ON c.id = ct.community_id
 		WHERE ct.id = $1`, threadID)
 	if err != nil {
@@ -412,11 +412,11 @@ func (r *PGStore) ListCommunityPosts(ctx context.Context, threadID, limit, offse
 		       cp.hidden_at, cp.hidden_by, cp.hidden_reason,
 		       cp.edited_at, cp.created_at,
 		       u.username                          AS username,
-		       COALESCE(u.role, 'user')            AS user_role,
+		       u.role                              AS user_role,
 		       COALESCE(u.reputation_tier, 0)      AS reputation_tier,
 		       COALESCE(u.avatar_path, '')         AS avatar_path
 		FROM community_posts cp
-		JOIN users u ON u.id = cp.user_id
+		JOIN user_display u ON u.id = cp.user_id
 		WHERE cp.thread_id = $1 AND cp.hidden_at IS NULL AND cp.removed_at IS NULL
 		ORDER BY cp.created_at ASC
 		LIMIT $2 OFFSET $3`, threadID, limit, offset)
@@ -500,12 +500,13 @@ func (r *PGStore) ListPendingJoinRequests(ctx context.Context, communityID int) 
 		       jr.response_message, jr.points_held, jr.decided_by,
 		       jr.decided_at, jr.created_at,
 		       u.username                          AS username,
-		       COALESCE(u.role, 'user')            AS role,
+		       d.role                              AS role,
 		       COALESCE(u.avatar_path, '')         AS avatar_path,
 		       u.created_at                        AS account_created,
 		       COALESCE(u.points, 0)               AS user_points
 		FROM community_join_requests jr
 		JOIN users u ON u.id = jr.user_id
+		JOIN user_display d ON d.id = u.id
 		WHERE jr.community_id = $1 AND jr.status = 'pending'
 		ORDER BY jr.created_at ASC`, communityID)
 	return rows, err
