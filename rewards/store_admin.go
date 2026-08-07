@@ -42,6 +42,12 @@ type AdminStore interface {
 	ListSources(ctx context.Context) (SourceCatalog, error)
 	CountSources(ctx context.Context) (int, error)
 	SeedSources(ctx context.Context, cat SourceCatalog) error
+	// Definition CRUD -- see admin_achievements.go for why these validate
+	// rather than just insert.
+	CreateAchievement(ctx context.Context, a NewAchievement) (int64, error)
+	SetAchievementEnabled(ctx context.Context, id int64, on bool) error
+	UpsertSource(ctx context.Context, d SourceDef) error
+	SetSourceEnabled(ctx context.Context, key string, on bool) error
 	RecentGrants(ctx context.Context, limit int) ([]GrantRow, error)
 
 	CreateEvent(ctx context.Context, ev Event) (int64, error)

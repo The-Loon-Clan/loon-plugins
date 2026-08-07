@@ -5,6 +5,7 @@ package rewards
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -478,4 +479,97 @@ func grantSilent(t *testing.T, db *sqlx.DB, rewardID, userID int64) bool {
 		t.Fatalf("read grant: %v", err)
 	}
 	return silent
+}
+
+// Every mistake made while creating this site's first two achievements by
+// hand, now returned as a refusal an operator can read. All four were live in
+// production at some point on 2026-08-07 and none raised an error anywhere.
+func TestCreateAchievementRefusesTheMistakesWeActuallyMade(t *testing.T) {
+	db := testDB(t)
+	st := testStore(t, db)
+	ctx := context.Background()
+
+	mk := func(slug, kind string, payouts bool, enabled bool) int64 {
+		t.Helper()
+		var id int64
+		if _, err := db.Exec("SET search_path = rewards"); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _, _ = db.Exec("SET search_path = public") }()
+		if err := db.Get(&id, `
+			INSERT INTO rewards (slug, name, kind, delivery, enabled)
+			VALUES ($1, $1, $2, 'auto', $3) RETURNING id`, slug, kind, enabled); err != nil {
+			t.Fatal(err)
+		}
+		if payouts {
+			if _, err := db.Exec(`INSERT INTO reward_payouts (reward_id, kind, amount)
+			                      VALUES ($1, 'points', 10)`, id); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return id
+	}
+	good := mk("good", "one_off", true, true)
+	noPayout := mk("nopay", "one_off", false, true)
+	perUnit := mk("perunit", "per_unit", true, true)
+	disabled := mk("off", "one_off", true, false)
+
+	if err := st.UpsertSource(ctx, SourceDef{Key: "posts", Label: "Posts",
+		Counts: true, Unit: "post", Units: "posts"}); err != nil {
+		t.Fatalf("seed counter source: %v", err)
+	}
+	if err := st.UpsertSource(ctx, SourceDef{Key: "fires-only", Label: "Fires", Fires: true}); err != nil {
+		t.Fatalf("seed event source: %v", err)
+	}
+
+	base := NewAchievement{Slug: "x", Name: "X", RewardID: good, Metric: "posts", Threshold: 5}
+	for _, tc := range []struct {
+		name string
+		mut  func(*NewAchievement)
+		want string
+	}{
+		{"no payout lines", func(a *NewAchievement) { a.RewardID = noPayout }, "no payout lines"},
+		{"per_unit reward", func(a *NewAchievement) { a.RewardID = perUnit }, "one_off"},
+		{"disabled reward", func(a *NewAchievement) { a.RewardID = disabled }, "disabled"},
+		{"undeclared metric", func(a *NewAchievement) { a.Metric = "nope" }, "not in the source catalogue"},
+		{"metric that only fires", func(a *NewAchievement) { a.Metric = "fires-only" }, "does not count"},
+		{"no threshold", func(a *NewAchievement) { a.Threshold = 0 }, "threshold must be positive"},
+		{"no name", func(a *NewAchievement) { a.Name = "" }, "name is required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := base
+			tc.mut(&a)
+			_, err := st.CreateAchievement(ctx, a)
+			if err == nil {
+				t.Fatal("accepted")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+
+	// The valid one lands, and lands DISABLED — enabling is what triggers the
+	// backfill, so it cannot be a side effect of creating.
+	id, err := st.CreateAchievement(ctx, base)
+	if err != nil {
+		t.Fatalf("a valid achievement was refused: %v", err)
+	}
+	var enabled bool
+	if err := db.Get(&enabled, `SELECT enabled FROM rewards.achievements WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	if enabled {
+		t.Error("created enabled — one tool call could then backfill a badge to the whole membership")
+	}
+	if err := st.SetAchievementEnabled(ctx, id, true); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+
+	// And the slug is unique, with a message that says so rather than a
+	// constraint name.
+	if _, err := st.CreateAchievement(ctx, base); err == nil ||
+		!strings.Contains(err.Error(), "already exists") {
+		t.Errorf("duplicate slug: %v", err)
+	}
 }
