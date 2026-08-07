@@ -348,3 +348,58 @@ func progressOf(t *testing.T, db *sqlx.DB, achID, userID int64) int64 {
 	}
 	return n
 }
+
+// A reward with no payout lines pays nothing while looking healthy. Engine.grant
+// refuses one; this path does not go through Engine.grant, so it has to refuse
+// separately — and the cost of not doing so is worse here, because a completion
+// is irreversible. completed_at is stamped once, so the member would hold an
+// achievement that never paid and could never be re-earned after somebody added
+// the missing line.
+//
+// This is not hypothetical: the first real achievement on the site was created
+// with its payout row missing, lost while splitting a repair file.
+func TestAchievementRefusesAPayoutlessReward(t *testing.T) {
+	db := testDB(t)
+	st := testStore(t, db)
+	ctx := context.Background()
+
+	var rewardID int64
+	if _, err := db.Exec("SET search_path = rewards"); err != nil {
+		t.Fatalf("scope: %v", err)
+	}
+	err := db.Get(&rewardID, `
+		INSERT INTO rewards (slug, name, kind, delivery, enabled)
+		VALUES ('empty', 'Empty', 'one_off', 'auto', true) RETURNING id`)
+	if _, e := db.Exec("SET search_path = public"); e != nil {
+		t.Fatalf("reset: %v", e)
+	}
+	if err != nil {
+		t.Fatalf("seed reward: %v", err)
+	}
+
+	var achID int64
+	if err := db.Get(&achID, `
+		INSERT INTO rewards.achievements (slug, name, reward_id, metric, threshold)
+		VALUES ('empty-ach', 'Empty', $1, 'x', 1) RETURNING id`, rewardID); err != nil {
+		t.Fatalf("seed achievement: %v", err)
+	}
+	if _, err := st.RecordProgress(ctx, achID, 7, 1); err != nil {
+		t.Fatalf("progress: %v", err)
+	}
+
+	p := &Plugin{store: st}
+	d := AchievementDef{ID: achID, Slug: "empty-ach", RewardID: rewardID}
+	if err := p.completeAchievement(ctx, st, d, 7); err == nil {
+		t.Error("a payout-less reward was accepted; the member now holds an achievement " +
+			"that paid nothing and can never be re-earned")
+	}
+
+	var completed int
+	if err := db.Get(&completed, `SELECT count(*) FROM rewards.user_achievements
+	                               WHERE achievement_id = $1 AND completed_at IS NOT NULL`, achID); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if completed != 0 {
+		t.Error("the completion was stamped despite the refusal")
+	}
+}

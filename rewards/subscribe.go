@@ -141,6 +141,18 @@ func (p *Plugin) completeAchievement(ctx context.Context, st *PGStore, d Achieve
 		// page; here it is simply not something to act on.
 		return nil
 	}
+	// The same refusal Engine.grant makes, and it has to be made here too
+	// because this path does not go through it. A reward with no payout lines
+	// pays nothing while looking perfectly healthy — and unlike a refused
+	// grant, a completion is IRREVERSIBLE: completed_at is stamped once, so
+	// the member would hold an achievement that never paid and could never be
+	// re-earned when somebody added the missing line.
+	//
+	// Found by the validator on the first real achievement, whose payout row
+	// was lost while splitting a repair file.
+	if len(r.Payouts) == 0 {
+		return fmt.Errorf("achievement %q pays reward %q, which has no payout lines", d.Slug, r.Slug)
+	}
 	if r.Kind != KindOneOff {
 		return fmt.Errorf("achievement %q pays reward %q of kind %s; only one_off is supported "+
 			"and reference=0 below would be wrong for anything else", d.Slug, r.Slug, r.Kind)
