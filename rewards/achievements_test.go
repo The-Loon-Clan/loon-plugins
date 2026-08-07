@@ -6,57 +6,91 @@ import (
 	"time"
 )
 
-var earned = time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
-
-func nullStr(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }
-
-// The grant states and the page states are different vocabularies, and the
-// mapping between them is where an achievements page goes quietly wrong: a
-// member sees a badge they do not hold, or does not see one they do.
-//
-// The case that matters most is EXPIRED. The grant row still carries a date,
-// so a naive mapping shows "locked — earned 1 Aug", which reads as a bug
-// rather than as history.
-func TestAchievementRowMapsGrantStateToPageState(t *testing.T) {
+// The page state is derived from two facts that can disagree, which is why it
+// is worth its own test: the COMPLETION is the achievement's own record, and
+// the GRANT's state says whether the payment landed. A member who earned
+// something and has not claimed it has earned it — reporting that as locked
+// would tell them they had not.
+func TestAchievementRowMapsCompletionAndGrantToPageState(t *testing.T) {
+	earned := time.Now().Add(-time.Hour)
 	for _, tc := range []struct {
-		name       string
-		state      string
-		hasDate    bool
-		wantState  AchievementState
-		wantEarned bool
+		name  string
+		row   achievementRow
+		want  AchievementState
+		dated bool
 	}{
-		{"credited is unlocked", string(StateCredited), true, AchievementUnlocked, true},
-		{"pending is pending", string(StatePending), true, AchievementPending, true},
-		{"expired is locked, and loses its date", string(StateExpired), true, AchievementLocked, false},
-		{"no grant at all is locked", "", false, AchievementLocked, false},
-		// A state this plugin does not know must not read as unlocked. Failing
-		// closed is the only safe default for "do they have this".
-		{"an unknown state is locked", "some_future_state", true, AchievementLocked, true},
+		{
+			name: "no progress row at all",
+			row:  achievementRow{Slug: "first-upload", Threshold: 1},
+			want: AchievementLocked,
+		},
+		{
+			name: "progress but not there yet",
+			row: achievementRow{Slug: "hundred", Threshold: 100,
+				Progress: sql.NullInt64{Int64: 63, Valid: true}},
+			want: AchievementLocked,
+		},
+		{
+			name: "completed, payment settled",
+			row: achievementRow{Slug: "hundred", Threshold: 100,
+				CompletedAt: sql.NullTime{Time: earned, Valid: true},
+				GrantState:  sql.NullString{String: string(StateCredited), Valid: true}},
+			want: AchievementUnlocked, dated: true,
+		},
+		{
+			name: "completed, awaiting claim",
+			row: achievementRow{Slug: "hundred", Threshold: 100,
+				CompletedAt: sql.NullTime{Time: earned, Valid: true},
+				GrantState:  sql.NullString{String: string(StatePending), Valid: true}},
+			want: AchievementPending, dated: true,
+		},
+		{
+			// A grant that lapsed unclaimed does not un-earn the achievement.
+			// The member did the thing; what expired is the payment, and
+			// hiding the badge would be a second punishment for the same lapse.
+			name: "completed, grant expired unclaimed",
+			row: achievementRow{Slug: "hundred", Threshold: 100,
+				CompletedAt: sql.NullTime{Time: earned, Valid: true},
+				GrantState:  sql.NullString{String: string(StateExpired), Valid: true}},
+			want: AchievementUnlocked, dated: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			row := achievementRow{
-				Slug: "first-grab", Name: "First Grab", Target: "first-grab",
-				State:    nullStr(tc.state),
-				EarnedAt: sql.NullTime{Time: earned, Valid: tc.hasDate},
+			got := tc.row.achievement()
+			if got.State != tc.want {
+				t.Errorf("state = %q, want %q", got.State, tc.want)
 			}
-			got := row.achievement()
-			if got.State != tc.wantState {
-				t.Errorf("state %q -> %q, want %q", tc.state, got.State, tc.wantState)
+			if tc.dated && got.EarnedAt.IsZero() {
+				t.Error("an earned achievement has no EarnedAt — the page would print the epoch")
 			}
-			if gotEarned := !got.EarnedAt.IsZero(); gotEarned != tc.wantEarned {
-				t.Errorf("state %q -> EarnedAt set = %v, want %v", tc.state, gotEarned, tc.wantEarned)
+			if !tc.dated && !got.EarnedAt.IsZero() {
+				t.Error("an unearned achievement carries an EarnedAt")
+			}
+			if got.Earned() != (tc.want != AchievementLocked) {
+				t.Errorf("Earned() = %v, disagrees with state %q", got.Earned(), got.State)
 			}
 		})
 	}
 }
 
-// A reward with no name falls back to its slug in SQL; the mapping must not
-// undo that, and Target is a separate field on purpose.
-func TestAchievementRowKeepsSlugTargetAndNameDistinct(t *testing.T) {
-	row := achievementRow{Slug: "summer-2026-finisher", Name: "Summer Finisher", Target: "marathon"}
-	got := row.achievement()
-	if got.Slug != "summer-2026-finisher" || got.Name != "Summer Finisher" || got.Target != "marathon" {
-		t.Errorf("got %+v, want the three fields carried through unchanged", got)
+// Progress has to survive the read, because "63 / 100" is most of what an
+// achievements page is for and is the thing the placeholder could not say.
+func TestAchievementRowCarriesProgressAndCriterion(t *testing.T) {
+	got := achievementRow{
+		Slug: "hundred-uploads", Name: "Centurion", Description: "upload 100",
+		Metric: "uploads", Threshold: 100,
+		Progress: sql.NullInt64{Int64: 63, Valid: true},
+		Times:    sql.NullInt32{Int32: 0, Valid: true},
+	}.achievement()
+
+	if got.Progress != 63 || got.Threshold != 100 {
+		t.Errorf("progress/threshold = %d/%d, want 63/100", got.Progress, got.Threshold)
+	}
+	if got.Metric != "uploads" {
+		t.Errorf("metric = %q, want uploads", got.Metric)
+	}
+	if got.Name != "Centurion" || got.Description != "upload 100" {
+		t.Errorf("name/description lost: %q / %q", got.Name, got.Description)
 	}
 }
 

@@ -14,6 +14,8 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -49,16 +51,30 @@ func testDB(t *testing.T) *sqlx.DB {
 	if _, err := db.Exec(`DROP SCHEMA IF EXISTS rewards CASCADE; CREATE SCHEMA rewards`); err != nil {
 		t.Fatalf("create schema: %v", err)
 	}
-	schema, err := os.ReadFile("migrations/001_init.sql")
+	// EVERY migration, in order — not just the first. Naming one file meant a
+	// second migration's tables were missing from the harness while present in
+	// production, so a test could only ever exercise the schema as it was on
+	// day one.
+	files, err := filepath.Glob("migrations/*.sql")
 	if err != nil {
-		t.Fatalf("read schema: %v", err)
+		t.Fatalf("list migrations: %v", err)
 	}
+	if len(files) == 0 {
+		t.Fatal("no migrations found — the harness would test an empty schema")
+	}
+	sort.Strings(files)
 	// Applied INSIDE the schema; the session goes straight back to public.
 	if _, err := db.Exec("SET search_path = rewards"); err != nil {
 		t.Fatalf("scope for migration: %v", err)
 	}
-	if _, err := db.Exec(string(schema)); err != nil {
-		t.Fatalf("apply schema: %v", err)
+	for _, f := range files {
+		schema, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		if _, err := db.Exec(string(schema)); err != nil {
+			t.Fatalf("apply %s: %v", f, err)
+		}
 	}
 	if _, err := db.Exec("SET search_path = public"); err != nil {
 		t.Fatalf("reset search_path: %v", err)

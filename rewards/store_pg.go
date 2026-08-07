@@ -213,39 +213,51 @@ func (s *PGStore) GrantsForUser(ctx context.Context, userID int64, rewardIDs []i
 
 func (s *PGStore) CreateGrant(ctx context.Context, g Grant, payouts []Payout) (Grant, error) {
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		err := tx.QueryRowContext(ctx, `
-			INSERT INTO reward_grants (reward_id, user_id, reference, state, reason, expires_at)
-			VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
-			g.RewardID, g.UserID, g.Reference, string(g.State), g.Reason, g.ExpiresAt,
-		).Scan(&g.ID, &g.CreatedAt)
-		if uniqueViolation(err) {
-			// The constraint arbitrated: someone else got there first. Not an
-			// error condition, just the answer.
-			return ErrAlreadyGranted
-		}
-		if err != nil {
-			return fmt.Errorf("insert grant: %w", err)
-		}
-
-		g.Payouts = make([]Payout, 0, len(payouts))
-		for _, p := range payouts {
-			var id int64
-			err := tx.QueryRowContext(ctx, `
-				INSERT INTO reward_grant_payouts (grant_id, kind, target, amount)
-				VALUES ($1, $2, NULLIF($3,''), $4) RETURNING id`,
-				g.ID, string(p.Kind), p.Target, p.Amount).Scan(&id)
-			if err != nil {
-				return fmt.Errorf("freeze payout %s: %w", p.Kind, err)
-			}
-			p.ID = id
-			g.Payouts = append(g.Payouts, p)
-		}
-		return nil
+		return insertGrantTx(ctx, tx, &g, payouts)
 	})
 	if err != nil {
 		return Grant{}, err
 	}
 	return g, nil
+}
+
+// insertGrantTx writes a grant and freezes its payout lines, inside a
+// transaction the caller owns.
+//
+// Extracted from CreateGrant so an achievement completion can put the SAME
+// writes in the SAME transaction as its user_achievements row — a second copy
+// of this SQL is how the two paths would drift on which columns a grant needs.
+// It mutates *g so the caller sees the assigned id, created_at and frozen
+// payout lines.
+func insertGrantTx(ctx context.Context, tx *sqlx.Tx, g *Grant, payouts []Payout) error {
+	err := tx.QueryRowContext(ctx, `
+		INSERT INTO reward_grants (reward_id, user_id, reference, state, reason, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
+		g.RewardID, g.UserID, g.Reference, string(g.State), g.Reason, g.ExpiresAt,
+	).Scan(&g.ID, &g.CreatedAt)
+	if uniqueViolation(err) {
+		// The constraint arbitrated: someone else got there first. Not an
+		// error condition, just the answer.
+		return ErrAlreadyGranted
+	}
+	if err != nil {
+		return fmt.Errorf("insert grant: %w", err)
+	}
+
+	g.Payouts = make([]Payout, 0, len(payouts))
+	for _, p := range payouts {
+		var id int64
+		err := tx.QueryRowContext(ctx, `
+			INSERT INTO reward_grant_payouts (grant_id, kind, target, amount)
+			VALUES ($1, $2, NULLIF($3,''), $4) RETURNING id`,
+			g.ID, string(p.Kind), p.Target, p.Amount).Scan(&id)
+		if err != nil {
+			return fmt.Errorf("freeze payout %s: %w", p.Kind, err)
+		}
+		p.ID = id
+		g.Payouts = append(g.Payouts, p)
+	}
+	return nil
 }
 
 func (s *PGStore) GrantByID(ctx context.Context, id int64) (*Grant, error) {

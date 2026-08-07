@@ -71,6 +71,10 @@ func (p *Plugin) Validate(ctx context.Context) ([]Finding, error) {
 	if err != nil {
 		return nil, err
 	}
+	achievements, err := p.admin.ListAchievementDefs(ctx)
+	if err != nil {
+		return nil, err
+	}
 	stale, err := p.admin.CountStalePending(ctx, now)
 	if err != nil {
 		return nil, err
@@ -84,6 +88,12 @@ func (p *Plugin) Validate(ctx context.Context) ([]Finding, error) {
 	var out []Finding
 	out = append(out, validateEvents(events, coverage, now)...)
 	out = append(out, validateRewards(rewards, byID, p.handlerKinds())...)
+
+	rewardsByID := make(map[int64]Reward, len(rewards))
+	for _, r := range rewards {
+		rewardsByID[r.ID] = r
+	}
+	out = append(out, validateAchievements(achievements, rewardsByID, p.metricNames())...)
 
 	if stale > 0 {
 		out = append(out, Finding{
@@ -244,6 +254,89 @@ func validateRewards(rewards []Reward, events map[int64]EventStats, handled map[
 			out = append(out, Finding{SeverityWarn, subject,
 				"delivery=claim with no trigger — no surface asks for it, so nobody will ever be offered it",
 				"set a trigger (e.g. login), or make it per_unit and grant it from a job"})
+		}
+	}
+	return out
+}
+
+// validateAchievements is the guard that keeps repeatability from having two
+// sources of truth.
+//
+// An achievement declares no repeatability of its own — deliberately, because
+// rewards.kind already does and the engine enforces it through the reference
+// it computes per grant. What remains is making sure the reward an achievement
+// points at is one whose repeatability MEANS anything for a criterion that
+// latches:
+//
+//   - one_off   — earn once, ever. The only kind allowed today.
+//   - recurring — once per event window. Coherent (a seasonal achievement),
+//     but not enabled yet; enabling it is a change here, not a migration.
+//   - per_unit  — incoherent. per_unit pays per delta forever, while a
+//     criterion latches the moment it is met. An achievement on one would
+//     complete once and then keep paying on every subsequent unit, which is
+//     not an achievement at all.
+//
+// The other silent failure this catches is a criterion nothing can ever score:
+// a metric with no registered source is inert, exactly as a payout kind with
+// no handler is, and an operator has no way to see that from the admin page.
+func validateAchievements(defs []AchievementDef, rewards map[int64]Reward, metrics map[string]bool) []Finding {
+	var out []Finding
+	for _, d := range defs {
+		if !d.Enabled {
+			continue
+		}
+		r, ok := rewards[d.RewardID]
+		switch {
+		case !ok:
+			out = append(out, Finding{
+				Severity: SeverityError,
+				Subject:  "achievement " + d.Slug,
+				Problem:  "points at a reward that does not exist",
+				Fix:      "pick an existing reward, or disable the achievement",
+			})
+		case !r.Enabled:
+			out = append(out, Finding{
+				Severity: SeverityError,
+				Subject:  "achievement " + d.Slug,
+				Problem:  fmt.Sprintf("pays reward %q, which is disabled — it can be earned but not paid", r.Slug),
+				Fix:      "enable the reward, or disable the achievement so it stops offering",
+			})
+		case r.Kind == KindPerUnit:
+			out = append(out, Finding{
+				Severity: SeverityError,
+				Subject:  "achievement " + d.Slug,
+				Problem: fmt.Sprintf("pays reward %q, which is per_unit — a criterion latches once, "+
+					"but per_unit keeps paying on every later unit", r.Slug),
+				Fix: "point it at a one_off reward",
+			})
+		case r.Kind != KindOneOff:
+			out = append(out, Finding{
+				Severity: SeverityError,
+				Subject:  "achievement " + d.Slug,
+				Problem:  fmt.Sprintf("pays reward %q of kind %s; achievements are one_off today", r.Slug, r.Kind),
+				Fix:      "point it at a one_off reward",
+			})
+		}
+
+		if d.Metric == "" {
+			out = append(out, Finding{
+				Severity: SeverityError,
+				Subject:  "achievement " + d.Slug,
+				Problem:  "has no metric, so nothing can ever score it",
+				Fix:      "set the metric to a counter the site registers",
+			})
+			continue
+		}
+		if !metrics[d.Metric] {
+			// Warn, not error: a host that has not booted its source yet is a
+			// deployment ordering problem, and refusing would make the admin
+			// page unusable during one.
+			out = append(out, Finding{
+				Severity: SeverityWarn,
+				Subject:  "achievement " + d.Slug,
+				Problem:  fmt.Sprintf("scored by metric %q, which no source is registered for — progress will never move", d.Metric),
+				Fix:      "register a MetricSource under " + MetricSourcePrefix + d.Metric + ", or retire the achievement",
+			})
 		}
 	}
 	return out

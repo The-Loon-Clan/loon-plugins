@@ -170,6 +170,47 @@ already left the building.
 itself. That is deliberate: a mock that let a double-book through would hide the
 one thing the whole model rests on.
 
+## Achievements
+
+An achievement is a **criterion attached to a reward**. That split is the whole
+design, and the reason there is not a second engine here.
+
+The engine already owns definitions, repeatability, triggers, jobs, callbacks
+and pay-once-as-a-constraint. The one thing it cannot express is "reach N of
+X": `per_unit` counts a number and pays per delta, with no threshold that
+latches. So `achievements` owns the criterion — a `metric` and a `threshold` —
+and a `reward_id` says what it pays. Payment then goes through the ordinary
+grant path, which means an achievement cannot pay twice even under a race
+without any new locking or idempotency scheme.
+
+**There is deliberately no `repeatable` column.** `rewards.kind` already
+declares repeatability and the engine enforces it through the `reference` it
+computes per grant; a second copy here could disagree, and an achievement
+marked repeatable whose reward is `one_off` would complete over and over while
+paying exactly once, with nothing reporting it. Validation restricts
+achievements to `one_off` rewards today. Allowing `recurring` (a seasonal
+achievement) is coherent and needs a validation change, not a migration.
+`per_unit` is refused outright: a criterion latches, and `per_unit` keeps
+paying on every later unit.
+
+**Completion is one transaction.** Stamping `user_achievements.completed_at`
+and creating the `reward_grants` row happen together or not at all — a
+completion with no grant paid nothing, and a grant with no completion pays
+again on the next evaluation because nothing recorded that it fired. The schema
+carries the same rule as a `CHECK ((completed_at IS NULL) = (grant_id IS
+NULL))`, so a future writer that sets one without the other is rejected rather
+than merely wrong.
+
+**Metrics** are host-registered under `rewards.metrics.<name>`, the same shape
+as `rewards.units.<slug>`, and a metric with no source is **inert** rather than
+a boot error — the configuration check reports it instead, so a half-deployed
+site says so on the admin page rather than refusing to start.
+
+Built so far: schema, the per-member read, progress recording, the completion
+transaction, and validation. **Not yet wired: the trigger path and the job that
+call `CompleteAchievement`** — so nothing completes an achievement in
+production yet. Design: `docs/ACHIEVEMENTS.md` in the ameNZB repo.
+
 ## The configuration check
 
 Every table enforces its own shape, and every one of them can be satisfied by a

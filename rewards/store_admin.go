@@ -34,6 +34,7 @@ type GrantRow struct {
 type AdminStore interface {
 	ListEventStats(ctx context.Context, at time.Time) ([]EventStats, error)
 	ListRewards(ctx context.Context) ([]Reward, error)
+	ListAchievementDefs(ctx context.Context) ([]AchievementDef, error)
 	RecentGrants(ctx context.Context, limit int) ([]GrantRow, error)
 
 	CreateEvent(ctx context.Context, ev Event) (int64, error)

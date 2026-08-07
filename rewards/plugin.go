@@ -68,6 +68,11 @@ type Plugin struct {
 	// Provision because the registry is written during boot and read on a
 	// worker tick; re-looking-up per tick would race a plugin still booting.
 	units map[string]UnitSource
+
+	// Achievement metric counters the host published, by metric name.
+	// Snapshotted for the same reason units are: the registry is written
+	// during boot and read on a worker tick.
+	metrics map[string]MetricSource
 }
 
 var _ core.Plugin = (*Plugin)(nil)
@@ -147,6 +152,26 @@ func (p *Plugin) Provision(c *core.Core) error {
 			return fmt.Errorf("rewards: extension %q is %T, want rewards.UnitSource", name, v)
 		}
 		p.units[strings.TrimPrefix(name, UnitSourcePrefix)] = src
+	}
+
+	// Achievement metrics, discovered the same way and for the same reason: a
+	// new achievement is a row plus one host registration, not a change here.
+	// A metric with no source is INERT rather than an error — the validator
+	// reports it, so a half-deployed site says so on the admin page instead of
+	// refusing to boot.
+	p.metrics = map[string]MetricSource{}
+	for _, name := range c.ExtensionNames() {
+		if !strings.HasPrefix(name, MetricSourcePrefix) {
+			continue
+		}
+		v, _ := c.Lookup(name)
+		src, ok := v.(MetricSource)
+		if !ok {
+			// Right key, wrong shape: the achievement would silently never
+			// progress, which is the failure this plugin exists to stop.
+			return fmt.Errorf("rewards: extension %q is %T, want rewards.MetricSource", name, v)
+		}
+		p.metrics[strings.TrimPrefix(name, MetricSourcePrefix)] = src
 	}
 
 	// Tell a member when something is waiting for them. Absent notifications
