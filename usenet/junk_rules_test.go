@@ -19,6 +19,15 @@ func TestEmbeddedJunkRulesParse(t *testing.T) {
 		"template_token", "dot_sep_obfuscated", "rot13_archive",
 		"repeated_short_tok", "alnum_blob_ext", "short_alnum_token",
 		"mid_alnum_token", "js_template_leak", "single_token_20",
+		// token_size_tail is local, not prod's (the second such rule, after
+		// garbled_no_space). Added 2026-08-08: obfuscated posts whose subjects
+		// carry the release size derive bases like "rP8nmcYiqE2eAjw7 -
+		// 49,37 GB" — not bare, so every token band and short_random_token
+		// decline them at every size, and 471k articles in one staging window
+		// assembled into garbage releases. Placed with its band siblings:
+		// everything above out-hits it, and the gateless regexes below would
+		// otherwise run on every article it catches.
+		"token_size_tail",
 		"long_digit_run", "bare_numeric_token", "high_special_chars", "random_words",
 		"word_word_hex", "tiny_no_space", "short_lowercase_token",
 		// garbled_no_space is the FIRST rule here that prod does not have.
@@ -32,7 +41,7 @@ func TestEmbeddedJunkRulesParse(t *testing.T) {
 		"short_random_token", "under_1mib", "under_5mib",
 	}
 	if len(specs) != len(wantOrder) {
-		t.Fatalf("got %d rules, want %d (prod's set plus garbled_no_space)", len(specs), len(wantOrder))
+		t.Fatalf("got %d rules, want %d (prod's set plus garbled_no_space and token_size_tail)", len(specs), len(wantOrder))
 	}
 	for i, s := range specs {
 		if s.Name != wantOrder[i] {

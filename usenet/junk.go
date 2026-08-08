@@ -180,6 +180,7 @@ var junkHeuristics = map[string]bool{
 	"repeated_short_tok":  true, // "rtNJ rtNJ" — same short token twice
 	"high_special_chars":  true, // 15%+ garbled punctuation
 	"random_words":        true, // 70%+ of non-punct chars from random-looking words
+	"token_size_tail":     true, // bare junk token wearing the poster's size annotation
 	"tiny_no_space":       true, // sized: no whitespace at all under the size cap
 	"long_no_space":       true, // sized: 60+ chars, no whitespace, 5+ garbled
 	"garbled_no_space":    true, // ANY size: 60+ chars, no whitespace, min_garbled+
@@ -344,6 +345,8 @@ func runJunkHeuristic(id, t string, p junkParams) bool {
 		return highSpecialChars(t, p)
 	case "random_words":
 		return randomWordsJunk(t)
+	case "token_size_tail":
+		return tokenSizeTail(t)
 	case "tiny_no_space":
 		return !strings.ContainsAny(t, " \t\r\n\v\f")
 	case "long_no_space":
@@ -406,6 +409,100 @@ func bareAlnumToken(t string, p junkParams) bool {
 		}
 	}
 	if p.RequireDigit && !(hasDigit && hasLetter) {
+		return false
+	}
+	return true
+}
+
+// reSizeTailVol strips a leftover PAR2 recovery-volume marker from the head
+// before its shape is judged — the obfuscated posts' par volumes derive bases
+// like "Wzc1sGrt4kbNaVuGU0It.vol175+190 - 3,70 GB" (the size text sits between
+// the marker and end-of-string, so neither ext peeling nor par2_volume's
+// $-anchor can reach it).
+var reSizeTailVol = regexp.MustCompile(`(?i)\.vol\d+\+\d+$`)
+
+// tokenSizeTail: the title is a bare junk-shaped token wearing the poster's
+// size annotation — "rP8nmcYiqE2eAjw7 - 49,37 GB", "3hehrnk86mlv - 8,82 GB".
+// The token alone would trip the bare_alnum_token bands; the welded-on size
+// text is what defeats every whole-title rule, sized ones included (the tail
+// breaks short_random_token's bare shape too, so these assembled and INDEXED
+// at any size). Measured on a staging window of 7.6M rule-surviving articles:
+// 692 distinct bases, 471,563 articles — 6.2% of everything the rest of the
+// engine passes — and exactly one hit across 81,416 catalogued titles, itself
+// a leaked member of this family ("QYZNRMFJKEGLCHSUTBPA - 10,78 GB").
+//
+// Shape: <head> [- ] <number>[.,<number>] <K|M|G|T>B, where the head (after
+// peeling a .volN+N remnant) passes the band union's own test — 6+ chars of
+// pure alnum, digit AND letter both required under 20 chars. Reusing the band
+// gates inherits their measured false-positive profile: pure-letter heads
+// ("Lamune - 1,2 GB") survive exactly as pure-letter bare titles do, and any
+// dot, space or dash in a real name ("Mac.OSX.Snow.Leopard... 6,84 GB")
+// rejects the head outright.
+//
+// Cost when it declines — almost every real title — is the last-byte 'B'
+// comparison, which is why its mid-list position is safe even if the family's
+// share of the stream moves.
+func tokenSizeTail(t string) bool {
+	n := len(t)
+	if n < 10 || t[n-1] != 'B' {
+		return false
+	}
+	u := t[n-2]
+	if u != 'G' && u != 'M' && u != 'K' && u != 'T' {
+		return false
+	}
+	i := n - 2
+	if i == 0 || t[i-1] != ' ' {
+		return false
+	}
+	i--
+	// The number, with , or . decimal groups ("8,82", "831.38", "1191").
+	j := i
+	digits := 0
+	for j > 0 {
+		c := t[j-1]
+		if c >= '0' && c <= '9' {
+			digits++
+			j--
+		} else if c == ',' || c == '.' {
+			j--
+		} else {
+			break
+		}
+	}
+	if digits == 0 {
+		return false
+	}
+	// Optional " - " separator between head and number.
+	k := j
+	for k > 0 && t[k-1] == ' ' {
+		k--
+	}
+	if k > 0 && t[k-1] == '-' {
+		k--
+		for k > 0 && t[k-1] == ' ' {
+			k--
+		}
+	}
+	if k == 0 {
+		return false
+	}
+	head := reSizeTailVol.ReplaceAllString(t[:k], "")
+	if len(head) < 6 {
+		return false
+	}
+	var hasDigit, hasLetter bool
+	for _, c := range head {
+		if !isAlnum(c) {
+			return false
+		}
+		if c >= '0' && c <= '9' {
+			hasDigit = true
+		} else {
+			hasLetter = true
+		}
+	}
+	if len(head) < 20 && !(hasDigit && hasLetter) {
 		return false
 	}
 	return true
