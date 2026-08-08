@@ -112,7 +112,7 @@ func TestBuildNZBSanitisesInvalidUTF8(t *testing.T) {
 		MessageID: "<a@x>", Subject: "rel \xff\xfe (1/1)", Poster: "p\xffq",
 		Bytes: 100, Group: "a.b", PartNum: 1,
 	}}
-	out, err := buildNZB(arts)
+	out, _, err := buildNZB(arts)
 	if err != nil {
 		t.Fatalf("sanitised build still errored: %v", err)
 	}

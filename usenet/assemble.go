@@ -341,7 +341,7 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 		}
 		// Span read BEFORE the post-store delete destroys the meta it lives on.
 		spanLo, spanHi, _ := p.staging.setSpan(ctx, k.Group, k.Base)
-		xmlBytes, err := buildNZB(arts)
+		xmlBytes, totals, err := buildNZB(arts)
 		if err != nil {
 			p.outcomes.note(outcomeXMLError, k.Base)
 			// Malformed input the sanitising didn't cover. Leave the set staged:
@@ -359,13 +359,17 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			p.reportErr(ctx, "usenet/build-gzip", err)
 			continue
 		}
-		size, posted := summarize(arts)
+		// Size and segment count describe the NZB THIS ROW SERVES, not the
+		// staged input it was built from — see nzbTotals. _ is the old
+		// summarize size, deliberately dropped: it counted articles the
+		// document does not contain.
+		_, posted := summarize(arts)
 		rel := pluginapi.AssembledRelease{
 			Title: title, BaseSubject: k.Base, Group: k.Group,
 			Poster:      firstPoster(arts),
 			ContentHash: contentHashArticles(arts),
-			SizeBytes:   size, PostedAt: posted,
-			NZBGz: gz, Segments: len(arts), CategoryHint: cat,
+			SizeBytes:   totals.Bytes, PostedAt: posted,
+			NZBGz: gz, Segments: totals.Segments, CategoryHint: cat,
 		}
 		_, created, err := sink.store(ctx, rel)
 		if err != nil {
@@ -401,8 +405,8 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			// Feed the "recently built" telemetry ring: with sink=host no
 			// plugin table records this, and the host table mixes in agent
 			// uploads — the ring is what the crawlers page shows.
-			p.tel.noteBuilt(title, k.Group, size)
-			p.emitIndexed(ctx, title, k.Group, size)
+			p.tel.noteBuilt(title, k.Group, totals.Bytes)
+			p.emitIndexed(ctx, title, k.Group, totals.Bytes)
 			p.resolutions.note(k.Group, k.Base, "built", len(arts), spanLo, spanHi)
 		}
 	}
@@ -601,7 +605,7 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			}
 			continue
 		}
-		xmlBytes, err := buildNZB(arts)
+		xmlBytes, totals, err := buildNZB(arts)
 		if err != nil {
 			p.reportErr(ctx, "usenet/salvage-xml", fmt.Errorf("%s/%s: %w", k.Group, truncateSample(k.Base), err))
 			continue
@@ -611,13 +615,14 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			p.reportErr(ctx, "usenet/salvage-gzip", err)
 			continue
 		}
-		size, posted := summarize(arts)
+		// As on the build path: the row describes the NZB, not the input.
+		_, posted := summarize(arts)
 		id, created, err := sink.store(ctx, pluginapi.AssembledRelease{
 			Title: title, BaseSubject: k.Base, Group: k.Group,
 			Poster:      firstPoster(arts),
 			ContentHash: contentHashArticles(arts),
-			SizeBytes:   size, PostedAt: posted,
-			NZBGz: gz, Segments: len(arts), CategoryHint: cat,
+			SizeBytes:   totals.Bytes, PostedAt: posted,
+			NZBGz: gz, Segments: totals.Segments, CategoryHint: cat,
 		})
 		if err != nil {
 			// Transient sink failure: stay staged, the cursor retries.
@@ -633,18 +638,23 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			// job. A failed write leaves the set staged and the cursor retries
 			// the whole store+verdict pair.
 			//
-			// The stored total is len(arts)+missData, NOT salvageTally's
+			// The stored total is totals.Segments+missData, NOT salvageTally's
 			// total: a health recheck reconstructs its baseline as
 			// claimedTotal - len(segments in the NZB), and that baseline must
 			// equal the missing DATA exactly. Tally total also counts par2
 			// claims and absent-file estimates, which inflated the baseline
 			// on every recheck and decayed broken releases straight to dead.
+			//
+			// totals.Segments, not len(arts): the sentence above says "segments
+			// in the NZB" and that is now literally what it is. They differ
+			// whenever makeFile deduped anything, and every such release had
+			// its recheck baseline overstated by exactly the dropped count.
 			if id <= 0 {
 				p.reportErr(ctx, "usenet/salvage-verdict", fmt.Errorf(
 					"%s: sink returned no id (created=%v) — release may be stored unmarked; leaving staged to retry", title, created))
 				continue
 			}
-			if err := hb.setVerdict(ctx, id, healthBroken, len(arts)+missData, missData, par2Claimed); err != nil {
+			if err := hb.setVerdict(ctx, id, healthBroken, totals.Segments+missData, missData, par2Claimed); err != nil {
 				p.reportErr(ctx, "usenet/salvage-verdict", fmt.Errorf("nzb %d stored but not marked broken: %w", id, err))
 				continue
 			}
@@ -659,8 +669,8 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 		if created {
 			salvaged++
 			p.tel.noteSalvaged(1)
-			p.tel.noteBuilt(title, k.Group, size)
-			p.emitIndexed(ctx, title, k.Group, size)
+			p.tel.noteBuilt(title, k.Group, totals.Bytes)
+			p.emitIndexed(ctx, title, k.Group, totals.Bytes)
 		}
 	}
 	if salvaged+dead+junked > 0 {
@@ -864,7 +874,30 @@ func isComplete(arts []stagedArticle) bool {
 // bytes — invisible until a user tries it. Attributes are sanitised so the
 // error path is nearly unreachable, but if it fires the release is skipped
 // loudly rather than stored empty.
-func buildNZB(arts []stagedArticle) ([]byte, error) {
+// nzbTotals is what the finished NZB ACTUALLY contains — counted from the
+// marshalled document, after makeFile has deduped each file's segments by part
+// number.
+//
+// It exists because the release row used to describe the INPUT instead: size
+// came from summarize(arts) and segments from len(arts), both over every loaded
+// article. Whenever a staged set holds two articles with the same
+// (file, part) — a repost, or a staging-key collision — makeFile emits one and
+// the row counted both. Measured over 84,112 catalogued releases: 2,305 claimed
+// more than their NZB delivers, 1,296 of them by 10x or more, together claiming
+// 477.8 GB against 14.2 GB of real content. 464 of those were marked HEALTHY,
+// because the health job STATs message-ids and every article does exist — they
+// are simply the wrong articles, or the same one counted many times.
+//
+// Derived from doc rather than recomputed from arts on purpose: a second
+// implementation of makeFile's dedup rule is a divergence waiting to happen,
+// and this file already carries three "mirrors X" comments that each cost a
+// production incident when the mirror drifted.
+type nzbTotals struct {
+	Bytes    int64
+	Segments int
+}
+
+func buildNZB(arts []stagedArticle) ([]byte, nzbTotals, error) {
 	multi := false
 	for _, a := range arts {
 		if a.FileParts {
@@ -889,11 +922,18 @@ func buildNZB(arts []stagedArticle) ([]byte, error) {
 	} else {
 		doc.Files = []nzbFile{makeFile(arts)}
 	}
+	var totals nzbTotals
+	for _, f := range doc.Files {
+		for _, s := range f.Segments.Segment {
+			totals.Bytes += s.Bytes
+			totals.Segments++
+		}
+	}
 	out, err := xml.MarshalIndent(doc, "", "  ")
 	if err != nil {
-		return nil, err
+		return nil, nzbTotals{}, err
 	}
-	return append([]byte(xml.Header), out...), nil
+	return append([]byte(xml.Header), out...), totals, nil
 }
 
 // makeFile builds one <file> from the articles of a single file, segments

@@ -224,7 +224,7 @@ func TestTwoCounterGrouping(t *testing.T) {
 	if isComplete(arts[:3]) {
 		t.Error("dropping a segment should make it incomplete")
 	}
-	xmlOut, err := buildNZB(arts)
+	xmlOut, _, err := buildNZB(arts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestBuildNZBAndGzip(t *testing.T) {
 		{MessageID: "<a@x>", Subject: "rel (1/2) yEnc", Poster: "p", Bytes: 100, Group: "a.b", PartNum: 1},
 		{MessageID: "<b@x>", Subject: "rel (2/2) yEnc", Poster: "p", Bytes: 120, Group: "a.b", PartNum: 2},
 	}
-	xmlBytes, err := buildNZB(arts)
+	xmlBytes, _, err := buildNZB(arts)
 	if err != nil || len(xmlBytes) == 0 {
 		t.Fatalf("buildNZB: %v (len %d)", err, len(xmlBytes))
 	}
@@ -289,7 +289,7 @@ func TestMultiFileGrouping(t *testing.T) {
 	if isComplete(arts[:3]) {
 		t.Error("dropping a segment should make it incomplete")
 	}
-	xmlOut, err := buildNZB(arts)
+	xmlOut, _, err := buildNZB(arts)
 	if err != nil {
 		t.Fatal(err)
 	}
