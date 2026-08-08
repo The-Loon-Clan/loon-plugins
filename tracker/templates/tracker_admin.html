@@ -1,0 +1,89 @@
+{{define "tracker_admin.html"}}
+{{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
+
+{{if .Idle}}
+{{/* Said outright rather than shown as an empty table. Provision registers no
+     routes when the host has no Redis, so a blank page would read as "a tracker
+     nobody uses" when the truth is "a tracker that cannot run". */}}
+<div class="alert alert-warning">
+  <strong>The tracker is idle.</strong>
+  No Redis is configured, and the peer store has no durable fallback &mdash; announce,
+  scrape and the member pages are not registered. Set the host's Redis config to
+  enable it.
+</div>
+{{else}}
+
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Members</strong>
+    <span class="text-muted small">
+      sort by
+      <a href="?sort=last_seen">recent</a> &middot;
+      <a href="?sort=uploaded">uploaded</a> &middot;
+      <a href="?sort=downloaded">downloaded</a> &middot;
+      <a href="?sort=torrents">torrents</a>
+    </span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 align-middle">
+      <thead><tr>
+        <th>Member</th><th>Access</th><th>Uploaded</th><th>Downloaded</th>
+        <th>Ratio</th><th>Active</th><th>Torrents</th><th>Snatched</th><th>Last seen</th>
+      </tr></thead>
+      <tbody>
+      {{range .Members}}
+        <tr>
+          <td>{{.Username}}</td>
+          <td>{{if .Entitled}}<span class="badge bg-success">entitled</span>
+              {{else}}<span class="badge bg-secondary">no access</span>{{end}}</td>
+          <td>{{bytes .Uploaded}}</td>
+          <td>{{bytes .Downloaded}}</td>
+          <td>{{ratio .Ratio}}</td>
+          <td>{{.ActiveCount}}</td>
+          <td>{{.TorrentCount}}</td>
+          <td>{{.SnatchedCount}}</td>
+          <td>{{ts .LastSeen}}</td>
+        </tr>
+      {{else}}
+        <tr><td colspan="9" class="text-muted">
+          No member has announced yet. A member with the
+          <code>tracker.access</code> entitlement appears here after their first announce.
+        </td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Torrents</strong>
+    <span class="text-muted small">{{.Total}} registered &mdash; newest first</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 align-middle">
+      <thead><tr>
+        <th>Name</th><th>Size</th><th>Files</th>
+        <th>Seed</th><th>Leech</th><th>Snatches</th><th>Added</th>
+      </tr></thead>
+      <tbody>
+      {{range .Torrents}}
+        <tr>
+          <td><code class="small">{{.Name}}</code></td>
+          <td>{{bytes .Size}}</td>
+          <td>{{.FileCount}}</td>
+          <td>{{.Seeders}}</td>
+          <td>{{.Leechers}}</td>
+          <td>{{.Snatches}}</td>
+          <td>{{ts_at .AddedAt}}</td>
+        </tr>
+      {{else}}
+        <tr><td colspan="7" class="text-muted">No torrents registered.</td></tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}
+{{end}}
