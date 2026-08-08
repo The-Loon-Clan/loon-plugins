@@ -77,6 +77,15 @@ func domainForCategory(cat int) string {
 		return "movie"
 	case cat/1000 == 5:
 		return "tv"
+	// Books (7xxx). Everything in the tree is a book domain lookup: Mags,
+	// Ebook, Comics and Technical all resolve against the same catalogue, and
+	// splitting them would need three sources to answer one question.
+	//
+	// Added when the site started collecting more than video. Until then these
+	// categories fell through to "" — no domain, so no match, so no cover, and
+	// nothing anywhere said why. A release simply had no art forever.
+	case cat/1000 == 7:
+		return "book"
 	}
 	return ""
 }
