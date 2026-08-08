@@ -39,7 +39,15 @@ var catRules = []struct {
 	{5070, []string{"anime", "subsplease", "erai-raws", "horriblesubs", "vostfr"}},
 	{6070, []string{"xxx", "porn", "erotica", "brazzers", "onlyfans", "sex"}},
 	{7020, []string{"ebook", "epub", "mobi", ".pdf", " pdf", "azw3"}},
-	{7030, []string{"comic", "cbz", "cbr", "manga"}},
+	// "cbr" is NOT here. As a comic archive it is a file extension; as a video
+	// term it is the constant-bitrate marker, and release names carry it as its
+	// own dot-delimited token ("Yuddha.Kaandam.2022.1080p.CBR.AMZN.WEB-DL") —
+	// so no boundary rule can separate the two, because both ARE whole tokens.
+	// A .cbr release is still recognised, by the article filenames rather than
+	// the title: see contentKindFromArticles in the usenet plugin, which reads
+	// the actual file names and sets the Manga hint. "cbz" stays because it has
+	// no second meaning.
+	{7030, []string{"comic", "cbz", "manga"}},
 	{7010, []string{"magazine"}},
 	{3040, []string{"flac", "lossless", "24bit", "dsd"}},
 	{3030, []string{"audiobook"}},
@@ -73,7 +81,7 @@ func categorizeText(h string) int {
 	}
 	for _, r := range catRules {
 		for _, kw := range r.keywords {
-			if strings.Contains(h, kw) {
+			if containsToken(h, kw) {
 				return r.cat
 			}
 		}
@@ -82,6 +90,49 @@ func categorizeText(h string) int {
 		return 2040 // resolution with no other signal → Movies/HD
 	}
 	return 8010
+}
+
+// containsToken reports whether kw appears in h as a whole token rather than as
+// any substring.
+//
+// A plain Contains mis-files real releases, and the failures are not exotic:
+//
+//	Mangalavaar.2023.720p.WEB-DL       → "manga"  → Comics   (an Indian film)
+//	Aum.Mangalam.Singlem.2022          → "manga"  → Comics   (likewise)
+//	Yuddha.Kaandam.2022.1080p.CBR.AMZN → "cbr"    → Comics   (CBR = constant bitrate)
+//
+// Sixty-seven releases sat in Comics on this index, most of them films. The
+// keywords are short and English words are long, so the collisions are
+// guaranteed rather than unlucky.
+//
+// A "token" boundary here is any non-alphanumeric, which suits release names:
+// they separate words with dots, underscores, dashes and brackets far more
+// often than with spaces. Keywords that already carry their own delimiter
+// (".pdf", " pdf", "-codex", "-flt") still work — the delimiter is part of the
+// match and the boundary test applies to what surrounds the whole keyword.
+func containsToken(h, kw string) bool {
+	if kw == "" {
+		return false
+	}
+	for i := 0; i+len(kw) <= len(h); i++ {
+		j := strings.Index(h[i:], kw)
+		if j < 0 {
+			return false
+		}
+		start := i + j
+		end := start + len(kw)
+		if !alnumByte(kw[0]) || start == 0 || !alnumByte(h[start-1]) {
+			if !alnumByte(kw[len(kw)-1]) || end == len(h) || !alnumByte(h[end]) {
+				return true
+			}
+		}
+		i = start
+	}
+	return false
+}
+
+func alnumByte(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 // groupCategory infers a category from the newsgroup name alone.

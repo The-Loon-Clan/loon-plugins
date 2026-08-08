@@ -24,3 +24,33 @@ func TestCategorize(t *testing.T) {
 		t.Errorf("anime group = %d, want 5070", got)
 	}
 }
+
+// Keywords are short and English words are long, so a plain substring match
+// collides by construction. Every case here was found in the live catalogue.
+func TestCategorizeMatchesWholeTokens(t *testing.T) {
+	films := []string{
+		"Mangalavaar.2023.720p.JC.WEB-DL.Hindi.DDP5.1.H.264-Archie",
+		"Aum.Mangalam.Singlem.2022.720p.SM.WEB-DL.AAC5.1.H.264-PrimeFix",
+		"Yuddha.Kaandam.2022.1080p.CBR.AMZN.WEB-DL.DDP2.0.H.264-PMI",
+	}
+	for _, f := range films {
+		if got := categorize("alt.binaries.movies", f); got/1000 == 7 {
+			t.Errorf("categorize(%q) = %d — a film filed under Books", f, got)
+		}
+	}
+	// The real forms still classify.
+	for _, tc := range []struct {
+		title string
+		want  int
+	}{
+		{"Some Manga Vol 3 (2024) cbz", 7030},
+		{"Naruto.Shippuden.manga.collection", 7030},
+		{"Artist - Album 2024 FLAC", 3040},
+		{"Some Book - Author.epub", 7020},
+		{"National Geographic Magazine April 2026", 7010},
+	} {
+		if got := categorize("alt.binaries.misc", tc.title); got != tc.want {
+			t.Errorf("categorize(%q) = %d, want %d", tc.title, got, tc.want)
+		}
+	}
+}
