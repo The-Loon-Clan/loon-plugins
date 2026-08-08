@@ -122,12 +122,16 @@ func fileNameFromSubject(subject string) string {
 }
 
 // parseSubject parses a Usenet subject into the fields the crawler stages. It
-// handles the two dominant yEnc forms:
+// handles the three dominant forms:
 //
 //   - single-file:  Release.Name.ext (n/m) yEnc          -> base = release name
 //   - multi-file:   Release Name [i/j] - "file" yEnc (n/m) -> base = release name
 //     (the text before [i/j], shared by every file in the release, so they group
 //     into ONE NZB)
+//   - multi-file, parenthesized counters: "file.part01.rar" - (i/j) - yEnc (n/m)
+//     and, without yEnc, [Title] (i/j) - "file.part01.rar" (n/m) — the counter
+//     nearer the front is the file counter, the last one the segment counter
+//     (see the measurement in the body)
 //
 // This is the multi-file-aware version: the base for an [i/j] release is the
 // release name, not the per-file name, so completeness + assembly work at the
@@ -156,21 +160,68 @@ func parseSubject(subject string) (base string, partNum, totalParts, segTotal, f
 	//	Release.Name.mkv (1/45) yEnc     — counter BEFORE the keyword
 	//	Release.Name.mkv yEnc (1/45)     — counter AFTER it (the common form)
 	//
-	// Prefer the one before yEnc, because for the first form anything after the
-	// keyword is a file-count indicator rather than a segment counter. Fall back
-	// to scanning the whole subject when there is nothing before it: that is the
-	// second form, and reading it as 1/1 is not a cosmetic miss. Every segment
-	// then parses as part 1 of 1, they collide on one staging key
-	// (formatFieldKey(0,1) == "0:1"), 44 of 45 articles are overwritten, and the
-	// survivor assembles as a ~700 KB "release" that the size catchalls junk.
-	// That silently ate the whole forward crawl for four days.
+	// With only ONE counter, prefer the one before yEnc, and fall back to
+	// scanning the whole subject when there is nothing before it: reading the
+	// second form as 1/1 is not a cosmetic miss. Every segment then parses as
+	// part 1 of 1, they collide on one staging key (formatFieldKey(0,1) ==
+	// "0:1"), 44 of 45 articles are overwritten, and the survivor assembles as
+	// a ~700 KB "release" that the size catchalls junk. That silently ate the
+	// whole forward crawl for four days.
 	//
-	// For [i/j] multi-file the counter legitimately follows yEnc, so the scope is
-	// the whole subject either way.
+	// With a counter on BOTH sides of yEnc, the one before is the FILE counter
+	// and the one after the segment counter:
+	//
+	//	"BB520.part001.rar" - (001/225) - yEnc (100/391)
+	//
+	// This is measured, not assumed — an earlier comment here reasoned the
+	// opposite ("anything after the keyword is a file-count indicator") and it
+	// held for zero of the 288 two-counter posts in a 7.6M-article index. In
+	// every measurable post the before-total is one constant, tracks the
+	// .partNNN volume number with a fixed offset, and the after-totals vary
+	// per file (rar vs par2) — the file-counter signature, unanimous across
+	// 71k articles plus the under-20-article tail. Reading it the old way
+	// staged every segment of a volume under that volume's file index: 98.1%
+	// of these articles overwrote each other, and what assembled was one
+	// segment per volume claiming the whole volume's size.
+	//
+	// The same swap applies WITHOUT yEnc when two or more counters are
+	// present ([Superboys.of.Malegaon.2025] (06/23) - "….part04.rar"
+	// (0683/1621)): first is the file counter, last the segment counter —
+	// same evidence, its own population (9.4k articles, zero inversions).
+	//
+	// fromParens records that the file counter came from these rules rather
+	// than a bracket match: the [i/j] base derivation below dereferences
+	// fileLoc, which is nil here, and its release-name-before-the-marker rule
+	// would be wrong anyway — for the leading-counter forms the text before
+	// the counter is empty or a poster banner, not a release name. These
+	// subjects keep the stripAllMarkers base they have always had, which is
+	// what keeps their staged sets, junk memoisation and grouping history
+	// stable across the change.
+	//
+	// For [i/j] multi-file the counter legitimately follows yEnc, so the scope
+	// is the whole subject either way.
+	fromParens := false
 	segScope := subject
 	if !fileParts {
-		if loc := reYenc.FindStringIndex(subject); loc != nil && rePartOf.MatchString(subject[:loc[0]]) {
-			segScope = subject[:loc[0]]
+		if loc := reYenc.FindStringIndex(subject); loc != nil {
+			if rePartOf.MatchString(subject[:loc[0]]) {
+				if after := subject[loc[1]:]; rePartOf.MatchString(after) {
+					before := rePartOf.FindAllStringSubmatch(subject[:loc[0]], -1)
+					last := before[len(before)-1]
+					fileNum = atoi(last[1])
+					totalFiles = atoi(last[2])
+					fileParts = totalFiles > 0
+					fromParens = fileParts
+					segScope = after
+				} else {
+					segScope = subject[:loc[0]]
+				}
+			}
+		} else if counters := rePartOf.FindAllStringSubmatch(subject, -1); len(counters) >= 2 {
+			fileNum = atoi(counters[0][1])
+			totalFiles = atoi(counters[0][2])
+			fileParts = totalFiles > 0
+			fromParens = fileParts
 		}
 	}
 	if parts := rePartOf.FindAllStringSubmatch(segScope, -1); len(parts) > 0 {
@@ -183,7 +234,7 @@ func parseSubject(subject string) (base string, partNum, totalParts, segTotal, f
 	}
 	segTotal = totalParts
 
-	if fileParts {
+	if fileParts && !fromParens {
 		// Release name = the text before [i/j] (the "Title [i/j] - file" form),
 		// shared by every file. Fall back to the per-file name if [i/j] is at the
 		// very start.

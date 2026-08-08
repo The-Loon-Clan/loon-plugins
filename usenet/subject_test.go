@@ -49,15 +49,19 @@ func TestParseSubject(t *testing.T) {
 			wantTotal: 1200,
 		},
 		{
-			// Precedence, and the reason the fix is a fallback rather than a
-			// widened scope: when a counter exists BEFORE yEnc it is the
-			// segment marker and anything after is a file count. Reading the
-			// trailing pair here would report 1 of 12 segments instead of 12
-			// of 45, and the set would never look complete.
-			name:      "marker before yEnc wins over a trailing file count",
+			// Two counters around yEnc: the one AFTER is the segment counter,
+			// the one before the file counter. An earlier version of this row
+			// pinned the opposite ("a counter before yEnc is the segment
+			// marker and anything after is a file count") on this same
+			// synthetic subject — a shape that occurs in zero of the 288
+			// two-counter posts in a 7.6M-article index. The swap is measured,
+			// unanimous, and validated over every distinct subject in staging;
+			// see loon-demo-site docs/SUBJECT-PARSING-REVIEW.md.
+			name:      "two counters: the after-yEnc pair is the segment counter",
 			subject:   `The.Release.Name.S01E05.1080p.WEB.mkv (12/45) yEnc (1/12)`,
-			wantPart:  12,
-			wantTotal: 45,
+			wantPart:  1,
+			wantTotal: 12,
+			wantFile:  true,
 		},
 		{
 			name:      "multi-file, segment marker after yEnc",
@@ -90,6 +94,147 @@ func TestParseSubject(t *testing.T) {
 				t.Errorf("base = %q, want %q", base, tc.wantBase)
 			}
 		})
+	}
+}
+
+// TestTwoCounterFamilies pins the counter swap against real-index fixtures,
+// one per family that exists in production, with the FILE counter asserted —
+// the table test above only checks the fileParts bool. Bases are asserted
+// byte-for-byte where given: they must equal what the OLD parser derived, or
+// the change re-keys live staging (the wanted values were read from staged
+// base_subject rows, not computed by hand).
+func TestTwoCounterFamilies(t *testing.T) {
+	tests := []struct {
+		name     string
+		subject  string
+		wantBase string // "" = don't assert (splinter-base warts, pinned elsewhere)
+		pn, tp   int
+		fn, tf   int
+	}{
+		{
+			// The largest family by article count: counter at position 0, so a
+			// release-name-before-the-counter base rule would derive "" here.
+			name:     "leading counter",
+			subject:  `(002/199) - - "3hehrnk86mlv.part001.rar" - 8,82 GB - yEnc (1/79)`,
+			wantBase: "3hehrnk86mlv - 8,82 GB",
+			pn:       1, tp: 79, fn: 2, tf: 199,
+		},
+		{
+			// Mid-subject counter after a poster banner: the strongest
+			// discriminator against the [i/j] base route, which would truncate
+			// the base to the banner and merge every TOWN post into one.
+			name:     "banner then counter",
+			subject:  `<TOWN> www.town.ag > sponsored by www.ssl-news.info > (02/90) "flt-cry2.part01.rar" - 8,07 GB - yEnc (120/273)`,
+			wantBase: "<TOWN> www.town.ag > sponsored by www.ssl-news.info > flt-cry2 - 8,07 GB",
+			pn:       120, tp: 273, fn: 2, tf: 90,
+		},
+		{
+			// Quoted filename FIRST, counter after the quote, .rNN volume
+			// numbering (reExt strips it, so all volumes share the base). The
+			// ground-truth measurement was made on this family: .r00 = file 03,
+			// a fixed offset per post.
+			name:     "realmom .rN form",
+			subject:  `"Mac.OSX.Snow.Leopard.v10.6.7-HOTiSO__www.realmom.info__.r00" (03/80) 6,84 GB yEnc (1/261)`,
+			wantBase: "Mac.OSX.Snow.Leopard.v10.6.7-HOTiSO__www.realmom.info__ 6,84 GB",
+			pn:       1, tp: 261, fn: 3, tf: 80,
+		},
+		{
+			// A par2 recovery volume of the same post. The counters swap like
+			// every sibling; the base keeps its .vol000+01 splinter (the
+			// trailing size text defeats the end-anchored reVolSuffix), which
+			// is today's behaviour ON PURPOSE — unifying it would be a second,
+			// unreviewed change that re-keys live staging.
+			name:     "vol+par2 keeps its splinter base",
+			subject:  `(169/199) - - "3hehrnk86mlv.vol000+01.PAR2" - 8,82 GB - yEnc (3/5)`,
+			wantBase: "3hehrnk86mlv.vol000+01 - 8,82 GB",
+			pn:       3, tp: 5, fn: 169, tf: 199,
+		},
+		{
+			// One of exactly four real subjects whose two counters are
+			// numerically EQUAL. They pin that the swap is positional, not
+			// value-based: an implementation that "detects two distinct
+			// counters" by comparing values passes every other fixture and
+			// fails only here (fileParts would stay false).
+			name:    "value-coincident counters still swap",
+			subject: `(13/15) - Description - "Dean M. Cole - Multiversum-Raum 02 - Gefangene der Wiederkehr (Ungekuerzt).vol015+16.par2" - 683,12 MB - yEnc (13/15)`,
+			pn:      13, tp: 15, fn: 13, tf: 15,
+		},
+		{
+			// A trailing (1/1) after yEnc is still a real segment counter, and
+			// with fileParts true the article is NOT residue (crawl.go's
+			// pn==1 && tp==1 && !fp) — single-segment members of multi-file
+			// posts must not be counted as unparseable.
+			name:    "single-segment member of a multi-file post",
+			subject: `(10/16) - Description - "Christian Knieps - Chaos Vater.vol000+01.par2" - 380,33 MB - yEnc (1/1)`,
+			pn:      1, tp: 1, fn: 10, tf: 16,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			base, pn, tp, seg, fn, tf, fp := parseSubject(tc.subject)
+			if pn != tc.pn || tp != tc.tp {
+				t.Errorf("segment = %d/%d, want %d/%d", pn, tp, tc.pn, tc.tp)
+			}
+			if fn != tc.fn || tf != tc.tf || !fp {
+				t.Errorf("file = %d/%d fp=%v, want %d/%d fp=true", fn, tf, fp, tc.fn, tc.tf)
+			}
+			if seg != tp {
+				t.Errorf("segTotal = %d, want == totalParts %d", seg, tp)
+			}
+			if tc.wantBase != "" && base != tc.wantBase {
+				t.Errorf("base = %q, want %q (must match the OLD parse byte-for-byte)", base, tc.wantBase)
+			}
+		})
+	}
+}
+
+// TestTwoCounterGrouping is TestMultiFileGrouping for the parenthesized form:
+// volumes of one post share a base, complete per-file, and emit one <file>
+// per volume — each carrying its own quoted filename, where the broken parse
+// produced a single bucket under one arbitrary volume's name.
+func TestTwoCounterGrouping(t *testing.T) {
+	subs := []string{
+		`"tiny.part01.rar" - (1/2) - yEnc (1/2)`,
+		`"tiny.part01.rar" - (1/2) - yEnc (2/2)`,
+		`"tiny.part02.rar" - (2/2) - yEnc (1/2)`,
+		`"tiny.part02.rar" - (2/2) - yEnc (2/2)`,
+	}
+	var arts []stagedArticle
+	bases := map[string]bool{}
+	keys := map[string]bool{}
+	for i, s := range subs {
+		base, part, total, seg, fn, tf, fp := parseSubject(s)
+		bases[base] = true
+		keys[formatFieldKey(fn, part)] = true
+		arts = append(arts, stagedArticle{
+			MessageID: fmt.Sprintf("<%d@x>", i), Group: "a.b", BaseSubject: base,
+			Subject: s, PartNum: part, TotalParts: total, SegTotal: seg,
+			FileNum: fn, TotalFiles: tf, FileParts: fp,
+		})
+	}
+	if len(bases) != 1 {
+		t.Fatalf("volumes should share one base, got %d: %v", len(bases), bases)
+	}
+	if len(keys) != len(subs) {
+		t.Fatalf("4 articles should hold 4 distinct staging keys, got %d", len(keys))
+	}
+	if !isComplete(arts) {
+		t.Error("2 volumes x 2 segments all present should be complete")
+	}
+	if isComplete(arts[:3]) {
+		t.Error("dropping a segment should make it incomplete")
+	}
+	xmlOut, err := buildNZB(arts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(xmlOut), "<file "); n != 2 {
+		t.Errorf("NZB should have one <file> per volume, got %d", n)
+	}
+	for _, name := range []string{"tiny.part01.rar", "tiny.part02.rar"} {
+		if !strings.Contains(string(xmlOut), name) {
+			t.Errorf("NZB lost volume filename %q", name)
+		}
 	}
 }
 

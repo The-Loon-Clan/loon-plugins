@@ -26,6 +26,14 @@ import "testing"
 // These tests do not FIX that. They pin the two facts a fix would have to
 // change, so the next person starts from evidence rather than from a paragraph:
 // the base subject is shared, and the field key collides.
+//
+// Scope note (8 Aug 2026): the TWO-counter subfamilies of the rar split are
+// fixed — see the swap tests at the bottom of this file. THIS form, a single
+// counter with the volume number only in the filename, still collides exactly
+// as pinned here: there is no file counter in the subject to read, and
+// deriving one from ".partNN" is the separately-measured risk the parser's
+// reArchivePart comment documents. The next two tests remain the pin, not a
+// fossil.
 func TestRarVolumesShareOneStagingKey(t *testing.T) {
 	const seg = 81
 	subjects := []string{
@@ -86,56 +94,95 @@ func TestParVolumesCollideTheSameWay(t *testing.T) {
 	}
 }
 
-// The real thing, from production staging — and it is NOT what the paragraph
-// above guessed.
+// The two-counter form, from production staging — and it is NOT what the
+// paragraph above guessed.
 //
 // The backlog's hypothesis was that multi-volume posts carry no file counter at
-// all, so fileNum stays 0 and volumes collide. That happens. But the posts
-// actually doing the damage carry TWO counters:
+// all, so fileNum stays 0 and volumes collide. That happens (the tests above
+// pin it, and it is STILL unfixed). But the posts that did the measured damage
+// carry TWO counters:
 //
 //	"BB520.part001.rar" - (001/225) - yEnc (100/391)
 //	                      ^^^^^^^^^         ^^^^^^^^
 //	                      file 1 of 225     segment 100 of 391
 //
-// parseSubject prefers the counter BEFORE yEnc, on the documented reasoning
-// that "anything after the keyword is a file-count indicator rather than a
-// segment counter". In THIS shape that is exactly inverted: the counter before
-// yEnc is the file counter and the one after it is the segment counter.
+// parseSubject used to prefer the counter BEFORE yEnc, reasoning that
+// "anything after the keyword is a file-count indicator rather than a segment
+// counter" — a shape that occurs in zero of the 288 two-counter posts in a
+// 7.6M-article index. Under that reading every segment of volume 001 parsed
+// as part 1 of 225 and staged under one key: 98.1% of these articles
+// overwrote each other, and what survived was one segment per volume claiming
+// the whole volume's size — the junk row the backlog described.
 //
-// So every one of the 391 segments of volume 001 parses as part 1 of 225 and
-// stages under the same key. Measured against 7.2M staged articles: 30,646
-// articles in this shape across 103 posts collapse onto 532 keys — 98.3%
-// overwritten. What survives is one segment per volume claiming the whole
-// volume's size, which is precisely the junk row the backlog described.
-//
-// These assertions pin the WRONG behaviour deliberately, because a failing test
-// in a shared repository is somebody else's broken build. When the parser is
-// fixed they will fail with a message saying so, and that is the signal to
-// rewrite them as the correct expectation.
-func TestTwoCounterSubjectReadsTheFileCounterAsSegments(t *testing.T) {
+// Fixed 8 Aug 2026 (loon-demo-site docs/SUBJECT-PARSING-REVIEW.md holds the
+// full validation: zero base changes and zero introduced collisions across
+// 6.99M distinct subjects). These assertions are the correct expectation the
+// old pinned-wrong version told its finder to write.
+func TestTwoCounterSubjectSwapsFileAndSegmentCounters(t *testing.T) {
 	const subject = `"BB520.part001.rar" - (001/225) - yEnc (100/391)`
-	base, pn, tp, _, fn, tf, _ := parseSubject(subject)
+	base, pn, tp, seg, fn, tf, fp := parseSubject(subject)
 
+	// The base must stay on the stripAllMarkers route. The [i/j] release-name
+	// rule would take the text before the counter and produce
+	// `"BB520.part001.rar` — quotes, volume number and extension intact
+	// (cleanBase does not trim quotes) — splitting every volume into its own
+	// release and re-keying live staging.
 	if base != "BB520" {
-		t.Errorf("base = %q, want BB520 (the base is right; the counters are not)", base)
+		t.Errorf("base = %q, want BB520 (must stay on the stripAllMarkers route)", base)
 	}
-	// What it SHOULD be: pn=100, tp=391 (the yEnc counter), fn=1, tf=225.
-	if pn == 100 && tp == 391 {
-		t.Fatalf("the segment counter is now read correctly (%d/%d) — this bug is FIXED; "+
-			"rewrite this test as the correct expectation", pn, tp)
+	if pn != 100 || tp != 391 || seg != 391 {
+		t.Errorf("segment = %d/%d seg=%d, want 100/391 seg=391 (the counter AFTER yEnc)", pn, tp, seg)
 	}
-	if pn != 1 || tp != 225 {
-		t.Errorf("segment parsed as %d/%d; the bug reads the FILE counter (1/225)", pn, tp)
-	}
-	if fn != 0 || tf != 0 {
-		t.Errorf("file parsed as %d/%d; the bug leaves it unset (0/0)", fn, tf)
+	if fn != 1 || tf != 225 || !fp {
+		t.Errorf("file = %d/%d fp=%v, want 1/225 fp=true (the counter BEFORE yEnc)", fn, tf, fp)
 	}
 
-	// The consequence: two different segments of one volume share a key.
+	// The healed consequence, both axes: two segments of one volume get their
+	// own keys, and the same segment index of two volumes does too.
 	_, pnA, _, _, fnA, _, _ := parseSubject(`"BB520.part001.rar" - (001/225) - yEnc (100/391)`)
 	_, pnB, _, _, fnB, _, _ := parseSubject(`"BB520.part001.rar" - (001/225) - yEnc (250/391)`)
-	if formatFieldKey(fnA, pnA) != formatFieldKey(fnB, pnB) {
-		t.Fatalf("segments 100 and 250 no longer collide — the bug is FIXED; update this test")
+	_, pnC, _, _, fnC, _, _ := parseSubject(`"BB520.part002.rar" - (002/225) - yEnc (100/391)`)
+	if formatFieldKey(fnA, pnA) == formatFieldKey(fnB, pnB) {
+		t.Errorf("segments 100 and 250 of volume 001 still share key %q", formatFieldKey(fnA, pnA))
 	}
-	t.Logf("segments 100 and 250 of one volume both stage under %q", formatFieldKey(fnA, pnA))
+	if formatFieldKey(fnA, pnA) == formatFieldKey(fnC, pnC) {
+		t.Errorf("segment 100 of volumes 001 and 002 still share key %q", formatFieldKey(fnA, pnA))
+	}
+}
+
+// The no-yEnc variant of the same bug — the one that actually produced the
+// [Superboys.of.Malegaon.2025] fragment releases the evidence doc used as its
+// headline (it misattributed them to the yEnc form; the download test that
+// exposed that is in SUBJECT-PARSING-REVIEW.md). No yEnc anywhere, two
+// counters: the first is the file counter, the last the segment counter.
+//
+// Before the fix the segment counter was already read correctly (the last
+// (a/b) wins when there is no yEnc to scope by) but the file counter went
+// unread — all 23 files of the post fought for the "0:s" key space, and what
+// assembled was an interleaved mosaic. Two of six such fragments passed a real
+// newsreader's post-processing as "Completed" because their surviving keys
+// held only whole par2 files: no data, nothing to verify, status green.
+func TestNoYencTwoCounterSubjectReadsBothCounters(t *testing.T) {
+	const subject = `[Superboys.of.Malegaon.2025] (06/23) - "Superboys.of.Malegaon.2025.1080p.AMZN.WEB-DL.DDP5.1..Atmos.H.264-WADU.part04.rar" (0683/1621)`
+	base, pn, tp, _, fn, tf, fp := parseSubject(subject)
+
+	if fn != 6 || tf != 23 || !fp {
+		t.Errorf("file = %d/%d fp=%v, want 6/23 fp=true (the FIRST counter)", fn, tf, fp)
+	}
+	if pn != 683 || tp != 1621 {
+		t.Errorf("segment = %d/%d, want 683/1621 (the LAST counter, unchanged from before the fix)", pn, tp)
+	}
+	// Byte-identical to the pre-fix base, so the post's staged set and its
+	// junk-rule memoisation survive the change.
+	const wantBase = "[Superboys.of.Malegaon.2025] - Superboys.of.Malegaon.2025.1080p.AMZN.WEB-DL.DDP5.1..Atmos.H.264-WADU"
+	if base != wantBase {
+		t.Errorf("base = %q, want %q", base, wantBase)
+	}
+
+	// A single counter without yEnc must NOT grow a file counter — that is
+	// the Ratatouille shape pinned above, deliberately untouched.
+	_, _, _, _, fn2, tf2, fp2 := parseSubject(`"Some.Release-GRP.part01.rar" (5/60)`)
+	if fp2 || fn2 != 0 || tf2 != 0 {
+		t.Errorf("single no-yEnc counter grew a file counter (%d/%d fp=%v); the ≥2-counter guard is gone", fn2, tf2, fp2)
+	}
 }
