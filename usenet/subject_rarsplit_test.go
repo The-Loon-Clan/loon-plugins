@@ -85,3 +85,57 @@ func TestParVolumesCollideTheSameWay(t *testing.T) {
 			formatFieldKey(afn, apn), formatFieldKey(bfn, bpn))
 	}
 }
+
+// The real thing, from production staging — and it is NOT what the paragraph
+// above guessed.
+//
+// The backlog's hypothesis was that multi-volume posts carry no file counter at
+// all, so fileNum stays 0 and volumes collide. That happens. But the posts
+// actually doing the damage carry TWO counters:
+//
+//	"BB520.part001.rar" - (001/225) - yEnc (100/391)
+//	                      ^^^^^^^^^         ^^^^^^^^
+//	                      file 1 of 225     segment 100 of 391
+//
+// parseSubject prefers the counter BEFORE yEnc, on the documented reasoning
+// that "anything after the keyword is a file-count indicator rather than a
+// segment counter". In THIS shape that is exactly inverted: the counter before
+// yEnc is the file counter and the one after it is the segment counter.
+//
+// So every one of the 391 segments of volume 001 parses as part 1 of 225 and
+// stages under the same key. Measured against 7.2M staged articles: 30,646
+// articles in this shape across 103 posts collapse onto 532 keys — 98.3%
+// overwritten. What survives is one segment per volume claiming the whole
+// volume's size, which is precisely the junk row the backlog described.
+//
+// These assertions pin the WRONG behaviour deliberately, because a failing test
+// in a shared repository is somebody else's broken build. When the parser is
+// fixed they will fail with a message saying so, and that is the signal to
+// rewrite them as the correct expectation.
+func TestTwoCounterSubjectReadsTheFileCounterAsSegments(t *testing.T) {
+	const subject = `"BB520.part001.rar" - (001/225) - yEnc (100/391)`
+	base, pn, tp, _, fn, tf, _ := parseSubject(subject)
+
+	if base != "BB520" {
+		t.Errorf("base = %q, want BB520 (the base is right; the counters are not)", base)
+	}
+	// What it SHOULD be: pn=100, tp=391 (the yEnc counter), fn=1, tf=225.
+	if pn == 100 && tp == 391 {
+		t.Fatalf("the segment counter is now read correctly (%d/%d) — this bug is FIXED; "+
+			"rewrite this test as the correct expectation", pn, tp)
+	}
+	if pn != 1 || tp != 225 {
+		t.Errorf("segment parsed as %d/%d; the bug reads the FILE counter (1/225)", pn, tp)
+	}
+	if fn != 0 || tf != 0 {
+		t.Errorf("file parsed as %d/%d; the bug leaves it unset (0/0)", fn, tf)
+	}
+
+	// The consequence: two different segments of one volume share a key.
+	_, pnA, _, _, fnA, _, _ := parseSubject(`"BB520.part001.rar" - (001/225) - yEnc (100/391)`)
+	_, pnB, _, _, fnB, _, _ := parseSubject(`"BB520.part001.rar" - (001/225) - yEnc (250/391)`)
+	if formatFieldKey(fnA, pnA) != formatFieldKey(fnB, pnB) {
+		t.Fatalf("segments 100 and 250 no longer collide — the bug is FIXED; update this test")
+	}
+	t.Logf("segments 100 and 250 of one volume both stage under %q", formatFieldKey(fnA, pnA))
+}
