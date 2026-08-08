@@ -284,6 +284,12 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// The member-facing claim card and its POST. Registered before the admin
 	// pages so a failure here is a boot error rather than a half-wired plugin
 	// that serves an admin surface for a delivery mode members cannot reach.
+	// The profile card. Order against registerViews (below, which parses the
+	// template set) does not matter: registration stores a Render closure, and
+	// nothing renders until a request arrives long after Boot.
+	if err := p.registerAchievementProfile(c); err != nil {
+		return err
+	}
 	if err := p.registerMemberViews(c); err != nil {
 		return err
 	}
