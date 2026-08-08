@@ -48,10 +48,9 @@ type memberVM struct {
 	Ratio    float64
 }
 
+// registerViews publishes the admin page. Templates are already parsed by
+// Provision, which needs them for the member pages too.
 func (p *Plugin) registerViews(c *core.Core) error {
-	if err := p.parseTemplates(); err != nil {
-		return err
-	}
 	return c.RegisterView(core.View{
 		Slug: "tracker", Title: "Tracker", Slot: core.SlotAdminPage,
 		Description: "Swarm oversight: torrents, and every member's ratio accounting.",
@@ -89,6 +88,19 @@ func (p *Plugin) parseTemplates() error {
 				return "—"
 			}
 			return fmt.Sprintf("%.2f", r)
+		},
+		// since borrows the host's relative-time formatting so the tracker's
+		// "last seen" and "added" columns read like every other one on the site.
+		// Falls back to an absolute stamp rather than failing: a page is more
+		// useful with an unfamiliar date format than not at all.
+		"since": func(t time.Time) string {
+			if t.IsZero() {
+				return "—"
+			}
+			if deps != nil && deps.RelativeTime != nil {
+				return deps.RelativeTime(t)
+			}
+			return t.UTC().Format("2006-01-02 15:04")
 		},
 	}).ParseFS(viewFS, "templates/*.html")
 	if err != nil {

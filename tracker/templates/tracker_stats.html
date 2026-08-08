@@ -1,0 +1,95 @@
+{{/* One member's own counters. A FRAGMENT — the host supplies the chrome.
+     Adapted from the host's tracker_stats.html with one change of substance: the
+     fourth card was "Active / Total", reading Totals.ActiveCount and
+     Totals.TorrentCount. This plugin's Totals carries Seeding, Leeching and
+     Snatched instead, which is both what it actually computes and more use to a
+     member — "2 seeding, 1 leeching" answers a question that "3 active" does
+     not. Rendering the fields that exist beats adding fields to satisfy a
+     phrase. */}}
+{{define "tracker_stats.html"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 style="font-weight:600;margin:0;">My Tracker Stats</h5>
+    <a href="/tracker" class="btn btn-sm btn-outline-secondary">Back to list</a>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-3">
+        <div class="card" style="background:var(--bg-elevated); border:1px solid var(--border);">
+            <div class="card-body py-2">
+                <div class="text-muted" style="font-size:0.75rem;">Uploaded</div>
+                <div><strong>{{bytes .Totals.Uploaded}}</strong></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card" style="background:var(--bg-elevated); border:1px solid var(--border);">
+            <div class="card-body py-2">
+                <div class="text-muted" style="font-size:0.75rem;">Downloaded</div>
+                <div><strong>{{bytes .Totals.Downloaded}}</strong></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card" style="background:var(--bg-elevated); border:1px solid var(--border);">
+            <div class="card-body py-2">
+                <div class="text-muted" style="font-size:0.75rem;">Ratio</div>
+                <div><strong>{{ratio .Totals.Ratio}}</strong></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card" style="background:var(--bg-elevated); border:1px solid var(--border);">
+            <div class="card-body py-2">
+                <div class="text-muted" style="font-size:0.75rem;">Seeding / Leeching</div>
+                <div><strong>{{.Totals.Seeding}} / {{.Totals.Leeching}}</strong></div>
+                <div class="text-muted" style="font-size:0.7rem;">{{.Totals.Snatched}} snatched</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3" style="background:var(--bg-elevated); border:1px solid var(--border);">
+    <div class="card-body py-2">
+        <div class="text-muted mb-1" style="font-size:0.75rem;">Announce URL — paste this into a client, or download a .torrent which already carries it</div>
+        <div style="font-family:monospace;font-size:0.8rem;background:var(--bg-elevated);border:1px solid var(--border);border-radius:4px;padding:0.5rem;word-break:break-all;">{{.AnnounceURL}}</div>
+        <form method="POST" action="/tracker/passkey/rotate" class="mt-2">
+            <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+            <button class="btn btn-sm btn-outline-danger"
+                    onclick="return confirm('Rotating your passkey will break every .torrent you already downloaded. Continue?')">
+                Rotate passkey
+            </button>
+        </form>
+    </div>
+</div>
+
+{{if .Rows}}
+<div class="table-responsive">
+<table class="table table-sm table-hover">
+    <thead>
+        <tr class="small text-muted">
+            <th>Name</th>
+            <th class="text-end">Up</th>
+            <th class="text-end">Down</th>
+            <th class="text-end">Left</th>
+            <th class="text-end">Last seen</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Rows}}
+        <tr style="font-size:0.88rem;">
+            <td>{{if .Name}}{{.Name}}{{else}}<code>{{.InfoHash}}</code>{{end}}</td>
+            <td class="text-end">{{bytes .Uploaded}}</td>
+            <td class="text-end">{{bytes .Downloaded}}</td>
+            <td class="text-end">{{bytes .LeftBytes}}</td>
+            <td class="text-end text-muted" style="font-size:0.75rem;">{{since .LastSeen}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</div>
+{{else}}
+<div class="alert alert-secondary">
+    You haven't announced on any torrent yet. Download one to start.
+</div>
+{{end}}
+{{end}}

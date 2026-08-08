@@ -1,6 +1,10 @@
 package tracker
 
 import (
+	"html/template"
+	"strings"
+	"time"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
@@ -9,22 +13,45 @@ import (
 // Deps is the render seam the host supplies.
 //
 // The member pages keep the URLs they had before the extraction (/tracker,
-// /tracker/my) and render templates that live in the HOST's set — the same
-// arrangement messages, wiki and donations use. Moving them to /p/tracker to make
-// the plugin self-contained would be a cost paid by every member with a bookmark,
-// so the plugin borrows the chrome instead.
+// /tracker/my) — moving them to /p/tracker would be a cost paid by every member
+// with a bookmark — but the MARKUP belongs to the plugin. It renders its own
+// fragment and the host wraps it in the site chrome, which is the arrangement
+// messages, wiki, forum, lists, news, offers, store and tickets all use.
+//
+// The first version of this seam took (tmpl string, data any) and rendered a
+// template out of the HOST's set. That looked like less work and was a trap: the
+// host templates are whole pages, so they pull in navbar and footer and need the
+// host's BaseData to render at all, and they referenced two fields
+// (Totals.ActiveCount, Totals.TorrentCount) this plugin does not have. Neither
+// problem shows up at compile time — html/template streams, so a missing field
+// truncates the page mid-row. Owning the fragment removes the whole class.
 type Deps struct {
-	// RenderPage renders a host template with the site's own layout — navbar,
-	// footer, session context. Required: without it these pages render as though
-	// nobody is signed in, which reads as a broken session rather than a missing
-	// seam.
-	RenderPage func(c *gin.Context, tmpl string, data any)
+	// RenderPage wraps a rendered fragment in the site's layout — navbar, footer,
+	// session context. Required: without it these pages render as though nobody
+	// is signed in, which reads as a broken session rather than a missing seam.
+	RenderPage func(c *gin.Context, title string, body template.HTML)
+
+	// CSRFToken supplies the double-submit token for the passkey-rotate form.
+	// A separate seam rather than a field on the view model because the token is
+	// the host's session concern, not the tracker's.
+	CSRFToken func(c *gin.Context) string
+
+	// RelativeTime formats a timestamp the way the rest of the site does
+	// ("3 hours ago"). Borrowed rather than reimplemented so the tracker's
+	// "last seen" column does not drift from every other one.
+	RelativeTime func(t time.Time) string
 }
 
 var deps *Deps
 
 // SetDeps is called from the host's main() before core.Boot.
 func SetDeps(d Deps) { deps = &d }
+
+// depsReady reports whether every required seam is wired, for Provision to fail
+// loud rather than at first request.
+func depsReady() bool {
+	return deps != nil && deps.RenderPage != nil && deps.CSRFToken != nil && deps.RelativeTime != nil
+}
 
 // Handlers serves the tracker: the two BitTorrent endpoints a client talks to,
 // and the member pages a browser does.
@@ -38,7 +65,14 @@ type Handlers struct {
 	gate    Gate
 	auth    core.AuthService
 	siteURL string
+	// tmpl is the plugin's own fragment set, shared with the admin view.
+	tmpl *template.Template
 }
+
+// SetTemplates hands the handler set the parsed fragments. Separate from
+// NewHandlers because Provision parses once and both the member pages and the
+// admin view read the same set.
+func (h *Handlers) SetTemplates(t *template.Template) { h.tmpl = t }
 
 // NewHandlers builds the handler set. siteURL is the absolute base (scheme +
 // host, no trailing slash) baked into every downloaded .torrent's announce URL —
@@ -54,14 +88,27 @@ func (h *Handlers) currentUser(c *gin.Context) (*core.User, bool) {
 	return h.auth.CurrentUser(c)
 }
 
-// render hands a page to the host's layout. A nil seam is a wiring bug rather
-// than a runtime condition, so it says so instead of writing a blank page.
-func (h *Handlers) render(c *gin.Context, tmpl string, data any) {
-	if deps == nil || deps.RenderPage == nil {
-		c.String(500, "tracker: SetDeps was not called with a RenderPage — wire it in main() before core.Boot")
+// render executes one of the plugin's own fragments and hands it to the host's
+// layout. A nil seam is a wiring bug rather than a runtime condition, so it says
+// so instead of writing a blank page.
+func (h *Handlers) render(c *gin.Context, tmpl, title string, data any) {
+	if !depsReady() {
+		c.String(500, "tracker: SetDeps was not called with a full Deps — wire it in main() before core.Boot")
 		return
 	}
-	deps.RenderPage(c, tmpl, data)
+	if h.tmpl == nil {
+		c.String(500, "tracker: templates were not parsed")
+		return
+	}
+	var sb strings.Builder
+	if err := h.tmpl.ExecuteTemplate(&sb, tmpl, data); err != nil {
+		// A fragment that fails mid-execute has already written part of itself to
+		// sb, which is exactly why it goes to a buffer first: the half-rendered
+		// output is discarded instead of reaching the browser as a truncated page.
+		c.String(500, "tracker: rendering %s: %v", tmpl, err)
+		return
+	}
+	deps.RenderPage(c, title, template.HTML(sb.String()))
 }
 
 func trimRightSlash(s string) string {

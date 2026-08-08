@@ -1,0 +1,80 @@
+{{/* The swarm, as a member sees it. A FRAGMENT: the host wraps it in the site
+     chrome, so there is no doctype, navbar or footer here. Adapted from the
+     host's tracker_list.html, with two deliberate changes — the ratio card now
+     reads the plugin's Totals.Ratio() instead of recomputing the division in the
+     template, and the download button is unchanged because /tracker/download
+     keeps its URL. */}}
+{{define "tracker_list.html"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 style="font-weight:600;margin:0;">Private Tracker</h5>
+    <a href="/tracker/my" class="btn btn-sm btn-outline-secondary">My Stats</a>
+</div>
+
+<div class="card mb-3" style="background:var(--bg-elevated); border:1px solid var(--border);">
+    <div class="card-body py-2">
+        <div class="row small">
+            <div class="col-md-4">
+                <div class="text-muted" style="font-size:0.75rem;">Uploaded (all time)</div>
+                <div><strong>{{bytes .Totals.Uploaded}}</strong></div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-muted" style="font-size:0.75rem;">Downloaded (all time)</div>
+                <div><strong>{{bytes .Totals.Downloaded}}</strong></div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-muted" style="font-size:0.75rem;">Ratio</div>
+                <div><strong>{{ratio .Totals.Ratio}}</strong></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{if .Torrents}}
+<div class="table-responsive">
+<table class="table table-sm table-hover">
+    <thead>
+        <tr class="small text-muted">
+            <th>Name</th>
+            <th class="text-end">Size</th>
+            <th class="text-end">Files</th>
+            <th class="text-end">Swarm</th>
+            <th class="text-end">Snatches</th>
+            <th class="text-end">Added</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Torrents}}
+        <tr>
+            <td>
+                <div>{{.Name}}</div>
+                <div class="text-muted" style="font-size:0.75rem;"><code>{{.InfoHash}}</code></div>
+            </td>
+            <td class="text-end">{{bytes .Size}}</td>
+            <td class="text-end">{{.FileCount}}</td>
+            <td class="text-end">
+                <span style="color:#22c55e;">{{.Seeders}}S</span> /
+                <span style="color:#f97316;">{{.Leechers}}L</span>
+            </td>
+            <td class="text-end">{{.Snatches}}</td>
+            <td class="text-end text-muted" style="font-size:0.75rem;">{{since .AddedAt}}</td>
+            <td class="text-end">
+                <a class="btn btn-sm btn-outline-primary"
+                   href="/tracker/download/{{.InfoHash}}">.torrent</a>
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</div>
+{{else}}
+<div class="alert alert-secondary">
+    No torrents registered yet.
+</div>
+{{end}}
+
+<div class="text-muted mt-3" style="font-size:0.75rem;">
+    {{.Total}} torrent{{if ne .Total 1}}s{{end}} registered.
+    Your passkey is embedded in each download — keep it private.
+</div>
+{{end}}

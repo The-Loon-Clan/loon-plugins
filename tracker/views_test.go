@@ -1,9 +1,12 @@
 package tracker
 
 import (
+	"html/template"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func renderFixture(t *testing.T) *Plugin {
@@ -118,5 +121,95 @@ func TestHumanBytes(t *testing.T) {
 		if got := humanBytes(tc.in); got != tc.want {
 			t.Errorf("humanBytes(%d) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+// The member fragments must EXECUTE against the real PageData.
+//
+// This is the test the restructure was for. The first version of these pages
+// rendered templates out of the host's set, and those referenced
+// Totals.ActiveCount and Totals.TorrentCount — fields this plugin does not have.
+// html/template streams, so a missing field does not fail the request: it
+// truncates the page mid-row and returns 200. Nothing at compile time catches it
+// and it looks like a rendering glitch rather than a wiring bug.
+func TestMemberFragmentsRenderWithRealData(t *testing.T) {
+	SetDeps(Deps{
+		RenderPage:   func(*gin.Context, string, template.HTML) {},
+		CSRFToken:    func(*gin.Context) string { return "tok" },
+		RelativeTime: func(time.Time) string { return "3 hours ago" },
+	})
+	t.Cleanup(func() { deps = nil })
+
+	p := &Plugin{}
+	if err := p.parseTemplates(); err != nil {
+		t.Fatalf("parseTemplates: %v", err)
+	}
+
+	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	data := PageData{
+		Torrents: []*Torrent{{
+			InfoHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Name: "Some Release",
+			Size: 5 << 30, FileCount: 12, Seeders: 4, Leechers: 2, Snatches: 7, AddedAt: now,
+		}},
+		Total: 1,
+		Rows: []*UserStat{{
+			InfoHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Name: "Some Release",
+			Uploaded: 3 << 30, Downloaded: 1 << 30, LeftBytes: 0, LastSeen: now,
+		}},
+		Totals:      Totals{Uploaded: 3 << 30, Downloaded: 1 << 30, Seeding: 2, Leeching: 1, Snatched: 5},
+		Passkey:     "deadbeefdeadbeefdeadbeefdeadbeef",
+		AnnounceURL: "https://example.test/api/tracker/announce/deadbeefdeadbeefdeadbeefdeadbeef",
+		CSRFToken:   "tok",
+	}
+
+	for _, tc := range []struct{ tmpl, wants string }{
+		{"tracker_list.html", "Some Release"},
+		{"tracker_stats.html", "Rotate passkey"},
+	} {
+		t.Run(tc.tmpl, func(t *testing.T) {
+			var sb strings.Builder
+			// Executing a template with a field the model lacks is an ERROR here
+			// (not silent) only because we check it — which is the point.
+			if err := p.tmpl.ExecuteTemplate(&sb, tc.tmpl, data); err != nil {
+				t.Fatalf("%s: %v", tc.tmpl, err)
+			}
+			out := sb.String()
+			if !strings.Contains(out, tc.wants) {
+				t.Errorf("%s did not render %q", tc.tmpl, tc.wants)
+			}
+			// A truncated stream is the failure mode: assert the LAST thing in
+			// the fragment made it out, not merely that something did.
+			if !strings.Contains(out, "3.00") {
+				t.Errorf("%s: ratio missing — Totals.Ratio did not render: %s", tc.tmpl, out)
+			}
+			if strings.Contains(out, "ActiveCount") || strings.Contains(out, "TorrentCount") {
+				t.Errorf("%s leaked a field name into the output", tc.tmpl)
+			}
+		})
+	}
+}
+
+// The rotate form carries the host's token. Without it the POST is refused by
+// CSRF and the button silently does nothing.
+func TestStatsFragmentCarriesTheCSRFToken(t *testing.T) {
+	SetDeps(Deps{
+		RenderPage:   func(*gin.Context, string, template.HTML) {},
+		CSRFToken:    func(*gin.Context) string { return "the-token" },
+		RelativeTime: func(time.Time) string { return "now" },
+	})
+	t.Cleanup(func() { deps = nil })
+
+	p := &Plugin{}
+	if err := p.parseTemplates(); err != nil {
+		t.Fatal(err)
+	}
+	var sb strings.Builder
+	if err := p.tmpl.ExecuteTemplate(&sb, "tracker_stats.html", PageData{
+		Totals: Totals{}, CSRFToken: "the-token",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sb.String(), `name="_csrf" value="the-token"`) {
+		t.Error("the rotate form has no CSRF token; the POST would be refused")
 	}
 }

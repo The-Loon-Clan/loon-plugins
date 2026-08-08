@@ -33,6 +33,9 @@ type PageData struct {
 	// AnnounceURL is rendered so a member can paste it into a client that wants
 	// the tracker URL directly rather than a .torrent.
 	AnnounceURL string
+	// CSRFToken for the passkey-rotate form, supplied by the host's session
+	// layer via Deps rather than derived here.
+	CSRFToken string
 }
 
 // IndexPage lists the swarm.
@@ -53,9 +56,9 @@ func (h *Handlers) IndexPage(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "passkey: %v", err)
 		return
 	}
-	h.render(c, "tracker_list.html", PageData{
+	h.render(c, "tracker_list.html", "Private Tracker", PageData{
 		Torrents: rows, Total: total, Totals: totals,
-		Passkey: pk, AnnounceURL: h.announceURL(pk),
+		Passkey: pk, AnnounceURL: h.announceURL(pk), CSRFToken: h.csrf(c),
 	})
 }
 
@@ -81,9 +84,20 @@ func (h *Handlers) MyStatsPage(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "passkey: %v", err)
 		return
 	}
-	h.render(c, "tracker_stats.html", PageData{
-		Rows: rows, Totals: totals, Passkey: pk, AnnounceURL: h.announceURL(pk),
+	h.render(c, "tracker_stats.html", "My Tracker Stats", PageData{
+		Rows: rows, Totals: totals, Passkey: pk,
+		AnnounceURL: h.announceURL(pk), CSRFToken: h.csrf(c),
 	})
+}
+
+// csrf reads the host's double-submit token. Empty when the seam is unwired,
+// which the render path has already refused on, so this never silently produces
+// a form that would be rejected.
+func (h *Handlers) csrf(c *gin.Context) string {
+	if deps == nil || deps.CSRFToken == nil {
+		return ""
+	}
+	return deps.CSRFToken(c)
 }
 
 // Download returns the .torrent with this member's passkey in the announce URL.

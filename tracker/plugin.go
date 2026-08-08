@@ -121,6 +121,19 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return nil
 	}
 
+	// Templates and the host render seams are needed by the member pages below
+	// AND by the admin view, so they are established before either is mounted.
+	// Refused rather than deferred: an unwired seam surfaces as a 500 on a page
+	// a member opened, which is a worse place to learn about it than boot.
+	if !depsReady() {
+		return fmt.Errorf("tracker: SetDeps was not called with a full Deps " +
+			"(RenderPage, CSRFToken, RelativeTime) before core.Boot")
+	}
+	if err := p.parseTemplates(); err != nil {
+		return fmt.Errorf("tracker: parsing templates: %w", err)
+	}
+	p.h.SetTemplates(p.tmpl)
+
 	// ── Member pages ────────────────────────────────────────────────────────
 	//
 	// Two gates, in order: the host's own auth chain first (RequireUser), then the
