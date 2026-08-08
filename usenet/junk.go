@@ -89,6 +89,24 @@ type junkParams struct {
 	// by setting the same param instead of silently receiving a different
 	// normalisation than the rules it sits beside.
 	LightInput bool `json:"light_input,omitempty"`
+	// SpareNamedMedia exempts a title that NAMES a small-but-legitimate media
+	// type (.epub, .cbz, .flac, .mp3 …) from a size catchall.
+	//
+	// The catchalls were written for an anime-only catalogue, where "nothing
+	// legitimate is a few MB" held. It stopped holding when the site began
+	// collecting music, manga and books, and the rules did not notice: the last
+	// title under_5mib dropped was `Blackthorn - J.T. Geissinger.epub`, a real
+	// book deleted for being 2 MB. Meanwhile under_1mib's last catch was
+	// `elys-1907283e54a1cae9 - [KXPSbTzl] qoS5w5nwO0OvHnwj`, which is exactly
+	// what the catchall is for.
+	//
+	// So the premise needed narrowing, not the threshold: the band is not
+	// "too small to be real", it is "too small to be real AND unnamed". A
+	// filename extension is the poster's own claim about what the file IS, and
+	// no obfuscation bot writes `.epub` — the junk in this band is nameless
+	// tokens. Requires LightInput, since full normalisation strips the very
+	// extension this reads.
+	SpareNamedMedia bool `json:"spare_named_media,omitempty"`
 }
 
 func (p junkParams) sized() bool { return p.MinSizeBytes > 0 || p.MaxSizeBytes > 0 }
@@ -312,6 +330,16 @@ func (m *junkMatcher) match(t, ts string, sizeBytes int64) string {
 		if r.params.LightInput {
 			in = ts
 		}
+		// A title that NAMES a small-but-legitimate media type is exempt from
+		// the rules that opt in — see SpareNamedMedia. Applied here rather than
+		// inside one heuristic because several size-gated rules share the same
+		// outdated premise: size_catchall's "nothing legitimate is this small"
+		// and tiny_no_space's "legit tiny NZBs always have spaces in their
+		// titles" both broke on the same content. A subtitle or a single track
+		// is a dotted filename with no spaces at all.
+		if r.params.SpareNamedMedia && namesSmallMedia(in) {
+			continue
+		}
 		if r.re != nil {
 			// Cheap literal gate first: proven-necessary substring, so a miss
 			// here is a miss the automaton would have taken far longer to
@@ -363,6 +391,65 @@ func runJunkHeuristic(id, t string, p junkParams) bool {
 			countGarbledPunct(t) >= 3
 	case "size_catchall":
 		return true // the size gate in match() is the whole rule
+	}
+	return false
+}
+
+// smallMediaExts are file types a REAL release can be a few megabytes of. A
+// book, a comic chapter, a single track: content whose whole delivery is small,
+// as opposed to a fragment of something large.
+//
+// Archive and video extensions are deliberately absent. A 2 MB `.rar` or
+// `.mkv` is not a small release, it is a broken big one — which is the case the
+// catchall must keep catching.
+var smallMediaExts = []string{
+	// books and comics
+	".epub", ".mobi", ".azw3", ".azw", ".pdf", ".cbz", ".cbr", ".djvu",
+	// audio
+	".mp3", ".flac", ".m4a", ".m4b", ".ogg", ".opus", ".wav", ".aac", ".alac",
+	// subtitles, which are tiny by nature and belong to a real release
+	".srt", ".ass", ".ssa", ".sub", ".idx",
+}
+
+// namesSmallMedia reports whether the title carries a small-media extension.
+//
+// Matched anywhere, not just at the end: real titles trail metadata after the
+// filename (`Some Book.epub [retail]`, `Album.flac (2024)`), and anchoring to
+// the end would spare only the tidiest of them.
+//
+// The extension must actually END a filename, which is what the delimiter set
+// below decides. A dot does NOT end one: a random-byte title carrying
+// `…}.pdf.1\xe6\xaa8Zp` was spared by an earlier version that accepted any
+// non-alphanumeric, because `.pdf.` reads as a match if you only look one
+// character ahead. Garbled titles are long and contain everything, so an
+// exemption this rule grants has to be hard to hit by accident — end-of-string,
+// whitespace, or a closing delimiter, and nothing else.
+func namesSmallMedia(title string) bool {
+	low := strings.ToLower(title)
+	for _, ext := range smallMediaExts {
+		for i := 0; i < len(low); {
+			j := strings.Index(low[i:], ext)
+			if j < 0 {
+				break
+			}
+			end := i + j + len(ext)
+			if end == len(low) || endsFilename(low[end]) {
+				return true
+			}
+			i += j + 1
+		}
+	}
+	return false
+}
+
+// endsFilename reports whether c can follow a file extension in a real title.
+// Deliberately short: a filename ends at whitespace or a bracket, and anything
+// else — a letter, a digit, another dot — means the token continues and the
+// "extension" was a coincidence inside something longer.
+func endsFilename(c byte) bool {
+	switch c {
+	case ' ', '\t', ')', ']', '}', ',', ';', '"', '\'', '|':
+		return true
 	}
 	return false
 }
