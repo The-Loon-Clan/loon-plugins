@@ -246,7 +246,92 @@ func (s *Source) Search(ctx context.Context, query string) (catalog.CatalogEntry
 	if sh.ID == 0 {
 		return catalog.CatalogEntry{}, false, nil
 	}
-	return s.toEntry(sh), true, nil
+	e := s.toEntry(sh)
+	// The wide art lives behind a second call. Best-effort by design: a banner
+	// is a nicety and the poster, summary and dates are already in hand, so a
+	// failure here must not lose the match. Errors are dropped rather than
+	// returned for exactly that reason.
+	s.addWideArt(ctx, sh.ID, &e)
+	return e, true, nil
+}
+
+// image is one entry from /shows/{id}/images.
+type image struct {
+	Type        string `json:"type"`
+	Main        bool   `json:"main"`
+	Resolutions struct {
+		Original struct {
+			URL string `json:"url"`
+		} `json:"original"`
+		Medium struct {
+			URL string `json:"url"`
+		} `json:"medium"`
+	} `json:"resolutions"`
+}
+
+// addWideArt fills banner and background from /shows/{id}/images.
+//
+// The search endpoint returns ONE image — the poster — but TVmaze also holds
+// banner, background and typography art, and a release page wants the wide
+// shapes the poster cannot fill. They are a separate call because the show
+// object does not carry them.
+//
+// That call costs a second slot against the rate limit, which is why this is
+// the only extra request the source makes and why it is skipped entirely when
+// the show has no id to ask about.
+func (s *Source) addWideArt(ctx context.Context, id int64, e *catalog.CatalogEntry) {
+	if id <= 0 {
+		return
+	}
+	if err := s.wait(ctx); err != nil {
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		fmt.Sprintf("%s/shows/%d/images", s.baseURL, id), nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return
+	}
+	var imgs []image
+	if err := json.Unmarshal(body, &imgs); err != nil {
+		return
+	}
+	// "main" is TVmaze's own pick for a type, so it wins; otherwise the first
+	// of that type. A show carries dozens of posters and usually one banner,
+	// so this is a real choice only for the poster — which we do not take from
+	// here, since the search already gave us the one the show itself uses.
+	pick := map[string]string{}
+	for _, im := range imgs {
+		url := im.Resolutions.Original.URL
+		if url == "" {
+			url = im.Resolutions.Medium.URL
+		}
+		if url == "" {
+			continue
+		}
+		if _, have := pick[im.Type]; !have || im.Main {
+			pick[im.Type] = url
+		}
+	}
+	for _, t := range []string{"banner", "background"} {
+		if u := pick[t]; u != "" {
+			e.Fields[t+"_url"] = u
+		}
+	}
 }
 
 func (s *Source) toEntry(sh show) catalog.CatalogEntry {

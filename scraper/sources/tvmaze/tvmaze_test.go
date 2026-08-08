@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -184,3 +185,79 @@ func TestNewNeverReturnsNil(t *testing.T) {
 }
 
 func nowMillis() int64 { return time.Now().UnixNano() / 1e6 }
+
+// The search endpoint returns ONE image, the poster. Banner and background live
+// behind /shows/{id}/images, and a release page wants the wide shapes a poster
+// cannot fill.
+func TestSearchAddsBannerAndBackground(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/images") {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				// Not "main": the fallback is the first of a type.
+				{"type": "banner", "main": false, "resolutions": map[string]any{
+					"original": map[string]any{"url": "https://static.tvmaze.com/b1.jpg"}}},
+				// A second banner marked main must WIN over the first.
+				{"type": "banner", "main": true, "resolutions": map[string]any{
+					"original": map[string]any{"url": "https://static.tvmaze.com/b-main.jpg"}}},
+				{"type": "background", "main": false, "resolutions": map[string]any{
+					"original": map[string]any{"url": "https://static.tvmaze.com/bg.jpg"}}},
+				// Typography is real but nothing renders it; it must not leak
+				// into the entry as an unrecognised field.
+				{"type": "typography", "main": true, "resolutions": map[string]any{
+					"original": map[string]any{"url": "https://static.tvmaze.com/typo.jpg"}}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": 82, "name": "Game of Thrones", "premiered": "2011-04-17",
+			"image": map[string]string{"original": "https://static.tvmaze.com/poster.jpg"},
+		})
+	}))
+	defer srv.Close()
+
+	e, ok, err := New(srv.URL).Search(context.Background(), "Game.of.Thrones.S01E01.1080p")
+	if err != nil || !ok {
+		t.Fatalf("Search: ok=%v err=%v", ok, err)
+	}
+	if e.CoverURL != "https://static.tvmaze.com/poster.jpg" {
+		t.Errorf("CoverURL = %q — the poster must still come from the show object", e.CoverURL)
+	}
+	if got := e.Fields["banner_url"]; got != "https://static.tvmaze.com/b-main.jpg" {
+		t.Errorf("banner_url = %v, want the one flagged main", got)
+	}
+	if got := e.Fields["background_url"]; got != "https://static.tvmaze.com/bg.jpg" {
+		t.Errorf("background_url = %v", got)
+	}
+	if _, leaked := e.Fields["typography_url"]; leaked {
+		t.Error("typography leaked into Fields — nothing renders it")
+	}
+}
+
+// The wide art is a nicety; the poster, summary and dates are already in hand.
+// A failure fetching it must never lose the match.
+func TestImagesFailureKeepsTheMatch(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusInternalServerError, http.StatusTooManyRequests} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/images") {
+				w.WriteHeader(status)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": 82, "name": "Show", "premiered": "2011-04-17",
+				"image": map[string]string{"original": "https://static.tvmaze.com/p.jpg"},
+			})
+		}))
+		e, ok, err := New(srv.URL).Search(context.Background(), "Show.S01E01")
+		srv.Close()
+		if err != nil || !ok {
+			t.Fatalf("images %d lost the match: ok=%v err=%v", status, ok, err)
+		}
+		if e.Title != "Show" || e.CoverURL == "" {
+			t.Errorf("images %d damaged the entry: %+v", status, e)
+		}
+		if _, has := e.Fields["banner_url"]; has {
+			t.Errorf("images %d produced a banner anyway", status)
+		}
+	}
+}
