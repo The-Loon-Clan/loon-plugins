@@ -29,6 +29,19 @@ func init() {
 
 // Config is plugins.tracker.* in the host's config.
 type Config struct {
+	// Enabled switches the whole plugin on. Default FALSE, which is unusual
+	// among these plugins and deliberate here.
+	//
+	// A tracker is not a feature a site accidentally wants. It publishes
+	// announce endpoints, mints passkeys, and starts keeping ratio accounting
+	// the moment it is reachable — so the safe default for a host that merely
+	// has the code compiled in is off. Everything else here (wiki, messages,
+	// forum) is inert until a member visits it; this is not.
+	//
+	// Defaulting false also means the required site_url below is only required
+	// when it will actually be used, so importing the plugin cannot break a
+	// host's boot.
+	Enabled bool `json:"enabled"`
 	// SiteURL is the absolute base (scheme + host) the announce URL is built
 	// from and baked into every downloaded .torrent.
 	//
@@ -65,6 +78,26 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.core = c
 	if err := c.Config.PluginInto("tracker", &p.cfg); err != nil {
 		return fmt.Errorf("tracker: config: %w", err)
+	}
+
+	// OFF unless switched on. Checked FIRST, ahead of the Redis and site_url
+	// checks below, so a host that compiles the plugin in without configuring it
+	// boots cleanly instead of being refused for a site_url it has no use for.
+	//
+	// Logged rather than silent, for the same reason the Redis-idle path is: a
+	// tracker that is not there is indistinguishable from one that is broken, and
+	// the member-visible symptom of both is identical. An operator who expected
+	// it on should be able to find out why from the boot log.
+	//
+	// Note that migrations run in Boot step 1, BEFORE any Provision, so a
+	// disabled tracker still gets its (empty) schema. That is deliberate: it
+	// makes enabling later a config change and a restart, with no migration step
+	// and no first-run schema surprise.
+	if !p.cfg.Enabled {
+		log.Printf("tracker: plugins.tracker.enabled is false — the tracker is OFF " +
+			"(no announce, no scrape, no member pages, no admin view). " +
+			"Set plugins.tracker.enabled: true and plugins.tracker.site_url to enable it.")
+		return nil
 	}
 
 	// REDIS IS REQUIRED, AND ITS ABSENCE IS AN IDLE RATHER THAN A BOOT FAILURE.

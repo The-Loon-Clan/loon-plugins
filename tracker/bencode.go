@@ -304,5 +304,13 @@ func InfoHash(b []byte) ([20]byte, error) {
 	if !ok {
 		return [20]byte{}, errors.New("bencode: missing info dict")
 	}
+	// The span must actually BE a dict. Without this, `d4:infoi5ee` returns a
+	// confident-looking SHA-1 of an integer — an info_hash for something that has
+	// none. Here that would register a torrent nothing can ever announce against;
+	// the same gap on the host side (now pkg/bencode) let the RSS importer dedup
+	// two unrelated downloads onto one key.
+	if info.Len() == 0 || b[info.Start] != 'd' {
+		return [20]byte{}, errors.New("bencode: info is not a dict")
+	}
 	return sha1.Sum(b[info.Start:info.End]), nil
 }

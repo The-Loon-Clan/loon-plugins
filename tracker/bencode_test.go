@@ -108,3 +108,29 @@ func TestMultiFileInfoSummary(t *testing.T) {
 		t.Errorf("file[1]: %+v", sum.Files[1])
 	}
 }
+
+// A non-dict `info` has no info_hash, so it must be an error rather than a
+// confident hash of whatever the span happened to cover.
+//
+// Both copies of this scanner had the gap. On the host side (now pkg/bencode) it
+// let the RSS importer dedup two unrelated downloads onto one key; here it would
+// register a torrent the swarm can never match. Same fix, kept in step.
+func TestInfoHashRejectsNonDictInfo(t *testing.T) {
+	for name, in := range map[string]string{
+		"info is an int":    "d4:infoi5ee",
+		"info is a string":  "d4:info5:helloe",
+		"info is a list":    "d4:infol1:ae e",
+		"info key missing":  "d8:announce3:abce",
+		"not a dict at all": "i9e",
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, err := InfoHash([]byte(in))
+			if err == nil {
+				t.Errorf("accepted %q, returning %x", in, h)
+			}
+			if h != [20]byte{} {
+				t.Errorf("non-zero hash alongside an error: %x", h)
+			}
+		})
+	}
+}
