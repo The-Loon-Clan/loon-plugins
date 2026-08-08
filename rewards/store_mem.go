@@ -23,13 +23,23 @@ type MemStore struct {
 	baselines  map[[2]int64]int64 // (reward, user) -> where counting starts
 	nextID     int64
 
+	// Achievements. Definitions plus one progress row per (achievement, member),
+	// mirroring the achievements / user_achievements pair. See
+	// store_mem_achievements.go for the invariants these are held to.
+	achDefs     map[int64]AchievementDef
+	achProgress map[memAchKey]*memProgress
+
 	Now time.Time
 }
 
 var _ Store = (*MemStore)(nil)
 
 func NewMemStore() *MemStore {
-	return &MemStore{grantLines: map[int64][]Payout{}, baselines: map[[2]int64]int64{}, Now: time.Now()}
+	return &MemStore{
+		grantLines: map[int64][]Payout{}, baselines: map[[2]int64]int64{},
+		achDefs: map[int64]AchievementDef{}, achProgress: map[memAchKey]*memProgress{},
+		Now: time.Now(),
+	}
 }
 
 // PreviousMark mirrors the SQL's GREATEST(max grant reference, baseline): a

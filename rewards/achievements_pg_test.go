@@ -392,7 +392,7 @@ func TestAchievementRefusesAPayoutlessReward(t *testing.T) {
 
 	p := &Plugin{store: st}
 	d := AchievementDef{ID: achID, Slug: "empty-ach", RewardID: rewardID}
-	if err := p.completeAchievement(ctx, st, d, 7); err == nil {
+	if err := p.completeAchievement(ctx, d, 7); err == nil {
 		t.Error("a payout-less reward was accepted; the member now holds an achievement " +
 			"that paid nothing and can never be re-earned")
 	}
@@ -432,7 +432,7 @@ func TestFirstScoringPassIsSilentAndOnlyTheFirst(t *testing.T) {
 	if len(defs) != 1 || defs[0].BackfilledAt != nil {
 		t.Fatalf("setup: a fresh achievement should have no backfill mark: %+v", defs)
 	}
-	if err := p.completeAchievement(ctx, st, defs[0], 7); err != nil {
+	if err := p.completeAchievement(ctx, defs[0], 7); err != nil {
 		t.Fatalf("backfill completion: %v", err)
 	}
 	if !grantSilent(t, db, rewardID, 7) {
@@ -453,7 +453,7 @@ func TestFirstScoringPassIsSilentAndOnlyTheFirst(t *testing.T) {
 	if _, err := st.RecordProgress(ctx, achID, 9, 5); err != nil {
 		t.Fatalf("progress: %v", err)
 	}
-	if err := p.completeAchievement(ctx, st, defs[0], 9); err != nil {
+	if err := p.completeAchievement(ctx, defs[0], 9); err != nil {
 		t.Fatalf("live completion: %v", err)
 	}
 	if grantSilent(t, db, rewardID, 9) {

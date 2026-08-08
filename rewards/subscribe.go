@@ -85,28 +85,27 @@ func (p *Plugin) onCountableEvent(ctx context.Context, e core.Event) {
 	if e.UserID == 0 || e.Count <= 0 {
 		return
 	}
-	if p.admin == nil {
+	if p.store == nil {
 		return
 	}
-	defs, err := p.admin.AchievementDefsByMetric(ctx, e.Name)
+	defs, err := p.store.AchievementDefsByMetric(ctx, e.Name)
 	if err != nil {
 		log.Printf("achievements: defs for %q: %v", e.Name, err)
 		return
 	}
 	if len(defs) == 0 {
 		// The common case by far: an event nothing is scored on. Returning
-		// here keeps the store assertion off the hot path of every post.
+		// here keeps everything below off the hot path of every post.
 		return
 	}
-	// Only now is a real store needed. Asserting earlier made this handler
-	// unreachable in any test without a database — which is how a test for
-	// the UserID guard came to pass for the wrong reason.
-	st, ok := p.store.(*PGStore)
-	if !ok {
-		return
-	}
+	// No *PGStore assertion here any more. It used to be the reason this whole
+	// path needed a database to test — including the parts that are pure logic,
+	// like which achievements a metric selects or whether a completion should be
+	// announced. The methods are on the Store interface now, so the MemStore runs
+	// it, and the assertion that once made a UserID-guard test pass for the wrong
+	// reason is gone rather than merely moved later.
 	for _, d := range defs {
-		reached, err := st.IncrementProgress(ctx, d.ID, e.UserID, e.Count)
+		reached, err := p.store.IncrementProgress(ctx, d.ID, e.UserID, e.Count)
 		if err != nil {
 			log.Printf("achievements: progress on %q for user %d: %v", d.Slug, e.UserID, err)
 			continue
@@ -114,7 +113,7 @@ func (p *Plugin) onCountableEvent(ctx context.Context, e core.Event) {
 		if !reached {
 			continue
 		}
-		if err := p.completeAchievement(ctx, st, d, e.UserID); err != nil {
+		if err := p.completeAchievement(ctx, d, e.UserID); err != nil {
 			log.Printf("achievements: completing %q for user %d: %v", d.Slug, e.UserID, err)
 		}
 	}
@@ -131,14 +130,14 @@ func (p *Plugin) onCountableEvent(ctx context.Context, e core.Event) {
 // "ever". Validation enforces the restriction; this would silently pay twice
 // per window if it were ever relaxed without revisiting the line below, so the
 // kind is re-checked here rather than trusted.
-func (p *Plugin) completeAchievement(ctx context.Context, st *PGStore, d AchievementDef, userID int64) error {
+func (p *Plugin) completeAchievement(ctx context.Context, d AchievementDef, userID int64) error {
 	// An achievement that has never been scored is being backfilled right now,
 	// so this member earned it before it existed. Award it, do not announce
 	// it. See MarkBackfilled for when that stops being true.
-	return p.completeAchievementSilent(ctx, st, d, userID, d.BackfilledAt == nil)
+	return p.completeAchievementSilent(ctx, d, userID, d.BackfilledAt == nil)
 }
 
-func (p *Plugin) completeAchievementSilent(ctx context.Context, st *PGStore, d AchievementDef, userID int64, silent bool) error {
+func (p *Plugin) completeAchievementSilent(ctx context.Context, d AchievementDef, userID int64, silent bool) error {
 	r, err := p.store.RewardByID(ctx, d.RewardID)
 	if err != nil {
 		return err
@@ -178,7 +177,7 @@ func (p *Plugin) completeAchievementSilent(ctx context.Context, st *PGStore, d A
 		g.ExpiresAt = &exp
 	}
 
-	g, err = st.CompleteAchievement(ctx, d.ID, g, r.Payouts)
+	g, err = p.store.CompleteAchievement(ctx, d.ID, g, r.Payouts)
 	if err != nil {
 		if err == ErrAlreadyGranted {
 			// Someone else completed it first, or it was already done. Not a
@@ -219,11 +218,10 @@ func (p *Plugin) completeAchievementSilent(ctx context.Context, st *PGStore, d A
 // read to discover that almost nobody changed is thousands of queries to learn
 // nothing.
 func (p *Plugin) scoreMetric(ctx context.Context, metric string, src MetricSource) (completed int, err error) {
-	st, ok := p.store.(*PGStore)
-	if !ok || p.admin == nil {
+	if p.store == nil {
 		return 0, nil
 	}
-	defs, err := p.admin.AchievementDefsByMetric(ctx, metric)
+	defs, err := p.store.AchievementDefsByMetric(ctx, metric)
 	if err != nil {
 		return 0, err
 	}
@@ -252,14 +250,14 @@ func (p *Plugin) scoreMetric(ctx context.Context, metric string, src MetricSourc
 		for _, d := range defs {
 			// SET, not add: this is the absolute total, and adding it every
 			// tick would multiply a member's progress by the number of ticks.
-			reached, err := st.RecordProgress(ctx, d.ID, userID, v)
+			reached, err := p.store.RecordProgress(ctx, d.ID, userID, v)
 			if err != nil {
 				return completed, err
 			}
 			if !reached {
 				continue
 			}
-			if err := p.completeAchievementSilent(ctx, st, d, userID, backfilling[d.ID]); err != nil {
+			if err := p.completeAchievementSilent(ctx, d, userID, backfilling[d.ID]); err != nil {
 				// One member's failure must not abandon the rest of the
 				// membership for this tick.
 				log.Printf("achievements: completing %q for user %d: %v", d.Slug, userID, err)
@@ -280,7 +278,7 @@ func (p *Plugin) scoreMetric(ctx context.Context, metric string, src MetricSourc
 		if !wasBackfilling {
 			continue
 		}
-		if err := st.MarkBackfilled(ctx, id); err != nil {
+		if err := p.store.MarkBackfilled(ctx, id); err != nil {
 			log.Printf("achievements: marking %d backfilled: %v", id, err)
 		}
 	}
