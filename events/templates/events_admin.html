@@ -2,6 +2,33 @@
 {{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
 
+{{/* Window health, above the table. Every row below can look perfectly valid
+     while the generator has been stopped for a month and nothing gated on any
+     of these events has opened since -- that failure is silence, so it needs a
+     surface of its own rather than a column an operator has to interpret. */}}
+{{if .Findings}}
+<div class="card mb-3">
+  <div class="card-header"><strong>Window health</strong>
+    <span class="text-muted small">each event's rows are individually valid</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <tbody>
+      {{range .Findings}}
+        <tr>
+          <td style="width:5rem">
+            <span class="badge bg-{{if eq .Severity "error"}}danger{{else if eq .Severity "warn"}}warning text-dark{{else}}secondary{{end}}">{{.Severity}}</span>
+          </td>
+          <td style="width:14rem"><code>{{.Subject}}</code></td>
+          <td>{{.Problem}}{{if .Fix}}<br><span class="text-muted small">&rarr; {{.Fix}}</span>{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}
+
 <div class="card mb-3">
   <div class="card-header d-flex justify-content-between align-items-center">
     <strong>Scheduled events</strong>

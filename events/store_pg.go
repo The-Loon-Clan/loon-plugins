@@ -255,3 +255,39 @@ func (s *PGStore) ListWindows(ctx context.Context, slug string, limit int) ([]pl
 	}
 	return out, nil
 }
+
+// Coverage counts windows, finds the furthest end, and counts gaps per event.
+//
+// Ported from the rewards plugin. lead() over each event's windows gives the
+// next window's start, so a gap is any row whose end does not equal the next
+// start -- computed in the database because doing it in Go means pulling every
+// window row to count the ones that are adjacent.
+//
+// LEFT JOIN from events, not an inner join off event_windows: an event with NO
+// windows is exactly what the validator most needs to hear about, and joining
+// the other way would omit it entirely.
+func (s *PGStore) Coverage(ctx context.Context) (map[string]Coverage, error) {
+	var rows []Coverage
+	err := s.sel(ctx, &rows, `
+		WITH ordered AS (
+		    SELECT event_id, starts_at, ends_at,
+		           lead(starts_at) OVER (PARTITION BY event_id ORDER BY starts_at) AS next_start
+		      FROM event_windows
+		)
+		SELECT e.slug,
+		       count(o.event_id)                             AS windows,
+		       coalesce(max(o.ends_at), 'epoch'::timestamptz) AS last_end,
+		       count(*) FILTER (WHERE o.next_start IS NOT NULL
+		                          AND o.next_start <> o.ends_at) AS gaps
+		  FROM events e
+		  LEFT JOIN ordered o ON o.event_id = e.id
+		 GROUP BY e.slug`)
+	if err != nil {
+		return nil, fmt.Errorf("coverage: %w", err)
+	}
+	out := make(map[string]Coverage, len(rows))
+	for _, c := range rows {
+		out[c.Slug] = c
+	}
+	return out, nil
+}

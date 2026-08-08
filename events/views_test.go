@@ -144,3 +144,57 @@ func TestEmptyPageSaysWhatToDo(t *testing.T) {
 		t.Error("an empty install renders a bare table with no explanation")
 	}
 }
+
+// The findings banner renders, with all three severity styles and its fixes.
+//
+// The banner is the only part of this page that says something is WRONG, so a
+// render bug here is the failure mode the validator exists to prevent, wearing a
+// different hat: a stalled generator that nobody is told about.
+func TestFindingsBannerRenders(t *testing.T) {
+	p, _ := renderFixture(t)
+	vm := adminVM{Now: time.Now(), Findings: []Finding{
+		{SeverityError, "event daily", "has a cron but no windows at all", "trigger the job"},
+		{SeverityWarn, "event weekly", "windows run out in 72h", "the generator keeps 45 days ahead"},
+		{SeverityInfo, "event next-year", "no window yet", ""},
+	}}
+
+	var sb strings.Builder
+	if err := p.tmpl.ExecuteTemplate(&sb, "events_admin.html", vm); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := sb.String()
+
+	for _, want := range []string{
+		"Window health",
+		"no windows at all", "run out in 72h", "no window yet",
+		// Severity must be VISIBLE, not merely worded — an operator scans colour.
+		"bg-danger", "bg-warning", "bg-secondary",
+		"trigger the job", // the fix, which is what makes it actionable
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("findings banner missing %q", want)
+		}
+	}
+	// A finding with no fix must not render a dangling arrow.
+	if strings.Contains(out, "&rarr; </span>") {
+		t.Error("a fix-less finding rendered an empty arrow")
+	}
+	// And the table below must still render — the banner is prepended, not
+	// substituted, and html/template streams.
+	if !strings.Contains(out, "event-save") {
+		t.Error("the page did not reach its form; the banner truncated the render")
+	}
+}
+
+// No findings, no banner. An empty "Window health" card on a healthy site is
+// noise that trains an operator to skip the one place that matters.
+func TestNoBannerWhenHealthy(t *testing.T) {
+	p, _ := renderFixture(t)
+	var sb strings.Builder
+	if err := p.tmpl.ExecuteTemplate(&sb, "events_admin.html", adminVM{Now: time.Now()}); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if strings.Contains(sb.String(), "Window health") {
+		t.Error("the health card rendered with nothing to report")
+	}
+}

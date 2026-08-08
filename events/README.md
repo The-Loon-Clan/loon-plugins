@@ -17,9 +17,10 @@ into rewards to ask.
 ## Surface
 
 One admin page, registered as a `SlotAdminPage` view under slug **`events`**
-("Scheduled events", nav group Operations): the definitions table with live
-open/closed state and next-opens, a windows panel per event, and a create/update
-form. Actions: `event-save`, `event-toggle`, `event-delete`.
+("Scheduled events", nav group Operations): a **window-health banner**, the
+definitions table with live open/closed state and next-opens, a windows panel per
+event, and a create/update form. Actions: `event-save`, `event-toggle`,
+`event-delete`.
 
 Ported from the rewards plugin, whose own comment said why it should never have
 lived there — *"Events are not reward-specific … burying them inside a Rewards
@@ -81,6 +82,38 @@ would forget.
 - **A one-off that never closes.** Its generator returned nothing for a
   cron-less event ("windows authored by hand"), and `ends_at > starts_at` forced
   a finite end, so "always after this date" had to be faked with a year-9999 row.
+
+## Window health
+
+Every row in this schema can be valid while the site opens nothing. An event with
+no windows is a valid event; a reward or a news post gated on it is valid too.
+Together they are a thing that can never happen, and the failure is **silence** —
+the first report is a member asking why they never got their bonus.
+
+So `Validate` reports what is broken and what will break soon, and the page shows
+it above the table. `Store.Coverage` computes it for every event in ONE query
+(`lead()` over a `LEFT JOIN`, so a zero-window event still gets a row — an inner
+join would drop exactly the case worth reporting).
+
+| finding | severity | when |
+|---|---|---|
+| cron event with no windows | error | the generator has never run for it |
+| one-off whose start has passed, no window | error | the generator has not caught up |
+| every window in the past | error | the runway is exhausted; nothing can open |
+| windows run out in under a week | warn | the generator has not completed a pass in over a month |
+| gaps in a contiguous event | warn | a period during which the event did not exist |
+| one-off beyond the generation horizon | info | not broken — it has not happened yet |
+
+These checks lived in the rewards plugin until the tables moved. Rewards was
+right to stop running them (the generator's owner is the authority), but they were
+then checked **nowhere** for a day, which is what this file put back.
+
+Three cases needed adapting rather than porting, and each is a false alarm the
+old version would now raise. A one-off booked beyond the 45-day horizon
+legitimately has no windows. A finished one-off has not "run out", it is over. And
+a perpetual window's end is the year-9999 sentinel, so a runway measured against
+it reports eight thousand years — true, useless, and the sort of number that makes
+an operator distrust the page.
 
 ## Dependencies
 
@@ -146,6 +179,8 @@ cron costs that event its windows, not the site its daily reset.
 
 - `plugin.go` — registration, capability publication, the generator job.
 - `views.go` + `templates/events_admin.html` — the admin page.
+- `validate.go` — window-health findings; `validateEvents` is pure so every case
+  is testable without a database.
 - `service.go` — the published capability, thin over the store, with an
   injectable clock so window-boundary tests are not flaky.
 - `windows.go` — `GenerateWindows` and `NextStart`; the cron parsing and the
@@ -166,9 +201,23 @@ Render-tested against every event shape, including the streamed-abort signature
 asserts on content at the END of the template). Mutation-checked by adding a
 bogus field and watching it fail.
 
-Needs integration (live DB): `PGStore` — the INTERVAL-as-seconds round trip, the
-`unnest`-based batch insert, and `DISTINCT ON` window selection are SQL shapes a
-MemStore cannot prove.
+**Integration-tested against a real Postgres** (`store_pg_test.go`, build tag
+`integration`, `EVENTS_TEST_DSN`). This plugin shipped without any, which meant
+every line of its SQL reached production having never run. Covered: the
+`duration_seconds` round trip including NULL-is-not-zero, the `unnest` batch
+insert and its idempotency, the half-open boundary **in Postgres** rather than in
+Go, the `Coverage` query (windows inserted out of chronological order, because
+`lead()` is ordered by the window clause and not by insertion), the `ON DELETE
+CASCADE`, and a perpetual window surviving the round trip.
+
+The harness applies EVERY migration and then returns the session to `public`, so
+a store that had lost its `SchemaDB` scoping fails here instead of on its first
+real request.
+
+All nine validator cases are unit-tested, and the two that guard against false
+alarms were mutation-checked. One of those checks found dead code: a dedicated
+perpetual guard turned out to be unreachable, since only a one-off can be
+perpetual and the one-off exemption already covered it.
 
 ## Adoption status
 

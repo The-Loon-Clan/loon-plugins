@@ -54,4 +54,13 @@ type Store interface {
 
 	// ListWindows returns an event's windows, newest first, for the admin view.
 	ListWindows(ctx context.Context, slug string, limit int) ([]pluginapi.EventWindow, error)
+
+	// Coverage reports every event's window health in ONE query: how many
+	// windows, how far ahead the furthest reaches, and how many gaps sit between
+	// them. Feeds the validator.
+	//
+	// One query rather than three per event, because the admin page renders it
+	// on every load and a per-event round trip is the shape that turns a
+	// twenty-event site into sixty queries.
+	Coverage(ctx context.Context) (map[string]Coverage, error)
 }

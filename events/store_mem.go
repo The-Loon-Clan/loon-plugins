@@ -160,3 +160,33 @@ func (m *MemStore) ListWindows(ctx context.Context, slug string, limit int) ([]p
 	}
 	return ws, nil
 }
+
+// Coverage mirrors the PG query, including the part that is easy to get wrong:
+// an event with NO windows still gets a row. The PG version uses a LEFT JOIN for
+// the same reason -- a zero-window event is precisely what the validator needs to
+// report, and omitting it is a silent pass.
+func (m *MemStore) Coverage(ctx context.Context) (map[string]Coverage, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make(map[string]Coverage, len(m.events))
+	for slug := range m.events {
+		ws := make([]pluginapi.EventWindow, len(m.windows[slug]))
+		copy(ws, m.windows[slug])
+		sort.Slice(ws, func(i, j int) bool { return ws[i].Starts.Before(ws[j].Starts) })
+
+		c := Coverage{Slug: slug, Windows: len(ws)}
+		for i, w := range ws {
+			if w.Ends.After(c.LastEnd) {
+				c.LastEnd = w.Ends
+			}
+			// A gap is a window whose end is not the next one's start. Same
+			// definition as the SQL lead(), so the two cannot disagree about
+			// what "contiguous" means.
+			if i+1 < len(ws) && !ws[i+1].Starts.Equal(w.Ends) {
+				c.Gaps++
+			}
+		}
+		out[slug] = c
+	}
+	return out, nil
+}

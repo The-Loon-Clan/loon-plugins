@@ -37,6 +37,12 @@ type adminVM struct {
 	Events  []eventVM
 	Picked  string
 	Windows []pluginapi.EventWindow
+
+	// Findings is the window-health report. It sits at the TOP of the page
+	// because it is the only part that says something is wrong -- an operator
+	// reading a healthy-looking table of events has no way to know the generator
+	// stalled a month ago and everything gated on them quietly stopped.
+	Findings []Finding
 }
 
 // eventVM is one row of the definitions table, with the state an operator
@@ -152,6 +158,13 @@ func (p *Plugin) renderPage(ctx context.Context, picked, msg, errMsg string) (te
 		if vm.Windows, err = p.store.ListWindows(ctx, picked, 50); err != nil {
 			return "", err
 		}
+	}
+
+	// Non-fatal, like the per-row lookups above: a page that cannot run the
+	// validator is still worth rendering, and losing the banner is a visible
+	// symptom where a 500 would hide every event on the site.
+	if fs, err := p.Validate(ctx); err == nil {
+		vm.Findings = fs
 	}
 
 	var sb strings.Builder
