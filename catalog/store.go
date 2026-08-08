@@ -33,6 +33,13 @@ func NewPGStore(db *core.SchemaDB) *PGStore { return &PGStore{db: db} }
 var _ Store = (*PGStore)(nil)
 
 // UpsertEntry persists a scraped catalog entry, deduped on (kind, external id).
+//
+// External[0] is the entry's own identity and stays on the row as
+// (ext_namespace, ext_id) — it is half the unique key, so moving it would
+// re-key every existing row. The REST go to catalog_external, and until that
+// table existed they were dropped on the floor: TVmaze hands back the IMDb and
+// TheTVDB id for every show it matches, and all 84,000 of them were discarded
+// one line into this function.
 func (s *PGStore) UpsertEntry(ctx context.Context, e catalog.CatalogEntry) error {
 	ns, extID := "", ""
 	if len(e.External) > 0 {
@@ -40,15 +47,31 @@ func (s *PGStore) UpsertEntry(ctx context.Context, e catalog.CatalogEntry) error
 	}
 	fields, _ := json.Marshal(e.Fields)
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		_, err := tx.ExecContext(ctx,
+		var entryID int64
+		if err := tx.QueryRowContext(ctx,
 			`INSERT INTO catalog_entry (kind, ext_namespace, ext_id, title, norm_title, cover_url, year, fields, updated_at)
 			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now())
 			 ON CONFLICT (kind, ext_namespace, ext_id) DO UPDATE SET
 			   title = EXCLUDED.title, norm_title = EXCLUDED.norm_title,
 			   cover_url = EXCLUDED.cover_url, year = EXCLUDED.year,
-			   fields = EXCLUDED.fields, updated_at = now()`,
-			e.Ref.Kind, ns, extID, e.Title, catalog.DefaultNormalize(e.Title), e.CoverURL, e.Year, fields)
-		return err
+			   fields = EXCLUDED.fields, updated_at = now()
+			 RETURNING id`,
+			e.Ref.Kind, ns, extID, e.Title, catalog.DefaultNormalize(e.Title), e.CoverURL, e.Year, fields,
+		).Scan(&entryID); err != nil {
+			return err
+		}
+		for _, x := range e.External {
+			if x.Namespace == "" || x.Value == "" {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO catalog_external (entry_id, namespace, value) VALUES ($1,$2,$3)
+				 ON CONFLICT (entry_id, namespace) DO UPDATE SET value = EXCLUDED.value`,
+				entryID, x.Namespace, x.Value); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
