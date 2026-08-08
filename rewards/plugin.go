@@ -290,6 +290,12 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if err := p.registerAchievementProfile(c); err != nil {
 		return err
 	}
+	// The public catalogue, as a content block the wiki can embed. Registered
+	// rather than routed: the page that shows it is editor-authored, so the
+	// plugin supplies the table and the site supplies the words around it.
+	if err := p.registerAchievementBlock(c); err != nil {
+		return err
+	}
 	if err := p.registerMemberViews(c); err != nil {
 		return err
 	}

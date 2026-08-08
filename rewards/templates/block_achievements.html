@@ -1,0 +1,34 @@
+{{/* The public achievements catalogue, embedded in editor content via the
+     {{achievements}} token. Generated per render, so adding an achievement never
+     leaves a help page wrong.
+
+     Disabled and hidden achievements are filtered out before this — a hidden one
+     listed here would stop being secret. */}}
+{{define "block_achievements.html"}}
+{{if .}}
+<div class="table-responsive">
+  <table class="table table-sm">
+    <thead>
+      <tr class="small text-muted">
+        <th>Achievement</th><th>How to earn it</th><th class="text-end">Target</th><th>Reward</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .}}
+      <tr>
+        <td><strong>{{.Name}}</strong></td>
+        <td>
+          {{if .Description}}{{.Description}}{{else}}<span class="text-muted">&mdash;</span>{{end}}
+          <div class="text-muted" style="font-size:0.72rem;"><code>{{.Metric}}</code></div>
+        </td>
+        <td class="text-end">{{.Threshold}}</td>
+        <td>{{if .Pays}}{{.Pays}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<p class="text-muted">No achievements are available yet.</p>
+{{end}}
+{{end}}

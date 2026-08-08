@@ -196,7 +196,7 @@ func (h *Handlers) Post(c *gin.Context) {
 	render(c, http.StatusOK, "Wiki", "wiki_post.html", gin.H{
 		"Topic":           topic,
 		"Post":            post,
-		"RenderedContent": deps.Markdown(post.Content),
+		"RenderedContent": h.renderContent(ctx, post.Content),
 		"AllTopics":       allTopics,
 		"Posts":           siblingPosts,
 		"PostsByTopic":    h.postsByTopicMap(c),
