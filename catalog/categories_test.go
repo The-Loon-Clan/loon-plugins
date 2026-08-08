@@ -25,6 +25,102 @@ func TestCategorize(t *testing.T) {
 	}
 }
 
+// Standard-definition video used to fall through to Other/Misc, because the
+// resolution fallback only knew 1080p, 2160p and 720p. Half of everything the
+// categoriser could not place was video it simply could not see.
+//
+// Every title here is real, taken from the 5,103 that sat in Other/Misc.
+func TestCategorizeFindsStandardDefinitionVideo(t *testing.T) {
+	for _, tc := range []struct {
+		title string
+		want  int
+	}{
+		// A pixel count below 720p is still a shelf, not an absence of one.
+		{"Akkaran.2024.480p.SS.WEB-DL.Tamil.AAC2.0.H.264", 2030},
+		{"Macherla Niyojakavargam (2022) 576p ZEE5 WEB-DL", 2030},
+		// A source marker that implies SD, with no pixel count anywhere.
+		{"Ramayana.The.Legend.of.Prince.Rama.1992.DVDRip.x264-HANDJOB", 2030},
+		{"Das Bankentrio (1989) - DVDRiP - Xvid", 2030},
+		// A codec that implies HD without saying so.
+		{"Anaganaga Oka Roju (1996) - WebDL x264 - [DD 2.0 CLEANED]", 2040},
+		// 4K spelled as 4K. This was filed HD until the token was added.
+		{"Prince And Family (2025) 4k TRUE WEB-DL - SDR - HEVC", 2045},
+		{"Devdas.2002.4320p.YT.WEB-DL.AAC2.0.AV1-Anmol", 2045},
+	} {
+		if got := categorize("alt.binaries.misc", tc.title); got != tc.want {
+			t.Errorf("categorize(%q) = %d (%s), want %d (%s)",
+				tc.title, got, categoryName(got), tc.want, categoryName(tc.want))
+		}
+	}
+}
+
+// Television is filed by its own resolution rather than assumed HD.
+func TestEpisodesUseTheirOwnResolution(t *testing.T) {
+	for _, tc := range []struct {
+		title string
+		want  int
+	}{
+		{"Show.S01E05.480p.WEB", 5030},
+		{"Show.S01E05.1080p.WEB", 5040},
+		{"Show.S01E05.2160p.WEB", 5045},
+		{"Show.S01E05", 5040}, // no marker at all: HD is the default guess
+	} {
+		if got := categorize("", tc.title); got != tc.want {
+			t.Errorf("categorize(%q) = %d (%s), want %d (%s)",
+				tc.title, got, categoryName(got), tc.want, categoryName(tc.want))
+		}
+	}
+}
+
+// The episode scanner required a digit within three bytes of the season, so
+// "S02 EP04" failed on the 'p' and 141 real releases were filed as Other/Misc.
+func TestCategorizeReadsLooseEpisodeForms(t *testing.T) {
+	for _, title := range []string{
+		"Game of Thrones S04 EP09",
+		"DAHMER S01 EP03 Doin A Dahmer",
+		"True Detective (2015) S02 EP04",
+		"Show.S02.E04.720p",
+		"Show S2E4",
+		"Some Show Season 2 Episode 4",
+	} {
+		if got := categorize("", title); topLevelOf(got) != 5000 {
+			t.Errorf("categorize(%q) = %d (%s) — an episode not filed under TV",
+				title, got, categoryName(got))
+		}
+	}
+	// A season number with no episode is NOT an episode pattern; it is a pack,
+	// and catRules claims it separately.
+	if got := hasEpisodePattern("show.s02.1080p.web"); got {
+		t.Error("hasEpisodePattern matched a season with no episode")
+	}
+}
+
+// A bracketed CRC32 is a fansub habit, which makes it a sharper anime signal
+// than the word "anime". Without it these carry a resolution and land in
+// Movies — a wrong shelf, where Other/Misc was merely an unknown one.
+func TestFansubChecksumMeansAnime(t *testing.T) {
+	for _, title := range []string{
+		"Dragon Ball GT.23.DBOX.480p.x264-iKaos [v2] [9C1CEE03]",
+		"Crayon Shin-chan - 0146 - Hindi+Tamil+Telugu dub [ATTKC][491BD7B9]",
+		"[CBM]_Tomo-chan_is_a_Girl_-_06_-_Birthday_Present_[H.265_10bit]_[5D9F1A2B]",
+	} {
+		if got := categorize("alt.binaries.misc", title); got != 5070 {
+			t.Errorf("categorize(%q) = %d (%s), want 5070 (TV/Anime)",
+				title, got, categoryName(got))
+		}
+	}
+	// Eight hex digits, but not in brackets, and a bracket group that is not a
+	// checksum. Neither is the fansub convention.
+	for _, title := range []string{
+		"Some.Movie.2024.1080p.DEADBEEF.WEB-DL",
+		"[RlsGroup] Some Movie 2024 1080p",
+	} {
+		if got := categorize("alt.binaries.movies", title); got == 5070 {
+			t.Errorf("categorize(%q) called anime on a non-checksum bracket", title)
+		}
+	}
+}
+
 // Keywords are short and English words are long, so a plain substring match
 // collides by construction. Every case here was found in the live catalogue.
 func TestCategorizeMatchesWholeTokens(t *testing.T) {
