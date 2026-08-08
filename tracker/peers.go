@@ -23,7 +23,10 @@ const PeerTTL = 45 * time.Minute
 // deltas — the announce handler diffs them against the previous snapshot to
 // compute how much to add to the per-user bytes.
 type Peer struct {
-	UserID     int    `json:"u"`
+	// int64, widened from the host's int so it matches core.User.ID and the
+	// store. Free to change: the field is JSON on the wire, where a number is a
+	// number, and there were no peers in Redis to reinterpret.
+	UserID     int64  `json:"u"`
 	PeerID     string `json:"p"`
 	IP         string `json:"i"`
 	Port       int    `json:"o"`
