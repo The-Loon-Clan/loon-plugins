@@ -1332,10 +1332,30 @@ func classifyRelease(base string, arts []stagedArticle) (title, cat, junkRule st
 		if allRecoveryVolumes(arts) {
 			return title, "", "par2_volume", false
 		}
-		if junkRule = whichJunkRuleSized(title, totalBytes(arts)); junkRule != "" {
+		// What the ARTICLE FILENAMES say this is. A recognised kind vouches for
+		// the release against the SIZE rules only — it is judged by the unsized
+		// form, which by construction runs every structural rule (random
+		// tokens, hashes, garble) and skips every size-gated one.
+		//
+		// That distinction is the whole point. The size rules encode "nothing
+		// legitimate is this small", which was true of an anime-only catalogue
+		// and false of one that collects books, music and manga: `Blackthorn -
+		// J.T. Geissinger.epub` was deleted for being 2 MB, and `Erotic
+		// Magazine - Fiesta Readers Wives 23` for being 2.2 MB. Both name their
+		// file type in the articles. Meanwhile a recognised kind must NOT
+		// excuse a junk NAME — an obfuscated post is rar volumes containing an
+		// mkv, so vouching against the structural rules would wave through
+		// exactly the population those rules exist for.
+		kind := contentKindFromArticles(arts)
+		if kind != "" {
+			junkRule = whichJunkRule(title)
+		} else {
+			junkRule = whichJunkRuleSized(title, totalBytes(arts))
+		}
+		if junkRule != "" {
 			return title, "", junkRule, false
 		}
-		if articlesContainComicArchive(arts) {
+		if kind == kindComics {
 			cat = "Manga"
 		}
 	}

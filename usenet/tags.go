@@ -182,13 +182,143 @@ func hasBlockedExtension(title string) bool {
 // articlesContainComicArchive reports whether any article filename names a
 // .cbz/.cbr — the release is manga regardless of what the title reads.
 func articlesContainComicArchive(arts []stagedArticle) bool {
+	return contentKindFromArticles(arts) == kindComics
+}
+
+// Content kinds recognised from article FILENAMES. Deliberately coarse: this
+// answers "what sort of thing is this", not "which Newznab subcategory" — the
+// catalog plugin owns the taxonomy, and duplicating its tree here would give
+// the site two category systems to disagree with each other.
+const (
+	kindBook     = "book"
+	kindComics   = "comics"
+	kindAudio    = "audio"
+	kindVideo    = "video"
+	kindSoftware = "software"
+	kindImage    = "image"
+)
+
+// extKind maps a file extension to a content kind.
+//
+// The ARTICLE FILENAMES are the signal, not the release title. A poster names
+// the file honestly even when the title is decoration — which is the whole
+// reason articlesContainComicArchive (this function's original, comics-only
+// form) looked here in the first place. It is also the only signal available
+// for the content the title never announces: `Erotic Magazine - Fiesta Readers
+// Wives 23` carries no extension at all, and was deleted by a size rule for
+// being 2 MB.
+//
+// ARCHIVE AND RECOVERY EXTENSIONS ARE ABSENT ON PURPOSE. .rar/.7z/.zip/.001/
+// .r00/.par2 are containers: they describe the packaging, never the contents,
+// and a release whose only evidence is "it is in a rar" has told us nothing.
+// Including them would vouch for every obfuscated post on the index, since
+// those are rar volumes too.
+var extKind = map[string]string{
+	// Books. Reader formats plus the scanned-document ones; the long tail is
+	// what calibre accepts as input, which is the closest thing to a canonical
+	// list of "things that are a book".
+	".epub": kindBook, ".mobi": kindBook, ".azw": kindBook, ".azw3": kindBook,
+	".azw4": kindBook, ".kepub": kindBook, ".fb2": kindBook, ".fbz": kindBook,
+	".djvu": kindBook, ".lit": kindBook, ".prc": kindBook, ".pdb": kindBook,
+	".snb": kindBook, ".tcr": kindBook, ".htmlz": kindBook, ".pml": kindBook,
+	// .pdf is a book here because on an indexer that is what it almost always
+	// is — a magazine, a manual, a scan. It is genuinely ambiguous (it is also
+	// every datasheet ever posted), and it earns its place only because the
+	// consequence of being wrong is a release surviving, not one being deleted.
+	".pdf": kindBook,
+	// Comics keep their own kind: the category they map to differs (Comics vs
+	// Ebook) and the existing Manga hint depends on telling them apart.
+	".cbz": kindComics, ".cbr": kindComics, ".cb7": kindComics, ".cbc": kindComics,
+	// Audio. Lossy and lossless together — the distinction belongs to the
+	// taxonomy, not to "is this a real release".
+	".mp3": kindAudio, ".aac": kindAudio, ".m4a": kindAudio, ".m4b": kindAudio,
+	".ogg": kindAudio, ".opus": kindAudio, ".wma": kindAudio, ".mka": kindAudio,
+	".flac": kindAudio, ".ape": kindAudio, ".wv": kindAudio, ".tta": kindAudio,
+	".alac": kindAudio, ".wav": kindAudio, ".aiff": kindAudio, ".aif": kindAudio,
+	".dsf": kindAudio, ".dff": kindAudio, ".mpc": kindAudio, ".shn": kindAudio,
+	// Video containers.
+	".mkv": kindVideo, ".mp4": kindVideo, ".m4v": kindVideo, ".avi": kindVideo,
+	".mov": kindVideo, ".wmv": kindVideo, ".webm": kindVideo, ".flv": kindVideo,
+	".mpg": kindVideo, ".mpeg": kindVideo, ".m2ts": kindVideo, ".mts": kindVideo,
+	".ts": kindVideo, ".vob": kindVideo, ".ogm": kindVideo, ".rmvb": kindVideo,
+	".divx": kindVideo, ".m2v": kindVideo,
+	// Software: installers and packages across platforms. Note these are also
+	// on blockedExtensions for the TITLE check — that rule refuses a release
+	// NAMED after an executable, which is a different question from what the
+	// payload is.
+	".exe": kindSoftware, ".msi": kindSoftware, ".dmg": kindSoftware,
+	".pkg": kindSoftware, ".deb": kindSoftware, ".rpm": kindSoftware,
+	".apk": kindSoftware, ".ipa": kindSoftware, ".appimage": kindSoftware,
+	".msix": kindSoftware, ".appx": kindSoftware, ".jar": kindSoftware,
+	// .iso is the disc image an ISO-category release IS. It is a container in
+	// the strict sense, but unlike .rar it is the delivered artefact rather
+	// than the wrapping around one.
+	".iso": kindSoftware, ".img": kindSoftware,
+	// Image sets (XXX/ImgSet, scans).
+	".jpg": kindImage, ".jpeg": kindImage, ".png": kindImage, ".gif": kindImage,
+	".webp": kindImage, ".bmp": kindImage, ".tif": kindImage, ".tiff": kindImage,
+}
+
+// contentKindFromArticles reports what a set's ARTICLE FILENAMES say the
+// release is, or "" when nothing recognisable is named.
+//
+// First match wins by scan order over a stable priority, not by article order:
+// a set is one media file plus par2s plus an nfo and a jpg, so "whichever
+// article happened to sort first" would classify half the catalogue as an
+// image. Books beat comics beat audio beat video beat software beat images,
+// which is least-common-first — the rarer kind is the more informative one when
+// both appear.
+func contentKindFromArticles(arts []stagedArticle) string {
+	var seen map[string]bool
 	for _, a := range arts {
 		s := strings.ToLower(a.Subject)
-		if strings.Contains(s, ".cbz") || strings.Contains(s, ".cbr") {
-			return true
+		for ext, kind := range extKind {
+			if !strings.Contains(s, ext) {
+				continue
+			}
+			// The extension must END a filename token, or ".ts" matches inside
+			// every "…rights.ts…" and ".ape" inside "landscape.mkv".
+			if !namesFileWithExt(s, ext) {
+				continue
+			}
+			if seen == nil {
+				seen = map[string]bool{}
+			}
+			seen[kind] = true
 		}
 	}
+	for _, kind := range []string{kindBook, kindComics, kindAudio, kindVideo, kindSoftware, kindImage} {
+		if seen[kind] {
+			return kind
+		}
+	}
+	return ""
+}
+
+// namesFileWithExt reports whether ext appears in s as a real filename ending —
+// followed by a delimiter, a quote, or end-of-string, and never by another
+// alphanumeric. Same reasoning as namesSmallMedia in junk.go: a bare substring
+// match hands the exemption to any title long enough to contain the letters.
+func namesFileWithExt(s, ext string) bool {
+	for i := 0; i < len(s); {
+		j := strings.Index(s[i:], ext)
+		if j < 0 {
+			return false
+		}
+		end := i + j + len(ext)
+		if end == len(s) || !isFilenameChar(s[end]) {
+			return true
+		}
+		i += j + 1
+	}
 	return false
+}
+
+// isFilenameChar reports whether c could continue a filename token, so that
+// ".ts" in "rights.tsv" is rejected while ".ts" in "ep01.ts" is accepted.
+func isFilenameChar(c byte) bool {
+	return c == '.' || (c >= '0' && c <= '9') ||
+		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
 // reRecoveryFile matches a PAR recovery file by its name: a volume
