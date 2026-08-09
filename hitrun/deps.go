@@ -42,6 +42,20 @@ type Deps struct {
 	// LimitReached fires when a member's active warnings hit the maximum. See
 	// the note above: this plugin does not disable anything itself.
 	LimitReached func(ctx context.Context, userID int64, activeWarnings int)
+
+	// Exempt reports whether a snatch should be excused entirely.
+	//
+	// The site's answer to "does this one count", asked per (member, torrent).
+	// A freeleech token is the obvious case: a site that told somebody a
+	// download was free has already made its statement about what that
+	// download owes, and then warning them for not seeding it would be the
+	// site contradicting itself.
+	//
+	// A seam rather than a dependency on the perks plugin, because exemption
+	// is a site's judgement — a host may exempt staff, a launch window, or a
+	// torrent it knows is unseedable, and none of that is this plugin's
+	// business. Unset means nothing is exempt.
+	Exempt func(ctx context.Context, userID int64, infoHash string) bool
 }
 
 // Notifier is the message-sending subset, which is all the sweep needs.

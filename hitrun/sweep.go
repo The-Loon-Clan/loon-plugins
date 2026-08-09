@@ -54,9 +54,16 @@ func Sweep(ctx context.Context, st Store, p Policy, n Notifier, limit int, now t
 	// should hear about losing their downloads once.
 	touched := map[int64]bool{}
 
+	exempt := deps().Exempt
 	for _, c := range cands {
 		if ctx.Err() != nil {
 			return res, ctx.Err()
+		}
+		// The site's veto, asked before the policy runs. Cheap by contract —
+		// the perks plugin answers this from memory — and asked per snatch
+		// because that is the grain a freeleech token is spent at.
+		if exempt != nil && exempt(ctx, c.Snatch.UserID, c.Snatch.InfoHash) {
+			c.Snatch.Immune = true
 		}
 		a := Evaluate(p, c.Snatch, c.PrewarnedAt, now)
 		switch a.Verdict {

@@ -168,3 +168,40 @@ func TestSweepSurvivesUnwiredNotifiers(t *testing.T) {
 		t.Fatalf("sweep with no notifiers: %v", err)
 	}
 }
+
+// The site's veto. A freeleech token is the case this exists for: a site that
+// told somebody a download was free has already said what it owes, and warning
+// them for not seeding it would be the site contradicting itself.
+func TestExemptSeamExcusesASnatch(t *testing.T) {
+	now := time.Now()
+	c := snatchFor(1, "aa", now)
+	c.PrewarnedAt = now.Add(-30 * 24 * time.Hour) // squarely a warning otherwise
+
+	// Without the seam it is warned.
+	SetDeps(Deps{})
+	f := &fakeStore{cands: []Candidate{c}}
+	if res, _ := Sweep(context.Background(), f, on(), Notifier{}, 100, now); res.Warned != 1 {
+		t.Fatalf("setup: warned %d, want 1", res.Warned)
+	}
+
+	// With it, the same snatch is excused — and the seam is asked about the
+	// right member and torrent.
+	var askedUser int64
+	var askedHash string
+	SetDeps(Deps{Exempt: func(_ context.Context, u int64, h string) bool {
+		askedUser, askedHash = u, h
+		return true
+	}})
+	defer SetDeps(Deps{})
+	f2 := &fakeStore{cands: []Candidate{c}}
+	res, err := Sweep(context.Background(), f2, on(), Notifier{}, 100, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Warned != 0 || res.Prewarned != 0 {
+		t.Errorf("an exempt snatch was acted on: %+v", res)
+	}
+	if askedUser != 1 || askedHash != "aa" {
+		t.Errorf("Exempt asked about (%d,%q), want (1,\"aa\")", askedUser, askedHash)
+	}
+}
