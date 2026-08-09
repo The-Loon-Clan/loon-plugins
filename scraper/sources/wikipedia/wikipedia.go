@@ -149,7 +149,12 @@ func (s *Source) Normalize(raw string) string { return catalog.DefaultNormalize(
 
 var (
 	reBracket = regexp.MustCompile(`[\[\{][^\]\}]*[\]\}]`)
-	reYear    = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
+	// A bracketed year, unwrapped before reBracket deletes the whole group.
+	reBracketYear = regexp.MustCompile(`[\[\{]((?:19|20)\d{2})[\]\}]`)
+	// An indexer banner on the front of the name, with the ">" some of them
+	// add after it.
+	reSitePrefix = regexp.MustCompile(`^\s*\([^)]*www\.[^)]*\)\s*>?\s*`)
+	reYear       = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
 	// Everything from the first quality/source/codec marker onwards is
 	// packaging, not title. Anchored on the FIRST match so a title containing
 	// one of these words keeps whatever precedes it.
@@ -187,6 +192,15 @@ type Query struct {
 // first would sometimes take it with the rest.
 func ParseReleaseName(raw string) Query {
 	s := strings.ReplaceAll(raw, "_", " ")
+	// An indexer's banner, stamped on the front of 87 movie releases here:
+	// "(www.Thunder-News.org) >Men.in.Black.3.LD.German...". Removed before
+	// anything else, or it becomes the first words of the title.
+	s = reSitePrefix.ReplaceAllString(s, " ")
+	// A bracketed year is a YEAR, not a tag. reBracket below deletes bracket
+	// groups wholesale, which silently ate the release year of titles written
+	// "Chandigarh.Kare.Aashiqui.[2021].1080p" — 196 of them here. Unwrapping
+	// first keeps the year and still lets the bracket go.
+	s = reBracketYear.ReplaceAllString(s, " $1 ")
 	s = reBracket.ReplaceAllString(s, " ")
 	s = strings.ReplaceAll(s, ".", " ")
 
@@ -217,7 +231,20 @@ func ParseReleaseName(raw string) Query {
 			(head[last[0]-1] == '(' || head[last[0]-1] == '[') &&
 			(head[last[1]] == ')' || head[last[1]] == ']'):
 			head = head[:last[0]-1]
-		case strings.Trim(head[last[1]:], " )]}") == "":
+		default:
+			// Everything after the release year is packaging, named or not.
+			//
+			// This used to require the year to be the LAST thing in the head,
+			// which left "Manmarziyaan.2018.Hindi.1080p" searching Wikipedia
+			// for "Manmarziyaan 2018 Hindi" — 821 releases here put a language
+			// or a streaming platform between the year and the resolution.
+			// Cutting at the year covers all of them without a list of every
+			// language on Usenet, and it is what scene naming already promises:
+			// title, year, then packaging.
+			//
+			// Safe for a title that CONTAINS a year, because the year taken is
+			// the last one in the head: "Blade Runner 2049 2017" cuts after
+			// 2017, and "2001 A Space Odyssey 1968" after 1968.
 			head = head[:last[0]]
 		}
 		// Drop a bracket or dash left dangling by the cut.

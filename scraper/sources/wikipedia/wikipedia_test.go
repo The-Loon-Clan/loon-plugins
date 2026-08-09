@@ -44,6 +44,19 @@ func TestParseReleaseName(t *testing.T) {
 		// A title that IS a year keeps it: the bracket rule must not fire on a
 		// bare trailing year, and the release year is the LAST one.
 		{"2012.2009.1080p.BluRay.x264", "2012", 2009},
+
+		// Everything after the release year is packaging, named or not. 821
+		// movie releases here put a language or a streaming platform between
+		// the year and the resolution, which used to stay in the search:
+		// "Manmarziyaan 2018 Hindi".
+		{"Manmarziyaan.2018.Hindi.1080p.ZEE5.WEB-DL.AAC.2.0.H.264", "Manmarziyaan", 2018},
+		{"Aadujeevitham.The.Goat.Life.2024.1080p.NF.WEB-DL.Malayalam", "Aadujeevitham The Goat Life", 2024},
+		// A SQUARE-bracketed year is a year. reBracket deletes bracket groups
+		// wholesale, which silently ate the release year of 196 releases here.
+		{"Chandigarh.Kare.Aashiqui.[2021].1080p.10bit.WEBRip", "Chandigarh Kare Aashiqui", 2021},
+		// An indexer's banner stamped on the front, on 87 releases here. Left
+		// in place it becomes the first words of the title.
+		{"(www.Thunder-News.org) >Bad.Boys.2024.1080p.WEB-DL", "Bad Boys", 2024},
 	}
 	for _, c := range cases {
 		t.Run(c.raw, func(t *testing.T) {
