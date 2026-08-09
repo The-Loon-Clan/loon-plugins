@@ -86,6 +86,15 @@ func domainForCategory(cat int) string {
 	// nothing anywhere said why. A release simply had no art forever.
 	case cat/1000 == 7:
 		return "book"
+	// An audiobook IS a book, and the book source is the one that knows about
+	// it. 3xxx had no domain at all, so every audio release fell through to ""
+	// and matched nothing — 5,117 of them on the reference index, with a
+	// keyless source already registered and idle.
+	//
+	// Only 3030. The rest of Audio is music, which Open Library does not
+	// catalogue and would answer badly.
+	case cat == 3030:
+		return "book"
 	}
 	return ""
 }

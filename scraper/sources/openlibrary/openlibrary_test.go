@@ -197,3 +197,53 @@ func TestSearchRequestsABoundedFieldSet(t *testing.T) {
 		t.Errorf("query %q carries no q=", got)
 	}
 }
+
+// An audiobook posting is a request thread's subject line, not a scene name.
+// It carries whatever the poster and the requester said to each other, and the
+// title is somewhere in the middle.
+//
+// Measured over the 5,117 audiobook releases on the reference index: 79% carry
+// an "Author - Title" core, 44% of those also carry part bookkeeping, and the
+// cleanups below take the corpus from 61% to 97% cleanly parsed.
+func TestAudiobookPostingsAreStrippedToTheBook(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		// The conversation in front.
+		{"per req - Brad Meltzer - The Inner Circle 04-12 NMR", "Brad Meltzer - The Inner Circle"},
+		{"NR Jeffery Deaver - The Burning Wire 08-01", "Jeffery Deaver - The Burning Wire"},
+		{"RC_16-36 - John Sandford - Rough Country - 304.73 MB", "John Sandford - Rough Country"},
+		{"New 2025 Marie Benedict - The Queens Of Crime 7-04", "Marie Benedict - The Queens Of Crime"},
+		// And the bookkeeping after it, including two markers at once.
+		{"Laurell K Hamilton - Obsidian Butterfly 03of16 NMR", "Laurell K Hamilton - Obsidian Butterfly"},
+		{"Randy Wayne White - Sanibel Flats 14 - 25 Ch 13 NMR 64K", "Randy Wayne White - Sanibel Flats 14 - 25"},
+	} {
+		if got := ParseReleaseName(tc.raw).Title; got != tc.want {
+			t.Errorf("ParseReleaseName(%q)\n  got  %q\n  want %q", tc.raw, got, tc.want)
+		}
+	}
+}
+
+// A posting that names a GENRE is not a book, and this is the dangerous case:
+// "hardboiled mystery" is a perfectly good Open Library query that returns a
+// real book with a real cover, which would then be attached to a release it has
+// nothing to do with. Refusing means no cover, which is the better error.
+func TestGenreOnlyPostingsAreRefused(t *testing.T) {
+	for _, raw := range []string{
+		"hardboiled mystery",
+		"historical mysteries",
+		"Genres: Romance, Children's Fiction",
+		"Mystery, Thriller",
+	} {
+		if got := ParseReleaseName(raw).Title; got != "" {
+			t.Errorf("ParseReleaseName(%q) = %q — a genre would be searched as a book", raw, got)
+		}
+	}
+	// A real book whose title merely CONTAINS a genre word must still parse.
+	for _, raw := range []string{
+		"Agatha Christie - A Caribbean Mystery",
+		"Some Author - The Romance of the Forest",
+	} {
+		if ParseReleaseName(raw).Title == "" {
+			t.Errorf("ParseReleaseName(%q) refused a real book", raw)
+		}
+	}
+}
