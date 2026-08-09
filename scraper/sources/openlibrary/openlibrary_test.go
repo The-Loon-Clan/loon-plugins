@@ -19,12 +19,15 @@ func TestParseReleaseName(t *testing.T) {
 		wantAuthor string
 		wantYear   int
 	}{
-		{"Blackthorn - J.T. Geissinger.epub", "Blackthorn - J.T. Geissinger", "Blackthorn", 0},
-		{"Some Author - A Novel (2019) [retail epub]", "Some Author - A Novel", "Some Author", 2019},
+		// Single-segment postings: the whole string is the title, no author.
 		{"The_Hobbit_1937", "The Hobbit", "", 1937},
 		{"Dune [EPUB][MOBI]", "Dune", "", 0},
 		{"Neuromancer 1st Edition mobi", "Neuromancer", "", 0},
-		{"Project Hail Mary - Andy Weir - Unabridged Audiobook", "Project Hail Mary - Andy Weir", "Project Hail Mary", 0},
+		// Two segments: the FIRST is reported as the author because that is the
+		// dominant shape on this index, but the reported split is only a
+		// best-guess label — TestBothOrientationsAreTried covers what is
+		// actually put to the API.
+		{"Some Author - A Novel (2019) [retail epub]", "A Novel", "Some Author", 2019},
 	}
 	for _, c := range cases {
 		t.Run(c.raw, func(t *testing.T) {
@@ -192,9 +195,12 @@ func TestSearchRequestsABoundedFieldSet(t *testing.T) {
 	if !strings.Contains(got, "limit=") {
 		t.Errorf("query %q carries no limit=", got)
 	}
+	// Structured title=, not free-text q=. Measured against the live API:
+	// q="Ken Follett - The Pillars Of The Earth 02" returns zero results where
+	// title=+author= returns the book at rank 1.
 	q, _ := url.ParseQuery(got)
-	if q.Get("q") == "" {
-		t.Errorf("query %q carries no q=", got)
+	if q.Get("title") == "" {
+		t.Errorf("query %q carries no title=", got)
 	}
 }
 
@@ -206,19 +212,160 @@ func TestSearchRequestsABoundedFieldSet(t *testing.T) {
 // an "Author - Title" core, 44% of those also carry part bookkeeping, and the
 // cleanups below take the corpus from 61% to 97% cleanly parsed.
 func TestAudiobookPostingsAreStrippedToTheBook(t *testing.T) {
-	for _, tc := range []struct{ raw, want string }{
+	for _, tc := range []struct{ raw, wantTitle, wantAuthor string }{
 		// The conversation in front.
-		{"per req - Brad Meltzer - The Inner Circle 04-12 NMR", "Brad Meltzer - The Inner Circle"},
-		{"NR Jeffery Deaver - The Burning Wire 08-01", "Jeffery Deaver - The Burning Wire"},
-		{"RC_16-36 - John Sandford - Rough Country - 304.73 MB", "John Sandford - Rough Country"},
-		{"New 2025 Marie Benedict - The Queens Of Crime 7-04", "Marie Benedict - The Queens Of Crime"},
+		{"per req - Brad Meltzer - The Inner Circle 04-12 NMR", "The Inner Circle", "Brad Meltzer"},
+		{"NR Jeffery Deaver - The Burning Wire 08-01", "The Burning Wire", "Jeffery Deaver"},
+		{"RC_16-36 - John Sandford - Rough Country - 304.73 MB", "Rough Country", "John Sandford"},
+		{"New 2025 Marie Benedict - The Queens Of Crime 7-04", "The Queens Of Crime", "Marie Benedict"},
 		// And the bookkeeping after it, including two markers at once.
-		{"Laurell K Hamilton - Obsidian Butterfly 03of16 NMR", "Laurell K Hamilton - Obsidian Butterfly"},
-		{"Randy Wayne White - Sanibel Flats 14 - 25 Ch 13 NMR 64K", "Randy Wayne White - Sanibel Flats 14 - 25"},
+		{"Laurell K Hamilton - Obsidian Butterfly 03of16 NMR", "Obsidian Butterfly", "Laurell K Hamilton"},
+		{"Randy Wayne White - Sanibel Flats 14 - 25 Ch 13 NMR 64K", "Sanibel Flats", "Randy Wayne White"},
+	} {
+		q := ParseReleaseName(tc.raw)
+		if q.Title != tc.wantTitle || q.Author != tc.wantAuthor {
+			t.Errorf("ParseReleaseName(%q)\n  got  title=%q author=%q\n  want title=%q author=%q",
+				tc.raw, q.Title, q.Author, tc.wantTitle, tc.wantAuthor)
+		}
+	}
+}
+
+// The author is not always first. This index holds "Ken Follett - The Pillars
+// Of The Earth" AND "Blackthorn - J.T. Geissinger", and nothing in either
+// string says which half is the person. So the orientation is not guessed: the
+// search walks both, and this asserts the RIGHT pair is among the ones tried.
+func TestBothOrientationsAreTried(t *testing.T) {
+	for _, tc := range []struct{ raw, title, author string }{
+		{"Ken Follett - The Pillars Of The Earth 02", "The Pillars Of The Earth", "Ken Follett"},
+		{"Blackthorn - J.T. Geissinger.epub", "Blackthorn", "J.T. Geissinger"},
+		{"Project Hail Mary - Andy Weir - Unabridged Audiobook", "Project Hail Mary", "Andy Weir"},
+		// Three segments with a series marker in the middle: the book is the
+		// LAST one, and no catalogue title contains "Last Templar 02".
+		{"Raymond Khoury - Last Templar 02 - The Templar Salvation 06of12 NMR",
+			"The Templar Salvation", "Raymond Khoury"},
+	} {
+		var found bool
+		for _, a := range ParseReleaseName(tc.raw).attempts() {
+			if a[0] == tc.title && a[1] == tc.author {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("ParseReleaseName(%q).attempts() = %q\n  does not include title=%q author=%q",
+				tc.raw, ParseReleaseName(tc.raw).attempts(), tc.title, tc.author)
+		}
+	}
+}
+
+// The medium is announced in front of the author, in several shapes and often
+// stacked. Left in place it becomes the author — and "from CD William
+// Bernhardt" is a query Open Library answers with nothing, so a correctly
+// parsed TITLE still produced no cover.
+func TestSourceMediumPrefixesAreStripped(t *testing.T) {
+	for _, tc := range []struct{ raw, title, author string }{
+		{"New CD rip Tess Gerritsen - The Spy Coast 2-02", "The Spy Coast", "Tess Gerritsen"},
+		{"New CD rip Kathy Reichs - Fire And Bones 6-01", "Fire And Bones", "Kathy Reichs"},
+		{"CD 2026 Kathy Reichs - Evil Bones 5-4", "Evil Bones", "Kathy Reichs"},
+		{"NR from CD William Bernhardt - Criminal Intent 04", "Criminal Intent", "William Bernhardt"},
+	} {
+		q := ParseReleaseName(tc.raw)
+		if q.Title != tc.title || q.Author != tc.author {
+			t.Errorf("ParseReleaseName(%q)\n  got  title=%q author=%q\n  want title=%q author=%q",
+				tc.raw, q.Title, q.Author, tc.title, tc.author)
+		}
+	}
+}
+
+// The cleanups above are aggressive, so these assert what must NOT change. Each
+// is a real book that a slightly greedier rule would damage.
+func TestCleanupsDoNotEatRealTitles(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		// A bare "new" would leave "Moon"; the rule requires new+cd/rip/year.
+		{"New Moon", "New Moon"},
+		// A trailing number is only taken when hyphenated or zero-padded.
+		{"Fahrenheit 451", "Fahrenheit 451"},
+		{"Slaughterhouse 5", "Slaughterhouse 5"},
+		{"Catch 22", "Catch 22"},
+		// A hyphen inside a name has no space on either side, so it is not a
+		// segment separator.
+		{"Jean-Luc Nancy", "Jean-Luc Nancy"},
 	} {
 		if got := ParseReleaseName(tc.raw).Title; got != tc.want {
-			t.Errorf("ParseReleaseName(%q)\n  got  %q\n  want %q", tc.raw, got, tc.want)
+			t.Errorf("ParseReleaseName(%q).Title = %q, want %q", tc.raw, got, tc.want)
 		}
+	}
+}
+
+// "Rizzoli #3 - Tess Gerritsen - The Sinner": the series marker took the author
+// slot and pushed the author into the title slot, so neither field was what it
+// claimed to be.
+func TestSeriesMarkerSegmentsAreDropped(t *testing.T) {
+	q := ParseReleaseName("Bernie Gunther #6 - Philip Kerr - If the Dead Rise Not - 20of56 NMR")
+	if q.Title != "If the Dead Rise Not" || q.Author != "Philip Kerr" {
+		t.Errorf("got title=%q author=%q, want title=%q author=%q",
+			q.Title, q.Author, "If the Dead Rise Not", "Philip Kerr")
+	}
+	// But only when the marker is the WHOLE segment. Here the author trails it
+	// in the same segment and dropping it would lose the author entirely.
+	q = ParseReleaseName("per req Georgina Kincaid #3 Richelle Mead - Succubus Dreams 6of9 NMR")
+	if !strings.Contains(q.Author, "Richelle Mead") {
+		t.Errorf("author = %q, want it to retain \"Richelle Mead\"", q.Author)
+	}
+}
+
+// A poster writes "Phil Rickman- The Bones of Avalon" as readily as
+// "Ken Follett - The Pillars". Requiring a space on BOTH sides of the dash
+// treated the first as one unsplittable string.
+func TestDashWithoutASpaceInFrontStillSplits(t *testing.T) {
+	q := ParseReleaseName("Phil Rickman- The Bones of Avalon 08of12 NMR")
+	if q.Title != "The Bones of Avalon" || q.Author != "Phil Rickman" {
+		t.Errorf("got title=%q author=%q, want title=%q author=%q",
+			q.Title, q.Author, "The Bones of Avalon", "Phil Rickman")
+	}
+}
+
+// On an audiobook posting the bracket is frequently the TITLE, not decoration.
+// Discarding it left the author standing alone as the entire query.
+func TestBracketedTitleIsSearched(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		{"Mike Thompson ( Wolf Point ) WP-CD-08", "Wolf Point"},
+		{"Lee Child ( 61 Hours ) 61-Hours-CD-03", "61 Hours"},
+		{"Fern Michaels ( Return To Sender ) 04", "Return To Sender"},
+	} {
+		var found bool
+		for _, a := range ParseReleaseName(tc.raw).attempts() {
+			if a[0] == tc.want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("ParseReleaseName(%q).attempts() = %q, none searches title %q",
+				tc.raw, ParseReleaseName(tc.raw).attempts(), tc.want)
+		}
+	}
+	// Decoration must still be discarded rather than searched as a title.
+	for _, raw := range []string{"Dune [EPUB][MOBI]", "Some Author - A Novel (2019) [retail epub]"} {
+		if b := ParseReleaseName(raw).bracket; b != "" {
+			t.Errorf("ParseReleaseName(%q).bracket = %q, want none", raw, b)
+		}
+	}
+}
+
+// A release with no cover is better than a release wearing the wrong one. Open
+// Library's top hit for an author is just "a book by that author", which is how
+// "Home Free" landed on a posting for "Return To Sender".
+func TestWrongBookIsRefusedEvenWhenTheAuthorMatches(t *testing.T) {
+	ds := []doc{{Title: "Home Free", AuthorName: []string{"Fern Michaels"}}}
+	if _, ok := pick(ds, "Return To Sender", "Fern Michaels", 0); ok {
+		t.Error("accepted a different book by the right author")
+	}
+	if _, ok := pick(ds, "Home Free", "Fern Michaels", 0); !ok {
+		t.Error("refused the book it actually is")
+	}
+	// Open Library's edition decoration must still agree.
+	half := []doc{{Title: "The Pillars of the Earth. 1/2", AuthorName: []string{"Ken Follett"}}}
+	if _, ok := pick(half, "The Pillars Of The Earth", "Ken Follett", 0); !ok {
+		t.Error("refused a match over Open Library's edition suffix")
 	}
 }
 
