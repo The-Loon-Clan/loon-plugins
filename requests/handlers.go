@@ -1441,11 +1441,13 @@ type SearchTorrentResult struct {
 	Title    string `json:"title"`
 	InfoHash string `json:"info_hash"`
 	Link     string `json:"link"` // magnet or .torrent download URL
-	InfoURL  string `json:"info_url,omitempty"`
-	Size     int64  `json:"size"`
-	Seeders  int    `json:"seeders"`
-	Indexer  string `json:"indexer"` // upstream indexer name (Prowlarr) or backend ("nekoBT")
-	Source   string `json:"source"`  // "nekobt" or "prowlarr"
+	// info_url has NO omitempty on purpose: prod always emitted the key
+	// ("" for nekoBT results) and the wire shape is the contract.
+	InfoURL string `json:"info_url"`
+	Size    int64  `json:"size"`
+	Seeders int    `json:"seeders"`
+	Indexer string `json:"indexer"` // upstream indexer name (Prowlarr) or backend ("nekoBT")
+	Source  string `json:"source"`  // "nekobt" or "prowlarr"
 }
 
 // SearchTorrents serves the request-form's search button. Prefers

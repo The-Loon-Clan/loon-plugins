@@ -90,23 +90,32 @@ func derefInt64(p *int64) int64 {
 	return *p
 }
 
-// shortNum renders 1234 as "1.2k" — the compact counters on score pills.
+// shortNum, formatSize and splitComma are EXACT copies of the host FuncMap
+// entries the original templates rendered with — the lift's promise is that
+// a score pill or size cell shows the same characters it showed before.
+// (The first cut here "improved" them and the adversarial review caught
+// three visible divergences; parity is the contract, preference is not.)
+
 func shortNum(n int) string {
 	switch {
-	case n >= 1_000_000:
-		return strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1_000_000), ".0") + "m"
+	case n >= 1000000:
+		return fmt.Sprintf("%.1fM", float64(n)/1000000)
 	case n >= 1000:
-		return strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1000), ".0") + "k"
+		return fmt.Sprintf("%.0fk", float64(n)/1000)
 	default:
 		return fmt.Sprintf("%d", n)
 	}
 }
 
+// truncateStr is the ONE deliberate divergence from the host helper: the
+// host cuts at n BYTES (s[:n]), which lands mid-rune on CJK notes and
+// renders U+FFFD at the cut. Cutting at n runes shows a few more characters
+// for multi-byte text and can never manufacture mojibake — the same reason
+// the cohort's `initial` helper is rune-safe.
 func truncateStr(s string, n int) string {
 	if n <= 0 || len(s) <= n {
 		return s
 	}
-	// Rune-safe: a byte slice mid-rune manufactures mojibake.
 	r := []rune(s)
 	if len(r) <= n {
 		return s
@@ -116,8 +125,6 @@ func truncateStr(s string, n int) string {
 
 func formatSize(b int64) string {
 	switch {
-	case b >= 1<<40:
-		return fmt.Sprintf("%.2f TB", float64(b)/float64(1<<40))
 	case b >= 1<<30:
 		return fmt.Sprintf("%.2f GB", float64(b)/float64(1<<30))
 	case b >= 1<<20:
@@ -127,23 +134,11 @@ func formatSize(b int64) string {
 	case b > 0:
 		return fmt.Sprintf("%d B", b)
 	default:
-		return ""
+		return "—"
 	}
 }
 
-func splitComma(s string) []string {
-	if strings.TrimSpace(s) == "" {
-		return nil
-	}
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
+func splitComma(s string) []string { return strings.Split(s, ",") }
 
 // pageOffset converts a 1-based page to a query offset, clamping hostile
 // input.
