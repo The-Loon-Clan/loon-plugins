@@ -35,6 +35,9 @@ type DiscordBotService struct {
 	// admin-triggered reconnect, and none of them ever exited.
 	stopSync chan struct{}
 	stopOnce sync.Once
+
+	// reconnectMu serialises admin-triggered reconnects; see reconnect.
+	reconnectMu sync.Mutex
 }
 
 // SetCreateInvite wires the invite seam so the /invite Discord command can
@@ -302,8 +305,17 @@ func (d *DiscordBotService) backfillChatHistory(s *discordgo.Session, channelID 
 // reconnect disconnects (if connected) and reconnects. Used by the admin
 // "Trigger" button to pick up settings changes without restarting the worker.
 // The role-sync loop is untouched — it belongs to the service, not the
-// connection.
+// connection. Serialised: two concurrent triggers used to each open a live
+// session, and the orphaned one doubled every bridged message. Also refuses
+// to resurrect the connection after Shutdown.
 func (d *DiscordBotService) reconnect() {
+	d.reconnectMu.Lock()
+	defer d.reconnectMu.Unlock()
+	select {
+	case <-d.stopSync:
+		return // shut down — a trigger racing SIGTERM must not reconnect
+	default:
+	}
 	d.job.Log("Reconnecting (triggered by admin)...")
 	d.Stop()
 	time.Sleep(2 * time.Second)
@@ -634,8 +646,11 @@ func (d *DiscordBotService) handleMessage(s *discordgo.Session, m *discordgo.Mes
 	}
 	// Skip the bot's own posts (slash command replies, release notifs).
 	// Webhook messages still come through because they have a different
-	// author ID, which is what we want for Phase 2.
-	if d.session != nil && m.Author.ID == d.session.State.User.ID {
+	// author ID, which is what we want for Phase 2. Identity comes from the
+	// EVENT's session parameter, not d.session: the field read raced Stop
+	// nil-ing it between the check and the deref, and s is the right session
+	// even mid-reconnect.
+	if s.State.User != nil && m.Author.ID == s.State.User.ID {
 		return
 	}
 	// Trim empty messages (attachment-only Discord posts).

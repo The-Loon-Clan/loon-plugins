@@ -107,6 +107,12 @@ type IRCBotService struct {
 	running bool
 	stopCh  chan struct{}
 
+	// reconnectMu serialises admin-triggered reconnects; see reconnect.
+	reconnectMu sync.Mutex
+	// dead marks the service shut down, so a trigger racing SIGTERM cannot
+	// resurrect the connection loop.
+	dead bool
+
 	// bridgeCh is the hub subscription feeding bridgeFromChat. Held so
 	// Shutdown can Unsubscribe (which closes it and ends the goroutine) —
 	// the host version never did, leaving the bridge blocked on the hub
@@ -169,8 +175,11 @@ func (b *IRCBotService) SetCreateInvite(f func(context.Context, int) (string, er
 func (b *IRCBotService) Start() {
 	b.job = schedule.RegisterService("IRC Bot", "Maintains a persistent connection to the configured IRC server for chat bridge, account linking, and whisper delivery.")
 	b.job.SetTrigger(func() { go b.reconnect() })
-	b.stopCh = make(chan struct{})
-	go b.runWithBackoff()
+	stop := make(chan struct{})
+	b.mu.Lock()
+	b.stopCh = stop
+	b.mu.Unlock()
+	go b.runWithBackoff(stop)
 	// Subscribe SYNCHRONOUSLY, then hand the channel to the goroutine: if the
 	// goroutine subscribed itself, a Shutdown racing boot could read a nil
 	// bridgeCh, skip the Unsubscribe, and leak the bridge forever — the very
@@ -204,6 +213,9 @@ func (b *IRCBotService) Stop() {
 // Shutdown disconnects AND ends the bridge goroutine (Unsubscribe closes its
 // channel). Called from the plugin's Stop on process shutdown.
 func (b *IRCBotService) Shutdown() {
+	b.mu.Lock()
+	b.dead = true
+	b.mu.Unlock()
 	b.Stop()
 	b.mu.Lock()
 	ch := b.bridgeCh
@@ -214,21 +226,41 @@ func (b *IRCBotService) Shutdown() {
 	}
 }
 
+// reconnect is the admin Trigger: tear the old loop down, start a fresh one.
+// Serialised — two concurrent triggers used to each spawn a loop, and every
+// loop past the first is a duplicate connection joining the channel twice.
 func (b *IRCBotService) reconnect() {
+	b.reconnectMu.Lock()
+	defer b.reconnectMu.Unlock()
+	b.mu.Lock()
+	dead := b.dead
+	b.mu.Unlock()
+	if dead {
+		return // shut down — do not resurrect the loop
+	}
 	b.job.Log("Reconnecting (triggered by admin)...")
 	b.Stop()
-	b.stopCh = make(chan struct{})
-	go b.runWithBackoff()
+	stop := make(chan struct{})
+	b.mu.Lock()
+	b.stopCh = stop
+	b.mu.Unlock()
+	go b.runWithBackoff(stop)
 }
 
 // runWithBackoff is the connect + reconnect loop. Each successful
 // connection runs the girc client's blocking loop until disconnect;
 // disconnect triggers a backoff sleep then retry.
-func (b *IRCBotService) runWithBackoff() {
+//
+// stop is THIS loop's generation of the stop channel, taken as a parameter
+// on purpose: the loop used to select on the b.stopCh field, which Stop nils
+// under the lock — so a Stop landing while runOnce blocked left the next
+// iteration selecting on a nil channel, and the loop reconnected straight
+// through its own shutdown.
+func (b *IRCBotService) runWithBackoff(stop <-chan struct{}) {
 	backoff := ircReconnectMin
 	for {
 		select {
-		case <-b.stopCh:
+		case <-stop:
 			return
 		default:
 		}
@@ -239,10 +271,15 @@ func (b *IRCBotService) runWithBackoff() {
 			return
 		}
 		if err := b.runOnce(ctx); err != nil {
+			select {
+			case <-stop:
+				return
+			default:
+			}
 			b.job.Log("Connection ended: %v — reconnecting in %s", err, backoff.Round(time.Second))
 			b.job.SetError(fmt.Sprintf("Disconnected: %v", err))
 			select {
-			case <-b.stopCh:
+			case <-stop:
 				return
 			case <-time.After(backoff):
 			}
@@ -252,7 +289,13 @@ func (b *IRCBotService) runWithBackoff() {
 			}
 			continue
 		}
-		// Clean exit (e.g. server QUIT). Reset backoff.
+		// Clean exit (e.g. server QUIT) — or our own Stop closing the client,
+		// which surfaces as a clean return from runOnce.
+		select {
+		case <-stop:
+			return
+		default:
+		}
 		backoff = ircReconnectMin
 	}
 }
