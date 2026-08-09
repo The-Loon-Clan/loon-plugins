@@ -53,3 +53,20 @@ type ReleaseNotifier interface {
 	// goroutine and its own failures.
 	NotifyRelease(a ReleaseAnnouncement)
 }
+
+// OpsNotifierName is the registry key for the operator-digest sibling of
+// ReleaseNotifier: short operational summaries (daily review criticals,
+// curation sweep results) delivered to wherever the operators actually look.
+// The discord plugin publishes it against an ops channel; consumers Lookup
+// and nil-degrade exactly as with ReleaseNotifier.
+const OpsNotifierName = "notify.ops"
+
+// OpsNotifier carries an operational digest to the operators' channel. Same
+// direction and degradation rules as ReleaseNotifier: publishers own their
+// goroutine and their failures, absence means no delivery and callers
+// nil-check rather than requiring it. Title is one line; body is short
+// preformatted text (a few lines of counts), not markup.
+type OpsNotifier interface {
+	// NotifyOps MUST NOT block — job loops call it at end of run.
+	NotifyOps(title, body string)
+}

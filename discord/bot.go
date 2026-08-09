@@ -776,6 +776,34 @@ func (d *DiscordBotService) NotifyRelease(nzb pluginapi.ReleaseAnnouncement) {
 	}
 }
 
+// NotifyOps posts an operational digest to the configured ops channel.
+// NotifyOps implements pluginapi.OpsNotifier: it must not block, so the send
+// runs on its own goroutine and owns its own failures.
+func (d *DiscordBotService) NotifyOps(title, body string) {
+	d.mu.Lock()
+	s := d.session
+	d.mu.Unlock()
+	if s == nil {
+		return
+	}
+	channelID := d.settings.GetDiscordOpsChannelID(context.Background())
+	if channelID == "" {
+		return
+	}
+	go func() {
+		embed := &discordgo.MessageEmbed{
+			Title:       title,
+			Description: body,
+			Color:       0x8a5bf5,
+			Footer:      &discordgo.MessageEmbedFooter{Text: "ameNZB ops"},
+			Timestamp:   time.Now().Format(time.RFC3339),
+		}
+		if _, err := s.ChannelMessageSendEmbed(channelID, embed); err != nil {
+			log.Printf("discord bot: failed to send ops digest: %v", err)
+		}
+	}()
+}
+
 // syncRoles updates Discord roles for all linked users based on their active rank.
 func (d *DiscordBotService) syncRoles() {
 	d.mu.Lock()

@@ -72,6 +72,12 @@ func (f *fakeSettings) GetDiscordVerifyChannelID(context.Context) string {
 func (f *fakeSettings) SetDiscordVerifyChannelID(_ context.Context, v string) error {
 	return f.set("verify_channel", v)
 }
+func (f *fakeSettings) GetDiscordOpsChannelID(context.Context) string {
+	return f.get("ops_channel")
+}
+func (f *fakeSettings) SetDiscordOpsChannelID(_ context.Context, v string) error {
+	return f.set("ops_channel", v)
+}
 func (f *fakeSettings) GetDiscordChatWebhookURL(context.Context) string { return f.get("webhook") }
 func (f *fakeSettings) SetDiscordChatWebhookURL(_ context.Context, v string) error {
 	return f.set("webhook", v)

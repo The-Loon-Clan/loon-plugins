@@ -127,7 +127,12 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// mode (web looks this up after Boot). Registered under the pluginapi
 	// contract rather than a bare "discord.bot" string asserted to a concrete
 	// type: the consumer is the host, which cannot import this package.
-	return c.Register(pluginapi.ReleaseNotifierName, p.bot)
+	if err := c.Register(pluginapi.ReleaseNotifierName, p.bot); err != nil {
+		return err
+	}
+	// Same bot, second contract: short operational digests (curation runs,
+	// review criticals) to the ops channel. Consumers nil-degrade identically.
+	return c.Register(pluginapi.OpsNotifierName, p.bot)
 }
 
 // Start/Stop are no-ops on the web leg: it has views and a route, not a bot.

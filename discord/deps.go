@@ -89,6 +89,8 @@ type Settings interface {
 	SetDiscordChatChannelID(ctx context.Context, v string) error
 	GetDiscordVerifyChannelID(ctx context.Context) string
 	SetDiscordVerifyChannelID(ctx context.Context, v string) error
+	GetDiscordOpsChannelID(ctx context.Context) string
+	SetDiscordOpsChannelID(ctx context.Context, v string) error
 	GetDiscordChatWebhookURL(ctx context.Context) string
 	SetDiscordChatWebhookURL(ctx context.Context, v string) error
 	GetDiscordInviteURL(ctx context.Context) string

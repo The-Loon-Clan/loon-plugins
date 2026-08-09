@@ -65,6 +65,11 @@ var settingsTmpl = template.Must(template.New("discord-settings").Parse(`
                             <input type="text" name="discord_verify_channel_id" class="form-control form-control-sm" value="{{.VerifyChannelID}}" placeholder="Bot-only channel for the Verify button">
                             <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">Channel where /setup-verify posts the Verify button. Use a bot-only channel: each /setup-verify run wipes prior bot messages so updates don't leave duplicates. Restrict member send/manage permissions in Discord so only the bot can post here.</div>
                         </div>
+                        <div class="col-sm-6">
+                            <label class="form-label" style="font-size:0.78rem;">Ops Channel ID</label>
+                            <input type="text" name="discord_ops_channel_id" class="form-control form-control-sm" value="{{.OpsChannelID}}" placeholder="Staff channel for operational digests">
+                            <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">Daily job digests (season curation, review alerts) land here. Leave empty to disable Discord delivery; the admin pages carry the same information.</div>
+                        </div>
                     </div>
                     <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.5rem;">Role IDs (create roles in Discord, right-click &rarr; Copy Role ID)</div>
                     <div class="row g-3 mb-3">
@@ -144,6 +149,7 @@ func (p *Plugin) renderSettings(c *gin.Context) (template.HTML, error) {
 		"ReleasesChannelID": s.GetDiscordReleasesChannelID(ctx),
 		"ChatChannelID":     s.GetDiscordChatChannelID(ctx),
 		"VerifyChannelID":   s.GetDiscordVerifyChannelID(ctx),
+		"OpsChannelID":      s.GetDiscordOpsChannelID(ctx),
 		"WebhookSet":        s.GetDiscordChatWebhookURL(ctx) != "",
 		"InviteURL":         s.GetDiscordInviteURL(ctx),
 		"RoleMember":        s.GetDiscordMemberRoleID(ctx),
@@ -220,6 +226,7 @@ func (p *Plugin) saveSettings(c *gin.Context) (template.HTML, error) {
 		{s.SetDiscordReleasesChannelID, c.PostForm("discord_releases_channel_id")},
 		{s.SetDiscordChatChannelID, c.PostForm("discord_chat_channel_id")},
 		{s.SetDiscordVerifyChannelID, c.PostForm("discord_verify_channel_id")},
+		{s.SetDiscordOpsChannelID, c.PostForm("discord_ops_channel_id")},
 		{s.SetDiscordInviteURL, c.PostForm("discord_invite_url")},
 		{s.SetDiscordMemberRoleID, c.PostForm("discord_role_member")},
 	} {
