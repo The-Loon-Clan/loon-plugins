@@ -26,6 +26,7 @@ var settingsTmpl = template.Must(template.New("discord-settings").Parse(`
                     Configure the Discord bot for account linking, rank role sync, and release notifications.
                 </div>
                 <form method="POST" action="/admin/settings/discord/save">
+                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
                             <label class="form-label" style="font-size:0.78rem;">Bot Token</label>
@@ -144,6 +145,7 @@ func (p *Plugin) renderSettings(c *gin.Context) (template.HTML, error) {
 
 	var sb strings.Builder
 	if err := settingsTmpl.Execute(&sb, map[string]any{
+		"CSRFToken":         deps.CSRFToken(c),
 		"BotTokenSet":       s.GetDiscordBotToken(ctx) != "",
 		"GuildID":           s.GetDiscordGuildID(ctx),
 		"ReleasesChannelID": s.GetDiscordReleasesChannelID(ctx),

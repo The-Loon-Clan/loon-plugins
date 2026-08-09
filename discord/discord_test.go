@@ -99,11 +99,12 @@ func (f *fakeSettings) SetDiscordRoleID(_ context.Context, name, roleID string) 
 
 func validDeps() Deps {
 	return Deps{
-		Links:    stubLinks{},
-		Users:    stubUsers{},
-		Settings: newFakeSettings(),
-		NewHub:   func() pluginapi.ChatHub { return fakeHub{} },
-		Viewer:   func(*gin.Context) *Viewer { return nil },
+		Links:     stubLinks{},
+		Users:     stubUsers{},
+		Settings:  newFakeSettings(),
+		NewHub:    func() pluginapi.ChatHub { return fakeHub{} },
+		Viewer:    func(*gin.Context) *Viewer { return nil },
+		CSRFToken: func(*gin.Context) string { return "test-csrf" },
 	}
 }
 

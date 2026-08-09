@@ -72,8 +72,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// it — and finding out at boot beats finding out when the bot fails to
 	// connect. (The host used to skip NewHub here and a nil hub only surfaced
 	// as a panic inside Publish.)
-	if deps.Links == nil || deps.Users == nil || deps.Settings == nil || deps.NewHub == nil || deps.Viewer == nil {
-		return fmt.Errorf("discord: Deps missing a required field (Links/Users/Settings/NewHub/Viewer)")
+	if deps.Links == nil || deps.Users == nil || deps.Settings == nil || deps.NewHub == nil || deps.Viewer == nil || deps.CSRFToken == nil {
+		return fmt.Errorf("discord: Deps missing a required field (Links/Users/Settings/NewHub/Viewer/CSRFToken)")
 	}
 	p.process = c.Process
 	p.core = c

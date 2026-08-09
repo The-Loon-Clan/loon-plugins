@@ -110,6 +110,12 @@ type Deps struct {
 	Users    UserStore
 	Settings Settings
 
+	// CSRFToken answers the host middleware's per-session token for the
+	// admin settings form. Without it every save POST 403s under the host's
+	// global CSRF check — which is exactly what happened to this form
+	// between the lift and the 2026-08-09 consistency audit.
+	CSRFToken func(c *gin.Context) string
+
 	// NewHub constructs this bot's own chat-hub instance. The hub stays
 	// host-owned; instances converge on Redis. Called once, on the worker leg.
 	NewHub func() pluginapi.ChatHub
