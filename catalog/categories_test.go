@@ -70,6 +70,56 @@ func TestAudioCodecsDoNotClaimVideo(t *testing.T) {
 	}
 }
 
+// The same mistake as the audio buckets, in the categories nobody looks at:
+// a keyword that names a non-video content type sitting above the video rules
+// and claiming a film on its way past.
+//
+// 41 of the 43 releases in PC/Games were video, and 63 of the 67 in Comics.
+func TestNonVideoBucketsDoNotClaimVideo(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		title string
+		want  int
+	}{
+		// REPACK is a universal scene tag — a re-released package of ANYTHING.
+		// Only the game-specific groups still mean a game.
+		{"repack is not a game", "Bad Boys - Ride or Die (2024) REPACK 1080p DS4K WEBRip x265 HEVC", 2040},
+		{"repack on a bluray remux", "Tom.and.Jerry.1947.E27.Cat.Fishin.1080p.REPACK.BluRay.REMUX.AVC.1.0-SIUUU", 2050},
+		// "Switch" and "Family Switch" are films; the token is also a console.
+		{"a film called Switch", "Family.Switch.2023.1080p.WEB-DL.x264.6CH-Pahe.in", 2040},
+		// A film whose title contains a comics word.
+		{"comics word in a film", "Kanimangalam.Kovilakam.2026.1080p.SNXT.WEB-DL.Comic", 2040},
+		// "Portable" is an ISO keyword and an ordinary English word.
+		{"a film called Portable", "The.Portable.Door.2023.1080p.WEB-DL.x264", 2040},
+	} {
+		if got := categorize("alt.binaries.misc", tc.title); got != tc.want {
+			t.Errorf("%s: categorize(%q) = %d (%s), want %d (%s)",
+				tc.name, tc.title, got, categoryName(got), tc.want, categoryName(tc.want))
+		}
+	}
+
+	// The real things must still classify. None of these carry a resolution or
+	// a video codec, which is exactly why keying off video markers works.
+	for _, tc := range []struct {
+		title string
+		want  int
+	}{
+		{"FitGirl Repack - Some Game v1.2", 4050},
+		{"Some.Game-CODEX", 4050},
+		{"Zelda Tears of the Kingdom NSW", 1000},
+		{"Adobe Photoshop 2024 Crack", 4010},
+		{"Ubuntu 24.04 Desktop.iso", 4020},
+		{"Some Manga Vol 3 (2024) cbz", 7030},
+		{"National Geographic Magazine April 2026", 7010},
+		{"Some Book - Author.epub", 7020},
+	} {
+		if got := categorize("alt.binaries.misc", tc.title); got != tc.want {
+			t.Errorf("categorize(%q) = %d (%s), want %d (%s) — the real thing must still classify",
+				tc.title, got, categoryName(got), tc.want, categoryName(tc.want))
+		}
+	}
+}
+
 // Standard-definition video used to fall through to Other/Misc, because the
 // resolution fallback only knew 1080p, 2160p and 720p. Half of everything the
 // categoriser could not place was video it simply could not see.

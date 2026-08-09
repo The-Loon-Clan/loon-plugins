@@ -33,24 +33,30 @@ func topLevelOf(id int) int { return (id / 1000) * 1000 }
 
 // keyword buckets for Categorize, checked in priority order (first match wins).
 //
-// audioOnly marks a bucket whose keywords are AUDIO-TRACK descriptors as often
-// as they are release types. FLAC, MP3 and 320kbps describe the soundtrack of a
-// video just as readily as they describe an album, and the video is the release
-// — so these buckets are skipped when the title carries a video marker.
+// notVideo marks a bucket that names a NON-VIDEO content type — an album, a
+// book, a game, a console title. Their keywords double as ordinary words in
+// video release names, and because these buckets sit above the video rules they
+// claimed the release before anything looked at its resolution:
 //
-// Without that, 806 of the 810 releases in Audio on this index were video:
-// "Naruto.075.v4.480p.DVD.Dual-Audio.FLAC2.0.Hi10P.x264" filed as Lossless,
-// "House.Mates.2025.Tamil 1080p WEB-DL x264 [AAC.2.0 - 320kbps]" filed as MP3.
-// 99.5% of a whole top-level category, and the reason it looked like the index
-// held music worth fetching metadata for.
+//	Naruto.075.v4.480p.DVD.Dual-Audio.FLAC2.0.Hi10P.x264  "flac"   -> Audio
+//	Bad Boys - Ride or Die (2024) REPACK 1080p WEBRip     "repack" -> PC/Games
+//	Family.Switch.2023.1080p.WEB-DL.x264                  "switch" -> Console
+//
+// A title carrying a resolution or a video codec IS video, whatever else it
+// says, so these buckets are skipped for it. The video buckets — anime, XXX,
+// BluRay, season/HDTV — are deliberately unmarked: video is what they are for.
+//
+// The scale this was hiding: 806 of the 810 releases in Audio were video, and
+// 41 of the 43 in PC/Games. Whole categories, not rounding errors — and the
+// reason Audio looked like it held music worth fetching metadata for.
 var catRules = []struct {
-	cat       int
-	keywords  []string
-	audioOnly bool
+	cat      int
+	keywords []string
+	notVideo bool
 }{
 	{cat: 5070, keywords: []string{"anime", "subsplease", "erai-raws", "horriblesubs", "vostfr"}},
 	{cat: 6070, keywords: []string{"xxx", "porn", "erotica", "brazzers", "onlyfans", "sex"}},
-	{cat: 7020, keywords: []string{"ebook", "epub", "mobi", ".pdf", " pdf", "azw3"}},
+	{notVideo: true, cat: 7020, keywords: []string{"ebook", "epub", "mobi", ".pdf", " pdf", "azw3"}},
 	// "cbr" is NOT here. As a comic archive it is a file extension; as a video
 	// term it is the constant-bitrate marker, and release names carry it as its
 	// own dot-delimited token ("Yuddha.Kaandam.2022.1080p.CBR.AMZN.WEB-DL") —
@@ -59,15 +65,15 @@ var catRules = []struct {
 	// the title: see contentKindFromArticles in the usenet plugin, which reads
 	// the actual file names and sets the Manga hint. "cbz" stays because it has
 	// no second meaning.
-	{cat: 7030, keywords: []string{"comic", "cbz", "manga"}},
-	{cat: 7010, keywords: []string{"magazine"}},
-	{cat: 3040, keywords: []string{"flac", "lossless", "24bit", "dsd"}, audioOnly: true},
-	{cat: 3030, keywords: []string{"audiobook"}, audioOnly: true},
-	{cat: 3010, keywords: []string{"mp3", "320kbps", " m4a"}, audioOnly: true},
-	{cat: 4010, keywords: []string{"crack", "keygen", "0day", "activator", "regged"}},
-	{cat: 4020, keywords: []string{".iso", "installer", "portable", "setup"}},
-	{cat: 4050, keywords: []string{"repack", "fitgirl", "dodi", "-codex", "-plaza", "-flt"}},
-	{cat: 1000, keywords: []string{"nsw", "switch", "ps4", "ps5", "xbox", "-goldberg"}},
+	{notVideo: true, cat: 7030, keywords: []string{"comic", "cbz", "manga"}},
+	{notVideo: true, cat: 7010, keywords: []string{"magazine"}},
+	{notVideo: true, cat: 3040, keywords: []string{"flac", "lossless", "24bit", "dsd"}},
+	{notVideo: true, cat: 3030, keywords: []string{"audiobook"}},
+	{notVideo: true, cat: 3010, keywords: []string{"mp3", "320kbps", " m4a"}},
+	{notVideo: true, cat: 4010, keywords: []string{"crack", "keygen", "0day", "activator", "regged"}},
+	{notVideo: true, cat: 4020, keywords: []string{".iso", "installer", "portable", "setup"}},
+	{notVideo: true, cat: 4050, keywords: []string{"repack", "fitgirl", "dodi", "-codex", "-plaza", "-flt"}},
+	{notVideo: true, cat: 1000, keywords: []string{"nsw", "switch", "ps4", "ps5", "xbox", "-goldberg"}},
 	{cat: 2050, keywords: []string{"bluray", "blu-ray", "remux"}},
 	{cat: 5040, keywords: []string{"season", "hdtv", "pdtv"}},
 }
@@ -97,9 +103,9 @@ func categorizeText(h string) int {
 	// Resolved once: several rules below ask the same question.
 	video := isVideo(h)
 	for _, r := range catRules {
-		// An audio codec on a video release describes its soundtrack, not the
-		// release. Skipping lets the title fall through to the video rules.
-		if r.audioOnly && video {
+		// A non-video bucket cannot own a title that is plainly video. Skipping
+		// lets it fall through to the video rules below.
+		if r.notVideo && video {
 			continue
 		}
 		for _, kw := range r.keywords {
