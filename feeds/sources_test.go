@@ -132,9 +132,9 @@ func TestInfoHashFromTorrentURL(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	p := &Plugin{torrentClient: srv.Client()}
+	p := &Plugin{}
 
-	h, err := p.infoHashFromTorrentURL(context.Background(), srv.URL+"/ok.torrent")
+	h, err := p.infoHashFromTorrentURL(context.Background(), srv.Client(), srv.URL+"/ok.torrent")
 	if err != nil {
 		t.Fatalf("ok.torrent: %v", err)
 	}
@@ -142,11 +142,51 @@ func TestInfoHashFromTorrentURL(t *testing.T) {
 		t.Errorf("hash = %q, want 40 lowercase hex chars", h)
 	}
 
-	if _, err := p.infoHashFromTorrentURL(context.Background(), srv.URL+"/junk.torrent"); err == nil {
+	if _, err := p.infoHashFromTorrentURL(context.Background(), srv.Client(), srv.URL+"/junk.torrent"); err == nil {
 		t.Error("junk body produced a hash — that hash would dedup unrelated items onto one key")
 	}
-	if _, err := p.infoHashFromTorrentURL(context.Background(), srv.URL+"/missing.torrent"); err == nil {
+	if _, err := p.infoHashFromTorrentURL(context.Background(), srv.Client(), srv.URL+"/missing.torrent"); err == nil {
 		t.Error("404 produced a hash")
+	}
+}
+
+// The URL-level host pin — the only pin on the proxied path, where the SSRF
+// dialer cannot run. A feed item pointing its enclosure anywhere else must be
+// dropped before any fetch happens.
+func TestTorrentURLAllowed(t *testing.T) {
+	allowed := []string{
+		"https://www.anirena.com/torrents/x.torrent",
+		"https://anirena.com/torrents/x.torrent",
+	}
+	refused := []string{
+		"https://evil.example/x.torrent",
+		"https://anirena.com.evil.example/x.torrent", // suffix spoof
+		"https://notanirena.com/x.torrent",
+		"http://192.168.1.1/x.torrent",
+		"://not-a-url",
+	}
+	for _, u := range allowed {
+		if !torrentURLAllowed(u) {
+			t.Errorf("refused legitimate URL %q", u)
+		}
+	}
+	for _, u := range refused {
+		if torrentURLAllowed(u) {
+			t.Errorf("allowed %q — on the proxied path this is the only gate", u)
+		}
+	}
+}
+
+// Source routing: a configured proxy wins for its source only.
+func TestSourceClientRouting(t *testing.T) {
+	direct := &http.Client{}
+	proxied := &http.Client{}
+	p := &Plugin{client: direct, proxied: map[string]*http.Client{"anirena": proxied}}
+	if p.sourceClient("anirena") != proxied {
+		t.Error("routed source did not get the proxied client")
+	}
+	if p.sourceClient("nyaa") != direct {
+		t.Error("unrouted source did not get the direct client")
 	}
 }
 

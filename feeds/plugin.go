@@ -50,6 +50,25 @@ type Config struct {
 	// unavailable. (The ameNZB host copies its legacy app.nekobt_api_key in
 	// here when this is unset, so existing deployments need no config edit.)
 	NekoBTAPIKey string `json:"nekobt_api_key"`
+
+	// SourceProxies routes individual sources' fetches through an HTTP
+	// proxy, keyed by source name ("nyaa", "anirena", "tokyotosho",
+	// "nekobt"):
+	//
+	//	plugins:
+	//	  feeds:
+	//	    source_proxies:
+	//	      anirena: "http://egress-vpn:8888"
+	//
+	// This exists because upstreams IP-block servers: AniRena serves the
+	// ameNZB VPS an anti-bot page while answering residential IPs normally,
+	// which surfaced the day /ops/feeds first ran. A proxied source's
+	// traffic exits via the named proxy (the site's VPN egress container);
+	// unlisted sources fetch directly. The proxied client has no SSRF dial
+	// guard — the proxy address is private by nature — so proxy URLs are
+	// trusted operator config, and the .torrent fallback keeps its host pin
+	// as a URL-level check instead.
+	SourceProxies map[string]string `json:"source_proxies"`
 }
 
 // Plugin wires the importer job and the search capability.
@@ -60,8 +79,11 @@ type Plugin struct {
 	// client fetches the trusted, hardcoded feed endpoints. torrentClient
 	// fetches .torrent URLs that arrive IN feed content — host-pinned and
 	// SSRF-guarded, because those URLs are upstream data, not ours.
+	// proxied overrides both, per source, for operator-routed sources
+	// (Config.SourceProxies).
 	client        *http.Client
 	torrentClient *http.Client
+	proxied       map[string]*http.Client
 
 	search *torznabSearch
 	status *statusBook
@@ -96,9 +118,21 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.client = c.HTTPClient.Media()
 	// The AniRena fallback fetches .torrent URLs from feed content; pin them
 	// to the feed's own host and keep the SSRF dial guard.
-	p.torrentClient = c.HTTPClient.Whitelisted(30*time.Second, "anirena.com")
+	p.torrentClient = c.HTTPClient.Whitelisted(30*time.Second, anirenaHost)
+	p.proxied = make(map[string]*http.Client, len(p.cfg.SourceProxies))
+	for source, proxyURL := range p.cfg.SourceProxies {
+		cl, err := c.HTTPClient.Proxied(30*time.Second, proxyURL)
+		if err != nil {
+			// A misconfigured proxy must refuse boot rather than silently
+			// fetch direct — the operator routed this source for a reason.
+			return fmt.Errorf("feeds: source_proxies[%q]: %w", source, err)
+		}
+		p.proxied[source] = cl
+	}
 
-	p.search = &torznabSearch{key: p.cfg.NekoBTAPIKey, client: p.client}
+	// The search capability follows the nekobt source's routing, so an
+	// IP-blocked nekoBT would be one config line away from working too.
+	p.search = &torznabSearch{key: p.cfg.NekoBTAPIKey, client: p.sourceClient("nekobt")}
 	if err := c.RegisterDef(core.ExtensionDef{
 		Name:    lpapi.TorznabSearchName,
 		Kind:    core.ExtService,

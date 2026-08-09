@@ -39,6 +39,33 @@ var reMagnetInfoHash = regexp.MustCompile(`(?i)urn:btih:([0-9a-f]{40}|[A-Z2-7]{3
 // around the number are tolerated; unit is required.
 var reTokyoToshoSize = regexp.MustCompile(`(?i)\bSize:\s*([\d.]+)\s*(B|KB|MB|GB|TB)\b`)
 
+// anirenaHost pins the .torrent fallback: those URLs arrive IN feed content,
+// so they are upstream data and only the feed's own host is fetched.
+const anirenaHost = "anirena.com"
+
+// sourceClient resolves one source's HTTP client: the operator-configured
+// egress proxy when the source is routed (Config.SourceProxies), else the
+// shared direct client.
+func (p *Plugin) sourceClient(source string) *http.Client {
+	if cl, ok := p.proxied[source]; ok {
+		return cl
+	}
+	return p.client
+}
+
+// torrentURLAllowed is the URL-level half of the .torrent host pin. The
+// direct path's whitelisted client enforces the same pin at dial time, but
+// the proxied path cannot (an SSRF dialer would refuse the proxy's private
+// address), so the check lives here for both.
+func torrentURLAllowed(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == anirenaHost || strings.HasSuffix(host, "."+anirenaHost)
+}
+
 // fetchRSS is the shared GET half of every fetcher: browser UA (some of these
 // hosts refuse obvious bots), bounded read, non-200 as error.
 func fetchRSS(ctx context.Context, client *http.Client, feedURL, accept string, limit int64) ([]byte, error) {
@@ -115,7 +142,7 @@ func parseNyaa(body []byte) ([]item, error) {
 }
 
 func (p *Plugin) fetchNyaa(ctx context.Context) ([]item, error) {
-	body, err := fetchRSS(ctx, p.client, nyaaRSSURL, "", 5<<20)
+	body, err := fetchRSS(ctx, p.sourceClient("nyaa"), nyaaRSSURL, "", 5<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +163,7 @@ func (p *Plugin) fetchNyaaSearch(ctx context.Context, query string, limit int) (
 		limit = 5
 	}
 	u := "https://nyaa.si/?page=rss&c=1_0&s=seeders&o=desc&q=" + url.QueryEscape(query)
-	body, err := fetchRSS(ctx, p.client, u, "", 5<<20)
+	body, err := fetchRSS(ctx, p.sourceClient("nyaa"), u, "", 5<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +279,7 @@ func parseAniRena(body []byte) ([]anirenaEntry, error) {
 }
 
 func (p *Plugin) fetchAniRena(ctx context.Context) ([]item, error) {
-	body, err := fetchRSS(ctx, p.client, anirenaRSSURL, "application/rss+xml, application/xml;q=0.9, */*;q=0.8", 5<<20)
+	body, err := fetchRSS(ctx, p.sourceClient("anirena"), anirenaRSSURL, "application/rss+xml, application/xml;q=0.9, */*;q=0.8", 5<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -260,15 +287,25 @@ func (p *Plugin) fetchAniRena(ctx context.Context) ([]item, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The .torrent fallback follows the source's routing: proxied when the
+	// operator routed anirena, else the whitelisted direct client. Either
+	// way the URL-level host pin below applies.
+	torrentClient := p.torrentClient
+	if cl, ok := p.proxied["anirena"]; ok {
+		torrentClient = cl
+	}
 	var items []item
 	for _, e := range entries {
 		if e.it.infoHash == "" {
+			if !torrentURLAllowed(e.torrentURL) {
+				continue
+			}
 			// One small HTTP per NEW item; AniRena ships ~30 items per feed
 			// and most are repeats across polls, so the info_hash dedup at
 			// the call site keeps repeated fetches from doing real work past
 			// the first cycle. On any error the item is skipped rather than
 			// filed with a hash that would never match.
-			h, err := p.infoHashFromTorrentURL(ctx, e.torrentURL)
+			h, err := p.infoHashFromTorrentURL(ctx, torrentClient, e.torrentURL)
 			if err != nil {
 				continue
 			}
@@ -283,18 +320,18 @@ func (p *Plugin) fetchAniRena(ctx context.Context) ([]item, error) {
 // info_hash by SHA-1-ing the raw `info` dict bytes. Used by the AniRena path
 // where the RSS feed only ships a .torrent URL (no magnet anywhere).
 //
-// The fetch goes through the whitelisted client: the URL comes from an
-// upstream feed, not from this codebase, so it gets the SSRF dial guard and
-// an anirena.com host pin rather than a blind GET. Bounded by a 4 MB read cap
-// (a real .torrent shouldn't exceed that; refuses to allocate more).
-func (p *Plugin) infoHashFromTorrentURL(ctx context.Context, torrentURL string) (string, error) {
+// The URL comes from an upstream feed, not from this codebase — callers pin
+// the host first (torrentURLAllowed) and pass the source's client, which on
+// the direct path also carries the SSRF dial guard. Bounded by a 4 MB read
+// cap (a real .torrent shouldn't exceed that; refuses to allocate more).
+func (p *Plugin) infoHashFromTorrentURL(ctx context.Context, client *http.Client, torrentURL string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", torrentURL, nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("User-Agent", feedUserAgent)
 	req.Header.Set("Accept", "application/x-bittorrent, */*")
-	resp, err := p.torrentClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -405,7 +442,7 @@ func parseTokyoTosho(body []byte) ([]item, error) {
 }
 
 func (p *Plugin) fetchTokyoTosho(ctx context.Context) ([]item, error) {
-	body, err := fetchRSS(ctx, p.client, tokyotoshoRSSURL, "application/rss+xml, application/xml;q=0.9, */*;q=0.8", 5<<20)
+	body, err := fetchRSS(ctx, p.sourceClient("tokyotosho"), tokyotoshoRSSURL, "application/rss+xml, application/xml;q=0.9, */*;q=0.8", 5<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -519,7 +556,7 @@ func fetchNekoBTURL(ctx context.Context, client *http.Client, feedURL string) ([
 }
 
 func (p *Plugin) fetchNekoBT(ctx context.Context) ([]item, error) {
-	return fetchNekoBTURL(ctx, p.client, fmt.Sprintf("https://nekobt.to/api/torznab/api?t=search&apikey=%s", p.cfg.NekoBTAPIKey))
+	return fetchNekoBTURL(ctx, p.sourceClient("nekobt"), fmt.Sprintf("https://nekobt.to/api/torznab/api?t=search&apikey=%s", p.cfg.NekoBTAPIKey))
 }
 
 func extractHashFromMagnet(magnet string) string {

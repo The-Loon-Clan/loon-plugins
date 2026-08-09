@@ -58,6 +58,25 @@ serves no pages.
   still poll; search reports unavailable). The ameNZB host defaults it from
   its legacy `app.nekobt_api_key`, so existing deployments need no config
   edit.
+- Config: `plugins.feeds.source_proxies` — per-source egress routing for
+  upstreams that IP-block the server (AniRena serves datacenter IPs an
+  anti-bot page while answering residential IPs normally):
+
+  ```yaml
+  plugins:
+    feeds:
+      source_proxies:
+        anirena: "http://egress-vpn:8888"
+  ```
+
+  A routed source's fetches (RSS, and for anirena the `.torrent` fallback)
+  exit via the named HTTP proxy through `HTTPClient.Proxied`; unlisted
+  sources fetch directly. The proxied client carries no SSRF dial guard —
+  the proxy address is private by nature — so proxy URLs are trusted
+  operator config, and the `.torrent` host pin is enforced at the URL level
+  (`torrentURLAllowed`) instead of at dial time. A malformed proxy URL
+  fails Provision rather than silently fetching direct. The `nekobt`
+  routing also carries the published search capability's traffic.
 - `Metadata.Requires`: none.
 
 ## Hooks & Callbacks
