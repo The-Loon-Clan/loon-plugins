@@ -121,6 +121,79 @@ func TestPickFilmPrefersTheMatchingYear(t *testing.T) {
 	}
 }
 
+// A YEAR IS NOT AN IDENTITY. Found against live Wikipedia over 60 uncovered
+// movie releases: "The Champion 2024" returned "Chandu Champion" and
+// "Mia Moglie 2022" returned "Hey Sinamika" — both real films, both of the
+// right year, both complete strangers to the release. The year branch used to
+// return on the year alone, without ever comparing the title.
+func TestPickFilmRefusesTheRightYearWithTheWrongTitle(t *testing.T) {
+	pages := []searchPage{
+		{Key: "Chandu_Champion", Title: "Chandu Champion", Description: "2024 Indian Hindi-language film"},
+	}
+	if got, ok := pickFilm(pages, "The Champion", 2024); ok {
+		t.Errorf("accepted %q for an unrelated title of the same year", got.Key)
+	}
+	pages = []searchPage{
+		{Key: "Hey_Sinamika", Title: "Hey Sinamika", Description: "2022 Indian Tamil-language film"},
+	}
+	if got, ok := pickFilm(pages, "Mia Moglie", 2022); ok {
+		t.Errorf("accepted %q for an unrelated title of the same year", got.Key)
+	}
+}
+
+// The mirror image: the right title in the wrong year. "Annie.2014" wore
+// "Annie (1982 film)" and "I.See.You.2006" wore "I See You (2019 film)",
+// because the title branch never looked at the year.
+//
+// The 1982 article's description does not always state its year — but the
+// DISAMBIGUATOR does, which is why pageYear reads both.
+func TestPickFilmRefusesTheRightTitleInTheWrongYear(t *testing.T) {
+	pages := []searchPage{
+		{Key: "Annie_1982", Title: "Annie (1982 film)", Description: "American musical film"},
+	}
+	if got, ok := pickFilm(pages, "Annie", 2014); ok {
+		t.Errorf("accepted %q for a release of a different year", got.Key)
+	}
+	// The same page IS the answer for a release that names its year.
+	if _, ok := pickFilm(pages, "Annie", 1982); !ok {
+		t.Error("refused the film the release actually names")
+	}
+}
+
+// An awards ceremony's description says "film awards", which satisfied the
+// film test — so "Sikaisal" matched "70th National Film Awards", the ceremony
+// the film won at, and took that page's image as its cover.
+func TestPickFilmRefusesAwardsCeremonies(t *testing.T) {
+	pages := []searchPage{
+		{Key: "70th_National_Film_Awards", Title: "70th National Film Awards",
+			Description: "2024 Indian film awards ceremony"},
+	}
+	if got, ok := pickFilm(pages, "Sikaisal", 2022); ok {
+		t.Errorf("accepted %q, which is a ceremony rather than a film", got.Key)
+	}
+}
+
+// Strict equality alone loses real matches, so containment is allowed — but
+// only when the shorter side is long enough to be an identity. "Insurgent" is
+// the Divergent film; "Dog" is not "Dogville".
+func TestTitleRelatedAllowsSubtitlesButNotShortWords(t *testing.T) {
+	for _, tc := range []struct {
+		release, article string
+		want             bool
+	}{
+		{"Insurgent", "The Divergent Series: Insurgent", true},
+		{"Nirnayam Telugu", "Nirnayam (1991 film)", true},
+		{"The Darjeeling", "The Darjeeling Limited", true},
+		{"Dog", "Dogville", false},
+		{"Live", "Live Free or Die Hard", false},
+		{"The Champion", "Chandu Champion", false},
+	} {
+		if got := titleRelated(tc.release, tc.article); got != tc.want {
+			t.Errorf("titleRelated(%q, %q) = %v, want %v", tc.release, tc.article, got, tc.want)
+		}
+	}
+}
+
 // The regression this policy exists for, found against LIVE Wikipedia: the
 // release "Spiders 2013" returned "Paper Spiders", a 2020 film that merely
 // ranked first for the word, and an earlier version accepted it because it was

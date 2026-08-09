@@ -174,7 +174,12 @@ var (
 	reFilmDesc = regexp.MustCompile(`(?i)\bfilms?\b`)
 	// A franchise page ("film series", "film trilogy") is not a film, and it
 	// outranks the individual films for a bare series name.
-	reNotAFilm = regexp.MustCompile(`(?i)\bfilm (series|trilogy|franchise)\b|\blist of\b|\bsoundtrack\b|\bvideo game\b`)
+	// An awards ceremony's description says "film awards", which satisfied
+	// reFilmDesc — so a search for "Sikaisal" returned "70th National Film
+	// Awards" (the ceremony the film won at) and that page's image became the
+	// release's cover.
+	reNotAFilm = regexp.MustCompile(`(?i)\bfilm (series|trilogy|franchise|awards?|festival)\b|` +
+		`\bawards? ceremony\b|\blist of\b|\bsoundtrack\b|\bvideo game\b`)
 )
 
 // Query is the film title recovered from a release name, plus the year the
@@ -460,20 +465,60 @@ func (s *Source) addCrossIDs(ctx context.Context, pageKey string, e *catalog.Cat
 // release page, where nothing later disagrees with it. No match just leaves the
 // page as it is today.
 func pickFilm(pages []searchPage, title string, year int) (searchPage, bool) {
-	var titleHit searchPage
-	haveTitle := false
+	var fallback searchPage
+	haveFallback := false
 	for _, p := range pages {
 		if !isFilm(p.Description) {
 			continue
 		}
-		if year > 0 && descYear(p.Description) == year {
-			return p, true
+		// The TITLE has to agree, always. A year on its own is not identity:
+		// Wikipedia's search for "The Champion" returns "Chandu Champion",
+		// which is also a 2024 film, and for "Mia Moglie" it returns the 2022
+		// "Hey Sinamika" — both were accepted on the year alone and put a
+		// stranger's poster on the release.
+		if !titleRelated(title, p.Title) {
+			continue
 		}
-		if !haveTitle && sameTitle(title, p.Title) {
-			titleHit, haveTitle = p, true
+		py := pageYear(p)
+		if year > 0 && py > 0 {
+			if py == year {
+				return p, true
+			}
+			// Same title, different film. This is how a release named
+			// "Annie.2014" ended up wearing "Annie (1982 film)" and
+			// "I.See.You.2006" wore "I See You (2019 film)".
+			continue
+		}
+		// One side does not state a year, so the title is all there is.
+		if !haveFallback {
+			fallback, haveFallback = p, true
 		}
 	}
-	return titleHit, haveTitle
+	return fallback, haveFallback
+}
+
+// titleRelated is sameTitle plus the containment a real match needs.
+//
+// Strict equality alone loses correct matches: a release named "Insurgent"
+// is Wikipedia's "The Divergent Series: Insurgent", and "Nirnayam Telugu" is
+// "Nirnayam". Containment alone is too loose — "Dog" is inside "Dogville".
+// So containment is allowed only when the shorter side is long enough to be
+// an identity rather than a common word.
+func titleRelated(release, article string) bool {
+	if sameTitle(release, article) {
+		return true
+	}
+	a := normTitle(release)
+	b := normTitle(reParenQualifier.ReplaceAllString(article, ""))
+	if a == "" || b == "" {
+		return false
+	}
+	short, long := a, b
+	if len(short) > len(long) {
+		short, long = long, short
+	}
+	const minContained = 8
+	return len(short) >= minContained && strings.Contains(long, short)
 }
 
 var (
@@ -509,6 +554,24 @@ func isFilm(desc string) bool {
 		return false
 	}
 	return reFilmDesc.MatchString(desc)
+}
+
+// pageYear is the film's year from wherever the page states it.
+//
+// The description usually leads with it ("2022 Indian Assamese-language film"),
+// but not always — "Annie (1982 film)" is described as "1982 American musical
+// film directed by John Huston" on some revisions and simply "American musical
+// film" on others. When the description is silent the DISAMBIGUATOR still says
+// it, and reading only the description is what let a release named "Annie.2014"
+// match the 1982 film: no year found meant no year to disagree with.
+func pageYear(p searchPage) int {
+	if y := descYear(p.Description); y > 0 {
+		return y
+	}
+	if m := reParenQualifier.FindString(p.Title); m != "" {
+		return descYear(m)
+	}
+	return 0
 }
 
 // descYear reads the year out of a description like "2022 film by …".
