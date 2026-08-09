@@ -3,6 +3,7 @@ package tvmaze
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -159,8 +160,10 @@ func TestRequestsAreSpacedOut(t *testing.T) {
 	defer srv.Close()
 
 	s := New(srv.URL)
-	for i := 0; i < 3; i++ {
-		if _, _, err := s.Search(context.Background(), "Show.S01E01"); err != nil {
+	// DISTINCT series, because the same one is answered from cache and would
+	// make no request at all — see TestOneRequestPerSeries.
+	for _, title := range []string{"Alpha.S01E01", "Beta.S01E01", "Gamma.S01E01"} {
+		if _, _, err := s.Search(context.Background(), title); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -172,6 +175,77 @@ func TestRequestsAreSpacedOut(t *testing.T) {
 			t.Errorf("requests %d and %d were %dms apart, want >= %dms",
 				i-1, i, gap, int64(minInterval/1e6))
 		}
+	}
+}
+
+// The job asks per RELEASE; TVmaze answers per SERIES. On the reference index
+// that is 87,768 questions with 6,797 distinct answers, and at the 600ms
+// self-throttle the difference is 68 minutes against 14.6 hours.
+func TestOneRequestPerSeries(t *testing.T) {
+	var searches, images int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/images") {
+			images++
+			_ = json.NewEncoder(w).Encode([]any{})
+			return
+		}
+		searches++
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": 7, "name": "Gullak"})
+	}))
+	defer srv.Close()
+
+	s := New(srv.URL)
+	// Twelve episodes across two seasons — one show.
+	for i := 1; i <= 12; i++ {
+		title := fmt.Sprintf("Gullak.S%02dE%02d.1080p.WEB-DL", 1+i%2, i)
+		e, ok, err := s.Search(context.Background(), title)
+		if err != nil || !ok {
+			t.Fatalf("%s: ok=%v err=%v", title, ok, err)
+		}
+		if e.Title != "Gullak" {
+			t.Fatalf("%s: cached entry came back as %q", title, e.Title)
+		}
+	}
+	if searches != 1 {
+		t.Errorf("made %d searches for one series, want 1", searches)
+	}
+	if images != 1 {
+		t.Errorf("made %d image calls for one series, want 1", images)
+	}
+}
+
+// A miss is an answer too. Without caching it, every unmatchable release name
+// re-asks forever — and unmatchable names are what a crawler produces most of.
+func TestMissesAreRememberedButFailuresAreNot(t *testing.T) {
+	var hits int
+	status := http.StatusNotFound
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.WriteHeader(status)
+	}))
+	defer srv.Close()
+
+	s := New(srv.URL)
+	for i := 0; i < 3; i++ {
+		if _, ok, err := s.Search(context.Background(), "Nonesuch.S01E01"); ok || err != nil {
+			t.Fatalf("ok=%v err=%v", ok, err)
+		}
+	}
+	if hits != 1 {
+		t.Errorf("asked %d times about a known miss, want 1", hits)
+	}
+
+	// A 429 says nothing about the title. Caching one would turn a transient
+	// blip into a permanent hole in the catalogue.
+	status = http.StatusTooManyRequests
+	hits = 0
+	for i := 0; i < 2; i++ {
+		if _, _, err := s.Search(context.Background(), "Ratelimited.S01E01"); err == nil {
+			t.Fatal("expected an error on 429")
+		}
+	}
+	if hits != 2 {
+		t.Errorf("made %d requests after a 429, want 2 — a rate limit must not be cached", hits)
 	}
 }
 

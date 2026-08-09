@@ -58,6 +58,26 @@ type Source struct {
 	// comment on why politeness is this source's own job.
 	mu   sync.Mutex
 	last time.Time
+
+	// seen caches one lookup per SERIES name, because the job asks per
+	// RELEASE. 87,768 TV releases on the reference index reduce to 6,797
+	// distinct series — a 13x difference, and at the 600ms self-throttle that
+	// is 68 minutes of requests instead of 14.6 hours.
+	//
+	// Misses are cached too, as a zero entry. Without that, every unmatchable
+	// release name re-asks TVmaze forever, and unmatchable names are the ones
+	// a crawler produces most of.
+	//
+	// Process-lifetime and unbounded by design: the key space is distinct
+	// series names, the job is idempotent, and a restart simply re-warms it.
+	cacheMu sync.RWMutex
+	seen    map[string]cached
+}
+
+// cached is one remembered lookup. ok=false records a miss.
+type cached struct {
+	entry catalog.CatalogEntry
+	ok    bool
 }
 
 var _ catalog.MetadataSource = (*Source)(nil)
@@ -70,6 +90,7 @@ func New(baseURL string) *Source {
 	return &Source{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
 		http:    &http.Client{Timeout: 20 * time.Second},
+		seen:    map[string]cached{},
 	}
 }
 
@@ -206,6 +227,12 @@ func (s *Source) Search(ctx context.Context, query string) (catalog.CatalogEntry
 	if q.Title == "" {
 		return catalog.CatalogEntry{}, false, nil
 	}
+	// The cache key is the parsed SERIES name, not the release name — every
+	// episode of a show asks the same question, and the answer is the show.
+	key := strings.ToLower(q.Title)
+	if c, hit := s.lookup(key); hit {
+		return c.entry, c.ok, nil
+	}
 	if err := s.wait(ctx); err != nil {
 		return catalog.CatalogEntry{}, false, err
 	}
@@ -230,6 +257,10 @@ func (s *Source) Search(ctx context.Context, query string) (catalog.CatalogEntry
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
+		// A definite "no such series" — worth remembering. The cases below are
+		// not: a 429 or a transport error says nothing about this title, and
+		// caching one would turn a blip into a permanent hole.
+		s.remember(key, catalog.CatalogEntry{}, false)
 		return catalog.CatalogEntry{}, false, nil
 	case http.StatusTooManyRequests:
 		// Say so plainly. A keyless service throttles by IP, so this is the one
@@ -244,6 +275,7 @@ func (s *Source) Search(ctx context.Context, query string) (catalog.CatalogEntry
 		return catalog.CatalogEntry{}, false, fmt.Errorf("tvmaze json: %w", err)
 	}
 	if sh.ID == 0 {
+		s.remember(key, catalog.CatalogEntry{}, false)
 		return catalog.CatalogEntry{}, false, nil
 	}
 	e := s.toEntry(sh)
@@ -252,7 +284,26 @@ func (s *Source) Search(ctx context.Context, query string) (catalog.CatalogEntry
 	// failure here must not lose the match. Errors are dropped rather than
 	// returned for exactly that reason.
 	s.addWideArt(ctx, sh.ID, &e)
+	s.remember(key, e, true)
 	return e, true, nil
+}
+
+// lookup reads the series cache.
+func (s *Source) lookup(key string) (cached, bool) {
+	s.cacheMu.RLock()
+	defer s.cacheMu.RUnlock()
+	c, ok := s.seen[key]
+	return c, ok
+}
+
+// remember records a settled answer — a match or a definite miss.
+func (s *Source) remember(key string, e catalog.CatalogEntry, ok bool) {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if s.seen == nil {
+		s.seen = map[string]cached{}
+	}
+	s.seen[key] = cached{entry: e, ok: ok}
 }
 
 // image is one entry from /shows/{id}/images.
