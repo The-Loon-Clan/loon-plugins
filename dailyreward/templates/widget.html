@@ -1,21 +1,86 @@
-<div class="card">
+<div class="card" data-dailyreward>
   <div class="card-body">
     <h2 class="card-title mb-1" style="font-size:1.25rem;">Daily reward</h2>
     {{if .Claimed}}
-      <p class="text-muted small mb-2">Claimed today &mdash; come back tomorrow to keep your streak.</p>
+      <p class="text-muted small mb-2" data-dr-message>Claimed today &mdash; come back tomorrow to keep your streak.</p>
     {{else}}
-      <p class="text-muted small mb-2">Claim today's reward for <strong>+{{.Reward}}</strong> points.</p>
+      <p class="text-muted small mb-2" data-dr-message>Claim today's reward for <strong>+{{.Reward}}</strong> points.</p>
     {{end}}
     <div class="d-flex gap-3 small text-muted mb-2">
-      <span>Streak <strong>{{.Streak}}</strong></span>
-      <span>Best <strong>{{.Longest}}</strong></span>
-      <span>Claims <strong>{{.Total}}</strong></span>
+      <span>Streak <strong data-dr-streak>{{.Streak}}</strong></span>
+      <span>Best <strong data-dr-longest>{{.Longest}}</strong></span>
+      <span>Claims <strong data-dr-total>{{.Total}}</strong></span>
     </div>
     {{if not .Claimed}}
-    <form method="post" action="/plugin/dailyreward/claim">
+    <form method="post" action="/plugin/dailyreward/claim" data-dr-form>
       {{.Captcha}}
       <button class="btn btn-primary btn-sm mt-2" type="submit">Claim +{{.Reward}} points</button>
     </form>
     {{end}}
   </div>
 </div>
+
+{{/* Claim in place.
+
+     The form POST still works on its own — this only intercepts submit when
+     JavaScript runs, and the handler answers a redirect to anyone who does not
+     ask for JSON. That matters here: the widget is rendered on the home page,
+     and a redirect for a one-field state change threw the reader back to the
+     top of the page every time they claimed.
+
+     Vanilla and inline because the site has no framework and no build step.
+     The whole form is sent as FormData rather than a hand-built body, so the
+     captcha's hidden field goes with it without this script knowing it
+     exists. */}}
+<script>
+(function () {
+  var root = document.currentScript.previousElementSibling;
+  if (!root) return;
+  var form = root.querySelector('[data-dr-form]');
+  if (!form) return;
+
+  form.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var button = form.querySelector('button[type=submit]');
+    if (button) { button.disabled = true; }
+
+    fetch(form.action, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'fetch' },
+      body: new FormData(form),
+      credentials: 'same-origin'
+    })
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+      .then(function (res) {
+        var msg = root.querySelector('[data-dr-message]');
+        if (!res.ok) {
+          if (msg) { msg.textContent = (res.body && res.body.error) || 'Could not claim right now.'; }
+          if (button) { button.disabled = false; }
+          return;
+        }
+        var set = function (sel, v) {
+          var el = root.querySelector(sel);
+          if (el && v !== undefined && v !== null) { el.textContent = v; }
+        };
+        set('[data-dr-streak]', res.body.streak);
+        set('[data-dr-longest]', res.body.longest);
+        set('[data-dr-total]', res.body.total);
+        if (msg) {
+          // claimed=false means today's was already taken — say that rather
+          // than congratulate someone for a claim that did not happen.
+          msg.textContent = res.body.claimed
+            ? 'Claimed — come back tomorrow to keep your streak.'
+            : 'Today’s reward has already been claimed.';
+        }
+        form.remove();
+      })
+      .catch(function () {
+        // The network failed, not the claim. Re-enable so the reader can try
+        // again, and leave the numbers alone rather than inventing them.
+        var msg = root.querySelector('[data-dr-message]');
+        if (msg) { msg.textContent = 'Could not reach the server. Try again.'; }
+        if (button) { button.disabled = false; }
+      });
+  });
+})();
+</script>

@@ -80,22 +80,44 @@ func (p *Plugin) renderProfileStreak(c *gin.Context) (template.HTML, error) {
 	return template.HTML(buf.String()), nil
 }
 
+// wantsJSON reports whether the caller is the widget's fetch() rather than a
+// browser submitting the form.
+//
+// The widget sets X-Requested-With explicitly instead of relying on Accept,
+// because a browser's form POST also sends an Accept header that lists
+// several types, and matching on it would turn the no-JS path into JSON the
+// user would be shown as a page of text.
+func wantsJSON(c *gin.Context) bool {
+	return c.GetHeader("X-Requested-With") == "fetch"
+}
+
 func (p *Plugin) claim(c *gin.Context) {
+	// finish answers in whichever dialect the caller asked for: JSON for the
+	// widget's fetch, a redirect for a plain form POST. Every exit below goes
+	// through it, so the two paths cannot drift.
+	finish := func(status int, payload gin.H, redirect string) {
+		if wantsJSON(c) {
+			c.JSON(status, payload)
+			return
+		}
+		c.Redirect(http.StatusSeeOther, redirect)
+	}
+
 	u, ok := p.core.Auth.CurrentUser(c)
 	if !ok {
-		c.Redirect(http.StatusSeeOther, "/login")
+		finish(http.StatusUnauthorized, gin.H{"error": "sign in to claim"}, "/login")
 		return
 	}
 	if p.captcha != nil {
 		if err := p.captcha.Verify(c.Request.Context(), c.PostForm("cf-turnstile-response"), c.ClientIP()); err != nil {
-			c.Redirect(http.StatusSeeOther, "/")
+			finish(http.StatusBadRequest, gin.H{"error": "captcha failed"}, "/")
 			return
 		}
 	}
 	streak, reward, claimed, err := p.st.Claim(c.Request.Context(), u.ID, today(), yesterday())
 	if err != nil {
 		p.core.LoggerFor("dailyreward").Error("claim", "err", err)
-		c.Redirect(http.StatusSeeOther, "/")
+		finish(http.StatusInternalServerError, gin.H{"error": "could not claim right now"}, "/")
 		return
 	}
 	if claimed {
@@ -119,7 +141,21 @@ func (p *Plugin) claim(c *gin.Context) {
 			Body:  fmt.Sprintf("You earned %d points (streak %d).", reward, streak),
 		})
 	}
-	c.Redirect(http.StatusSeeOther, "/")
+	// The widget redraws itself from these; the totals come back from the same
+	// place the template reads them, so a claim shows the same numbers a reload
+	// would. claimed=false means somebody already took today's — not an error,
+	// and the widget says so rather than pretending it worked.
+	st, err := p.st.Get(c.Request.Context(), u.ID)
+	if err != nil {
+		p.core.LoggerFor("dailyreward").Error("state after claim", "err", err)
+	}
+	finish(http.StatusOK, gin.H{
+		"claimed": claimed,
+		"streak":  streak,
+		"reward":  reward,
+		"longest": st.Longest,
+		"total":   st.TotalClaims,
+	}, "/")
 }
 
 // StatusExtension is the registry key the per-user claim state is published
