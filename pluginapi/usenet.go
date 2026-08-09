@@ -507,6 +507,18 @@ type CatalogStats struct {
 	Releases       int64           `json:"releases"`
 	TotalSizeBytes int64           `json:"total_size_bytes"`
 	Health         HealthBreakdown `json:"health"`
+
+	// PerGroup is newsgroup name -> releases the sink holds from it.
+	// OPTIONAL: nil is a host that does not answer it, and the dashboard
+	// then omits the per-group column rather than printing zeros.
+	//
+	// Printing zeros is the failure this exists to end. In sink=host mode
+	// the plugin's own nzbs table is empty, so every group's count read 0 —
+	// which is also what a group that has produced nothing reads, and the
+	// two are the opposite diagnosis. A fossil group crawls every pass and
+	// updates last_crawl exactly like a healthy one; its release count is
+	// the only thing that separates them.
+	PerGroup map[string]int64 `json:"per_group,omitempty"`
 }
 
 // CatalogStatsProvider is what the host registers under UsenetCatalogStatsName.

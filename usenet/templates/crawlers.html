@@ -201,9 +201,11 @@
         <table class="table table-dark table-sm align-middle">
             <thead><tr>
                 <th>Group</th><th style="min-width:240px">Coverage</th>
-                {{/* Per-group release counts read the plugin's own table, which
-                     host-sink mode leaves empty — hide rather than show 0s. */}}
-                {{if not $.HostSink}}<th class="text-end">NZBs</th>{{end}}<th class="text-end">Staged</th>
+                {{/* Per-group release counts. The plugin's own table answers in
+                     internal mode; in host mode the catalog-stats capability does,
+                     from an hourly cache. Neither available -> the column is hidden,
+                     because a column of zeros reads as "every group is dead". */}}
+                {{if $.HaveGroupCounts}}<th class="text-end" {{if $.GroupCountsCached}}title="from the host's hourly stats cache"{{end}}>NZBs{{if $.GroupCountsCached}} <span class="text-muted" style="font-weight:400">~1h</span>{{end}}</th>{{end}}<th class="text-end">Staged</th>
                 <th>Last crawl</th>
             </tr></thead>
             <tbody>
@@ -233,6 +235,8 @@
                                  say which of the two the number means. */}}
                             <span class="cov-pct" title="share of the server's retention fetched by THIS crawler; excludes anything indexed before it took over">{{.CoveredFmt}} crawled</span>
                         </div>
+                        {{else if .EmptyOnServer}}
+                        <div class="small text-warning" title="the provider answered with an empty group (high &lt; low) — there is nothing here to fetch, however often it is crawled">provider reports the group empty</div>
                         {{else if .NoCoverage}}
                         <div class="small text-muted" title="no fetched ranges recorded for this group on this backbone">no coverage recorded</div>
                         {{else}}
@@ -248,7 +252,7 @@
                             {{if .NewFmt}}<span class="text-info">(+{{.NewFmt}} new)</span>{{end}}
                         </div>
                     </td>
-                    {{if not $.HostSink}}<td class="text-end">{{.NZBs}}</td>{{end}}
+                    {{if $.HaveGroupCounts}}<td class="text-end">{{if .NZBs}}{{.NZBs}}{{else}}<span class="text-muted" title="this group has never produced a release">0</span>{{end}}</td>{{end}}
                     <td class="text-end">{{.Staged}}</td>
                     <td class="small text-muted">{{.LastCrawl}}</td>
                 </tr>

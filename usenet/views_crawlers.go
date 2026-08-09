@@ -331,6 +331,13 @@ type crawlerGroupVM struct {
 	// strip can say so in words instead of rendering an empty track that
 	// looks identical to "fetched nothing yet" and to "never asked".
 	NoCoverage bool
+	// EmptyOnServer is the provider's "this group holds nothing" answer:
+	// NNTP reports an empty group as high < low, which arrives here as the
+	// nonsense-looking pair 2/1. Said in words, because the numbers alone
+	// would render as coverage over an interval that does not exist — and
+	// because a fossil group is otherwise indistinguishable from a healthy
+	// one here: it is crawled every pass, so its last_crawl is always fresh.
+	EmptyOnServer bool
 	// The legacy-format coverage line: "↩ back-at · ↑ fwd-at (+N new)".
 	FwdAt        string // forward watermark, date+time
 	BackAt       string // backfill watermark, date+time
@@ -399,6 +406,26 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		p.reportErr(ctx, "usenet/coverage-ranges", rerr)
 	}
 
+	// Catalog stats feed Index Stats AND the per-group release column, so
+	// the fetch happens before the group loop that consumes it.
+	var cs *pluginapi.CatalogStats
+	if p.cfg.Sink == SinkHost {
+		if prov, ok := pluginapi.LookupCatalogStats(p.core); ok {
+			if v, err := prov.CatalogStats(ctx); err == nil {
+				cs = &v
+			} else {
+				p.core.Errors.Report(ctx, "usenet/catalog-stats", err)
+			}
+		}
+	}
+	// hostCounts is nil in internal mode (the store's own join already
+	// answered) and nil on a host serving no per-group census — the column
+	// then hides rather than printing a column of zeros.
+	var hostCounts map[string]int64
+	if cs != nil {
+		hostCounts = cs.PerGroup
+	}
+
 	var backbones []backboneVM
 	byBackbone := map[string]int{}
 	for _, g := range stats.Groups {
@@ -415,6 +442,14 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		}
 		if !g.BackfillDone && g.BackWatermark > g.ServerLow {
 			vm.RemainingFmt = fmtComma(g.BackWatermark - g.ServerLow)
+		}
+		// The provider's empty-group answer, kept as a fact rather than
+		// arithmetic: any span over [low..high] is meaningless when high < low.
+		vm.EmptyOnServer = g.ServerHigh < g.ServerLow
+		// In sink=host mode the releases live in the host's table, so the
+		// count the store joined is structurally 0 for every group.
+		if hostCounts != nil {
+			vm.NZBs = int(hostCounts[g.Name])
 		}
 		if runs := ranges[coverKey{g.Backbone, g.Name}]; len(runs) > 0 {
 			cells := coverageCells(runs, g.ServerLow, g.ServerHigh, coverCellCount)
@@ -454,19 +489,6 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 			Size: fmtBytes(b.Size), Created: fmtTime(b.At),
 		}
 	}
-	// Catalog-stats fetch feeds Index Stats in host mode (internal mode reads
-	// the plugin's own tables inside the VM). Per-job status, logs, and the
-	// Builder/health panels moved to the Jobs tab (views_jobs.go).
-	var cs *pluginapi.CatalogStats
-	if p.cfg.Sink == SinkHost {
-		if prov, ok := pluginapi.LookupCatalogStats(p.core); ok {
-			if v, err := prov.CatalogStats(ctx); err == nil {
-				cs = &v
-			} else {
-				p.core.Errors.Report(ctx, "usenet/catalog-stats", err)
-			}
-		}
-	}
 	// Distinct group names, not len(stats.Groups): stats() emits one row per
 	// (backbone, group), so the row count double-counts every group a second
 	// backbone carries — the Index Stats card and status.json's active_groups
@@ -482,10 +504,16 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		"Errors":      errorVMs(tv.Errors),
 		"BackfillETA": eta,
 		"Fleet":       p.fleetVMs(ctx, tv.Fleet), "Workers": p.workerVMs(ctx),
-		"IndexStats":  p.indexStatsWithTel(ctx, len(names), cs, tv),
-		"HostSink":    p.cfg.Sink == SinkHost,
-		"RecentNzbs":  recentNzbs,
-		"WorkerStale": tv.Stale, "WorkerLastSeen": fmtTime(tv.UpdatedAt),
+		"IndexStats": p.indexStatsWithTel(ctx, len(names), cs, tv),
+		"HostSink":   p.cfg.Sink == SinkHost,
+		// Whether the per-group release column carries real numbers:
+		// always in internal mode, in host mode only when the capability
+		// answered. Zeros indistinguishable from "not answered" are what
+		// sent an operator to the database to ask if a group was dead.
+		"HaveGroupCounts":   p.cfg.Sink != SinkHost || hostCounts != nil,
+		"GroupCountsCached": p.cfg.Sink == SinkHost && hostCounts != nil,
+		"RecentNzbs":        recentNzbs,
+		"WorkerStale":       tv.Stale, "WorkerLastSeen": fmtTime(tv.UpdatedAt),
 		"Msg": msg, "Err": errMsg,
 	})
 }

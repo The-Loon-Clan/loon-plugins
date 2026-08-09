@@ -223,10 +223,18 @@ Extensions CONSUMED (`Core.Lookup`):
   `ClearHealthRecheckRequest`, for the one check outcome that writes neither a
   verdict nor a touch — see "How the health sweep gives up" below.
 - `pluginapi.UsenetCatalogStatsName` — optional, `sink: host` only: catalog
-  totals + the health breakdown for the dashboard's Index Stats and NZB Health
-  cards (in host mode the releases and verdicts live in the host's domain,
-  invisible to the plugin's tables). A host should serve it from CACHED
-  numbers; absent, those cards degrade to empty.
+  totals, the health breakdown, and the per-group release census, for the
+  dashboard's Index Stats and NZB Health cards and the Newsgroups table's
+  NZBs column (in host mode the releases and verdicts live in the host's
+  domain, invisible to the plugin's tables). A host should serve it from
+  CACHED numbers; absent, those cards degrade to empty and the per-group
+  column hides. `CatalogStats.PerGroup` is separately optional — nil means
+  "this host does not answer", which hides the column, where an empty map
+  means "answered: every group has zero" and would declare the fleet dead.
+  A group absent from the map has produced nothing, which is the point: a
+  fossil group is crawled every pass like any other, so a fresh `last_crawl`
+  says nothing, and the release count is the only thing that separates
+  "quiet" from "dead".
 - `pluginapi.UsenetJunkSweepName` — optional: the host's stored-catalogue
   junk-sweep attribution counters, shown as a third card on the Filters tab
   (ingest hits say what was dropped; the sweep says what got past ingest and

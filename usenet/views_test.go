@@ -676,3 +676,72 @@ func TestDiagnosticsRenderSeparatelyFromRules(t *testing.T) {
 		t.Error("an ungrouped stem rendered in the RULES table — that is the bug")
 	}
 }
+
+// The per-group release column is the difference between "this group is
+// quiet" and "this group has never produced anything" — and in sink=host
+// mode the plugin's own table cannot answer it, so the column used to be
+// hidden entirely. An operator watching a fossil group therefore saw a fresh
+// last_crawl every pass and no way to tell it apart from a healthy one, which
+// is exactly the question that reached the database instead of the page.
+func TestCrawlersRendersPerGroupCountsInHostMode(t *testing.T) {
+	tmpl, err := template.ParseFS(viewFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups := []crawlerGroupVM{
+		{Name: "alt.binaries.anime", NZBs: 4211, CoveredFmt: "62%", Cells: []int{3, 2}},
+		// The fossil: crawled every pass, nothing to show for it.
+		{Name: "alt.binaries.multimedia.anime.dialup", NZBs: 0, EmptyOnServer: true, LastCrawl: "08:52:14"},
+	}
+	render := func(data map[string]any) string {
+		base := map[string]any{
+			"Stats": pluginapi.IndexStats{}, "Groups": groups,
+			"Backbones": []backboneVM{{Name: "netnews", Groups: groups}},
+			"Jobs":      nil, "Builder": BuilderInfo{}, "Fleet": []providerVM{}, "Workers": []workerVM{},
+			"Health": healthVM{}, "Pass": passVM{}, "Backfill": passVM{}, "Errors": []errorVM{},
+			"Msg": "", "Err": "",
+		}
+		for k, v := range data {
+			base[k] = v
+		}
+		var buf bytes.Buffer
+		if err := tmpl.ExecuteTemplate(&buf, "crawlers.html", base); err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		return buf.String()
+	}
+
+	// Host sink WITH the capability answering: real counts, marked stale.
+	out := render(map[string]any{
+		"HostSink": true, "HaveGroupCounts": true, "GroupCountsCached": true,
+	})
+	for _, want := range []string{
+		">NZBs", "4211",
+		"~1h",                              // the count is an hourly cache, and says so
+		"provider reports the group empty", // the fossil's real diagnosis
+		"never produced a release",         // the zero is deliberate, not missing data
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("host-mode render missing %q", want)
+		}
+	}
+
+	// Host sink with NO capability: the column hides rather than printing a
+	// column of zeros, which reads as "every group is dead".
+	out = render(map[string]any{"HostSink": true, "HaveGroupCounts": false})
+	if strings.Contains(out, ">NZBs") {
+		t.Error("unanswerable per-group counts still rendered a NZBs column")
+	}
+	if !strings.Contains(out, "provider reports the group empty") {
+		t.Error("the empty-server state is independent of the count capability")
+	}
+
+	// Internal sink: the plugin's own join answers, with no staleness note.
+	out = render(map[string]any{"HostSink": false, "HaveGroupCounts": true, "GroupCountsCached": false})
+	if !strings.Contains(out, "4211") {
+		t.Error("internal-mode render lost the per-group count")
+	}
+	if strings.Contains(out, "~1h") {
+		t.Error("internal-mode counts are live; they must not claim an hourly cache")
+	}
+}
