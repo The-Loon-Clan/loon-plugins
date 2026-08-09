@@ -2,12 +2,20 @@ package seedlock
 
 import (
 	"context"
+	"embed"
+	"fmt"
+	"html/template"
 	"log"
 	"time"
+
+	"github.com/jmoiron/sqlx"
 
 	"github.com/the-loon-clan/loon-plugins/tracker"
 	"github.com/the-loon-clan/loon/core"
 )
+
+//go:embed templates/*.html
+var tmplFS embed.FS
 
 func init() {
 	core.RegisterPlugin("seedlock", func() core.Plugin { return &Plugin{} })
@@ -65,6 +73,34 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if err := c.Register(ExtensionName, p); err != nil {
 		return err
 	}
+	// The member page the refusal message points at. Mounted only where a
+	// human can see it, and only when the host wired a renderer — a rule that
+	// tells somebody to "clear the lock on the site" while offering no such
+	// page sends them looking for something that is not there.
+	if c.Process != "api" {
+		if pageReady() {
+			tmpl, err := template.ParseFS(tmplFS, "templates/*.html")
+			if err != nil {
+				return fmt.Errorf("seedlock: parsing templates: %w", err)
+			}
+			var db *sqlx.DB
+			if c.Storage != nil {
+				db = c.Storage.DB()
+			}
+			h := NewHandlers(p, c.Auth, db)
+			h.SetTemplates(tmpl)
+			if c.Router != nil {
+				g := c.Router.Engine().Group("/seedlock")
+				g.Use(c.Auth.RequireUser(core.RoleUser)...)
+				g.GET("", h.ClaimsPage)
+				g.POST("/clear", h.ClearAction)
+			}
+		} else {
+			log.Printf("seedlock: WARNING no RenderPage seam wired — /seedlock is NOT mounted, " +
+				"but the refusal a client shows still tells members to clear the lock there")
+		}
+	}
+
 	tracker.SetAnnounceGuard(p.admit)
 	log.Printf("seedlock: ARMED — one host per torrent, claim lapses %s after the last announce, identified by %s",
 		p.cfg.LockWindow(), p.cfg.IdentifyBy)

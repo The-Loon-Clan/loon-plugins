@@ -1,0 +1,56 @@
+{{/* A member's seeding locks.
+
+     The page the refusal message points at, so it has to explain the rule as
+     well as list the locks — somebody arrives here confused, having been told
+     by their torrent client that they cannot seed their own download. */}}
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">Seeding locks</h2>
+    </header>
+    <div class="panel__body">
+        <p class="text-muted small">
+            Each torrent may be seeded from one machine at a time. The first client to
+            announce claims it, and the claim lasts {{.WindowText}} past its last announce
+            — so stopping a torrent, or simply leaving it, frees it on its own.
+            Clear one here if you have moved machines and do not want to wait.
+        </p>
+        {{if .Message}}<p class="alert alert-info">{{.Message}}</p>{{end}}
+    </div>
+</section>
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            Locked to a host <span class="panel__grouping">({{len .Rows}})</span>
+        </h2>
+    </header>
+    <div class="panel__body panel__body--flush">
+        {{if .Rows}}
+        <table class="data-table">
+            <thead>
+                <tr><th>Torrent</th><th>Host</th><th class="data-table__nowrap">Action</th></tr>
+            </thead>
+            <tbody>
+                {{range .Rows}}
+                <tr>
+                    <td>{{.Name}}</td>
+                    <td class="text-muted small">{{.Host}}</td>
+                    <td class="data-table__nowrap">
+                        <form method="post" action="/seedlock/clear" style="display:inline">
+                            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+                            <input type="hidden" name="info_hash" value="{{.InfoHash}}">
+                            <button class="btn btn-sm btn-outline-primary" type="submit">Clear</button>
+                        </form>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <p class="text-muted">
+            Nothing is locked. A torrent appears here once one of your clients starts seeding it.
+        </p>
+        {{end}}
+    </div>
+</section>
