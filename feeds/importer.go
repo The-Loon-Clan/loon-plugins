@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -115,6 +116,14 @@ func (p *Plugin) runImport(ctx context.Context) {
 			msg := fmt.Sprintf("panic: %v", r)
 			job.SetError(msg)
 			p.status.runFinished(nil, msg)
+			// This recover is load-bearing on the manual-trigger path (a bare
+			// goroutine — an unrecovered panic there kills the process), but it
+			// also hides the panic from ServiceLoop's PanicSink on the
+			// scheduled path. So persist it here, stack included: without this
+			// a recurring parser panic shows "panic: ..." on /admin/jobs while
+			// /admin/errors stays empty and no stack exists anywhere.
+			p.core.Errors.Report(ctx, "feeds/import-panic",
+				fmt.Errorf("%s\n%s", msg, debug.Stack()))
 		}
 	}()
 
@@ -133,9 +142,18 @@ func (p *Plugin) runImport(ctx context.Context) {
 	// Fetch from all configured feeds.
 	var allItems []item
 	poll := func(source, label string, fetch func(context.Context) ([]item, error)) {
+		if ctx.Err() != nil {
+			return // shutting down — don't start another fetch
+		}
 		job.SetProgress("Fetching %s...", label)
 		items, err := fetch(ctx)
 		if err != nil {
+			if ctx.Err() != nil {
+				// Shutdown cancelled the fetch mid-flight. Not a source-health
+				// fact — recording it would show "context canceled" as the
+				// source's last error after every deploy.
+				return
+			}
 			job.Log("%s error: %v", label, err)
 			p.status.pollFailed(source, err)
 			return
@@ -169,6 +187,16 @@ func (p *Plugin) runImport(ctx context.Context) {
 	// Dedup against existing requests.
 	existing, err := p.deps.RecentRequestKeys(ctx, 30)
 	if err != nil {
+		if ctx.Err() != nil {
+			// SIGTERM landed between polling and the dedup query. Close out
+			// as an interruption, not an error — otherwise every deploy whose
+			// shutdown hits this window records a red "context canceled" run
+			// and sends an operator chasing a DB failure that never happened.
+			job.Log("Import interrupted by shutdown before dedup")
+			job.SetIdle(time.Now().Add(defaultInterval))
+			p.status.runFinished(&totals, "interrupted by shutdown")
+			return
+		}
 		msg := fmt.Sprintf("get existing keys: %v", err)
 		job.SetError(msg)
 		p.status.runFinished(nil, msg)
