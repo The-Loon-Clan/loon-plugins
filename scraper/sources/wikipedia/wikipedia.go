@@ -346,9 +346,13 @@ func (s *Source) Search(ctx context.Context, query string) (catalog.CatalogEntry
 var wikidataProps = []struct{ prop, namespace string }{
 	{"P345", "imdb"},
 	{"P4947", "tmdb"},
-	{"P3302", "letterboxd"},
-	{"P1258", "rottentomatoes"},
-	{"P1712", "metacritic"},
+	{"P1258", "rottentomatoes"}, // "m/matrix" — already a path
+	{"P1712", "metacritic"},     // "movie/the-matrix" — likewise
+	// P3302 (Letterboxd film ID) is deliberately absent. Its value is a bare
+	// number and letterboxd.com/film/<number>/ 404s for every film checked —
+	// the slug is what that route wants. Letterboxd is still linkable, via its
+	// /tmdb/<id>/ route off the TMDB id above, so the button is derived at
+	// render rather than stored as an id we cannot turn into a URL.
 }
 
 // addCrossIDs attaches other databases' ids to a matched film.

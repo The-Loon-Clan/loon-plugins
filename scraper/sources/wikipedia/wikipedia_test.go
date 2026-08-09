@@ -243,10 +243,17 @@ func TestSearchBuildsAnEntry(t *testing.T) {
 	// put IMDb and Letterboxd buttons on a release page; without them a film
 	// links only back to Wikipedia.
 	want := map[string]string{
-		"wikipedia":  "Everything_Everywhere_All_at_Once",
-		"imdb":       "tt6710474",
-		"tmdb":       "545611",
-		"letterboxd": "179505",
+		"wikipedia": "Everything_Everywhere_All_at_Once",
+		"imdb":      "tt6710474",
+		"tmdb":      "545611",
+	}
+	// Letterboxd (P3302) is deliberately NOT collected: its value is a bare
+	// number and letterboxd.com/film/<number>/ 404s. The host derives that
+	// button from the TMDB id instead.
+	for _, x := range e.External {
+		if x.Namespace == "letterboxd" {
+			t.Errorf("collected an unlinkable Letterboxd id: %+v", x)
+		}
 	}
 	got := map[string]string{}
 	for _, x := range e.External {
