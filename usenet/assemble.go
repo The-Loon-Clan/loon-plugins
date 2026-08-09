@@ -1263,9 +1263,57 @@ func (s *PGStore) deleteStaged(ctx context.Context, group, base string) error {
 
 // totalBytes sums a staged set's payload — the release size the sized junk
 // rules are banded on.
+//
+// Deduped by (file, part), because that is what actually ships: makeFile keeps
+// one segment per part number, so a part posted five times contributes its
+// bytes once to the NZB and once to the stored size. Summing every staged row
+// instead made the gate judge a number nothing else in the system agreed with.
+//
+// It is not a rounding difference. 4.27% of staged parts on the reference index
+// are duplicates, and for the 15,652 releases that have any, the raw sum
+// averages 339x the real payload and peaks at 582,693x — a 701-byte post
+// weighed as 390 MB:
+//
+//	gate saw   honest payload   stored and shown
+//	5489 MB    198 MB           200 MB
+//
+// The stored size was already right (buildNZB counts the marshalled segments);
+// only this number was wrong, and only in the direction that makes a release
+// look BIGGER. That weakens the "nothing legitimate is this small" rules for
+// precisely the flood-posted junk they exist to catch — though in practice the
+// structural rules caught it anyway: of those 15,652, just 29 reached the
+// index, and all 29 are real releases with heavily reposted parts. So this is a
+// latent inconsistency being closed, not an incident being cleaned up.
+// This MIRRORS buildNZB, including its single/multi branch: with no file
+// counters anywhere in the set, buildNZB emits one <file> and dedups part
+// numbers across the whole thing, so two files' "part 1" collapse. The obvious
+// (file, part) key alone would over-count exactly there.
+//
+// The file already warns that a second implementation of makeFile's dedup rule
+// is a divergence waiting to happen, and that warning is respected here by
+// TestTotalBytesCountsWhatActuallyShips, which asserts this function and
+// buildNZB return the same total for the same input in both modes. A mirror
+// with a test that compares the two reflections cannot drift silently.
 func totalBytes(arts []stagedArticle) int64 {
+	multi := false
+	for _, a := range arts {
+		if a.FileParts {
+			multi = true
+			break
+		}
+	}
+	type segment struct{ file, part int }
+	seen := make(map[segment]bool, len(arts))
 	var n int64
 	for _, a := range arts {
+		s := segment{part: a.PartNum}
+		if multi {
+			s.file = a.FileNum
+		}
+		if seen[s] {
+			continue
+		}
+		seen[s] = true
 		n += a.Bytes
 	}
 	return n

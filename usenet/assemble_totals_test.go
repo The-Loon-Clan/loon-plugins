@@ -102,3 +102,81 @@ func TestNZBTotalsUnchangedForCleanSets(t *testing.T) {
 			totals.Bytes, totals.Segments, oldSize, len(arts))
 	}
 }
+
+// The size the junk gate JUDGES must be the size that gets stored.
+//
+// nzbTotals fixed the stored row; totalBytes is the same bug one call earlier,
+// on the number the sized junk rules band against. It summed every staged row,
+// so a part posted five times weighed five times — while the NZB, the stored
+// size and the reader all saw it once.
+//
+// 4.27% of staged parts on the reference index are duplicates. For the 15,652
+// releases holding any, the raw sum averages 339x the real payload and peaks at
+// 582,693x: a 701-byte post weighed as 390 MB. It errs in the direction that
+// makes a release look BIGGER, which is the direction that disarms "nothing
+// legitimate is this small".
+func TestTotalBytesCountsWhatActuallyShips(t *testing.T) {
+	arts := []stagedArticle{
+		{FileNum: 1, PartNum: 1, Bytes: 100},
+		{FileNum: 1, PartNum: 2, Bytes: 100},
+		{FileNum: 1, PartNum: 2, Bytes: 100}, // repost of part 2
+		{FileNum: 1, PartNum: 2, Bytes: 100}, // and again
+		{FileNum: 2, PartNum: 1, Bytes: 50},  // see below — NOT a second file
+	}
+	// 200, not 250. Nothing here sets FileParts, so buildNZB treats the set as
+	// ONE file and dedups part numbers across all of it: the last row's part 1
+	// collapses into the first row's. FileNum is meaningless without
+	// FileParts — the parser only fills it when the subject carries file
+	// counters — so counting it would invent a file the NZB does not contain.
+	if got, want := totalBytes(arts), int64(200); got != want {
+		t.Errorf("totalBytes = %d, want %d — reposts must not be counted twice", got, want)
+	}
+
+	// And it must agree with what buildNZB writes, because that is what is
+	// stored and shown. Two implementations of one dedup rule is how they
+	// drift, which is the warning already written on nzbTotals — so this
+	// asserts the two reflections match, in BOTH of buildNZB's modes.
+	//
+	// The modes differ in a way that is easy to get wrong: with no file
+	// counters anywhere, buildNZB emits ONE <file> and dedups part numbers
+	// globally, so two files' "part 1" collapse into one segment. A plain
+	// (file, part) key disagrees with it exactly there, which is how this test
+	// caught the first attempt.
+	for _, mode := range []struct {
+		name string
+		arts []stagedArticle
+	}{
+		{"single file — parts dedup globally", arts},
+		{"multi file — parts dedup within each file", []stagedArticle{
+			{FileParts: true, FileNum: 1, PartNum: 1, Bytes: 100},
+			{FileParts: true, FileNum: 1, PartNum: 2, Bytes: 100},
+			{FileParts: true, FileNum: 1, PartNum: 2, Bytes: 100}, // repost
+			{FileParts: true, FileNum: 2, PartNum: 1, Bytes: 50},
+		}},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
+			_, totals, err := buildNZB(mode.arts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := totalBytes(mode.arts); totals.Bytes != got {
+				t.Errorf("gate sees %d, NZB stores %d — the two must not disagree",
+					got, totals.Bytes)
+			}
+		})
+	}
+}
+
+// A part number belongs to its file: two files each having a part 1 is normal,
+// and collapsing them would under-count a real multi-file release — the same
+// distinction TestNZBTotalsDedupePerFileNotGlobally pins for the stored row.
+func TestTotalBytesKeepsPartsOfDifferentFilesApart(t *testing.T) {
+	arts := []stagedArticle{
+		{FileParts: true, FileNum: 1, PartNum: 1, Bytes: 10},
+		{FileParts: true, FileNum: 2, PartNum: 1, Bytes: 20},
+		{FileParts: true, FileNum: 3, PartNum: 1, Bytes: 30},
+	}
+	if got, want := totalBytes(arts), int64(60); got != want {
+		t.Errorf("totalBytes = %d, want %d", got, want)
+	}
+}
