@@ -46,6 +46,8 @@ var ErrNoLocalID = errors.New("wikipedia: no local id space (use Search)")
 
 const (
 	defaultBaseURL = "https://en.wikipedia.org"
+	// Cross-ids live on Wikidata, a different host from the articles.
+	defaultWikidataURL = "https://www.wikidata.org"
 	// minInterval paces this client. Wikimedia publishes no hard per-second cap
 	// for the REST API but asks for reasonable use, and this makes TWO calls
 	// per release across a catalogue of tens of thousands — the sort of volume
@@ -59,10 +61,33 @@ const (
 // Source is the Wikipedia metadata source for the "movie" domain.
 type Source struct {
 	baseURL string
-	http    *http.Client
+	// wikidataURL is separate because the cross-ids live on a DIFFERENT host
+	// from the articles. A field rather than a constant so a test can point it
+	// at a fake — hardcoding it made the suite call the live API, which is
+	// both slow and a test that fails when someone edits a Wikipedia page.
+	wikidataURL string
+	http        *http.Client
 
 	mu   sync.Mutex
 	last time.Time
+
+	// seen caches one lookup per FILM name, because the job asks per release.
+	// The saving is smaller than TVmaze's — 23,061 movie releases carry 13,862
+	// distinct films, so ~1.7x rather than 13x — but a film costs three calls
+	// here (search, summary, Wikidata) where a series costs two, so the two
+	// come out similar in wall-clock.
+	//
+	// Misses are cached too: Wikipedia has an article for almost everything,
+	// so "no page that is a film" is the COMMON answer, and re-asking it every
+	// sweep is most of the traffic this would otherwise generate.
+	cacheMu sync.RWMutex
+	seen    map[string]cached
+}
+
+// cached is one remembered lookup. ok=false records a miss.
+type cached struct {
+	entry catalog.CatalogEntry
+	ok    bool
 }
 
 var _ catalog.MetadataSource = (*Source)(nil)
@@ -73,9 +98,30 @@ func New(baseURL string) *Source {
 		baseURL = defaultBaseURL
 	}
 	return &Source{
-		baseURL: strings.TrimSuffix(baseURL, "/"),
-		http:    &http.Client{Timeout: 20 * time.Second},
+		baseURL:     strings.TrimSuffix(baseURL, "/"),
+		wikidataURL: defaultWikidataURL,
+		http:        &http.Client{Timeout: 20 * time.Second},
+		seen:        map[string]cached{},
 	}
+}
+
+// lookup reads the film cache.
+func (s *Source) lookup(key string) (cached, bool) {
+	s.cacheMu.RLock()
+	defer s.cacheMu.RUnlock()
+	c, ok := s.seen[key]
+	return c, ok
+}
+
+// remember records a settled answer — a match, or a definite "no film here".
+// Transport failures are never remembered: they say nothing about the title.
+func (s *Source) remember(key string, e catalog.CatalogEntry, ok bool) {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if s.seen == nil {
+		s.seen = map[string]cached{}
+	}
+	s.seen[key] = cached{entry: e, ok: ok}
 }
 
 // Domain returns the movie domain, at the same priority as the TMDB movie
@@ -111,7 +157,10 @@ var (
 	// REMASTERED.1080p" cut at 1080p left "The Matrix 1999 REMASTERED", and
 	// since the year was then no longer trailing it stayed in the title too —
 	// one missing word costing both the cut and the year.
-	reNoiseFrom = regexp.MustCompile(`(?i)\b(1080p|2160p|4k|720p|480p|web-?dl|web-?rip|bluray|blu-ray|brrip|bdrip|hdrip|dvdrip|dvdscr|hdtv|cam|telesync|remux|x26[45]|h\.?26[45]|hevc|avc|xvid|divx|aac\d?|ac3|dd[p5]|dts(-hd)?|truehd|atmos|multi|dual|repack|proper|internal|limited|extended|uncut|unrated|imax|hdr|sdr|10bit|remastered|restored|criterion|theatrical|anniversary|directors?.cut|final.cut|special.edition)\b`)
+	// The resolution list covers SD and the odd sizes too. It knew only
+	// 1080p/2160p/720p/480p, so "Kaali (2023) Tamil 1440p SF WEB-DL" cut at
+	// WEB-DL and searched Wikipedia for "Kaali (2023) Tamil 1440p SF".
+	reNoiseFrom = regexp.MustCompile(`(?i)\b(1080p|2160p|4320p|1440p|4k|8k|720p|576p|540p|480p|360p|240p|web-?dl|web-?rip|bluray|blu-ray|brrip|bdrip|hdrip|dvdrip|dvdscr|hdtv|cam|telesync|remux|x26[45]|h\.?26[45]|hevc|avc|xvid|divx|aac\d?|ac3|dd[p5]|dts(-hd)?|truehd|atmos|multi|dual|repack|proper|internal|limited|extended|uncut|unrated|imax|hdr|sdr|10bit|remastered|restored|criterion|theatrical|anniversary|directors?.cut|final.cut|special.edition)\b`)
 	reSpace     = regexp.MustCompile(`\s+`)
 	// A film's Wikipedia description reads "2022 film by …", "1997 television
 	// film", "2019 animated film". \bfilm\b and not a substring match, or
@@ -153,11 +202,26 @@ func ParseReleaseName(raw string) Query {
 	if ms := reYear.FindAllStringIndex(head, -1); len(ms) > 0 {
 		last := ms[len(ms)-1]
 		year, _ = strconv.Atoi(head[last[0]:last[1]])
-		// Only the trailing year is dropped from the title. A leading or
-		// embedded one is part of the name.
-		if strings.TrimSpace(head[last[1]:]) == "" {
+		// Only the TRAILING year is dropped from the title. A leading or
+		// embedded one is part of the name ("Blade Runner 2049", "2012").
+		//
+		// A BRACKETED year is different, and it is how 5,593 of the 24,223
+		// movie releases here are named: "Kaali (2023) Tamil 1440p SF WEB-DL".
+		// The bracket marks where the title ends, so everything after it goes
+		// regardless of what it is — which saves listing every language and
+		// streaming-platform tag that can sit between the year and the
+		// packaging, and saves guessing whether "English" is a language or the
+		// first word of "The English Patient".
+		switch {
+		case last[0] > 0 && last[1] < len(head) &&
+			(head[last[0]-1] == '(' || head[last[0]-1] == '[') &&
+			(head[last[1]] == ')' || head[last[1]] == ']'):
+			head = head[:last[0]-1]
+		case strings.Trim(head[last[1]:], " )]}") == "":
 			head = head[:last[0]]
 		}
+		// Drop a bracket or dash left dangling by the cut.
+		head = strings.TrimRight(head, " ([{-–—")
 	}
 	title := strings.Trim(reSpace.ReplaceAllString(head, " "), " -–—")
 	return Query{Title: title, Year: year}
@@ -234,6 +298,13 @@ func (s *Source) Search(ctx context.Context, query string) (catalog.CatalogEntry
 	if q.Title == "" {
 		return catalog.CatalogEntry{}, false, nil
 	}
+	// Keyed on title AND year: two releases of the same title from different
+	// years are different films, and the year is half of pickFilm's decision.
+	key := fmt.Sprintf("%s|%d", strings.ToLower(q.Title), q.Year)
+	if c, hit := s.lookup(key); hit {
+		return c.entry, c.ok, nil
+	}
+
 	var res struct {
 		Pages []searchPage `json:"pages"`
 	}
@@ -248,6 +319,7 @@ func (s *Source) Search(ctx context.Context, query string) (catalog.CatalogEntry
 		// Wikipedia has an article for almost everything, so "no page that is a
 		// film" is the common answer and not a failure. Returning a non-film
 		// here is what would put a director's biography on a release page.
+		s.remember(key, catalog.CatalogEntry{}, false)
 		return catalog.CatalogEntry{}, false, nil
 	}
 
@@ -257,9 +329,82 @@ func (s *Source) Search(ctx context.Context, query string) (catalog.CatalogEntry
 		// The page was identified but its detail is unavailable. Fall back to
 		// what search already gave: a title and a description beat nothing, and
 		// the match itself is still correct.
-		return entryFromSearch(page), true, nil
+		e := entryFromSearch(page)
+		s.addCrossIDs(ctx, page.Key, &e)
+		s.remember(key, e, true)
+		return e, true, nil
 	}
-	return toEntry(page, sum), true, nil
+	e := toEntry(page, sum)
+	s.addCrossIDs(ctx, page.Key, &e)
+	s.remember(key, e, true)
+	return e, true, nil
+}
+
+// wikidataProps are the identifier claims worth carrying, and the namespace
+// each becomes. Wikidata holds ~178 claim properties for a well-documented
+// film; these are the ones a release page can link to.
+var wikidataProps = []struct{ prop, namespace string }{
+	{"P345", "imdb"},
+	{"P4947", "tmdb"},
+	{"P3302", "letterboxd"},
+	{"P1258", "rottentomatoes"},
+	{"P1712", "metacritic"},
+}
+
+// addCrossIDs attaches other databases' ids to a matched film.
+//
+// Wikipedia's own API does not carry them, but every article is bound to a
+// Wikidata item that does, and wbgetentities resolves an enwiki page title
+// straight to that item's claims — so this is ONE extra call, not a lookup
+// followed by a fetch.
+//
+// Best-effort, exactly like TVmaze's addWideArt: the match, poster and synopsis
+// are already in hand, and a link-out button is not worth losing them over.
+// Errors are dropped rather than returned for that reason.
+func (s *Source) addCrossIDs(ctx context.Context, pageKey string, e *catalog.CatalogEntry) {
+	if pageKey == "" {
+		return
+	}
+	var res struct {
+		Entities map[string]struct {
+			Missing any `json:"missing"`
+			Claims  map[string][]struct {
+				Mainsnak struct {
+					DataValue struct {
+						Value any `json:"value"`
+					} `json:"datavalue"`
+				} `json:"mainsnak"`
+			} `json:"claims"`
+		} `json:"entities"`
+	}
+	if s.wikidataURL == "" {
+		return
+	}
+	endpoint := fmt.Sprintf(
+		"%s/w/api.php?action=wbgetentities&sites=enwiki&titles=%s&props=claims&format=json",
+		s.wikidataURL, url.QueryEscape(pageKey))
+	if err := s.getJSON(ctx, endpoint, &res); err != nil {
+		return
+	}
+	for _, ent := range res.Entities {
+		if ent.Missing != nil {
+			continue
+		}
+		for _, want := range wikidataProps {
+			claims, ok := ent.Claims[want.prop]
+			if !ok || len(claims) == 0 {
+				continue
+			}
+			// Identifier claims are plain strings. Anything else is a
+			// different datatype for this property than expected, and is
+			// skipped rather than coerced into a broken URL.
+			v, ok := claims[0].Mainsnak.DataValue.Value.(string)
+			if !ok || v == "" {
+				continue
+			}
+			e.External = append(e.External, catalog.ExternalID{Namespace: want.namespace, Value: v})
+		}
+	}
 }
 
 // pickFilm chooses the page that is actually a film.
@@ -272,10 +417,10 @@ func (s *Source) Search(ctx context.Context, query string) (catalog.CatalogEntry
 //
 // Two ways to accept, and NEITHER is "the first film in the results":
 //
-//	1. the year matches the release's — decisive, since remakes share a title
-//	   exactly and nothing else separates them;
-//	2. the title matches after normalisation — for the many releases that carry
-//	   no year, and for films whose article year differs from the posting's.
+//  1. the year matches the release's — decisive, since remakes share a title
+//     exactly and nothing else separates them;
+//  2. the title matches after normalisation — for the many releases that carry
+//     no year, and for films whose article year differs from the posting's.
 //
 // Taking the first film regardless is what an earlier version did, and against
 // live Wikipedia it turned the release "Spiders 2013" into "Paper Spiders", a

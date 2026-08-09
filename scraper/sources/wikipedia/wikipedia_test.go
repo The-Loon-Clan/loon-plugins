@@ -26,6 +26,24 @@ func TestParseReleaseName(t *testing.T) {
 		{"Nineteen.Eighty.Four.1984.DVDRip.XviD", "Nineteen Eighty Four", 1984},
 		// No year at all: the whole head is the title.
 		{"An.Untitled.Thing.WEB-DL", "An Untitled Thing", 0},
+
+		// A BRACKETED year ends the title. 5,593 of the 24,223 movie releases
+		// on the reference index are named this way, and they used to search
+		// Wikipedia with the year and everything after it still attached —
+		// "Kaali (2023) Tamil 1440p SF" rather than "Kaali".
+		{"Kaali (2023) Tamil 1440p SF WEB-DL AAC2.0 H264", "Kaali", 2023},
+		{"Macherla Niyojakavargam (2022) 576p ZEE5 WEB-DL", "Macherla Niyojakavargam", 2022},
+		{"Haseena Parkar (2019)", "Haseena Parkar", 2019},
+		{"The Matrix (1999) REMASTERED 720p", "The Matrix", 1999},
+		{"Das Bankentrio (1989) - DVDRiP - Xvid", "Das Bankentrio", 1989},
+		// Standard-definition and odd resolutions are packaging too. The list
+		// knew only 1080p/2160p/720p/480p, so 1440p and 576p cut in the wrong
+		// place — the same gap the categoriser had.
+		{"Akkaran.2024.480p.SS.WEB-DL", "Akkaran", 2024},
+		{"Jersey.2019.1440p.ZEE5.WEB-DL.DD+5.1.H.265-TR", "Jersey", 2019},
+		// A title that IS a year keeps it: the bracket rule must not fire on a
+		// bare trailing year, and the release year is the LAST one.
+		{"2012.2009.1080p.BluRay.x264", "2012", 2009},
 	}
 	for _, c := range cases {
 		t.Run(c.raw, func(t *testing.T) {
@@ -56,10 +74,10 @@ func TestIsFilm(t *testing.T) {
 		}
 	}
 	for _, no := range []string{
-		"",                             // an accolades list or stub
-		"American filmmaking duo",      // the DIRECTORS — "film" only as a substring
+		"",                        // an accolades list or stub
+		"American filmmaking duo", // the DIRECTORS — "film" only as a substring
 		"2017 soundtrack album by Hans Zimmer",
-		"American film series",         // a franchise, not a film
+		"American film series", // a franchise, not a film
 		"film trilogy by Peter Jackson",
 		"List of accolades received by a film",
 		"2015 video game",
@@ -160,6 +178,19 @@ func fakeWiki(t *testing.T, pages []searchPage, sum *summary, sumStatus int) *ht
 			t.Errorf("User-Agent %q does not identify the client — Wikimedia policy asks it to", ua)
 		}
 		w.Header().Set("Content-Type", "application/json")
+		// Cross-ids: the same fake stands in for Wikidata, which is a
+		// DIFFERENT host in production. Without this the suite calls the live
+		// API — slow, and a test that fails when someone edits an article.
+		if strings.Contains(r.URL.Path, "/w/api.php") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"entities": map[string]any{
+				"Q83495": map[string]any{"claims": map[string]any{
+					"P345":  []any{claim("tt6710474")},
+					"P4947": []any{claim("545611")},
+					"P3302": []any{claim("179505")},
+				}},
+			}})
+			return
+		}
 		if strings.Contains(r.URL.Path, "/summary/") {
 			if sumStatus != http.StatusOK {
 				w.WriteHeader(sumStatus)
@@ -189,7 +220,9 @@ func TestSearchBuildsAnEntry(t *testing.T) {
 		}, http.StatusOK)
 	defer srv.Close()
 
-	e, ok, err := New(srv.URL).Search(context.Background(),
+	src := New(srv.URL)
+	src.wikidataURL = srv.URL
+	e, ok, err := src.Search(context.Background(),
 		"Everything.Everywhere.All.at.Once.2022.2160p.WEB-DL")
 	if err != nil || !ok {
 		t.Fatalf("Search: ok=%v err=%v", ok, err)
@@ -206,9 +239,29 @@ func TestSearchBuildsAnEntry(t *testing.T) {
 	if !strings.Contains(e.Fields["overview"].(string), "2022 American film") {
 		t.Errorf("overview = %v", e.Fields["overview"])
 	}
-	if len(e.External) != 1 || e.External[0].Namespace != "wikipedia" {
-		t.Errorf("External = %+v", e.External)
+	// Its own id first, then the cross-ids Wikidata carries. These are what
+	// put IMDb and Letterboxd buttons on a release page; without them a film
+	// links only back to Wikipedia.
+	want := map[string]string{
+		"wikipedia":  "Everything_Everywhere_All_at_Once",
+		"imdb":       "tt6710474",
+		"tmdb":       "545611",
+		"letterboxd": "179505",
 	}
+	got := map[string]string{}
+	for _, x := range e.External {
+		got[x.Namespace] = x.Value
+	}
+	for ns, v := range want {
+		if got[ns] != v {
+			t.Errorf("External[%s] = %q, want %q (all: %+v)", ns, got[ns], v, e.External)
+		}
+	}
+}
+
+// claim builds one Wikidata identifier claim in the shape the API returns.
+func claim(v string) map[string]any {
+	return map[string]any{"mainsnak": map[string]any{"datavalue": map[string]any{"value": v}}}
 }
 
 // The page was identified; only its detail failed. The match is still correct,
@@ -254,5 +307,52 @@ func TestNewNeverReturnsNil(t *testing.T) {
 	}
 	if got := New("").Domain().Key; got != "movie" {
 		t.Errorf("Domain().Key = %q, want movie", got)
+	}
+}
+
+// The job asks per RELEASE; Wikipedia answers per FILM. 23,061 movie releases
+// on the reference index carry 13,862 distinct films, and each match costs
+// three calls (search, summary, Wikidata) — so re-asking is expensive.
+func TestOneLookupPerFilm(t *testing.T) {
+	var searches int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.Path, "/w/api.php"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"entities": map[string]any{}})
+		case strings.Contains(r.URL.Path, "/summary/"):
+			_ = json.NewEncoder(w).Encode(&summary{Title: "The Matrix"})
+		default:
+			searches++
+			_ = json.NewEncoder(w).Encode(map[string]any{"pages": []searchPage{
+				{Key: "The_Matrix", Title: "The Matrix", Description: "1999 film by the Wachowskis"},
+			}})
+		}
+	}))
+	defer srv.Close()
+
+	src := New(srv.URL)
+	src.wikidataURL = srv.URL
+	// The same film posted three ways — one question.
+	for _, rel := range []string{
+		"The.Matrix.1999.1080p.BluRay.x264-GRP",
+		"The.Matrix.1999.2160p.UHD.BluRay.x265",
+		"The Matrix (1999) REMASTERED 720p",
+	} {
+		if _, ok, err := src.Search(context.Background(), rel); err != nil || !ok {
+			t.Fatalf("%s: ok=%v err=%v", rel, ok, err)
+		}
+	}
+	if searches != 1 {
+		t.Errorf("made %d searches for one film, want 1", searches)
+	}
+
+	// A DIFFERENT year is a different film — remakes share a title exactly, so
+	// the year is half the identity and must not collide in the cache.
+	if _, _, err := src.Search(context.Background(), "The.Matrix.2021.1080p.WEB-DL"); err != nil {
+		t.Fatal(err)
+	}
+	if searches != 2 {
+		t.Errorf("made %d searches after a different year, want 2 — years must not share a cache key", searches)
 	}
 }
