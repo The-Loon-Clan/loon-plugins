@@ -90,13 +90,26 @@ func (h *Handlers) render(c *gin.Context, status int, title, name string, data g
 	h.deps.RenderPage(c, status, title, template.HTML(sb.String()))
 }
 
-// requireAuthed answers false (and a 401 the /flow JS understands) for an
-// anonymous request.
+// requireAuthed is a faithful port of the host's requireAuth, POLARITY
+// INCLUDED: it returns TRUE when it has finalized the request (JSON 401 for
+// API-shaped calls, /login redirect for browsers), so every call site reads
+// `if h.requireAuthed(c) { return }` exactly as the original did. The first
+// cut here inverted it and the adversarial review caught what the render
+// tests could not: every signed-in user would have received empty 200s from
+// all eight gated reads.
 func (h *Handlers) requireAuthed(c *gin.Context) bool {
-	if h.deps.Viewer(c) == nil {
-		jsonError(c, 401, "sign in required")
+	if h.deps.Viewer(c) != nil {
 		return false
 	}
+	accept := c.GetHeader("Accept")
+	if strings.HasPrefix(c.Request.URL.Path, "/api/") ||
+		strings.Contains(accept, "application/json") ||
+		c.GetHeader("X-Requested-With") == "XMLHttpRequest" {
+		c.AbortWithStatusJSON(401, gin.H{"error": "sign in required"})
+		return true
+	}
+	c.Redirect(302, "/login")
+	c.Abort()
 	return true
 }
 
