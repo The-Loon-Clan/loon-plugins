@@ -1,0 +1,123 @@
+{{define "admin_changelog.html"}}
+    <div class="container mt-4 page">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Admin · Changelog</h1>
+            <a href="/help/roadmap?tab=changelog" style="font-size:0.85rem;color:var(--blue);">Public view &rarr;</a>
+        </div>
+
+        {{if .Saved}}<div class="alert alert-success py-2" style="font-size:0.85rem;">Saved.</div>{{end}}
+
+        <details class="card mb-3" style="background:var(--bg-surface);border-color:var(--border);">
+            <summary class="card-header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add changelog entry</summary>
+            <div class="card-body">
+                {{template "admin_changelog_form" (dict "Entry" nil "CSRFToken" .CSRFToken "FlowNodes" .FlowNodes)}}
+            </div>
+        </details>
+
+        <div class="card" style="background:var(--bg-surface);border-color:var(--border);">
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0" style="font-size:0.85rem;">
+                    <thead style="font-size:0.72rem;color:var(--text-muted);">
+                        <tr>
+                            <th style="width:100px;">Released</th>
+                            <th style="width:90px;">Category</th>
+                            <th>Title</th>
+                            <th style="width:170px;text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Entries}}
+                        <tr>
+                            <td style="font-size:0.78rem;color:var(--text-muted);">{{.ReleasedAt.Format "2006-01-02"}}</td>
+                            <td><span class="badge bg-secondary bg-opacity-50" style="font-size:0.62rem;">{{.Category}}</span></td>
+                            <td>
+                                <div style="font-weight:600;">{{.Title}}</div>
+                                <div style="font-size:0.75rem;color:var(--text-muted);">{{.Description}}</div>
+                            </td>
+                            <td style="text-align:right;white-space:nowrap;">
+                                <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.7rem;"
+                                        data-bs-toggle="collapse" data-bs-target="#cl-edit-{{.ID}}">Edit</button>
+                                <form method="POST" action="/admin/changelog/{{.ID}}/delete" class="d-inline"
+                                      onsubmit="return confirm('Delete this changelog entry?');">
+                                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.7rem;">Del</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <tr id="cl-edit-{{.ID}}" class="collapse">
+                            <td colspan="4" style="background:var(--bg-elevated);">
+                                {{template "admin_changelog_form" (dict "Entry" . "CSRFToken" $.CSRFToken "FlowNodes" $.FlowNodes)}}
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{if gt .TotalPages 1}}
+            <div class="card-footer d-flex justify-content-between align-items-center py-2" style="font-size:0.75rem;color:var(--text-muted);">
+                <span>Page {{.Page}} of {{.TotalPages}}</span>
+                <div>
+                    {{if gt .Page 1}}<a href="?page={{sub (int64 .Page) 1}}" class="btn btn-sm btn-outline-secondary py-0">&laquo; Prev</a>{{end}}
+                    {{if lt .Page .TotalPages}}<a href="?page={{inc .Page}}" class="btn btn-sm btn-outline-secondary py-0">Next &raquo;</a>{{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    
+{{end}}
+
+{{define "admin_changelog_form"}}
+    <form method="POST" action="/admin/changelog/save">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+        <input type="hidden" name="id" value="{{if .Entry}}{{.Entry.ID}}{{else}}0{{end}}">
+        <div class="row g-2">
+            <div class="col-md-7">
+                <label class="form-label small">Title</label>
+                <input type="text" name="title" class="form-control form-control-sm" required
+                       value="{{if .Entry}}{{.Entry.Title}}{{end}}" maxlength="200">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Category</label>
+                <select name="category" class="form-select form-select-sm">
+                    {{$cur := "feature"}}{{if .Entry}}{{$cur = .Entry.Category}}{{end}}
+                    <option value="feature"  {{if eq $cur "feature"}}selected{{end}}>feature</option>
+                    <option value="fix"      {{if eq $cur "fix"}}selected{{end}}>fix</option>
+                    <option value="perf"     {{if eq $cur "perf"}}selected{{end}}>perf</option>
+                    <option value="security" {{if eq $cur "security"}}selected{{end}}>security</option>
+                    <option value="infra"    {{if eq $cur "infra"}}selected{{end}}>infra</option>
+                    <option value="docs"     {{if eq $cur "docs"}}selected{{end}}>docs</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Released</label>
+                <input type="date" name="released_at" class="form-control form-control-sm"
+                       value="{{if .Entry}}{{.Entry.ReleasedAt.Format "2006-01-02"}}{{end}}">
+            </div>
+            <div class="col-12">
+                <label class="form-label small">Description</label>
+                <textarea name="description" class="form-control form-control-sm" rows="3"
+                          maxlength="4000">{{if .Entry}}{{.Entry.Description}}{{end}}</textarea>
+            </div>
+            <div class="col-12">
+                <label class="form-label small">Link to /flow proposal (optional)</label>
+                <select name="flow_node_id" class="form-select form-select-sm">
+                    {{$curNode := int64 0}}{{if and .Entry .Entry.FlowNodeID}}{{$curNode = deref64 .Entry.FlowNodeID}}{{end}}
+                    <option value="0">— no link —</option>
+                    {{range .FlowNodes}}
+                    <option value="{{.ID}}" {{if eq .ID $curNode}}selected{{end}}>
+                        {{if .Tag}}[{{.Tag}}] {{end}}{{.Label}}{{if .Kind}} ({{.Kind}}){{end}}
+                    </option>
+                    {{end}}
+                </select>
+                <div class="form-text" style="font-size:0.7rem;">
+                    Surfaces a "Proposal" link on the public changelog, and shows this row when someone expands the linked proposal on /flow/proposals.
+                </div>
+            </div>
+            <div class="col-12 mt-2">
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            </div>
+        </div>
+    </form>
+    {{end}}

@@ -1,0 +1,195 @@
+{{define "flow_mockup_detail.html"}}
+    <style>
+        /* Permalink page = single-mockup deep-dive: full-size preview
+           up top, side-by-side parent diff (when this mockup proposes
+           a change), notes panel, comments panel. All sections share
+           a 1-column layout up to ~1100px so wide-screen reviewers
+           can see content + comments side-by-side without scrolling. */
+        .mockup-frame {
+            width: 100%; min-height: 60vh;
+            border: 1px solid var(--border);
+            border-radius: 6px; background: #fff;
+        }
+        .mockup-side {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+        .mockup-side > div { min-width: 0; }
+        .mockup-side .frame-label {
+            font-size: 0.72rem; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.04em;
+            margin-bottom: 0.25rem;
+        }
+        .mockup-side iframe {
+            width: 100%; height: 320px;
+            border: 1px solid var(--border); border-radius: 4px;
+            background: #fff;
+        }
+        .notes-rendered {
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.6rem 0.75rem;
+            font-size: 0.88rem;
+        }
+        .notes-rendered code {
+            background: rgba(91,138,245,0.1);
+            padding: 1px 4px; border-radius: 3px;
+            font-size: 0.85em;
+        }
+        .mockup-comment {
+            font-size: 0.85rem; padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .mockup-comment:last-child { border-bottom: none; }
+        .mockup-comment-meta {
+            font-size: 0.7rem; color: var(--text-muted);
+            margin-bottom: 2px;
+        }
+    </style>
+    <div class="container mt-4 site-container">
+        <nav aria-label="breadcrumb" class="mb-2" style="font-size:0.78rem;">
+            <a href="/flow/mockups" style="color:var(--text-muted);">UI Mockups</a>
+            &nbsp;&rsaquo;&nbsp;
+            <span style="color:var(--text-primary);">#{{.Node.ID}}</span>
+        </nav>
+
+        <div class="d-flex align-items-baseline justify-content-between gap-2 mb-2">
+            <div>
+                <h2 class="mb-0" style="font-size:1.25rem;font-weight:600;">🖼 {{.Node.Label}}</h2>
+                {{if .Parent}}
+                <p class="mb-0 mt-1" style="font-size:0.78rem;color:var(--text-muted);">
+                    <span class="badge bg-warning text-dark me-1" style="font-size:0.65rem;">edits</span>
+                    Proposes a change to
+                    <a href="/flow#node-{{.Parent.ID}}" style="color:var(--bs-warning);">{{.Parent.Label}}</a>
+                </p>
+                {{end}}
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="badge bg-secondary" style="font-size:0.78rem;">▲ <span id="vote-count">{{.Node.VoteCount}}</span></span>
+                <button id="btn-vote" class="btn btn-sm btn-outline-warning">👍 Vote</button>
+                <a href="/flow#node-{{.Node.ID}}" class="btn btn-sm btn-outline-primary">🌐 Open in graph</a>
+            </div>
+        </div>
+
+        {{if .Node.Description}}
+        <p class="mb-3" style="font-size:0.92rem;color:var(--text-muted);">{{.Node.Description}}</p>
+        {{end}}
+
+        <div class="row g-3">
+            <div class="col-12 col-lg-8">
+                {{if .Parent}}
+                {{/* Side-by-side iframe diff. Both iframes are sandbox=""
+                     — same security boundary as the canvas. The user
+                     can see "this canonical now" vs "this proposal" at
+                     the same scale. When the parent's data_json
+                     doesn't have HTML (a non-mockup canonical, e.g.
+                     a page seed), the left panel falls back to a
+                     description card so the comparison still reads. */}}
+<div class="mockup-side mb-3">
+                    <div>
+                        <div class="frame-label">Current ({{.Parent.Label}})</div>
+                        <iframe sandbox="" srcdoc="{{.ParentHTML}}" title="parent preview"></iframe>
+                    </div>
+                    <div>
+                        <div class="frame-label">Proposed ({{.Node.Label}})</div>
+                        <iframe sandbox="" srcdoc="{{.MockupHTML}}" title="proposed preview"></iframe>
+                    </div>
+                </div>
+                {{else}}
+                <div class="frame-label" style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.25rem;">Mockup preview</div>
+                <iframe sandbox="" srcdoc="{{.MockupHTML}}" class="mockup-frame" title="mockup preview"></iframe>
+                {{end}}
+
+                {{if .MockupNotesHTML}}
+                <h6 class="mt-4 mb-2" style="font-size:0.85rem;color:var(--text-muted);">Notes</h6>
+                <div class="notes-rendered">{{.MockupNotesHTML}}</div>
+                {{end}}
+            </div>
+
+            <div class="col-12 col-lg-4">
+                <div class="card">
+                    <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">
+                        Comments ({{len .Comments}})
+                    </div>
+                    <div class="card-body p-0">
+                        {{range .Comments}}
+                        <div class="mockup-comment">
+                            <div class="mockup-comment-meta">
+                                <strong>{{.Username}}</strong>
+                                &middot; {{.CreatedAt.Format "Jan 02, 15:04"}}
+                            </div>
+                            <div>{{.Body}}</div>
+                        </div>
+                        {{else}}
+                        <div class="p-3" style="font-size:0.82rem;color:var(--text-muted);">
+                            No comments yet. Open this mockup on the <a href="/flow#node-{{.Node.ID}}">canvas</a> to start a thread.
+                        </div>
+                        {{end}}
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">Quick add</div>
+                    <div class="card-body">
+                        <div class="d-flex gap-1">
+                            <input id="comment-input" class="form-control form-control-sm" type="text" placeholder="Leave a comment…" maxlength="2000">
+                            <button id="btn-comment" class="btn btn-sm btn-primary">Send</button>
+                        </div>
+                        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:6px;">
+                            Comments here go to the same thread as the canvas. Markdown isn't rendered yet — keep it short.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function(){
+        const CSRF = (document.cookie.match(/csrf_tok=([^;]+)/) || [])[1] || '';
+        const NODE_ID = {{.Node.ID}};
+
+        async function postJSON(url, body) {
+            const r = await fetch(url, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+                body: body ? JSON.stringify(body) : undefined,
+            });
+            const j = await r.json().catch(() => null);
+            if (!r.ok || !j || j.ok === false) throw new Error((j && j.error) || ('HTTP ' + r.status));
+            return j;
+        }
+
+        const $vote = document.getElementById('btn-vote');
+        const $vc   = document.getElementById('vote-count');
+        if ($vote) $vote.addEventListener('click', async () => {
+            try {
+                const j = await postJSON('/flow/node/' + NODE_ID + '/vote');
+                $vc.textContent = j.count;
+            } catch (e) { alert('Vote failed: ' + e.message); }
+        });
+
+        const $cBtn = document.getElementById('btn-comment');
+        const $cIn  = document.getElementById('comment-input');
+        async function sendComment() {
+            const body = ($cIn.value || '').trim();
+            if (!body) return;
+            $cBtn.disabled = true;
+            try {
+                await postJSON('/flow/node/' + NODE_ID + '/comment', { body });
+                location.reload();
+            } catch (e) {
+                alert('Comment failed: ' + e.message);
+                $cBtn.disabled = false;
+            }
+        }
+        if ($cBtn) $cBtn.addEventListener('click', sendComment);
+        if ($cIn) $cIn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); sendComment(); }
+        });
+    })();
+    </script>
+{{end}}

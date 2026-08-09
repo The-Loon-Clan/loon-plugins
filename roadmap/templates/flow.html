@@ -1,0 +1,1667 @@
+{{define "flow.html"}}
+    <style>
+        body { overflow: hidden; }
+        .flow-shell { display: flex; flex-direction: column; height: calc(100vh - 56px); }
+        .flow-toolbar {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+        }
+        .flow-toolbar .spacer { flex: 1; }
+        .flow-toolbar .status {
+            font-size: 0.78rem; color: var(--text-muted);
+            font-family: monospace;
+        }
+        .flow-canvas { flex: 1; position: relative; background: var(--bg-base); }
+        #cy { position: absolute; inset: 0; }
+
+        .flow-inspector {
+            position: absolute; top: 0; right: 0; bottom: 0; width: 320px;
+            background: var(--bg-elevated);
+            border-left: 1px solid var(--border);
+            transform: translateX(100%);
+            transition: transform 0.15s ease-out;
+            display: flex; flex-direction: column;
+            z-index: 10;
+        }
+        .flow-inspector.open { transform: translateX(0); }
+        .flow-inspector-header {
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            font-size: 0.85rem; font-weight: 600;
+        }
+        .flow-inspector-body { padding: 0.75rem; overflow-y: auto; flex: 1; font-size: 0.85rem; }
+        .flow-inspector .form-label { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .flow-inspector .form-control, .flow-inspector .form-select {
+            background: var(--bg-base); border-color: var(--border); color: var(--text-primary);
+            font-size: 0.85rem;
+        }
+        .flow-inspector textarea { min-height: 90px; }
+        .flow-inspector-footer {
+            padding: 0.6rem 0.75rem;
+            border-top: 1px solid var(--border);
+            display: flex; gap: 0.5rem;
+        }
+        .flow-locked-badge {
+            font-size: 0.65rem; padding: 1px 6px; border-radius: 3px;
+            background: rgba(var(--bs-warning-rgb), 0.2);
+            color: var(--bs-warning);
+        }
+        .flow-meta { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+        .flow-comments { margin-top: 0.75rem; border-top: 1px dashed var(--border); padding-top: 0.5rem; }
+        .flow-comment { font-size: 0.78rem; margin-bottom: 0.35rem; padding-bottom: 0.35rem; border-bottom: 1px solid var(--border); }
+        .flow-comment:last-child { border-bottom: none; }
+        .flow-comment-meta { font-size: 0.7rem; color: var(--text-muted); }
+
+        /* Per-mockup canvas overlays. Each mockup node gets a
+           position:absolute wrapper that mirrors the cytoscape node's
+           bounding box on every viewport tick, with a sandboxed iframe
+           inside rendering the user's HTML. The iframe has sandbox=""
+           (no allow-tokens) so script + form-submission + plugins are
+           neutralised — even malicious HTML can't escape its frame.
+           pointer-events:none keeps clicks falling through to the
+           underlying cy node so drag / connect / inspector-open keep
+           working; the node outline is what the user actually grabs. */
+        .flow-mockup-overlay {
+            position: absolute;
+            pointer-events: none;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #fff;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.4);
+            z-index: 4;
+            transform-origin: top left;
+        }
+        .flow-mockup-overlay iframe {
+            border: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: #fff;
+        }
+
+        .flow-connect-banner {
+            position: absolute; top: 0.75rem; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(91,138,245,0.95);
+            color: #fff;
+            border-radius: 6px;
+            padding: 0.45rem 0.85rem;
+            font-size: 0.85rem;
+            display: none;
+            align-items: center;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+            z-index: 8;
+        }
+        .flow-connect-banner.open { display: inline-flex; }
+
+        /* Port-picker popover. Shown when the user is mid-connect and
+           the relevant node has more than one named port. Anchored to
+           top-center under the connect banner — small, modal-feeling
+           but click-outside-to-cancel. */
+        .flow-port-picker {
+            position: absolute; top: 3.5rem; left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.5rem;
+            min-width: 220px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+            display: none;
+            z-index: 9;
+        }
+        .flow-port-picker.open { display: block; }
+        .flow-port-picker h6 {
+            font-size: 0.7rem; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.04em;
+            margin-bottom: 0.3rem;
+        }
+        .flow-port-picker .port-row {
+            display: flex; align-items: center; gap: 0.4rem;
+            padding: 0.3rem 0.45rem; border-radius: 4px;
+            cursor: pointer; font-size: 0.82rem;
+        }
+        .flow-port-picker .port-row:hover {
+            background: rgba(91,138,245,0.15);
+        }
+        .flow-port-picker .port-row .port-name {
+            font-weight: 600; color: var(--text-primary);
+        }
+        .flow-port-picker .port-row .port-hint {
+            font-size: 0.72rem; color: var(--text-muted);
+            margin-left: auto; max-width: 60%;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        .flow-help {
+            position: absolute; bottom: 0.75rem; left: 0.75rem;
+            max-width: 320px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.7rem 0.85rem;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            display: none;
+            z-index: 5;
+        }
+        .flow-help.open { display: block; }
+        .flow-help kbd {
+            background: var(--bg-base); border: 1px solid var(--border);
+            border-radius: 3px; padding: 0 4px; font-size: 0.72rem;
+        }
+    </style>
+
+    <div class="flow-shell">
+        <div class="flow-toolbar">
+            <button id="btn-add-node" class="btn btn-sm btn-primary" title="Add node (N)">+ Node</button>
+            <button id="btn-add-comment" class="btn btn-sm btn-outline-secondary" title="Add comment node">+ Comment</button>
+            <button id="btn-add-mockup" class="btn btn-sm btn-outline-secondary" title="Add UI mockup node — HTML preview, fork-able like any other node">+ Mockup</button>
+            <button id="btn-undo" class="btn btn-sm btn-outline-secondary" title="Undo (Ctrl+Z)" disabled>&#9100;</button>
+            <button id="btn-redo" class="btn btn-sm btn-outline-secondary" title="Redo (Ctrl+Shift+Z)" disabled>&#9101;</button>
+            <span class="spacer"></span>
+            <span class="status" id="flow-status">ready</span>
+            <button id="btn-refresh" class="btn btn-sm btn-outline-secondary" title="Refresh from server">Refresh</button>
+            <button id="btn-fit" class="btn btn-sm btn-outline-secondary" title="Fit (F)">Fit</button>
+            <button id="btn-help" class="btn btn-sm btn-outline-secondary" title="Help">?</button>
+        </div>
+
+        <div class="flow-canvas" id="flow-canvas">
+            <div id="cy"></div>
+
+            {{/* Connect-mode banner. Shown when the user has clicked
+                 "Connect to…" in a node inspector and is waiting to
+                 pick a target node. Hidden by default; the JS toggles
+                 .open. Same modal-banner pattern as the help panel,
+                 but pinned top-center so the user's eye lands on it
+                 right after the click. */}}
+            <div class="flow-connect-banner" id="connect-banner">
+                <span id="connect-banner-text">🔗 Click another node to connect…</span>
+                <button type="button" id="connect-cancel" class="btn btn-sm btn-outline-light py-0 px-2 ms-3" style="font-size:0.72rem;">Cancel</button>
+            </div>
+
+            {{/* Port picker. Surfaces only when the relevant node
+                 (source on initial click, target on second click) has
+                 multiple named ports — single-port and unportned nodes
+                 skip the prompt entirely. Populated dynamically by JS. */}}
+            <div class="flow-port-picker" id="port-picker"></div>
+
+            {{/* History modal — populated dynamically by JS when the
+                 user clicks the "History" button on a node. Lists
+                 every revision in flow_node_revisions for that node,
+                 with per-row "Show before" buttons that diff the
+                 snapshot's label/description/HTML against the live
+                 row. Bootstrap modal-lg keeps it readable on a tall
+                 list without dominating the screen. */}}
+            <div class="modal fade" id="history-modal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                    <div class="modal-content" style="background:var(--bg-elevated);">
+                        <div class="modal-header py-2">
+                            <h6 class="modal-title" id="history-modal-title" style="font-size:0.9rem;">History</h6>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="filter:invert(0.7);"></button>
+                        </div>
+                        <div class="modal-body" id="history-modal-body" style="font-size:0.85rem;">
+                            <div style="color:var(--text-muted);">Loading…</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{/* Full-size mockup modal. Bootstrap is already loaded
+                 (see footer script tag). The iframe inside gets srcdoc
+                 set to the current mockup's HTML when the user clicks
+                 "Open full-size" in the inspector — same sandbox=""
+                 boundary as the canvas overlay, just at natural size
+                 so reviewers can see the actual layout. */}}
+            <div class="modal fade" id="mockup-fullsize-modal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-xl modal-dialog-centered">
+                    <div class="modal-content" style="background:var(--bg-elevated);">
+                        <div class="modal-header py-2">
+                            <h6 class="modal-title" id="mockup-fullsize-title" style="font-size:0.9rem;">Mockup preview</h6>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="filter:invert(0.7);"></button>
+                        </div>
+                        <div class="modal-body p-0" style="background:#fff;">
+                            <iframe id="mockup-fullsize-frame" sandbox="" style="width:100%;height:75vh;border:0;background:#fff;"></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="flow-inspector" id="inspector">
+                <div class="flow-inspector-header">
+                    <span id="inspector-title">Node</span>
+                    <button class="btn-close btn-close-white" id="inspector-close" aria-label="Close" style="filter:invert(0.7);"></button>
+                </div>
+                <div class="flow-inspector-body" id="inspector-body"></div>
+                <div class="flow-inspector-footer">
+                    <button id="btn-save" class="btn btn-sm btn-primary" type="button">Save</button>
+                    <button id="btn-delete" class="btn btn-sm btn-outline-danger ms-auto" type="button">Delete</button>
+                </div>
+            </aside>
+
+            <div class="flow-help" id="help-panel">
+                <p class="mb-2"><strong>Feature Requests board</strong></p>
+                <p class="mb-2" style="font-size:0.78rem;">Sketch out an idea by adding nodes around the existing site flow. Connect related ideas with edges, leave comments, and a mod can promote a good one into the canonical pipeline.</p>
+                <ul class="ps-3 mb-2" style="font-size:0.78rem;">
+                    <li><strong>+ Node</strong> / <kbd>N</kbd> — add a stand-alone idea node at canvas center.</li>
+                    <li><strong>+ Mockup</strong> — add a UI mockup node. Edit its HTML in the inspector and the canvas thumbnail updates live; users can connect mockups to flow nodes via ports (e.g. "this Login click goes to <em>that mockup</em>").</li>
+                    <li>Click a node — inspector opens with all actions.</li>
+                    <li><strong>✏️ Propose change</strong> — fork any canonical node to suggest edits (label, description, ports). The amber copy shows up next to the original; edit it, vote on it, mods merge accepted ones back.</li>
+                    <li><strong>👍 Vote</strong> — every signed-in user gets one vote per node. Votes drive what mods promote.</li>
+                    <li><strong>🔗 Connect to another node…</strong> — pick a port on the source, then click the target. (Right-click on a node also starts an edge.)</li>
+                    <li><kbd>Del</kbd> — delete the selected element (own nodes / mods).</li>
+                    <li><kbd>F</kbd> fit graph, <kbd>Ctrl+Z</kbd> undo, <kbd>Ctrl+Shift+Z</kbd> redo.</li>
+                    <li>Dotted-border nodes are canonical (mods edit). Amber-dashed nodes are proposed edits to a canonical.</li>
+                </ul>
+                <p class="mb-0" style="font-size:0.72rem;">Edits save to the server over REST. Click <strong>Refresh</strong> to pull other people's changes.</p>
+            </div>
+        </div>
+    </div>
+
+    {{/* Cytoscape primary + fallback. unpkg.com is occasionally blocked by
+         corp networks / ad blockers / Pi-holes; jsdelivr is a different
+         IP space and tends to survive when unpkg doesn't. The onerror
+         handler swaps in jsdelivr synchronously so the rest of the page
+         (which depends on cytoscape being a global) sees a loaded lib
+         either way. If BOTH fail, initCy's typeof guard surfaces a
+         clear error in the toolbar instead of letting the page die. */}}
+    <script src="https://unpkg.com/cytoscape@3.30.1/dist/cytoscape.min.js"
+            onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/cytoscape@3.30.1/dist/cytoscape.min.js';s.async=false;document.head.appendChild(s);"></script>
+
+    <script>
+    (function(){
+        // ── Constants & state ────────────────────────────────────────
+        const CSRF = (document.cookie.match(/csrf_tok=([^;]+)/) || [])[1] || '';
+        const VIEWER_ID = {{if .Username}}{{.UserID}}{{else}}0{{end}};
+        const VIEWER_NAME = {{if .Username}}"{{.Username}}"{{else}}""{{end}};
+        const VIEWER_IS_MOD = {{if .IsAdmin}}true{{else}}false{{end}};
+
+        const $status = document.getElementById('flow-status');
+        const $inspector = document.getElementById('inspector');
+        const $inspectorTitle = document.getElementById('inspector-title');
+        const $inspectorBody = document.getElementById('inspector-body');
+        const $btnSave = document.getElementById('btn-save');
+        const $btnDelete = document.getElementById('btn-delete');
+        const $btnUndo = document.getElementById('btn-undo');
+        const $btnRedo = document.getElementById('btn-redo');
+        const $help = document.getElementById('help-panel');
+        const $canvas = document.getElementById('flow-canvas');
+        const $connectBanner = document.getElementById('connect-banner');
+        const $connectBannerText = document.getElementById('connect-banner-text');
+        const $connectCancel = document.getElementById('connect-cancel');
+        const $portPicker = document.getElementById('port-picker');
+
+        let cy;
+        let selectedKind = null, selectedID = null;
+        let pendingEdgeSource = null;
+        let pendingEdgeSourcePort = null;
+        // Mockup node id → { wrapper: HTMLDivElement, html: string }.
+        // Lifecycle:
+        //   * applyGraph rebuilds it from scratch on every load.
+        //   * applyNodeCreate / applyNodeUpdate / applyNodeDelete keep
+        //     it in sync incrementally so users don't get a flash of
+        //     "wrong" UI between op + reload.
+        //   * Position sync runs on every cy 'render' tick (zoom, pan,
+        //     drag) — Cytoscape's own throttle keeps this cheap.
+        const mockupOverlays = new Map();
+
+        // Undo/redo: stack of inverse-ops keyed by what we sent. Each
+        // entry has { do, undo } closures bound to the right IDs.
+        const undoStack = [], redoStack = [];
+
+        // ── Cytoscape init ───────────────────────────────────────────
+        function initCy(){
+            // Cytoscape comes from a CDN script tag above. If that load
+            // failed (CSP block, network outage, ad blocker), the global
+            // is missing. Surface that loudly instead of letting the next
+            // call to `cy.elements()` masquerade as a generic load error.
+            if (typeof cytoscape !== 'function') {
+                console.error('[flow] cytoscape library failed to load; check network / CSP for unpkg.com');
+                setStatus('cytoscape failed to load — check your network / ad blocker', 'err');
+                return;
+            }
+            cy = cytoscape({
+                container: document.getElementById('cy'),
+                wheelSensitivity: 0.2, minZoom: 0.25, maxZoom: 2.5,
+                elements: [],
+                style: [
+                    { selector: 'node', style: {
+                        'shape': 'round-rectangle',
+                        'background-color': '#1f2937',
+                        'border-color': 'rgba(91,138,245,0.6)', 'border-width': 1,
+                        'label': 'data(label)', 'color': '#e2e4ec',
+                        'font-size': '12px', 'font-weight': 600,
+                        'text-valign': 'center', 'text-halign': 'center',
+                        'text-wrap': 'wrap', 'text-max-width': 130,
+                        'padding': '10px',
+                        'width': 'label', 'height': 'label',
+                        'min-width': 80, 'min-height': 32,
+                    }},
+                    { selector: 'node[kind = "system"]', style: {
+                        'background-color': '#1e293b',
+                        'border-color': 'rgba(100,116,139,0.8)', 'border-width': 2,
+                        'color': '#cbd5e1',
+                        // System nodes carry an emoji prefix and tend
+                        // to have longer descriptive labels. Bump the
+                        // font and widen the text-wrap so the icon is
+                        // legible and the label doesn't truncate
+                        // mid-word.
+                        'font-size': '13px',
+                        'text-max-width': 160,
+                    }},
+                    { selector: 'node[kind = "comment"]', style: {
+                        'background-color': '#3f2f1a',
+                        'border-color': 'rgba(251,191,36,0.6)',
+                        'color': '#fde68a', 'font-style': 'italic',
+                    }},
+                    { selector: 'node[kind = "user-proposal"]', style: {
+                        'background-color': '#1f2937',
+                        'border-color': 'rgba(74,222,128,0.7)',
+                    }},
+                    // Mockup nodes are sized for an HTML preview thumbnail.
+                    // Background is transparent + label hidden so the
+                    // absolute-positioned iframe overlay (rendered by
+                    // syncMockupOverlays) is what users see. The node
+                    // outline keeps drag/select/connect interactions
+                    // intact; only the visual surface is delegated.
+                    { selector: 'node[kind = "mockup"]', style: {
+                        'background-color': 'rgba(28,30,38,0.4)',
+                        'border-color': 'rgba(167,139,250,0.7)', 'border-width': 2,
+                        'shape': 'round-rectangle',
+                        'width': 240, 'height': 160,
+                        'label': '',
+                    }},
+                    { selector: 'node[?locked]', style: {
+                        'border-style': 'dashed', 'border-width': 3, 'opacity': 0.85,
+                    }},
+                    // Proposal nodes (parent_node_id > 0): amber tint
+                    // + dashed accent so reviewers can spot at a
+                    // glance that this row is a *change request*
+                    // against an existing canonical node, not a free-
+                    // standing idea.
+                    { selector: 'node[parent_node_id > 0]', style: {
+                        'background-color': '#3f2f1a',
+                        'border-color': 'rgba(251,191,36,0.75)',
+                        'border-style': 'dashed', 'border-width': 3,
+                        'color': '#fde68a',
+                    }},
+                    { selector: ':selected', style: {
+                        'border-color': '#5b8af5', 'border-width': 4,
+                    }},
+                    { selector: 'edge', style: {
+                        'curve-style': 'bezier',
+                        'target-arrow-shape': 'triangle',
+                        'line-color': 'rgba(91,138,245,0.5)',
+                        'target-arrow-color': 'rgba(91,138,245,0.5)',
+                        'width': 1.5,
+                        'label': 'data(label)',
+                        'font-size': '10px', 'color': '#94a3b8',
+                        'text-background-color': '#0f1115',
+                        'text-background-opacity': 0.85,
+                        'text-background-padding': '2px',
+                    }},
+                    { selector: 'edge[?locked]', style: { 'opacity': 0.5 } },
+                    // Synthetic "this proposal edits that canonical"
+                    // edges. Dashed amber so they don't get confused
+                    // with real flow edges (which carry actual port
+                    // semantics). Rendered with no arrowhead because
+                    // the relationship is descriptive, not directional
+                    // in a flow sense.
+                    { selector: 'edge[kind = "proposal-of"]', style: {
+                        'line-style': 'dashed',
+                        'line-color': 'rgba(251,191,36,0.5)',
+                        'target-arrow-color': 'rgba(251,191,36,0.5)',
+                        'target-arrow-shape': 'circle',
+                        'curve-style': 'unbundled-bezier',
+                        'opacity': 0.7,
+                        'font-size': '9px',
+                    }},
+                ],
+                layout: { name: 'preset' },
+            });
+
+            cy.on('tap', 'node', (e) => {
+                if (pendingEdgeSource && parseInt(e.target.id(), 10) !== pendingEdgeSource) {
+                    // Target click in connect-mode. Thread through the
+                    // source port chosen (or auto-picked) earlier; if
+                    // the target has multiple input ports, pop the
+                    // picker once more, otherwise auto-fill and ship.
+                    const src = pendingEdgeSource;
+                    const tgt = parseInt(e.target.id(), 10);
+                    const srcPort = pendingEdgeSourcePort || '';
+                    const ins = e.target.data('input_ports') || [];
+                    const tgtLabel = e.target.data('label') || ('#' + tgt);
+                    if (ins.length > 1) {
+                        showPortPicker('Pick input port on ' + tgtLabel, ins, (chosen) => {
+                            endEdgeMode();
+                            sendEdgeCreate(src, tgt, srcPort, chosen);
+                        });
+                        return;
+                    }
+                    const tgtPort = ins.length === 1 ? (ins[0].name || '') : '';
+                    endEdgeMode();
+                    sendEdgeCreate(src, tgt, srcPort, tgtPort);
+                    return;
+                }
+                openInspectorNode(e.target);
+            });
+            cy.on('tap', 'edge', (e) => openInspectorEdge(e.target));
+            cy.on('tap', (e) => { if (e.target === cy) { closeInspector(); endEdgeMode(); } });
+
+            // Right-click is preserved as the power-user shortcut; the
+            // button in the inspector is the discoverable equivalent.
+            cy.on('cxttap', 'node', (e) => {
+                startEdgeFrom(parseInt(e.target.id(), 10));
+            });
+
+            cy.on('dragfree', 'node', (e) => {
+                const n = e.target;
+                if (n.data('locked') && !VIEWER_IS_MOD) {
+                    if (n.scratch('lastSavedPos')) n.position(n.scratch('lastSavedPos'));
+                    setStatus('locked node — cannot move', 'warn');
+                    return;
+                }
+                const id = parseInt(n.id(), 10);
+                const before = n.scratch('lastSavedPos') || { x: n.position().x, y: n.position().y };
+                const after = { x: n.position().x, y: n.position().y };
+                n.scratch('lastSavedPos', after);
+                sendNodeUpdate(id, { x: after.x, y: after.y });
+                pushUndo({
+                    label: 'move node',
+                    do:   () => sendNodeUpdate(id, { x: after.x,  y: after.y  }),
+                    undo: () => sendNodeUpdate(id, { x: before.x, y: before.y }),
+                });
+            });
+
+            // Mockup overlays follow the cytoscape viewport. 'render'
+            // fires after every visual change (pan, zoom, drag, layout)
+            // and is the cheap event for "redraw if you have anything
+            // overlaid". 'position' on a node fires per-tick during
+            // drag so overlays don't lag.
+            cy.on('render', mockupOverlaySyncAll);
+            cy.on('position', 'node[kind = "mockup"]', (e) => mockupOverlayPosition(e.target));
+
+            // Keyboard shortcuts.
+            document.addEventListener('keydown', (e) => {
+                if (e.target.matches('input,textarea,select')) return;
+                if (e.key === 'f' || e.key === 'F') { cy.fit(undefined, 50); }
+                else if (e.key === 'n' || e.key === 'N') { addNode('user-proposal'); }
+                else if (e.key === 'Delete' || e.key === 'Backspace') {
+                    if (selectedID) handleDelete();
+                }
+                else if (e.key === 'Escape') { endEdgeMode(); closeInspector(); }
+                else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                    e.preventDefault(); doUndo();
+                }
+                else if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.shiftKey && e.key === 'z'))) {
+                    e.preventDefault(); doRedo();
+                }
+            });
+        }
+
+        // ── Mockup overlay manager ──────────────────────────────────
+        // Keeps a sandboxed iframe per mockup node aligned over the
+        // cytoscape node's bounding box. The iframe is the security
+        // boundary (sandbox="" disables script + form submission), so
+        // arbitrary HTML written by users can't escape its frame.
+        function mockupHTMLFromNode(ele){
+            // The user's authored HTML lives in data_json.html, which
+            // round-trips through node.data().html when applyNodeCreate
+            // / applyGraph copies the per-node data blob onto the
+            // cytoscape data map.
+            return (ele.data('mockup_html') || '');
+        }
+        function mockupOverlayCreate(ele){
+            if (mockupOverlays.has(ele.id())) return;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flow-mockup-overlay';
+            const frame = document.createElement('iframe');
+            frame.setAttribute('sandbox', '');               // no JS / no form / no plugins
+            frame.setAttribute('title', 'mockup preview');
+            frame.srcdoc = mockupHTMLFromNode(ele);
+            wrapper.appendChild(frame);
+            $canvas.appendChild(wrapper);
+            mockupOverlays.set(ele.id(), { wrapper, html: mockupHTMLFromNode(ele) });
+            mockupOverlayPosition(ele);
+        }
+        function mockupOverlayDestroy(id){
+            const entry = mockupOverlays.get(id);
+            if (!entry) return;
+            entry.wrapper.remove();
+            mockupOverlays.delete(id);
+        }
+        function mockupOverlayUpdateContent(ele){
+            const entry = mockupOverlays.get(ele.id());
+            const newHTML = mockupHTMLFromNode(ele);
+            if (!entry) {
+                if (ele.data('kind') === 'mockup') mockupOverlayCreate(ele);
+                return;
+            }
+            if (entry.html !== newHTML) {
+                const frame = entry.wrapper.querySelector('iframe');
+                if (frame) frame.srcdoc = newHTML;
+                entry.html = newHTML;
+            }
+        }
+        function mockupOverlayPosition(ele){
+            const entry = mockupOverlays.get(ele.id());
+            if (!entry) return;
+            // boundingBox returns the node's screen-space rect (after
+            // pan + zoom). We render the iframe at exactly that size /
+            // location, minus a small inset so the cytoscape border
+            // stays visible around the preview.
+            const bb = ele.renderedBoundingBox();
+            const w = bb.w, h = bb.h;
+            const x = bb.x1, y = bb.y1;
+            const inset = 4;
+            entry.wrapper.style.left   = (x + inset) + 'px';
+            entry.wrapper.style.top    = (y + inset) + 'px';
+            entry.wrapper.style.width  = Math.max(0, w - inset * 2) + 'px';
+            entry.wrapper.style.height = Math.max(0, h - inset * 2) + 'px';
+        }
+        function mockupOverlaySyncAll(){
+            cy.nodes('[kind = "mockup"]').forEach(mockupOverlayPosition);
+        }
+        function mockupOverlayRebuildAll(){
+            // Drop any overlays for nodes that no longer exist, create
+            // for new ones, and refresh content for any that changed.
+            const live = new Set();
+            cy.nodes('[kind = "mockup"]').forEach(ele => {
+                live.add(ele.id());
+                mockupOverlayUpdateContent(ele);
+            });
+            for (const id of Array.from(mockupOverlays.keys())) {
+                if (!live.has(id)) mockupOverlayDestroy(id);
+            }
+            mockupOverlaySyncAll();
+        }
+
+        // ── Apply ops to the canvas (idempotent) ─────────────────────
+        function applyNodeCreate(n){
+            if (!n || cy.$('#' + n.id).length) return;
+            const portData = n.data || {};
+            cy.add({ group: 'nodes',
+                data: {
+                    id: String(n.id),
+                    label: n.label,
+                    description: n.description,
+                    kind: n.kind,
+                    locked: !!n.locked,
+                    created_by: n.created_by,
+                    input_ports:  Array.isArray(portData.input_ports)  ? portData.input_ports  : [],
+                    output_ports: Array.isArray(portData.output_ports) ? portData.output_ports : [],
+                    parent_node_id: n.parent_node_id || 0,
+                    vote_count:     n.vote_count     || 0,
+                    mockup_html:          (typeof portData.html          === 'string') ? portData.html          : '',
+                    mockup_markdown:      (typeof portData.markdown      === 'string') ? portData.markdown      : '',
+                    mockup_markdown_html: (typeof portData.markdown_html === 'string') ? portData.markdown_html : '',
+                },
+                position: { x: n.x, y: n.y },
+            });
+            if (n.kind === 'mockup') {
+                mockupOverlayCreate(cy.$('#' + n.id));
+            }
+            const ele = cy.$('#' + n.id);
+            ele.scratch('lastSavedPos', { x: n.x, y: n.y });
+            // If this was our own create, select it + open inspector.
+            if (n.created_by === VIEWER_ID) {
+                ele.select();
+                openInspectorNode(ele);
+            }
+        }
+        function applyNodeUpdate(n){
+            if (!n) return;
+            const ele = cy.$('#' + n.id);
+            if (!ele.length) return;
+            ele.data('label', n.label);
+            ele.data('description', n.description);
+            ele.data('kind', n.kind);
+            ele.data('locked', !!n.locked);
+            // Mockup payload may have changed via the inspector; pull
+            // it back into cy data so the overlay refresh below sees
+            // the new HTML.
+            const portData = n.data || {};
+            if (Array.isArray(portData.input_ports))  ele.data('input_ports',  portData.input_ports);
+            if (Array.isArray(portData.output_ports)) ele.data('output_ports', portData.output_ports);
+            if (typeof portData.html          === 'string') ele.data('mockup_html',          portData.html);
+            if (typeof portData.markdown      === 'string') ele.data('mockup_markdown',      portData.markdown);
+            if (typeof portData.markdown_html === 'string') ele.data('mockup_markdown_html', portData.markdown_html);
+            const cur = ele.position();
+            if (Math.abs(cur.x - n.x) > 0.01 || Math.abs(cur.y - n.y) > 0.01) {
+                ele.position({ x: n.x, y: n.y });
+            }
+            ele.scratch('lastSavedPos', { x: n.x, y: n.y });
+            if (n.kind === 'mockup') mockupOverlayUpdateContent(ele);
+            if (selectedKind === 'node' && selectedID === n.id) openInspectorNode(ele);
+        }
+        function applyNodeDelete(id){
+            const ele = cy.$('#' + id);
+            if (!ele.length) return;
+            mockupOverlayDestroy(String(id));
+            ele.connectedEdges().remove();
+            ele.remove();
+            if (selectedKind === 'node' && selectedID === id) closeInspector();
+        }
+        function applyEdgeCreate(e){
+            if (!e || cy.$('edge[edgeId = ' + e.id + ']').length) return;
+            const sp = e.source_port || '';
+            const tp = e.target_port || '';
+            let portTag = '';
+            if (sp || tp) portTag = '[' + (sp || '·') + ' → ' + (tp || '·') + ']';
+            const fullLabel = [e.label || '', portTag].filter(Boolean).join(' ');
+            cy.add({ group: 'edges',
+                data: {
+                    id: 'e' + e.id, edgeId: e.id,
+                    source: String(e.source_id), target: String(e.target_id),
+                    label: fullLabel, rawLabel: e.label || '',
+                    source_port: sp, target_port: tp,
+                    kind: e.kind, locked: !!e.locked, created_by: e.created_by,
+                },
+            });
+        }
+        function applyEdgeDelete(id){
+            cy.$('edge[edgeId = ' + id + ']').remove();
+            if (selectedKind === 'edge' && selectedID === id) closeInspector();
+        }
+
+        // ── REST helpers ────────────────────────────────────────────
+        async function restJSON(url, opts){
+            opts = opts || {};
+            opts.credentials = 'same-origin';
+            opts.headers = Object.assign({ 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }, opts.headers || {});
+            const r = await fetch(url, opts);
+            const body = await r.json().catch(() => null);
+            if (!r.ok || !body || body.ok === false) throw new Error((body && body.error) || ('HTTP ' + r.status));
+            return body;
+        }
+
+        // ── Connect-mode (edge creation) ────────────────────────────
+        // Single helper called from the inspector's "Connect to…"
+        // button OR the legacy right-click gesture. Sets
+        // pendingEdgeSource + shows the canvas banner so the user
+        // knows the next click will land an edge. Two-step picker:
+        //
+        //   1. If the source node has >1 output port, pop the picker
+        //      to choose which one. The chosen port is stamped onto
+        //      pendingEdgeSourcePort and the banner waits for a target
+        //      click. With 0 or 1 ports, skip the prompt and use the
+        //      single port name (or "" for the default).
+        //
+        //   2. On target click (in the cy.on('tap', 'node') handler),
+        //      same shape: pop a target-port picker if the target has
+        //      >1 input port, otherwise auto-fill and create the edge.
+        //
+        // This keeps the UX trivial for un-portned nodes (existing
+        // user-proposals and comment nodes) while exposing the named
+        // outputs/inputs on canonical pages cleanly.
+        function startEdgeFrom(srcID) {
+            if (!ensureCy('startEdgeFrom')) return;
+            pendingEdgeSource = srcID;
+            pendingEdgeSourcePort = null;
+            const ele = cy.$('#' + srcID);
+            const label = (ele.length && ele.data('label')) || ('#' + srcID);
+            const outs = (ele.length && ele.data('output_ports')) || [];
+
+            $connectBannerText.textContent = '🔗 Connect from: ' + label + ' — click another node…';
+            $connectBanner.classList.add('open');
+            closeInspector();
+
+            if (outs.length > 1) {
+                showPortPicker('Pick output port on ' + label, outs, (chosen) => {
+                    pendingEdgeSourcePort = chosen;
+                    $connectBannerText.textContent = '🔗 Connect [' + label + ' → ' + chosen + '] — click target…';
+                });
+            } else if (outs.length === 1) {
+                pendingEdgeSourcePort = outs[0].name || '';
+            } else {
+                pendingEdgeSourcePort = '';
+            }
+        }
+        function endEdgeMode() {
+            pendingEdgeSource = null;
+            pendingEdgeSourcePort = null;
+            $connectBanner.classList.remove('open');
+            hidePortPicker();
+        }
+        if ($connectCancel) {
+            $connectCancel.addEventListener('click', endEdgeMode);
+        }
+
+        // Port-picker helpers. The picker is a single shared DOM node
+        // — re-rendered per use — pinned top-center under the connect
+        // banner. Click a row to pick; the onChoose callback fires with
+        // the port name (string), and the picker hides itself.
+        function showPortPicker(title, ports, onChoose) {
+            const rows = ports.map(p => {
+                const name = escapeAttr(p.name || '');
+                const hint = escapeAttr(p.hint || '');
+                return '<div class="port-row" data-name="' + name + '">'
+                    + '<span class="port-name">' + escapeText(p.name || '') + '</span>'
+                    + (p.hint ? '<span class="port-hint">' + escapeText(p.hint) + '</span>' : '')
+                    + '</div>';
+            }).join('');
+            $portPicker.innerHTML =
+                '<h6>' + escapeText(title) + '</h6>' +
+                rows;
+            $portPicker.classList.add('open');
+            // One delegated click handler per show — wires up after
+            // innerHTML is in the DOM.
+            $portPicker.querySelectorAll('.port-row').forEach(row => {
+                row.addEventListener('click', () => {
+                    const chosen = row.getAttribute('data-name') || '';
+                    hidePortPicker();
+                    onChoose(chosen);
+                });
+            });
+        }
+        function hidePortPicker() {
+            $portPicker.classList.remove('open');
+            $portPicker.innerHTML = '';
+        }
+
+        // ── Send ops (REST-only) ────────────────────────────────────
+        // ensureCy is the single guard every user-action handler runs
+        // before touching the cytoscape API. Without it, a CDN failure
+        // or a bfcache restore where window.cytoscape didn't survive
+        // turns every button click into an uncaught
+        // "Cannot read properties of undefined (reading 'extent')"
+        // and the page silently breaks. Returns true when cy is usable;
+        // surfaces a clear toolbar status + console.error otherwise.
+        function ensureCy(action){
+            if (!cy) {
+                console.error('[flow] ' + action + ' aborted — cytoscape not initialized');
+                setStatus('canvas not ready — refresh the page', 'err');
+                return false;
+            }
+            return true;
+        }
+
+        async function addNode(kind){
+            if (!ensureCy('addNode')) return;
+            const center = cy.extent();
+            const x = (center.x1 + center.x2) / 2 + (Math.random() * 60 - 30);
+            const y = (center.y1 + center.y2) / 2 + (Math.random() * 60 - 30);
+            // Per-kind starter labels + payloads. Mockups get a tiny
+            // example layout so a fresh user has something to edit
+            // instead of a blank iframe — same idea as a Figma "blank
+            // frame" template having default dimensions.
+            let label = 'New node';
+            let data = null;
+            if (kind === 'comment') {
+                label = 'Comment';
+            } else if (kind === 'mockup') {
+                label = 'New mockup';
+                data = {
+                    html: '<div style="font-family:system-ui;padding:1rem;color:#222;background:#f5f5f5;">\n' +
+                          '  <h2 style="margin:0 0 .5rem 0;">Section heading</h2>\n' +
+                          '  <p style="margin:0 0 .75rem 0;">Sketch the UI you\'d like to see here.</p>\n' +
+                          '  <button style="padding:.4rem .8rem;border:1px solid #999;border-radius:4px;background:#fff;">Action</button>\n' +
+                          '</div>',
+                };
+            }
+            try {
+                const body = { kind: kind || 'user-proposal', label, description: '', x, y };
+                if (data) body.data = data;
+                const b = await restJSON('/flow/node', { method: 'POST', body: JSON.stringify(body) });
+                applyNodeCreate(b.node);
+                setStatus('saved', 'ok');
+            } catch (e) { setStatus('add failed: ' + e.message, 'err'); }
+        }
+
+        async function sendNodeUpdate(id, patch){
+            try {
+                const b = await restJSON('/flow/node/' + id, { method: 'PATCH', body: JSON.stringify(patch) });
+                applyNodeUpdate(b.node);
+                setStatus('saved', 'ok');
+            } catch (e) { setStatus('save failed: ' + e.message, 'err'); }
+        }
+
+        async function sendNodeDelete(id){
+            try {
+                await restJSON('/flow/node/' + id, { method: 'DELETE' });
+                applyNodeDelete(id);
+                setStatus('deleted', 'ok');
+            } catch (e) { setStatus('delete failed: ' + e.message, 'err'); }
+        }
+
+        async function sendEdgeCreate(src, tgt, srcPort, tgtPort){
+            try {
+                const b = await restJSON('/flow/edge', { method: 'POST', body: JSON.stringify({
+                    source_id: src,
+                    target_id: tgt,
+                    source_port: srcPort || '',
+                    target_port: tgtPort || '',
+                    kind: 'default',
+                    label: '',
+                })});
+                applyEdgeCreate(b.edge);
+                setStatus('saved', 'ok');
+            } catch (e) { setStatus('edge failed: ' + e.message, 'err'); }
+        }
+
+        async function sendEdgeDelete(id){
+            try {
+                await restJSON('/flow/edge/' + id, { method: 'DELETE' });
+                applyEdgeDelete(id);
+                setStatus('deleted', 'ok');
+            } catch (e) { setStatus('delete failed: ' + e.message, 'err'); }
+        }
+
+        // ── Wiki workflow: vote / propose / promote ─────────────────
+        // Three small REST helpers tied to the inspector buttons.
+        // Each updates the local cy data + re-renders the inspector
+        // so the UI reflects the new state without reloading the
+        // whole graph. Failure paths surface to the toolbar status
+        // — no silent breakage.
+        async function voteFlowNode(nodeID) {
+            try {
+                const b = await restJSON('/flow/node/' + nodeID + '/vote', { method: 'POST' });
+                const ele = cy.$('#' + nodeID);
+                if (ele.length) ele.data('vote_count', b.count);
+                const $vc = document.getElementById('vote-count');
+                if ($vc) $vc.textContent = b.count;
+                setStatus(b.added ? 'voted' : 'vote removed', 'ok');
+            } catch (e) { setStatus('vote failed: ' + e.message, 'err'); }
+        }
+
+        async function proposeChange(nodeID) {
+            try {
+                const b = await restJSON('/flow/node/' + nodeID + '/propose-change', { method: 'POST' });
+                applyNodeCreate(b.node);
+                // applyNodeCreate already opens the inspector on the
+                // new fork (since it's "our" create). The synthetic
+                // proposal-of edge is added on the next loadGraph,
+                // but for *this* session we add it inline so the
+                // visual link is immediate.
+                cy.add({ group: 'edges',
+                    data: {
+                        id: 'p' + b.node.id, edgeId: 0,
+                        source: String(b.node.id),
+                        target: String(b.node.parent_node_id),
+                        label: 'edits', kind: 'proposal-of',
+                        locked: true, synthetic: true,
+                    },
+                });
+                setStatus('proposal forked — edit the amber copy', 'ok');
+            } catch (e) { setStatus('propose failed: ' + e.message, 'err'); }
+        }
+
+        // Opens the history modal for `nodeID`. Fetches the audit
+        // list from /flow/node/:id/history, renders one row per
+        // revision with a "Show before" button that pops a per-row
+        // diff against the current node state. The diff is the same
+        // shape as the in-canvas proposal diff (label / description
+        // / ports — and for mockups, side-by-side iframes), kept
+        // simple so the visual idiom carries across surfaces.
+        async function openHistoryModal(nodeID, currentData) {
+            const modalEl = document.getElementById('history-modal');
+            const titleEl = document.getElementById('history-modal-title');
+            const bodyEl  = document.getElementById('history-modal-body');
+            if (!modalEl || !window.bootstrap) return;
+            titleEl.textContent = 'History — ' + (currentData.label || ('#' + nodeID));
+            bodyEl.innerHTML = '<div style="color:var(--text-muted);">Loading…</div>';
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            try {
+                const r = await fetch('/flow/node/' + nodeID + '/history', { credentials: 'same-origin' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const j = await r.json();
+                const revs = (j && j.revisions) || [];
+                if (revs.length === 0) {
+                    bodyEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.88rem;">No revisions recorded yet. History fills as proposals get merged or promoted into this node.</div>';
+                    return;
+                }
+                bodyEl.innerHTML = revs.map((rev, i) => {
+                    const when = new Date(rev.created_at).toLocaleString();
+                    const actor = rev.actor_user_id ? ('user #' + rev.actor_user_id) : 'system';
+                    return '<div class="mb-2 p-2" style="border:1px solid var(--border);border-radius:4px;">'
+                        + '<div style="font-size:0.78rem;">'
+                        +   '<strong>' + escapeText(rev.action_kind) + '</strong> '
+                        +   '&middot; ' + escapeText(rev.summary || '')
+                        + '</div>'
+                        + '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">'
+                        +   when + ' &middot; by ' + escapeText(actor)
+                        + '</div>'
+                        + '<button class="btn btn-sm btn-outline-secondary py-0 mt-2" data-rev-idx="' + i + '" style="font-size:0.7rem;">Show before</button>'
+                        + '<div class="rev-diff" data-rev-diff="' + i + '" style="display:none;margin-top:6px;"></div>'
+                    + '</div>';
+                }).join('');
+                // Wire the "Show before" buttons. Diff is computed
+                // against currentData (live node state) so users see
+                // the contrast between "what was rolled into this
+                // canonical at merge time" vs "what it looks like now".
+                bodyEl.querySelectorAll('button[data-rev-idx]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const idx = parseInt(btn.getAttribute('data-rev-idx'), 10);
+                        const target = bodyEl.querySelector('div[data-rev-diff="' + idx + '"]');
+                        if (!target) return;
+                        if (target.style.display === 'block') {
+                            target.style.display = 'none';
+                            btn.textContent = 'Show before';
+                            return;
+                        }
+                        const snap = revs[idx].snapshot || {};
+                        target.innerHTML = renderRevisionDiff(snap, currentData);
+                        target.style.display = 'block';
+                        btn.textContent = 'Hide';
+                    });
+                });
+            } catch (e) {
+                bodyEl.innerHTML = '<div class="text-danger" style="font-size:0.88rem;">Failed to load history: ' + escapeText(e.message) + '</div>';
+            }
+        }
+
+        // Build a small HTML diff between a revision's snapshot
+        // (server JSON shape) and the live node data. Reused by the
+        // history modal — same idiom as the inspector's proposal
+        // diff so users learn one mental model.
+        function renderRevisionDiff(snap, live) {
+            const cell = (val, changed, isOld) => {
+                const base = 'padding:3px 6px;font-size:0.78rem;vertical-align:top;';
+                if (!changed) return base + 'color:var(--text-muted);';
+                return isOld
+                    ? base + 'color:var(--text-muted);text-decoration:line-through;'
+                    : base + 'background:rgba(74,222,128,0.12);color:#fde68a;';
+            };
+            const row = (label, oldVal, newVal) => {
+                const changed = (oldVal || '') !== (newVal || '');
+                return '<tr>'
+                    + '<td style="padding:3px 6px;font-size:0.78rem;font-weight:600;width:25%;">' + escapeText(label) + '</td>'
+                    + '<td style="' + cell(oldVal, changed, true)  + '">' + escapeText(oldVal || '—') + '</td>'
+                    + '<td style="' + cell(newVal, changed, false) + '">' + escapeText(newVal || '—') + '</td>'
+                    + '</tr>';
+            };
+            // The snapshot uses Go struct tags — Label/Description
+            // were JSON-encoded as "label" and "description"; data_json
+            // round-trips as "data". Mockup HTML lives at data.html.
+            const snapData = snap.data || {};
+            const snapHTML = snapData.html || '';
+            const liveHTML = live.mockup_html || '';
+            let mockupBlock = '';
+            if (snapHTML || liveHTML) {
+                mockupBlock =
+                    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">'
+                    + '<div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;">Before</div>'
+                    + '<iframe sandbox="" srcdoc="' + escapeAttr(snapHTML) + '" style="width:100%;height:140px;border:1px solid var(--border);border-radius:3px;background:#fff;"></iframe></div>'
+                    + '<div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;">Current</div>'
+                    + '<iframe sandbox="" srcdoc="' + escapeAttr(liveHTML) + '" style="width:100%;height:140px;border:1px solid var(--border);border-radius:3px;background:#fff;"></iframe></div>'
+                    + '</div>';
+            }
+            return '<table style="width:100%;border-collapse:collapse;">'
+                + '<thead><tr style="font-size:0.7rem;color:var(--text-muted);"><th></th><th style="text-align:left;padding:2px 6px;">Before</th><th style="text-align:left;padding:2px 6px;">Current</th></tr></thead>'
+                + '<tbody>'
+                + row('Label',       snap.label,       live.label)
+                + row('Description', snap.description, live.description)
+                + '</tbody></table>'
+                + mockupBlock;
+        }
+
+        async function promoteFlowNode(nodeID, isMerge) {
+            const verb = isMerge ? 'Merge this proposal into its canonical?' : 'Promote this node to canonical (locked)?';
+            if (!confirm(verb)) return;
+            try {
+                const b = await restJSON('/flow/node/' + nodeID + '/promote', { method: 'POST' });
+                if (isMerge && b.merged_into) {
+                    // Pull a fresh graph: the parent's content has
+                    // changed, the proposal is gone. Cheaper than a
+                    // surgical update and avoids subtle desync on
+                    // ports / data_json.
+                    setStatus('merged into #' + b.merged_into, 'ok');
+                    loadGraph();
+                } else {
+                    const ele = cy.$('#' + nodeID);
+                    if (ele.length) {
+                        ele.data('locked', true);
+                        ele.data('kind', 'system');
+                    }
+                    setStatus('promoted to canonical', 'ok');
+                    closeInspector();
+                }
+            } catch (e) { setStatus('promote failed: ' + e.message, 'err'); }
+        }
+
+        // Used by the undo path to recreate a deleted node with all of its
+        // saved fields (regular addNode only takes kind).
+        async function recreateNode(snap){
+            try {
+                const b = await restJSON('/flow/node', { method: 'POST', body: JSON.stringify({
+                    kind: snap.kind, label: snap.label, description: snap.description,
+                    x: snap.x, y: snap.y,
+                })});
+                applyNodeCreate(b.node);
+            } catch (e) { setStatus('undo failed: ' + e.message, 'err'); }
+        }
+
+        // ── Initial graph load ───────────────────────────────────────
+        async function loadGraph(){
+            try {
+                const r = await fetch('/flow/data', { credentials: 'same-origin' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const g = await r.json();
+                applyGraph(g);
+                setStatus('ready', 'ok');
+            } catch (err) {
+                // Log the full error (with stack) so the cause is visible
+                // in DevTools; the toolbar status only gets the message.
+                console.error('[flow] loadGraph failed:', err);
+                setStatus('load failed: ' + err.message, 'err');
+            }
+        }
+        function applyGraph(g){
+            // Bail loudly instead of throwing a confusing "Cannot read
+            // properties of undefined (reading 'elements')" out of
+            // cy.elements() when initCy never ran (cytoscape CDN failed
+            // to load, container missing, etc).
+            if (!cy) {
+                console.error('[flow] applyGraph called before cytoscape was ready');
+                setStatus('canvas not ready — try refreshing the page', 'err');
+                return;
+            }
+            if (!g) {
+                console.error('[flow] applyGraph called with null payload');
+                setStatus('empty server response', 'err');
+                return;
+            }
+            const elements = [];
+            for (const n of (g.nodes || [])) {
+                // Parse port arrays out of data_json. Server sends these
+                // under `data` (FlowNode.DataJSON → JSON `data` field per
+                // the model's omitempty tag). When absent, the node
+                // falls back to one anonymous port — connect-mode skips
+                // the picker and the edge gets empty source/target_port
+                // strings.
+                const portData = n.data || {};
+                const inPorts  = Array.isArray(portData.input_ports)  ? portData.input_ports  : [];
+                const outPorts = Array.isArray(portData.output_ports) ? portData.output_ports : [];
+                elements.push({ group: 'nodes',
+                    data: {
+                        id: String(n.id),
+                        label: n.label || ('#' + n.id),
+                        description: n.description || '',
+                        kind: n.kind || 'user-proposal',
+                        locked: !!n.locked,
+                        created_by: n.created_by,
+                        input_ports:  inPorts,
+                        output_ports: outPorts,
+                        parent_node_id: n.parent_node_id || 0,
+                        vote_count:     n.vote_count     || 0,
+                        // Mockup payload — the canvas overlay reads this
+                        // directly. Stored in data_json.html so it
+                        // round-trips through every server path that
+                        // already passes data_json (CreateNode,
+                        // UpdateNode, GetFlowGraph) without per-field
+                        // plumbing. Defaults to empty string for non-
+                        // mockup nodes; the iframe srcdoc handles "" fine.
+                        // markdown_html is server-rendered (goldmark +
+                        // sanitize.Forum) so the inspector can drop it
+                        // straight into innerHTML — no client-side
+                        // markdown lib needed.
+                        mockup_html:          (typeof portData.html          === 'string') ? portData.html          : '',
+                        mockup_markdown:      (typeof portData.markdown      === 'string') ? portData.markdown      : '',
+                        mockup_markdown_html: (typeof portData.markdown_html === 'string') ? portData.markdown_html : '',
+                    },
+                    position: { x: n.x || 0, y: n.y || 0 },
+                });
+            }
+            for (const e of (g.edges || [])) {
+                // Build a label that surfaces the port path when one is
+                // set. "[click → entry]" reads the same way Blueprints
+                // and Figma do, so users intuit it without docs.
+                const baseLabel = e.label || '';
+                const sp = e.source_port || '';
+                const tp = e.target_port || '';
+                let portTag = '';
+                if (sp || tp) portTag = '[' + (sp || '·') + ' → ' + (tp || '·') + ']';
+                const fullLabel = [baseLabel, portTag].filter(Boolean).join(' ');
+                elements.push({ group: 'edges',
+                    data: {
+                        id: 'e' + e.id,
+                        edgeId: e.id,
+                        source: String(e.source_id),
+                        target: String(e.target_id),
+                        label: fullLabel,
+                        rawLabel: baseLabel,
+                        source_port: sp,
+                        target_port: tp,
+                        kind: e.kind || 'default',
+                        locked: !!e.locked,
+                        created_by: e.created_by,
+                    },
+                });
+            }
+            // Synthesize "proposal-of" edges (no DB cost) so the
+            // parent → fork relationship is visible on the canvas
+            // without users having to know it exists. Rendered with
+            // a distinct dashed style + "edits" label. The synthetic
+            // ID is "p<childId>" so it never collides with a real
+            // edge's "e<id>".
+            for (const n of (g.nodes || [])) {
+                if (n.parent_node_id && n.parent_node_id > 0) {
+                    elements.push({ group: 'edges',
+                        data: {
+                            id: 'p' + n.id,
+                            edgeId: 0,                          // synthetic: not deletable via the edge API
+                            source: String(n.id),
+                            target: String(n.parent_node_id),
+                            label: 'edits',
+                            kind: 'proposal-of',
+                            locked: true,
+                            synthetic: true,
+                        },
+                    });
+                }
+            }
+            cy.elements().remove();
+            cy.add(elements);
+            cy.nodes().forEach(n => n.scratch('lastSavedPos', { ...n.position() }));
+            cy.fit(undefined, 60);
+            // (Re)create / refresh / drop mockup overlays in lockstep
+            // with the graph — applyGraph is the only path that can
+            // wholesale-replace the node set.
+            mockupOverlayRebuildAll();
+            // A reload nukes the local comment cache so the next inspector
+            // open re-fetches from the server.
+            commentsByNode.clear();
+        }
+
+        // ── Inspector ───────────────────────────────────────────────
+        function openInspectorNode(ele){
+            selectedKind = 'node';
+            selectedID = parseInt(ele.id(), 10);
+            const data = ele.data();
+            const editable = canEdit(data);
+            const parentID = data.parent_node_id || 0;
+            const isProposal = parentID > 0;
+            const titleSuffix = data.locked ? ' (locked)' : (isProposal ? ' (proposed edit)' : '');
+            $inspectorTitle.textContent = 'Node #' + selectedID + titleSuffix;
+            // Render the port lists (input + output) so users can see
+            // what's available BEFORE clicking Connect. This is the
+            // "visible ports" affordance — small chips listed in the
+            // inspector instead of floating overlays on the canvas.
+            // Future canvas swap (Rete.js) will move them onto the node
+            // edge as actual sockets; the data model stays the same.
+            const inPorts  = data.input_ports  || [];
+            const outPorts = data.output_ports || [];
+            const renderPortList = (label, list) => {
+                if (!list || list.length === 0) return '';
+                const chips = list.map(p =>
+                    '<span class="badge bg-secondary me-1" title="' + escapeAttr(p.hint || '') + '" style="font-size:0.7rem;font-weight:500;">'
+                    + escapeText(p.name || '') + '</span>'
+                ).join('');
+                return '<div class="mb-1" style="font-size:0.72rem;color:var(--text-muted);"><strong>' + label + ':</strong> ' + chips + '</div>';
+            };
+
+            // Side-by-side diff for proposals: pull the parent out of
+            // the cy graph (we already loaded it) and render an "old →
+            // new" table for the fields the proposer can edit. Pure
+            // display — no fetch, no cost. When the parent isn't in
+            // the local graph (rare: parent was just deleted), the
+            // diff section is skipped.
+            //
+            // For mockup-on-mockup proposals, append a side-by-side
+            // iframe diff so reviewers can see the actual rendered
+            // change side-by-side, not just the textual delta. Same
+            // sandbox="" boundary as everywhere else.
+            let diffHtml = '';
+            if (isProposal) {
+                const parentEle = cy.$('#' + parentID);
+                if (parentEle.length) {
+                    const p = parentEle.data();
+                    const fmtPorts = list => (list || []).map(x => x.name).filter(Boolean).join(', ') || '—';
+                    const row = (label, oldVal, newVal) => {
+                        const changed = (oldVal || '') !== (newVal || '');
+                        const cellStyle = 'padding:3px 6px;font-size:0.78rem;vertical-align:top;';
+                        const newStyle = changed ? cellStyle + 'background:rgba(74,222,128,0.12);color:#fde68a;' : cellStyle;
+                        const oldStyle = changed ? cellStyle + 'color:var(--text-muted);text-decoration:line-through;' : cellStyle + 'color:var(--text-muted);';
+                        return '<tr>'
+                            + '<td style="' + cellStyle + 'font-weight:600;width:30%;">' + escapeText(label) + '</td>'
+                            + '<td style="' + oldStyle + '">' + escapeText(oldVal || '—') + '</td>'
+                            + '<td style="' + newStyle + '">' + escapeText(newVal || '—') + '</td>'
+                            + '</tr>';
+                    };
+                    let mockupDiff = '';
+                    if (data.kind === 'mockup' && p.kind === 'mockup') {
+                        mockupDiff =
+                            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">'
+                            + '<div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">Current</div>'
+                            + '<iframe sandbox="" srcdoc="' + escapeAttr(p.mockup_html || '') + '" style="width:100%;height:160px;border:1px solid var(--border);border-radius:3px;background:#fff;"></iframe></div>'
+                            + '<div><div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">Proposed</div>'
+                            + '<iframe sandbox="" srcdoc="' + escapeAttr(data.mockup_html || '') + '" style="width:100%;height:160px;border:1px solid var(--border);border-radius:3px;background:#fff;"></iframe></div>'
+                            + '</div>';
+                    }
+                    diffHtml =
+                        '<div class="mt-2 mb-2 p-2" style="border:1px dashed rgba(251,191,36,0.5);border-radius:4px;background:rgba(63,47,26,0.35);">'
+                        + '<div class="flow-meta mb-1">📝 Proposed change to <a href="#" id="diff-jump-parent" style="color:var(--bs-warning);">node #' + parentID + ' (' + escapeText(p.label || '') + ')</a></div>'
+                        + '<table style="width:100%;border-collapse:collapse;">'
+                        + '<thead><tr style="font-size:0.7rem;color:var(--text-muted);"><th></th><th style="text-align:left;padding:2px 6px;">Current</th><th style="text-align:left;padding:2px 6px;">Proposed</th></tr></thead>'
+                        + '<tbody>'
+                        + row('Label',       p.label,       data.label)
+                        + row('Description', p.description, data.description)
+                        + row('Inputs',      fmtPorts(p.input_ports),  fmtPorts(data.input_ports))
+                        + row('Outputs',     fmtPorts(p.output_ports), fmtPorts(data.output_ports))
+                        + '</tbody></table>'
+                        + mockupDiff
+                        + '</div>';
+                }
+            }
+
+            // Action buttons:
+            //  * 👍 Vote — every signed-in user, every node.
+            //  * ✏️ Propose change — anyone, on any non-proposal node
+            //    (forking a proposal-of-a-proposal isn't supported in
+            //    this iteration; one fork at a time keeps the diff
+            //    semantics tractable).
+            //  * ⚡ Promote / Merge — mods only. Wording flips by
+            //    parent_node_id presence: "Merge into canonical" for
+            //    targeted edits, "Promote to canonical" for stand-
+            //    alone proposals.
+            const voteBtn = (VIEWER_ID > 0)
+                ? '<button id="btn-vote" class="btn btn-sm btn-outline-warning" type="button">👍 Vote <span class="badge bg-secondary ms-1" id="vote-count">' + (data.vote_count || 0) + '</span></button>'
+                : '';
+            const proposeBtn = (VIEWER_ID > 0 && !isProposal)
+                ? '<button id="btn-propose" class="btn btn-sm btn-outline-info" type="button">✏️ Propose change</button>'
+                : '';
+            let promoteBtn = '';
+            if (VIEWER_IS_MOD) {
+                if (isProposal) {
+                    promoteBtn = '<button id="btn-promote" class="btn btn-sm btn-success" type="button">⚡ Merge into canonical</button>';
+                } else if (!data.locked) {
+                    promoteBtn = '<button id="btn-promote" class="btn btn-sm btn-success" type="button">⚡ Promote to canonical</button>';
+                }
+            }
+            // History is available on any node — every node may
+            // accumulate pre-merge / pre-promote snapshots over its
+            // lifetime. Hidden when there's no chance of history (a
+            // brand-new user-proposal) is overkill; always show it
+            // and let the modal say "no history yet" when empty.
+            const historyBtn = '<button id="btn-history" class="btn btn-sm btn-outline-secondary" type="button">🕘 History</button>';
+            const actionRow = (voteBtn || proposeBtn || promoteBtn || historyBtn)
+                ? '<div class="d-flex gap-1 flex-wrap mt-2 mb-2">' + voteBtn + proposeBtn + promoteBtn + historyBtn + '</div>'
+                : '';
+
+            // Mockup-specific block: HTML editor + sandboxed live
+            // preview. The textarea writes to data_json.html on save;
+            // the inspector preview is what the user sees while
+            // editing, the canvas overlay is what reviewers see at a
+            // glance. Markdown is exposed as a plain textarea for
+            // notes-on-the-mockup ("here's what this is supposed to
+            // do") — not rendered inline (yet); a future iteration
+            // can run it through marked/goldmark.
+            let mockupHtmlBlock = '';
+            if (data.kind === 'mockup') {
+                const escapedHTML = escapeText(data.mockup_html || '');
+                const escapedMD   = escapeText(data.mockup_markdown || '');
+                // markdown_html is *already-sanitized* server-side via
+                // sanitize.Forum (no script, no images, no raw HTML).
+                // Safe to drop into innerHTML directly — the same
+                // pipeline used for forum posts.
+                const renderedMD = data.mockup_markdown_html || '';
+                const renderedBlock = renderedMD
+                    ? '<div class="mb-2 p-2" style="font-size:0.82rem;background:var(--bg-base);border-radius:4px;border:1px solid var(--border);">' + renderedMD + '</div>'
+                    : '';
+                mockupHtmlBlock =
+                    '<hr style="border-color:rgba(167,139,250,0.3);">' +
+                    '<div class="d-flex justify-content-between align-items-end mb-1">' +
+                        '<label class="form-label mb-0">HTML</label>' +
+                        '<button id="btn-mockup-fullsize" class="btn btn-sm btn-outline-secondary py-0 px-2" type="button" style="font-size:0.7rem;">🔍 Open full-size</button>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<textarea id="ins-mockup-html" class="form-control form-control-sm font-monospace" rows="8" ' + (editable ? '' : 'disabled') + '>' + escapedHTML + '</textarea>' +
+                    '</div>' +
+                    '<div class="mb-2"><label class="form-label">Live preview</label>' +
+                        '<iframe id="ins-mockup-preview" sandbox="" style="width:100%;height:160px;border:1px solid var(--border);border-radius:4px;background:#fff;"></iframe>' +
+                    '</div>' +
+                    '<div class="mb-2"><label class="form-label">Notes (markdown)</label>' +
+                        '<textarea id="ins-mockup-md" class="form-control form-control-sm" rows="3" placeholder="Why this mockup, what it changes, what users said in review…" ' + (editable ? '' : 'disabled') + '>' + escapedMD + '</textarea>' +
+                        renderedBlock +
+                    '</div>';
+            }
+
+            $inspectorBody.innerHTML =
+                '<div class="mb-2"><label class="form-label">Label</label>' +
+                '<input id="ins-label" class="form-control form-control-sm" type="text" value="' + escapeAttr(data.label || '') + '" ' + (editable ? '' : 'disabled') + '></div>' +
+                '<div class="mb-2"><label class="form-label">Description</label>' +
+                '<textarea id="ins-desc" class="form-control form-control-sm" ' + (editable ? '' : 'disabled') + '>' + escapeText(data.description || '') + '</textarea></div>' +
+                (VIEWER_IS_MOD ? '<div class="form-check mb-2"><input id="ins-locked" class="form-check-input" type="checkbox" ' + (data.locked ? 'checked' : '') + '><label class="form-check-label" for="ins-locked" style="font-size:0.78rem;">Locked (canonical)</label></div>' : '') +
+                renderPortList('Inputs',  inPorts) +
+                renderPortList('Outputs', outPorts) +
+                '<div class="flow-meta">created_by: ' + (data.created_by || '—') + (data.locked ? ' &middot; <span class="flow-locked-badge">locked</span>' : '') + '</div>' +
+                mockupHtmlBlock +
+                diffHtml +
+                actionRow +
+                // "Connect to…" is the discoverable equivalent of the
+                // right-click-then-click-target gesture. Anyone can edge
+                // FROM any node (including locked canonical ones); the
+                // edge ownership rules apply at the target end / overall.
+                '<div class="mt-2 mb-2"><button id="btn-connect-from" class="btn btn-sm btn-outline-primary w-100" type="button">🔗 Connect to another node…</button></div>' +
+                '<div class="flow-comments" id="comments-thread">' +
+                    '<div class="flow-meta">Comments</div>' +
+                    '<div id="comments-list" style="margin-top:4px;"></div>' +
+                    '<div class="d-flex gap-1 mt-2"><input id="comment-input" class="form-control form-control-sm" type="text" placeholder="Add a comment…"><button id="btn-comment" class="btn btn-sm btn-outline-primary">Send</button></div>' +
+                '</div>';
+            $btnSave.disabled = !editable;
+            $btnDelete.disabled = !editable;
+            $btnSave.style.display = '';
+            $inspector.classList.add('open');
+            const $cBtn = document.getElementById('btn-comment');
+            if ($cBtn) $cBtn.addEventListener('click', () => sendComment(selectedID));
+            const $cIn = document.getElementById('comment-input');
+            if ($cIn) $cIn.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); sendComment(selectedID); }
+            });
+            const $connect = document.getElementById('btn-connect-from');
+            if ($connect) $connect.addEventListener('click', () => startEdgeFrom(selectedID));
+            const $vote = document.getElementById('btn-vote');
+            if ($vote) $vote.addEventListener('click', () => voteFlowNode(selectedID));
+            const $propose = document.getElementById('btn-propose');
+            if ($propose) $propose.addEventListener('click', () => proposeChange(selectedID));
+            const $promote = document.getElementById('btn-promote');
+            if ($promote) $promote.addEventListener('click', () => promoteFlowNode(selectedID, isProposal));
+            const $history = document.getElementById('btn-history');
+            if ($history) $history.addEventListener('click', () => openHistoryModal(selectedID, data));
+            const $diffJump = document.getElementById('diff-jump-parent');
+            if ($diffJump) $diffJump.addEventListener('click', (e) => {
+                e.preventDefault();
+                const parentEle = cy.$('#' + parentID);
+                if (parentEle.length) {
+                    cy.animate({ center: { eles: parentEle }, zoom: Math.max(cy.zoom(), 1) }, { duration: 250 });
+                    parentEle.select();
+                    setTimeout(() => openInspectorNode(parentEle), 260);
+                }
+            });
+            // Mockup live-preview wiring. Bind the iframe's srcdoc to
+            // the textarea on every keystroke; debounce-by-input
+            // keeps the iframe re-creation rate sane on long mockups.
+            // The sandbox="" attr is the security boundary — even
+            // mid-edit, malicious HTML can't fire scripts or submit
+            // forms outside the frame.
+            if (data.kind === 'mockup') {
+                const $mh = document.getElementById('ins-mockup-html');
+                const $mp = document.getElementById('ins-mockup-preview');
+                if ($mh && $mp) {
+                    $mp.srcdoc = $mh.value;
+                    $mh.addEventListener('input', () => { $mp.srcdoc = $mh.value; });
+                }
+                // Full-size modal: opens a bootstrap dialog at modal-xl
+                // (~85% viewport width) with the live HTML — useful
+                // when the 240×160 canvas tile + the 160px inspector
+                // pane are too small to evaluate the actual layout.
+                const $full = document.getElementById('btn-mockup-fullsize');
+                if ($full) $full.addEventListener('click', () => {
+                    const $frame  = document.getElementById('mockup-fullsize-frame');
+                    const $title  = document.getElementById('mockup-fullsize-title');
+                    if ($frame) $frame.srcdoc = ($mh ? $mh.value : data.mockup_html || '');
+                    if ($title) $title.textContent = 'Mockup preview — ' + (data.label || ('#' + selectedID));
+                    const modalEl = document.getElementById('mockup-fullsize-modal');
+                    if (modalEl && window.bootstrap) {
+                        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                    }
+                });
+            }
+            // Lazy-load thread on first inspector open (cached locally).
+            if (!commentsByNode.has(selectedID)) {
+                fetchComments(selectedID);
+            } else {
+                renderComments(selectedID);
+            }
+        }
+
+        function openInspectorEdge(ele){
+            selectedKind = 'edge';
+            selectedID = ele.data('edgeId');
+            const data = ele.data();
+            const editable = canEdit(data);
+            $inspectorTitle.textContent = 'Edge #' + selectedID + (data.locked ? ' (locked)' : '');
+            $inspectorBody.innerHTML =
+                '<div class="flow-meta">' + data.source + ' &rarr; ' + data.target + ' &middot; created_by: ' + (data.created_by || '—') + '</div>';
+            $btnSave.style.display = 'none';
+            $btnDelete.disabled = !editable;
+            $inspector.classList.add('open');
+        }
+
+        function closeInspector(){
+            $inspector.classList.remove('open');
+            $btnSave.style.display = '';
+            selectedKind = null; selectedID = null;
+        }
+
+        function canEdit(data){
+            if (VIEWER_IS_MOD) return true;
+            if (data.locked) return false;
+            return data.created_by && Number(data.created_by) === Number(VIEWER_ID);
+        }
+
+        $btnSave.addEventListener('click', () => {
+            if (selectedKind !== 'node' || !selectedID) return;
+            const ele = cy.$('#' + selectedID);
+            const before = {
+                label:       ele.data('label'),
+                description: ele.data('description'),
+                locked:      !!ele.data('locked'),
+                data:        {
+                    html:     ele.data('mockup_html')     || '',
+                    markdown: ele.data('mockup_markdown') || '',
+                },
+            };
+            const patch = {
+                label: document.getElementById('ins-label').value,
+                description: document.getElementById('ins-desc').value,
+            };
+            const lockedCB = document.getElementById('ins-locked');
+            if (lockedCB) patch.locked = lockedCB.checked;
+            // For mockup nodes, fold the HTML / markdown editors into
+            // the patch's `data` field so the server persists them in
+            // data_json. The PATCH payload's `data` is a json.RawMessage
+            // — anything we put in the object survives round-trip.
+            const $mh = document.getElementById('ins-mockup-html');
+            const $mm = document.getElementById('ins-mockup-md');
+            if ($mh || $mm) {
+                patch.data = {
+                    html:     $mh ? $mh.value : '',
+                    markdown: $mm ? $mm.value : '',
+                };
+            }
+            sendNodeUpdate(selectedID, patch);
+            const id = selectedID;
+            pushUndo({
+                label: 'edit node',
+                do:   () => sendNodeUpdate(id, patch),
+                undo: () => sendNodeUpdate(id, before),
+            });
+        });
+
+        $btnDelete.addEventListener('click', handleDelete);
+        document.getElementById('inspector-close').addEventListener('click', closeInspector);
+
+        function handleDelete(){
+            if (!selectedID || !selectedKind) return;
+            if (selectedKind === 'node') {
+                const ele = cy.$('#' + selectedID);
+                const data = ele.data();
+                if (!confirm('Delete this node? Connected edges go with it.')) return;
+                const id = selectedID, snap = { ...data, x: ele.position().x, y: ele.position().y };
+                sendNodeDelete(id);
+                pushUndo({
+                    label: 'delete node',
+                    do:   () => sendNodeDelete(id),
+                    undo: () => recreateNode(snap),
+                });
+            } else if (selectedKind === 'edge') {
+                const ele = cy.$('edge[edgeId = ' + selectedID + ']');
+                const data = ele.data();
+                if (!confirm('Delete this edge?')) return;
+                const id = selectedID;
+                const src = parseInt(data.source, 10);
+                const tgt = parseInt(data.target, 10);
+                const srcPort = data.source_port || '';
+                const tgtPort = data.target_port || '';
+                sendEdgeDelete(id);
+                pushUndo({
+                    label: 'delete edge',
+                    do:   () => sendEdgeDelete(id),
+                    undo: () => sendEdgeCreate(src, tgt, srcPort, tgtPort),
+                });
+            }
+        }
+
+        // ── Toolbar ─────────────────────────────────────────────────
+        document.getElementById('btn-add-node').addEventListener('click', () => addNode('user-proposal'));
+        document.getElementById('btn-add-comment').addEventListener('click', () => addNode('comment'));
+        document.getElementById('btn-add-mockup').addEventListener('click', () => addNode('mockup'));
+        document.getElementById('btn-fit').addEventListener('click', () => cy.fit(undefined, 50));
+        document.getElementById('btn-help').addEventListener('click', () => $help.classList.toggle('open'));
+        document.getElementById('btn-refresh').addEventListener('click', () => {
+            setStatus('refreshing…', 'info');
+            loadGraph();
+        });
+        $btnUndo.addEventListener('click', doUndo);
+        $btnRedo.addEventListener('click', doRedo);
+
+        // ── Undo/redo ───────────────────────────────────────────────
+        function pushUndo(entry){
+            undoStack.push(entry);
+            if (undoStack.length > 50) undoStack.shift();
+            redoStack.length = 0;
+            refreshUndoButtons();
+        }
+        function doUndo(){
+            const e = undoStack.pop();
+            if (!e) return;
+            try { e.undo(); redoStack.push(e); }
+            catch(err) { setStatus('undo failed', 'err'); }
+            refreshUndoButtons();
+        }
+        function doRedo(){
+            const e = redoStack.pop();
+            if (!e) return;
+            try { e.do(); undoStack.push(e); }
+            catch(err) { setStatus('redo failed', 'err'); }
+            refreshUndoButtons();
+        }
+        function refreshUndoButtons(){
+            $btnUndo.disabled = undoStack.length === 0;
+            $btnRedo.disabled = redoStack.length === 0;
+        }
+
+        // ── Comments (REST) ─────────────────────────────────────────
+        const commentsByNode = new Map();  // node_id → array
+        async function fetchComments(nodeID){
+            try {
+                const b = await restJSON('/flow/node/' + nodeID + '/comments', { method: 'GET' });
+                const list = (b.comments || []).map(c => ({
+                    user_id: c.user_id, username: c.username, body: c.body, created_at: c.created_at,
+                }));
+                commentsByNode.set(nodeID, list);
+                if (selectedKind === 'node' && selectedID === nodeID) renderComments(nodeID);
+            } catch (e) {
+                if (selectedKind === 'node' && selectedID === nodeID) {
+                    const $list = document.getElementById('comments-list');
+                    if ($list) $list.innerHTML = '<div class="flow-meta">Failed to load comments: ' + escapeText(e.message) + '</div>';
+                }
+            }
+        }
+        function renderComments(nodeID){
+            const $list = document.getElementById('comments-list');
+            if (!$list) return;
+            const items = commentsByNode.get(nodeID) || [];
+            if (items.length === 0) { $list.innerHTML = '<div class="flow-meta">No comments yet.</div>'; return; }
+            $list.innerHTML = items.map(c =>
+                '<div class="flow-comment"><div class="flow-comment-meta">' + escapeText(c.username || 'user') + ' &middot; ' + escapeText((c.created_at || '').slice(0, 16).replace('T', ' ')) + '</div><div>' + escapeText(c.body || '') + '</div></div>'
+            ).join('');
+        }
+        async function sendComment(nodeID){
+            const $in = document.getElementById('comment-input');
+            if (!$in) return;
+            const body = ($in.value || '').trim();
+            if (!body) return;
+            $in.disabled = true;
+            try {
+                const b = await restJSON('/flow/node/' + nodeID + '/comment', { method: 'POST', body: JSON.stringify({ body })});
+                const c = b.comment || { user_id: VIEWER_ID, username: VIEWER_NAME, body, created_at: new Date().toISOString() };
+                const list = commentsByNode.get(nodeID) || [];
+                list.push({ user_id: c.user_id, username: c.username, body: c.body, created_at: c.created_at });
+                commentsByNode.set(nodeID, list);
+                if (selectedKind === 'node' && selectedID === nodeID) renderComments(nodeID);
+                $in.value = '';
+            } catch (e) {
+                setStatus('comment failed: ' + e.message, 'err');
+            } finally {
+                $in.disabled = false;
+                $in.focus();
+            }
+        }
+
+        // ── Helpers ─────────────────────────────────────────────────
+        function setStatus(msg, kind){
+            $status.textContent = msg;
+            $status.style.color = kind === 'err' ? '#f87171' : kind === 'warn' ? '#fbbf24' : kind === 'ok' ? '#4ade80' : 'var(--text-muted)';
+        }
+        function escapeAttr(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+        function escapeText(s){ return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+
+        // ── Hash-based deep links ───────────────────────────────────
+        // External links (mockups gallery, proposals queue, mockup
+        // permalink, comments) point at /flow#node-<id>. Without a
+        // handler the hash is dead — the canvas just loads at default
+        // pan/zoom and the user has to find the node manually.
+        //
+        // Two entry points: (1) initial-load (call after loadGraph
+        // resolves so cy elements exist), (2) hashchange (user
+        // pastes a new hash or back/forward navigates between hashes
+        // on the same page).
+        function focusNodeFromHash() {
+            if (!cy) return;                                // canvas not ready
+            const m = (location.hash || '').match(/^#node-(-?\d+)$/);
+            if (!m) return;
+            const ele = cy.$('#' + m[1]);
+            if (!ele.length) {
+                setStatus('node ' + m[1] + ' not found in graph', 'warn');
+                return;
+            }
+            cy.animate({ center: { eles: ele }, zoom: Math.max(cy.zoom(), 1) }, { duration: 250 });
+            ele.select();
+            setTimeout(() => openInspectorNode(ele), 260);
+        }
+        window.addEventListener('hashchange', focusNodeFromHash);
+
+        // ── Boot ────────────────────────────────────────────────────
+        // Wait for cytoscape to land before initialising. The primary
+        // CDN script is synchronous, so when it succeeds cytoscape is
+        // already a global by the time this code runs and we proceed
+        // immediately. When it FAILS, the inline onerror handler in
+        // the head appends a fallback <script> tag — that load is async
+        // and won't be done by the time the IIFE executes. Polling at
+        // 50ms for up to 10s catches the fallback when it lands.
+        // Beyond 10s, surface a clear error in the toolbar so the user
+        // knows it's a network problem, not a silent breakage.
+        function waitForCytoscape(deadlineMs, onReady, onTimeout) {
+            const start = performance.now();
+            (function tick(){
+                if (typeof cytoscape === 'function') { onReady(); return; }
+                if (performance.now() - start > deadlineMs) { onTimeout(); return; }
+                setTimeout(tick, 50);
+            })();
+        }
+        waitForCytoscape(10000,
+            () => {
+                initCy();
+                // loadGraph is async — chain focusNodeFromHash so the
+                // hash-target lookup runs only after cy.add() has
+                // populated the graph. Failure to load is surfaced
+                // by loadGraph itself; we still try the focus, which
+                // safely no-ops on an empty graph.
+                loadGraph().then(focusNodeFromHash);
+            },
+            () => {
+                console.error('[flow] cytoscape failed to load within 10s — primary + fallback CDNs both unreachable');
+                setStatus('canvas library failed to load — check network / ad blocker', 'err');
+            }
+        );
+    })();
+    </script>
+{{end}}

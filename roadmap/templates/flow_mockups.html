@@ -1,0 +1,123 @@
+{{define "flow_mockups.html"}}
+    <style>
+        /* Mockup cards: thumbnail iframe + meta. Grid auto-flows so the
+           page reflows on small screens without me hand-rolling
+           breakpoints. Sandbox="" on the iframe is the security
+           boundary; the rest is layout. */
+        .mockup-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+        .mockup-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+            display: flex; flex-direction: column;
+            transition: border-color 0.12s ease;
+        }
+        .mockup-card:hover { border-color: rgba(167,139,250,0.6); }
+        .mockup-thumb {
+            position: relative;
+            background: #fff;
+            height: 180px;
+            overflow: hidden;
+            border-bottom: 1px solid var(--border);
+        }
+        .mockup-thumb iframe {
+            position: absolute; inset: 0;
+            width: 100%; height: 100%;
+            border: 0;
+            pointer-events: none; /* card is the click target */
+        }
+        .mockup-thumb-link {
+            position: absolute; inset: 0;
+            display: block;
+            z-index: 2;
+        }
+        .mockup-meta { padding: 0.6rem 0.75rem; font-size: 0.85rem; }
+        .mockup-meta .label { font-weight: 600; color: var(--text-primary); }
+        .mockup-meta .sub   { font-size: 0.72rem; color: var(--text-muted); }
+        .mockup-meta a      { color: inherit; text-decoration: none; }
+        .mockup-meta a:hover{ color: var(--blue); }
+        .mockup-vote-pill {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 0.72rem; color: var(--text-muted);
+            padding: 1px 6px; border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .mockup-edit-tag {
+            display: inline-block; font-size: 0.65rem;
+            padding: 1px 6px; border-radius: 3px;
+            background: rgba(251,191,36,0.15); color: #fbbf24;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+    </style>
+    <div class="container mt-4 site-container">
+        <div class="d-flex align-items-baseline justify-content-between gap-3 mb-3">
+            <div>
+                <p class="mb-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:500;">Community</p>
+                <h2 class="mb-0" style="font-size:1.25rem;font-weight:600;">UI Mockups</h2>
+                <p class="mb-0 mt-1" style="font-size:0.78rem;color:var(--text-muted);">
+                    Browse every mockup posted to the <a href="/flow">Feature Requests board</a>. Click a card to open the full-size view, vote, and read the discussion. Edit mockups by forking from the canvas.
+                </p>
+            </div>
+            <a href="/flow" class="btn btn-sm btn-outline-primary">Open canvas</a>
+        </div>
+
+        {{/* Filter / sort bar — purely query-string driven, no JS. */}}
+        <form method="get" class="d-flex gap-2 align-items-center mb-3" style="font-size:0.85rem;">
+            <span style="color:var(--text-muted);">Sort:</span>
+            <select name="sort" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                <option value="newest" {{if eq .Sort "newest"}}selected{{end}}>Newest</option>
+                <option value="votes"  {{if eq .Sort "votes"}}selected{{end}}>Most voted</option>
+            </select>
+            <span style="color:var(--text-muted);" class="ms-2">Show:</span>
+            <select name="scope" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                <option value="all"        {{if eq .Scope "all"}}selected{{end}}>All</option>
+                <option value="edits"      {{if eq .Scope "edits"}}selected{{end}}>Proposed edits</option>
+                <option value="standalone" {{if eq .Scope "standalone"}}selected{{end}}>Stand-alone</option>
+            </select>
+        </form>
+
+        {{if .Mockups}}
+        <div class="mockup-grid">
+            {{range .Mockups}}
+            <div class="mockup-card">
+                <div class="mockup-thumb">
+                    {{/* The thumbnail uses sandbox="" to disable JS,
+                         forms, plugins, and same-origin access. The
+                         <a> overlay above the iframe captures clicks
+                         since the iframe itself is pointer-events:none. */}}
+                    <iframe sandbox="" srcdoc="{{.HTML}}" loading="lazy" title="mockup #{{.ID}} preview"></iframe>
+                    <a class="mockup-thumb-link" href="/flow/mockup/{{.ID}}" aria-label="Open mockup #{{.ID}}"></a>
+                </div>
+                <div class="mockup-meta">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <a href="/flow/mockup/{{.ID}}" class="label" title="{{.Label}}">
+                            🖼 {{.Label}}
+                        </a>
+                        <span class="mockup-vote-pill" title="Votes">▲ {{.VoteCount}}</span>
+                    </div>
+                    <div class="sub mt-1">
+                        {{if .ParentNodeID}}
+                            <span class="mockup-edit-tag">edits</span>
+                            <a href="/flow#node-{{deref64 .ParentNodeID}}">{{.ParentLabel}}</a>
+                            &middot;
+                        {{end}}
+                        {{if .AuthorName}}by {{.AuthorName}}{{else}}anon{{end}}
+                        &middot;
+                        {{.CreatedAt.Format "Jan 02, 2006"}}
+                    </div>
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="alert alert-info py-3" style="font-size:0.88rem;">
+            No mockups yet. Open the <a href="/flow">Feature Requests board</a> and click <strong>+ Mockup</strong> to add one.
+        </div>
+        {{end}}
+    </div>
+{{end}}

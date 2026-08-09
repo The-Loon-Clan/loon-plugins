@@ -1,0 +1,681 @@
+{{define "flow_proposals.html"}}
+    <style>
+        /* Forum-style row + role badge styles, lifted from
+           community_thread.html so the two surfaces look like a set. */
+        .role-badge {
+            font-size: 0.62rem; padding: 2px 8px; border-radius: 999px;
+            font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+        }
+        .role-admin       { background: rgba(var(--bs-danger-rgb), 0.2); color: var(--bs-danger); }
+        .role-contributor { background: rgba(91,138,245,0.2); color: var(--blue); }
+        .role-user        { background: var(--bg-elevated); color: var(--text-muted); }
+
+        /* Tag chips — one colour per category. Kept lowercase so the
+           server's allowlist (ui/bug/feature/performance/other) maps
+           directly to a CSS class without translation. */
+        .prop-tag {
+            display: inline-block; font-size: 0.62rem; padding: 2px 8px;
+            border-radius: 999px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .prop-tag-ui          { background: rgba(91,138,245,0.18);  color: #5b8af5; }
+        .prop-tag-bug         { background: rgba(248,113,113,0.18); color: #f87171; }
+        .prop-tag-feature     { background: rgba(74,222,128,0.18);  color: #4ade80; }
+        .prop-tag-performance { background: rgba(167,139,250,0.18); color: #c4b5fd; }
+        .prop-tag-other       { background: rgba(148,163,184,0.18); color: #94a3b8; }
+
+        /* Status chips — slightly more saturated than tag chips so
+           lifecycle state pops next to the category. */
+        .prop-status {
+            display: inline-block; font-size: 0.62rem; padding: 2px 8px;
+            border-radius: 4px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .prop-status-open        { background: rgba(148,163,184,0.18); color: #cbd5e1; }
+        .prop-status-planned     { background: rgba(91,138,245,0.22);  color: #93c5fd; }
+        .prop-status-in_progress { background: rgba(251,191,36,0.22);  color: #fbbf24; }
+        .prop-status-done        { background: rgba(74,222,128,0.22);  color: #4ade80; }
+        .prop-status-declined    { background: rgba(248,113,113,0.22); color: #f87171; }
+
+        /* Filter pills. Active pill bumps the border + bg. */
+        .filter-pill {
+            display: inline-block; font-size: 0.75rem;
+            padding: 3px 12px; border-radius: 999px;
+            border: 1px solid var(--border); color: var(--text-muted);
+            text-decoration: none; transition: all .12s;
+        }
+        .filter-pill:hover  { border-color: var(--blue); color: var(--text-primary); }
+        .filter-pill.active { border-color: var(--blue); color: var(--blue); background: rgba(91,138,245,0.10); }
+
+        /* Forum-style row. Click anywhere outside the buttons to expand. */
+        .prop-row {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--border);
+            cursor: pointer; transition: background .12s;
+        }
+        .prop-row:hover { background: rgba(255,255,255,0.02); }
+        .prop-row.expanded { background: rgba(91,138,245,0.04); }
+        .prop-row:last-child { border-bottom: none; }
+        .prop-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            object-fit: cover; border: 1px solid var(--border); flex-shrink: 0;
+        }
+        .prop-avatar-fallback {
+            width: 36px; height: 36px; border-radius: 50%; background: #3a7bd5;
+            color: #fff; display: flex; align-items: center; justify-content: center;
+            font-size: 0.95rem; font-weight: 700; flex-shrink: 0;
+        }
+        .prop-title { font-size: 0.92rem; font-weight: 500; color: var(--text-primary); }
+        .prop-meta  { font-size: 0.72rem; color: var(--text-muted); }
+        .prop-stat  { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+
+        /* Vote button — same affordance as the old listing. Stops
+           click propagation so voting doesn't toggle the expanded
+           card open. */
+        .vote-btn {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 0.78rem; padding: 2px 10px;
+            border: 1px solid var(--border); border-radius: 4px;
+            background: transparent; color: var(--text-primary);
+            cursor: pointer; user-select: none;
+        }
+        .vote-btn:hover  { border-color: var(--bs-warning); color: var(--bs-warning); }
+        .vote-btn.voted  { border-color: var(--bs-warning); color: var(--bs-warning); background: rgba(251,191,36,0.1); }
+        /* Greyed-out self-vote — same shape, but reads as disabled. */
+        .vote-btn.disabled {
+            opacity: 0.45; cursor: not-allowed;
+            color: var(--text-muted); border-color: var(--border);
+        }
+        .vote-btn.disabled:hover { color: var(--text-muted); border-color: var(--border); }
+
+        /* Collapsed new-request card. The <details> summary acts as a
+           click target shaped like the page's other cards so the form
+           looks at-rest, not always-open. */
+        details.new-request > summary {
+            cursor: pointer; list-style: none;
+            padding: 0.55rem 0.85rem; font-size: 0.85rem;
+            color: var(--blue); user-select: none;
+        }
+        details.new-request > summary::-webkit-details-marker { display: none; }
+        details.new-request > summary::before {
+            content: '+ '; font-weight: 600; color: var(--blue);
+        }
+        details.new-request[open] > summary::before { content: '− '; }
+
+        /* Expanded panel. Sits below the row when open; lazy-loaded. */
+        .prop-detail {
+            padding: 0.9rem 1.1rem; background: var(--surface-2);
+            border-bottom: 1px solid var(--border); font-size: 0.88rem;
+        }
+        .prop-detail :where(h1,h2,h3) { font-size: 1rem; margin-top: 0.5rem; }
+        .prop-detail p { margin-bottom: 0.5rem; }
+        .prop-detail pre { font-size: 0.78rem; padding: 0.5rem; background: rgba(0,0,0,0.25); border-radius: 4px; }
+        .prop-comment {
+            padding: 0.5rem 0.7rem; border-left: 2px solid var(--border);
+            margin-top: 0.4rem; background: rgba(0,0,0,0.10); border-radius: 0 4px 4px 0;
+        }
+        .prop-comment-meta { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.2rem; }
+
+        /* Duplicate-detection hint under the title input. */
+        .dup-hint {
+            margin-top: 0.4rem; padding: 0.5rem 0.7rem;
+            background: rgba(251,191,36,0.08);
+            border: 1px solid rgba(251,191,36,0.3);
+            border-radius: 4px; font-size: 0.78rem;
+        }
+        .dup-hint a { color: var(--bs-warning); text-decoration: none; }
+        .dup-hint a:hover { text-decoration: underline; }
+    </style>
+    <div class="container mt-4 site-container">
+        <div class="d-flex align-items-baseline gap-3 mb-3">
+            <div>
+                <p class="mb-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:500;">Community</p>
+                <h2 class="mb-0" style="font-size:1.25rem;font-weight:600;">Feature Requests</h2>
+                <p class="mb-0 mt-1" style="font-size:0.78rem;color:var(--text-muted);">
+                    File requests for the site, vote on others, comment on what you'd like to see. {{if .IsAdmin}}As a mod, you can change status, retag, and promote any of these to canonical (locked) so they become part of the seeded site flow.{{end}}
+                </p>
+            </div>
+        </div>
+
+        {{/* New-request form. Posts via JS fetch to /flow/node so we
+             reuse the canvas's existing CreateNode endpoint. Tag
+             dropdown injects a structured template into the
+             description box (e.g. "Steps to reproduce" for bugs) so
+             reports come in a useful shape from the start.
+             Duplicate detection runs as the user types the title —
+             the response shows up under the title row, not as a
+             modal, so power users can ignore it without an extra
+             click. */}}
+        <details class="card mb-3 new-request" id="new-request-card">
+            <summary>File a new request</summary>
+            <div class="card-body" style="border-top:1px solid var(--border);">
+                <div class="mb-2">
+                    <label class="form-label" style="font-size:0.78rem;">Title <span class="text-danger">*</span></label>
+                    <input id="new-title" class="form-control form-control-sm" type="text" maxlength="200" placeholder="e.g. Add per-poster RSS feed">
+                    <div id="dup-hint" class="dup-hint" style="display:none;"></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:0.78rem;">Type</label>
+                        <select id="new-tag" class="form-select form-select-sm">
+                            <option value="">— pick a type —</option>
+                            <option value="ui">UI</option>
+                            <option value="bug">Bug</option>
+                            <option value="feature">Feature</option>
+                            <option value="performance">Performance</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="col-md-9">
+                        <label class="form-label" style="font-size:0.78rem;">Description</label>
+                        <textarea id="new-desc" class="form-control form-control-sm" rows="5" maxlength="2000" placeholder="Pick a Type to get a template, or just describe it in your own words. Markdown supported."></textarea>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button id="btn-new" class="btn btn-sm btn-primary" type="button">Submit request</button>
+                    <span id="new-status" style="font-size:0.78rem;color:var(--text-muted);"></span>
+                </div>
+            </div>
+        </details>
+
+        {{/* Filter strip — tag pills + status pills + sort dropdown.
+             Each pill is a plain link with the active filters in the
+             query string, so back/forward + bookmarking + sharing
+             "show me only the bug reports" all work without JS. */}}
+        <div class="card mb-3">
+            <div class="card-body py-2">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <span style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Type</span>
+                    {{$activeTag := .FilterTag}}
+                    {{$activeStatus := .FilterStatus}}
+                    {{$activeSort := .FilterSort}}
+                    {{$qsBase := ""}}
+                    {{if $activeStatus}}{{$qsBase = print "&status=" $activeStatus}}{{end}}
+                    {{if and $activeSort (ne $activeSort "newest")}}{{$qsBase = print $qsBase "&sort=" $activeSort}}{{end}}
+                    <a class="filter-pill {{if not $activeTag}}active{{end}}" href="/flow/proposals?tag={{$qsBase}}">All</a>
+                    <a class="filter-pill {{if eq $activeTag "ui"}}active{{end}}"          href="/flow/proposals?tag=ui{{$qsBase}}">UI</a>
+                    <a class="filter-pill {{if eq $activeTag "bug"}}active{{end}}"         href="/flow/proposals?tag=bug{{$qsBase}}">Bug</a>
+                    <a class="filter-pill {{if eq $activeTag "feature"}}active{{end}}"     href="/flow/proposals?tag=feature{{$qsBase}}">Feature</a>
+                    <a class="filter-pill {{if eq $activeTag "performance"}}active{{end}}" href="/flow/proposals?tag=performance{{$qsBase}}">Performance</a>
+                    <a class="filter-pill {{if eq $activeTag "other"}}active{{end}}"       href="/flow/proposals?tag=other{{$qsBase}}">Other</a>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <span style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Status</span>
+                    {{$qsTagSort := ""}}
+                    {{if $activeTag}}{{$qsTagSort = print "&tag=" $activeTag}}{{end}}
+                    {{if and $activeSort (ne $activeSort "newest")}}{{$qsTagSort = print $qsTagSort "&sort=" $activeSort}}{{end}}
+                    <a class="filter-pill {{if not $activeStatus}}active{{end}}"           href="/flow/proposals?status={{$qsTagSort}}">All</a>
+                    <a class="filter-pill {{if eq $activeStatus "open"}}active{{end}}"        href="/flow/proposals?status=open{{$qsTagSort}}">Open</a>
+                    <a class="filter-pill {{if eq $activeStatus "planned"}}active{{end}}"     href="/flow/proposals?status=planned{{$qsTagSort}}">Planned</a>
+                    <a class="filter-pill {{if eq $activeStatus "in_progress"}}active{{end}}" href="/flow/proposals?status=in_progress{{$qsTagSort}}">In Progress</a>
+                    <a class="filter-pill {{if eq $activeStatus "done"}}active{{end}}"        href="/flow/proposals?status=done{{$qsTagSort}}">Done</a>
+                    <a class="filter-pill {{if eq $activeStatus "declined"}}active{{end}}"    href="/flow/proposals?status=declined{{$qsTagSort}}">Declined</a>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Sort</span>
+                    {{$qsTagStatus := ""}}
+                    {{if $activeTag}}{{$qsTagStatus = print "&tag=" $activeTag}}{{end}}
+                    {{if $activeStatus}}{{$qsTagStatus = print $qsTagStatus "&status=" $activeStatus}}{{end}}
+                    <a class="filter-pill {{if or (eq $activeSort "newest") (not $activeSort)}}active{{end}}" href="/flow/proposals?sort=newest{{$qsTagStatus}}">Newest</a>
+                    <a class="filter-pill {{if eq $activeSort "top"}}active{{end}}"    href="/flow/proposals?sort=top{{$qsTagStatus}}">Top</a>
+                    <a class="filter-pill {{if eq $activeSort "active"}}active{{end}}" href="/flow/proposals?sort=active{{$qsTagStatus}}">Active</a>
+                    <span class="ms-auto" style="font-size:0.72rem;color:var(--text-muted);">{{.TotalCount}} request{{if ne .TotalCount 1}}s{{end}}</span>
+                </div>
+            </div>
+        </div>
+
+        {{if .Proposals}}
+        <div class="card">
+            <div id="prop-list">
+                {{$cuid := $.CurrentUserID}}
+                {{range .Proposals}}
+                {{$isOwn := and .CreatedBy (eq (deref .CreatedBy) $cuid)}}
+                <div class="prop-row" data-id="{{.ID}}" id="prop-{{.ID}}" data-own="{{if $isOwn}}1{{else}}0{{end}}">
+                    {{if .AvatarPath}}
+                    <a href="/u/{{.Username}}" onclick="event.stopPropagation();"><img class="prop-avatar" src="{{.AvatarPath}}" alt=""></a>
+                    {{else}}
+                    <a href="/u/{{.Username}}" onclick="event.stopPropagation();" style="text-decoration:none;"><div class="prop-avatar-fallback">{{initial .Username}}</div></a>
+                    {{end}}
+                    <div style="flex:1;min-width:0;">
+                        <div class="prop-title" style="overflow:hidden;text-overflow:ellipsis;">
+                            {{.Label}}
+                            {{if .Tag}}<span class="prop-tag prop-tag-{{.Tag}} ms-1">{{.Tag}}</span>{{end}}
+                            <span class="prop-status prop-status-{{.Status}} ms-1">{{if eq .Status "in_progress"}}In Progress{{else}}{{.Status}}{{end}}</span>
+                        </div>
+                        <div class="prop-meta">
+                            <a href="/u/{{.Username}}" onclick="event.stopPropagation();" style="color:var(--text-muted);text-decoration:none;">{{.Username}}</a>
+                            {{if eq .UserRole "admin"}}<span class="role-badge role-admin ms-1">Admin</span>
+                            {{else if eq .UserRole "contributor"}}<span class="role-badge role-contributor ms-1">Contributor</span>{{end}}
+                            <span class="ms-2">#{{.ID}} · {{.CreatedAt.Format "Jan 02, 15:04"}}</span>
+                        </div>
+                    </div>
+                    <div class="prop-stat" title="Comments">💬 {{.CommentCount}}</div>
+                    <button class="vote-btn btn-vote{{if $isOwn}} disabled{{end}}" data-id="{{.ID}}" type="button" title="{{if $isOwn}}You can't vote on your own request{{else}}Vote for this request{{end}}" onclick="event.stopPropagation();">
+                        ▲ <span class="vote-count">{{.VoteCount}}</span>
+                    </button>
+                </div>
+                <div class="prop-detail" id="detail-{{.ID}}" style="display:none;"></div>
+                {{end}}
+            </div>
+        </div>
+        {{else}}
+        <div class="alert alert-info py-3" style="font-size:0.88rem;">
+            {{if or .FilterTag .FilterStatus}}
+            No requests match the current filters. <a href="/flow/proposals" style="color:var(--blue);">Clear filters</a>.
+            {{else}}
+            No requests yet. Use the form above to file the first one.
+            {{end}}
+        </div>
+        {{end}}
+
+        {{.Pagination}}
+
+        {{/* Power-user escape hatch — the canvas-style editor with
+             ports, mockup nodes, side-by-side diffs, history is still
+             at /flow for anyone who wants the full graph view. Linked
+             discreetly so casual users aren't pushed there. */}}
+        <p class="mt-3" style="font-size:0.72rem;color:var(--text-muted);">
+            Looking for the visual canvas? <a href="/flow" style="color:var(--blue);">Open it here</a> — same data, graph view with mockups + history.
+        </p>
+    </div>
+
+    <script>
+    (function(){
+        const CSRF = (document.cookie.match(/csrf_tok=([^;]+)/) || [])[1] || '';
+        const IS_ADMIN = {{if .IsAdmin}}true{{else}}false{{end}};
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        // ── New-request form ───────────────────────────────────────
+        const $title  = document.getElementById('new-title');
+        const $desc   = document.getElementById('new-desc');
+        const $tag    = document.getElementById('new-tag');
+        const $btn    = document.getElementById('btn-new');
+        const $status = document.getElementById('new-status');
+        const $dupHint = document.getElementById('dup-hint');
+
+        // Per-tag templates. Pre-fill structured prompts so bug reports
+        // and feature requests come in with the context mods need to
+        // triage. Empty string for 'other' (and for the unset case).
+        const TAG_TEMPLATES = {
+            bug:         "Steps to reproduce:\n1. \n2. \n\nExpected:\n\nActual:\n\nBrowser/OS:",
+            feature:     "Why I want this:\n\nHow I'd use it:",
+            ui:          "Where I'm seeing this:\n\nWhat could be better:",
+            performance: "Where it's slow:\n\nHow long it takes vs expected:",
+            other:       "",
+            "":          ""
+        };
+        // Track whether the user has typed into the description so we
+        // don't clobber their text when they switch tags. Once they've
+        // edited, we leave the box alone.
+        let descUserEdited = false;
+        $desc.addEventListener('input', () => { descUserEdited = true; });
+        $tag.addEventListener('change', () => {
+            const t = TAG_TEMPLATES[$tag.value] || '';
+            if (!descUserEdited && t) {
+                $desc.value = t;
+            }
+        });
+
+        // Duplicate-detection hint. Debounced so we don't fire on
+        // every keystroke; 350ms is comfortable for typing speed.
+        let dupTimer = null;
+        $title.addEventListener('input', () => {
+            clearTimeout(dupTimer);
+            const q = $title.value.trim();
+            if (q.length < 4) { $dupHint.style.display = 'none'; return; }
+            dupTimer = setTimeout(() => fetchSimilar(q), 350);
+        });
+        async function fetchSimilar(q) {
+            try {
+                const r = await fetch('/flow/proposals/similar?q=' + encodeURIComponent(q));
+                if (!r.ok) return;
+                const body = await r.json();
+                const matches = (body && body.matches) || [];
+                if (!matches.length) { $dupHint.style.display = 'none'; return; }
+                let html = '<strong>Looks similar to:</strong><ul style="margin:0.3rem 0 0 1rem;padding:0;">';
+                for (const m of matches) {
+                    html += '<li><a href="/flow/proposals#prop-' + m.id + '">'
+                          + escapeHtml(m.label)
+                          + '</a> <span style="color:var(--text-muted);">— ▲'
+                          + (m.vote_count|0) + ' · ' + escapeHtml(m.username)
+                          + '</span></li>';
+                }
+                html += '</ul>';
+                $dupHint.innerHTML = html;
+                $dupHint.style.display = 'block';
+            } catch (_) { /* silent — hint is best-effort */ }
+        }
+
+        async function submitRequest() {
+            const title = ($title.value || '').trim();
+            if (!title) {
+                $status.textContent = 'Title is required.';
+                $status.style.color = 'var(--bs-danger)';
+                $title.focus();
+                return;
+            }
+            $btn.disabled = true;
+            $status.textContent = 'Submitting…';
+            $status.style.color = 'var(--text-muted)';
+            // Random position in the lower-half of the canvas. The
+            // canonical seeds occupy y ≈ 0–700; new proposals scatter
+            // below so users opening the canvas don't see an overlap
+            // pile on (0, 0).
+            const x = 200 + Math.floor(Math.random() * 1600);
+            const y = 800 + Math.floor(Math.random() * 600);
+            try {
+                const r = await fetch('/flow/node', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+                    body: JSON.stringify({
+                        kind:        'user-proposal',
+                        label:       title,
+                        description: ($desc.value || '').trim(),
+                        tag:         $tag.value || '',
+                        x: x, y: y,
+                    }),
+                });
+                const body = await r.json().catch(() => null);
+                if (!r.ok || !body || body.ok === false) {
+                    throw new Error((body && body.error) || ('HTTP ' + r.status));
+                }
+                $status.textContent = 'Submitted.';
+                $status.style.color = 'var(--bs-success)';
+                // Reload so the new request appears in the list.
+                setTimeout(() => location.reload(), 300);
+            } catch (err) {
+                $status.textContent = 'Failed: ' + err.message;
+                $status.style.color = 'var(--bs-danger)';
+                $btn.disabled = false;
+            }
+        }
+        if ($btn) $btn.addEventListener('click', submitRequest);
+        // Cmd/Ctrl+Enter inside any field submits.
+        [$title, $desc, $tag].forEach(el => {
+            if (!el) return;
+            el.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    submitRequest();
+                }
+            });
+        });
+
+        // ── Vote toggle on existing rows ────────────────────────────
+        document.addEventListener('click', async (e) => {
+            const vbtn = e.target.closest('.btn-vote');
+            if (!vbtn) return;
+            // Self-vote shortcut: the row's data-own attribute is the
+            // server's verdict on whether this is the viewer's own
+            // post. The vote handler also rejects these with a 400,
+            // but bailing client-side avoids the round-trip + alert
+            // noise.
+            if (vbtn.classList.contains('disabled')) return;
+            const id = vbtn.dataset.id;
+            vbtn.disabled = true;
+            try {
+                const r = await fetch('/flow/node/' + id + '/vote', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'X-CSRF-Token': CSRF },
+                });
+                const body = await r.json();
+                if (!r.ok || !body.ok) throw new Error((body && body.error) || ('HTTP ' + r.status));
+                const $count = vbtn.querySelector('.vote-count');
+                if ($count) $count.textContent = body.count;
+                vbtn.classList.toggle('voted', !!body.added);
+            } catch (err) {
+                alert('Vote failed: ' + err.message);
+            } finally {
+                vbtn.disabled = false;
+            }
+        });
+
+        // ── Inline expand: click row → fetch details + comments ─────
+        const detailCache = new Map(); // id → rendered HTML, so a re-expand is instant.
+        document.addEventListener('click', (e) => {
+            const row = e.target.closest('.prop-row');
+            if (!row) return;
+            // Ignore clicks inside vote buttons or links — the
+            // event.stopPropagation on those still triggers the
+            // delegated handler on some older browsers; double-check.
+            if (e.target.closest('.btn-vote, a, button')) return;
+            const id = row.dataset.id;
+            const detail = document.getElementById('detail-' + id);
+            if (!detail) return;
+            const isOpen = detail.style.display !== 'none';
+            if (isOpen) {
+                detail.style.display = 'none';
+                row.classList.remove('expanded');
+                return;
+            }
+            row.classList.add('expanded');
+            detail.style.display = 'block';
+            if (detailCache.has(id)) {
+                detail.innerHTML = detailCache.get(id);
+                wireDetail(id, detail);
+                return;
+            }
+            detail.innerHTML = '<span style="color:var(--text-muted);">Loading…</span>';
+            fetch('/flow/proposals/' + id + '/details')
+                .then(r => r.json())
+                .then(body => {
+                    if (!body || !body.ok) throw new Error('load failed');
+                    detail.innerHTML = renderDetail(body);
+                    detailCache.set(id, detail.innerHTML);
+                    wireDetail(id, detail);
+                })
+                .catch(() => {
+                    detail.innerHTML = '<span style="color:var(--bs-danger);">Failed to load.</span>';
+                });
+        });
+
+        function renderDetail(d) {
+            let html = '';
+            if (d.description_html) {
+                html += '<div class="mb-2">' + d.description_html + '</div>';
+            } else {
+                html += '<div class="mb-2" style="color:var(--text-muted);font-style:italic;">No description.</div>';
+            }
+            // Cross-links to roadmap items + changelog entries that
+            // reference this proposal (mig 232's flow_node_id). Lets
+            // a graph-view reader see "this idea is tracked / shipped"
+            // without clicking out to /help/roadmap and scanning for
+            // a match.
+            const roadmap = d.roadmap || [];
+            const changelog = d.changelog || [];
+            if (roadmap.length || changelog.length) {
+                html += '<div class="my-2 p-2" style="background:rgba(74,222,128,0.06);border-left:3px solid rgba(74,222,128,0.5);border-radius:4px;font-size:0.78rem;">';
+                if (roadmap.length) {
+                    html += '<div><strong style="color:var(--text-muted);">Tracked on roadmap:</strong></div>';
+                    for (const r of roadmap) {
+                        html += '<div style="margin-left:0.5rem;">&middot; <a href="/help/roadmap" style="color:var(--blue);">' + escapeHtml(r.title) + '</a>'
+                             +  ' <span style="color:var(--text-muted);">(' + escapeHtml(r.status) + ')</span></div>';
+                    }
+                }
+                if (changelog.length) {
+                    html += '<div' + (roadmap.length ? ' style="margin-top:0.35rem;"' : '') + '><strong style="color:var(--text-muted);">Shipped:</strong></div>';
+                    for (const cl of changelog) {
+                        html += '<div style="margin-left:0.5rem;">&middot; <a href="/help/roadmap?tab=changelog" style="color:var(--blue);">' + escapeHtml(cl.title) + '</a>'
+                             +  ' <span style="color:var(--text-muted);">(' + escapeHtml(cl.category) + ', ' + escapeHtml(cl.released_at) + ')</span></div>';
+                    }
+                }
+                html += '</div>';
+            }
+            // Mod-only controls. Status select + retag select +
+            // promote button. Hidden behind IS_ADMIN so non-mods don't
+            // see them.
+            if (IS_ADMIN) {
+                html += '<div class="d-flex flex-wrap align-items-center gap-2 my-2 p-2"'
+                     +  ' style="background:rgba(91,138,245,0.06);border-radius:4px;font-size:0.78rem;">'
+                     +  '<strong style="color:var(--text-muted);">Mod:</strong>';
+                html += statusSelect(d.id, d.status);
+                html += tagSelect(d.id, d.tag);
+                html += '<button class="btn btn-sm btn-outline-success btn-promote" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Promote</button>';
+                html += '<button class="btn btn-sm btn-outline-danger btn-delete ms-auto" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Delete</button>';
+                html += '</div>';
+            }
+            // Comments thread.
+            html += '<div class="mt-2">';
+            html += '<div style="font-size:0.78rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.3rem;">Discussion (' + (d.comments || []).length + ')</div>';
+            for (const c of (d.comments || [])) {
+                html += '<div class="prop-comment">'
+                     +  '<div class="prop-comment-meta"><strong>' + escapeHtml(c.username) + '</strong> · ' + escapeHtml(c.created_at) + '</div>'
+                     +  '<div>' + c.body_html + '</div>'
+                     +  '</div>';
+            }
+            html += '</div>';
+            // Reply box.
+            html += '<div class="mt-2">'
+                 +  '<textarea class="form-control form-control-sm reply-body" rows="2" maxlength="2000" placeholder="Reply or suggest something — markdown supported."></textarea>'
+                 +  '<div class="d-flex gap-2 align-items-center mt-1">'
+                 +  '<button class="btn btn-sm btn-primary btn-reply" data-id="' + d.id + '" type="button" style="font-size:0.78rem;">Post reply</button>'
+                 +  '<span class="reply-status" style="font-size:0.72rem;color:var(--text-muted);"></span>'
+                 +  '</div></div>';
+            return html;
+        }
+
+        function statusSelect(id, current) {
+            const opts = [
+                ['open',        'Open'],
+                ['planned',     'Planned'],
+                ['in_progress', 'In Progress'],
+                ['done',        'Done'],
+                ['declined',    'Declined'],
+            ];
+            let h = '<select class="form-select form-select-sm sel-status" data-id="' + id + '" style="width:auto;font-size:0.78rem;">';
+            for (const [v, lbl] of opts) {
+                h += '<option value="' + v + '"' + (v === current ? ' selected' : '') + '>' + lbl + '</option>';
+            }
+            h += '</select>';
+            return h;
+        }
+        function tagSelect(id, current) {
+            const opts = [
+                ['',            '— no tag —'],
+                ['ui',          'UI'],
+                ['bug',         'Bug'],
+                ['feature',     'Feature'],
+                ['performance', 'Performance'],
+                ['other',       'Other'],
+            ];
+            let h = '<select class="form-select form-select-sm sel-tag" data-id="' + id + '" style="width:auto;font-size:0.78rem;">';
+            for (const [v, lbl] of opts) {
+                h += '<option value="' + v + '"' + (v === (current || '') ? ' selected' : '') + '>' + lbl + '</option>';
+            }
+            h += '</select>';
+            return h;
+        }
+
+        function wireDetail(id, panel) {
+            // Reply handler.
+            const replyBtn = panel.querySelector('.btn-reply');
+            if (replyBtn) {
+                replyBtn.addEventListener('click', async () => {
+                    const body = panel.querySelector('.reply-body');
+                    const stat = panel.querySelector('.reply-status');
+                    const txt = (body.value || '').trim();
+                    if (!txt) return;
+                    replyBtn.disabled = true;
+                    stat.textContent = 'Posting…';
+                    try {
+                        const r = await fetch('/flow/node/' + id + '/comment', {
+                            method: 'POST', credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+                            body: JSON.stringify({ body: txt }),
+                        });
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        // Re-fetch details so the new comment appears
+                        // rendered identically to existing ones (markdown
+                        // server-rendered).
+                        detailCache.delete(id);
+                        body.value = '';
+                        stat.textContent = '';
+                        const refreshed = await fetch('/flow/proposals/' + id + '/details').then(r=>r.json());
+                        panel.innerHTML = renderDetail(refreshed);
+                        detailCache.set(id, panel.innerHTML);
+                        wireDetail(id, panel);
+                    } catch (err) {
+                        stat.textContent = 'Failed: ' + err.message;
+                        stat.style.color = 'var(--bs-danger)';
+                        replyBtn.disabled = false;
+                    }
+                });
+            }
+            // Mod controls.
+            const selStatus = panel.querySelector('.sel-status');
+            if (selStatus) {
+                selStatus.addEventListener('change', async () => {
+                    const fd = new URLSearchParams();
+                    fd.set('status', selStatus.value);
+                    const r = await fetch('/flow/node/' + id + '/status', {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'X-CSRF-Token': CSRF },
+                        body: fd,
+                    });
+                    if (!r.ok) { alert('Status update failed.'); return; }
+                    // Reload to refresh the row chip.
+                    location.reload();
+                });
+            }
+            const selTag = panel.querySelector('.sel-tag');
+            if (selTag) {
+                selTag.addEventListener('change', async () => {
+                    const fd = new URLSearchParams();
+                    fd.set('tag', selTag.value);
+                    const r = await fetch('/flow/node/' + id + '/tag', {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'X-CSRF-Token': CSRF },
+                        body: fd,
+                    });
+                    if (!r.ok) { alert('Tag update failed.'); return; }
+                    location.reload();
+                });
+            }
+            const promoteBtn = panel.querySelector('.btn-promote');
+            if (promoteBtn) {
+                promoteBtn.addEventListener('click', async () => {
+                    if (!confirm('Promote node #' + id + ' to canonical (locked)?')) return;
+                    promoteBtn.disabled = true;
+                    const r = await fetch('/flow/node/' + id + '/promote', {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'X-CSRF-Token': CSRF },
+                    });
+                    if (!r.ok) { alert('Promote failed.'); promoteBtn.disabled = false; return; }
+                    location.reload();
+                });
+            }
+            // Mod-only delete. Soft-delete via the existing
+            // DELETE /flow/node/:id endpoint — same path the canvas
+            // editor uses, so the row vanishes from both surfaces.
+            const deleteBtn = panel.querySelector('.btn-delete');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', async () => {
+                    if (!confirm('Delete request #' + id + '? This is reversible only via the DB.')) return;
+                    deleteBtn.disabled = true;
+                    const r = await fetch('/flow/node/' + id, {
+                        method: 'DELETE', credentials: 'same-origin',
+                        headers: { 'X-CSRF-Token': CSRF },
+                    });
+                    if (!r.ok) {
+                        const body = await r.json().catch(() => null);
+                        alert('Delete failed: ' + ((body && body.error) || ('HTTP ' + r.status)));
+                        deleteBtn.disabled = false;
+                        return;
+                    }
+                    // Drop the whole row from the DOM rather than reload — the
+                    // row's id matches the prop-{id} anchor, easy to find.
+                    const row = document.getElementById('prop-' + id);
+                    if (row) row.remove();
+                    panel.remove();
+                });
+            }
+        }
+    })();
+    </script>
+{{end}}

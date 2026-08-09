@@ -1,0 +1,121 @@
+{{define "admin_roadmap.html"}}
+    <div class="container mt-4 page">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Admin · Roadmap</h1>
+            <a href="/help/roadmap" style="font-size:0.85rem;color:var(--blue);">Public view &rarr;</a>
+        </div>
+
+        {{if .Saved}}<div class="alert alert-success py-2" style="font-size:0.85rem;">Saved.</div>{{end}}
+
+        {{/* New-item form (id=0 → create). Reused on the row-level
+             edit modal below; here it's the top-of-page quick-add. */}}
+        <details class="card mb-3" style="background:var(--bg-surface);border-color:var(--border);">
+            <summary class="card-header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add roadmap item</summary>
+            <div class="card-body">
+                {{template "admin_roadmap_form" (dict "Item" nil "CSRFToken" .CSRFToken "FlowNodes" .FlowNodes)}}
+            </div>
+        </details>
+
+        <div class="card" style="background:var(--bg-surface);border-color:var(--border);">
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0" style="font-size:0.85rem;">
+                    <thead style="font-size:0.72rem;color:var(--text-muted);">
+                        <tr>
+                            <th style="width:90px;">Status</th>
+                            <th style="width:60px;">Sort</th>
+                            <th>Title</th>
+                            <th style="width:120px;">Updated</th>
+                            <th style="width:170px;text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Items}}
+                        <tr>
+                            <td>
+                                {{if eq .Status "in_flight"}}<span class="badge bg-warning text-dark" style="font-size:0.62rem;">in flight</span>
+                                {{else if eq .Status "backlog"}}<span class="badge bg-secondary bg-opacity-50" style="font-size:0.62rem;">backlog</span>
+                                {{else}}<span class="badge bg-dark" style="font-size:0.62rem;">archived</span>{{end}}
+                            </td>
+                            <td style="color:var(--text-muted);">{{.SortOrder}}</td>
+                            <td>
+                                <div style="font-weight:600;">{{.Title}}</div>
+                                <div style="font-size:0.75rem;color:var(--text-muted);">{{.Description}}</div>
+                            </td>
+                            <td style="font-size:0.75rem;color:var(--text-muted);">{{relativeTime .UpdatedAt}}</td>
+                            <td style="text-align:right;white-space:nowrap;">
+                                <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.7rem;"
+                                        data-bs-toggle="collapse" data-bs-target="#edit-{{.ID}}">Edit</button>
+                                <form method="POST" action="/admin/roadmap/{{.ID}}/delete" class="d-inline"
+                                      onsubmit="return confirm('Delete this roadmap item?');">
+                                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.7rem;">Del</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <tr id="edit-{{.ID}}" class="collapse">
+                            <td colspan="5" style="background:var(--bg-elevated);">
+                                {{template "admin_roadmap_form" (dict "Item" . "CSRFToken" $.CSRFToken "FlowNodes" $.FlowNodes)}}
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {{/* Shared form partial. Pass via dict — Item=nil for create,
+         Item=*RoadmapItem for edit. CSRFToken always required. */}}
+    
+{{end}}
+
+{{define "admin_roadmap_form"}}
+    <form method="POST" action="/admin/roadmap/save">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+        <input type="hidden" name="id" value="{{if .Item}}{{.Item.ID}}{{else}}0{{end}}">
+        <div class="row g-2">
+            <div class="col-md-7">
+                <label class="form-label small">Title</label>
+                <input type="text" name="title" class="form-control form-control-sm" required
+                       value="{{if .Item}}{{.Item.Title}}{{end}}" maxlength="200">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Status</label>
+                <select name="status" class="form-select form-select-sm">
+                    {{$cur := ""}}{{if .Item}}{{$cur = .Item.Status}}{{end}}
+                    <option value="in_flight" {{if eq $cur "in_flight"}}selected{{end}}>in flight</option>
+                    <option value="backlog"   {{if or (eq $cur "backlog") (eq $cur "")}}selected{{end}}>backlog</option>
+                    <option value="archived"  {{if eq $cur "archived"}}selected{{end}}>archived</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Sort order</label>
+                <input type="number" name="sort_order" class="form-control form-control-sm"
+                       value="{{if .Item}}{{.Item.SortOrder}}{{else}}100{{end}}">
+            </div>
+            <div class="col-12">
+                <label class="form-label small">Description</label>
+                <textarea name="description" class="form-control form-control-sm" rows="3"
+                          maxlength="2000">{{if .Item}}{{.Item.Description}}{{end}}</textarea>
+            </div>
+            <div class="col-12">
+                <label class="form-label small">Link to /flow proposal (optional)</label>
+                <select name="flow_node_id" class="form-select form-select-sm">
+                    {{$curNode := int64 0}}{{if and .Item .Item.FlowNodeID}}{{$curNode = deref64 .Item.FlowNodeID}}{{end}}
+                    <option value="0">— no link —</option>
+                    {{range .FlowNodes}}
+                    <option value="{{.ID}}" {{if eq .ID $curNode}}selected{{end}}>
+                        {{if .Tag}}[{{.Tag}}] {{end}}{{.Label}}{{if .Kind}} ({{.Kind}}){{end}}
+                    </option>
+                    {{end}}
+                </select>
+                <div class="form-text" style="font-size:0.7rem;">
+                    Surfaces a "View on graph" link on the public roadmap, and shows this row when admins expand the linked proposal on /flow/proposals.
+                </div>
+            </div>
+            <div class="col-12 mt-2">
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            </div>
+        </div>
+    </form>
+    {{end}}
