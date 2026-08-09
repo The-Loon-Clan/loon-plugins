@@ -312,7 +312,55 @@ func hasEpisodePattern(s string) bool {
 		}
 	}
 	// The spelled-out form, which carries no S/E shorthand at all.
-	return strings.Contains(s, "season ") && strings.Contains(s, "episode ")
+	if strings.Contains(s, "season ") && strings.Contains(s, "episode ") {
+		return true
+	}
+	return hasBareEpisodeToken(s)
+}
+
+// hasBareEpisodeToken spots an episode number with NO season beside it:
+//
+//	The.K2.2016.E01.1080p.NF.WEB-DL          Hotel.Del.Luna.2019.E10.2160p
+//	Tom.and.Jerry.EP15.The.Bodyguard.1944    To Love E39 1080p WEB-DL
+//
+// Common in Asian drama and in cartoon libraries, where a show is numbered
+// straight through and never carries a season. 689 releases on this index sat
+// in MOVIES because of it — a top-level category no film source can ever match
+// them out of.
+//
+// TWO OR THREE digits, deliberately. A single digit would also catch
+// "Star.Wars.EP4.A.New.Hope", which is a film, and the strictness costs
+// nothing measurable: 686 of the 689 use two or three, and the three that do
+// not are television by some other rule anyway.
+//
+// The token must stand alone on both sides, so "Se7en" (letter before) and
+// "E-AC3" (no digits after) do not qualify, and neither does the "E5" in an
+// audio tag.
+func hasBareEpisodeToken(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] != 'e' {
+			continue
+		}
+		if i > 0 && alnumByte(s[i-1]) {
+			continue // mid-word, not a token
+		}
+		j := i + 1
+		if j < len(s) && s[j] == 'p' {
+			j++ // the "EP" spelling
+		}
+		start := j
+		for j < len(s) && isDigit(s[j]) {
+			j++
+		}
+		if n := j - start; n < 2 || n > 3 {
+			continue
+		}
+		if j < len(s) && alnumByte(s[j]) {
+			continue // the digits run into something else
+		}
+		return true
+	}
+	return false
 }
 
 // containsAnyToken reports whether any needle appears in h as a whole token.

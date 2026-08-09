@@ -84,7 +84,13 @@ func TestNonVideoBucketsDoNotClaimVideo(t *testing.T) {
 		// REPACK is a universal scene tag — a re-released package of ANYTHING.
 		// Only the game-specific groups still mean a game.
 		{"repack is not a game", "Bad Boys - Ride or Die (2024) REPACK 1080p DS4K WEBRip x265 HEVC", 2040},
-		{"repack on a bluray remux", "Tom.and.Jerry.1947.E27.Cat.Fishin.1080p.REPACK.BluRay.REMUX.AVC.1.0-SIUUU", 2050},
+		{"repack on a bluray remux", "Casablanca.1942.1080p.REPACK.BluRay.REMUX.AVC.1.0-SIUUU", 2050},
+		// The original case here was "Tom.and.Jerry.1947.E27.Cat.Fishin...",
+		// which the bare-episode rule now reads as TELEVISION — correctly, it
+		// is a numbered cartoon short. It still proves the point it was added
+		// for (repack does not mean PC/Games), just under a different shelf, so
+		// it stays as its own case with the answer it actually deserves.
+		{"a numbered cartoon short is television", "Tom.and.Jerry.1947.E27.Cat.Fishin.1080p.REPACK.BluRay.REMUX.AVC.1.0-SIUUU", 5040},
 		// "Switch" and "Family Switch" are films; the token is also a console.
 		{"a film called Switch", "Family.Switch.2023.1080p.WEB-DL.x264.6CH-Pahe.in", 2040},
 		// A film whose title contains a comics word.
@@ -242,6 +248,47 @@ func TestCategorizeMatchesWholeTokens(t *testing.T) {
 	} {
 		if got := categorize("alt.binaries.misc", tc.title); got != tc.want {
 			t.Errorf("categorize(%q) = %d, want %d", tc.title, got, tc.want)
+		}
+	}
+}
+
+// An episode number with NO season beside it. Common in Asian drama and in
+// cartoon libraries, where a show is numbered straight through and never
+// carries a season — 689 releases sat in MOVIES on this index because of it,
+// a top-level category no film source can ever match them out of.
+func TestBareEpisodeNumbersAreTelevision(t *testing.T) {
+	for _, title := range []string{
+		"The.K2.2016.E01.1080p.NF.WEB-DL.DDP2.0.x264-DEEP_Kyle",
+		"Hotel.Del.Luna.2019.E10.2160p.WEB-DL.x265.10bit.AAC-Deresisi",
+		"To Love E39 1080p WEB-DL AAC H.264-Luvmichelle",
+		"Tom.and.Jerry.EP15.The.Bodyguard.1944.1080p.BluRay",
+		"Ryomaden.Ep16.2010.BluRay.1080p.x265.10bit.MNHD-FRDS",
+		"Cross.Fire.2020.E27.WEB-DL.1080p.H264.AAC-PuTao",
+	} {
+		if got := categorize("alt.binaries.movies", title); topLevelOf(got) != 5000 {
+			t.Errorf("categorize(%q) = %d (%s) — an episode filed outside TV",
+				title, got, categoryName(got))
+		}
+	}
+
+	// TWO OR THREE digits only. A single digit would swallow "Star Wars EP4",
+	// which is a film — and the strictness costs nothing: 686 of the 689 real
+	// cases use two or three digits.
+	for _, title := range []string{
+		"Star.Wars.EP4.A.New.Hope.1977.1080p.BluRay.x264",
+		"Some.Film.2024.1080p.WEB-DL.DDP5.1.E5",
+	} {
+		if got := categorize("alt.binaries.movies", title); topLevelOf(got) == 5000 {
+			t.Errorf("categorize(%q) = %d (%s) — a film called television by a one-digit token",
+				title, got, categoryName(got))
+		}
+	}
+
+	// The token must stand alone. A letter before it or a non-digit after it
+	// means it is part of another word, not an episode number.
+	for _, s := range []string{"se7en", "the.matrix.e-ac3.1080p", "movie.1080p.aac2.0"} {
+		if hasBareEpisodeToken(s) {
+			t.Errorf("hasBareEpisodeToken(%q) = true", s)
 		}
 	}
 }
