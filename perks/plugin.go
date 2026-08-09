@@ -84,9 +84,22 @@ func (p *Plugin) Provision(c *core.Core) error {
 	tracker.SetMultiplier(func(_ context.Context, userID int64, infoHash string) (float64, float64) {
 		return p.table.Factors(userID, infoHash, time.Now())
 	})
+	// Publish the freeleech answer for anything that needs it — the
+	// hit-and-run framework asks whether a snatch was free. Registered under a
+	// plain name and satisfied structurally, so a consumer needs no import of
+	// this package.
+	if err := c.Register(ExtensionName, p); err != nil {
+		return fmt.Errorf("perks: registering %q: %w", ExtensionName, err)
+	}
 	log.Printf("perks: tracker credit seam installed (tokens last %s)", p.tokenDuration())
 	return nil
 }
+
+// ExtensionName is the registry key this plugin publishes itself under.
+// Exported because a consumer needs the same string, and a literal in two
+// repositories is how a capability ends up looked up under a name nobody
+// registers.
+const ExtensionName = "perks"
 
 func (p *Plugin) tokenDuration() time.Duration {
 	if p.cfg.TokenHours <= 0 {
