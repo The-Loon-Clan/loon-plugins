@@ -84,7 +84,7 @@ func (p *Plugin) Metadata() core.Metadata {
 	return core.Metadata{
 		Name:        "backup",
 		Version:     "0.1.0",
-		Description: "Weekly backup: zips persistent static-asset directories and dumps the PostgreSQL database, with retention pruning.",
+		Description: "Backup pipeline: daily asset indexing into content-addressed packs plus a daily PostgreSQL dump, with retention pruning.",
 		// web too, for the admin page. The jobs stay worker-side — see
 		// Provision, which gates on Process; without that gate the web process
 		// would register three jobs it never runs (a Run button and a next_run

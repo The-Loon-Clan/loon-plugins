@@ -1,17 +1,18 @@
 # backup plugin
 
-Keeps a site's irreplaceable bytes recoverable. It does three jobs on three
-clocks: it **indexes** every persistent asset directory daily (size, content
-hash, per-class totals), it **dumps the database** weekly into that same asset
-tree, and it serves both as **content-addressed packs** an off-site puller
-fetches over the host's ops listener.
+Keeps a site's irreplaceable bytes recoverable. Two jobs, both daily: it
+**indexes** every persistent asset directory (size, content hash, per-class
+totals) and it **dumps the database** into that same asset tree; it serves
+both as **content-addressed packs** an off-site puller fetches over the
+host's ops listener.
 
 The direction is deliberate: the backup box PULLS. Production never holds a
 second copy of its own data and never holds a write credential to the backup.
-The older weekly **archive** job (zip the assets + `pg_dump` into a dated folder
-on local disk) still exists for small installs, but on a site whose assets are
-3.5× the database it cannot run — it stages a full second copy on the volume it
-is protecting — and the pack pipeline is what replaced it.
+The older **archive** job (zip the assets + `pg_dump` into a dated folder on
+local disk) is retired — on a site whose assets are 3.5× the database it
+stages a full second copy on the volume it is protecting — and only its
+partial-folder cleanup survives in `archive_retired.go`, because the killed
+job left ~30 GB `.incoming-` staging folders nothing else would ever delete.
 
 ## Surface
 
@@ -35,18 +36,17 @@ The ack is the only write. Without it this plugin can report what is
 *available* to pull and nothing about whether anything pulls it — and a backup
 that stopped a month ago looks exactly like one that ran last night.
 
-Jobs (all worker-side, all visible in `/admin/jobs`):
+Jobs (both worker-side, both visible in `/admin/jobs`):
 
 | Job | Interval | What it does |
 |---|---|---|
 | **Backup Index** | daily | Walks the classes, stats everything, hashes what changed plus 1-in-8 of the rest, seals a generation. |
-| **Backup Database** | weekly | `pg_dump -Fd -j4` into a dated directory inside the `db-dumps` class. |
-| **Backup** | weekly | The legacy archive: zips classes + `pg_dump` into `<BackupDir>/YYYY-MM-DD_HHMMSS/`. |
+| **Backup Database** | daily | `pg_dump -Fd -j4` into a dated directory inside the `db-dumps` class. |
 
 Process kinds (`Metadata.Processes`): `web`, `worker`. Provision gates on
 `c.Process`: the page registers web-side, the jobs and the pack capability
-worker-side. Without that gate the web process would register three jobs it
-never runs — a Run button and a `next_run` nothing honours — and `Start` would
+worker-side. Without that gate the web process would register jobs it never
+runs — a Run button and a `next_run` nothing honours — and `Start` would
 launch a second set of loops.
 
 ## Data
@@ -80,15 +80,15 @@ No Router: the host mounts the HTTP surface.
 
 Store: **self-contained** — builds its own `PGStore` at Provision.
 
-Host seams (`SetDeps`, once in the worker, before `core.Boot`):
+Host seams (`SetDeps`, staged in the SHARED wiring section before
+`core.Boot` — the web leg provisions too and soft-degrades without them):
 
 ```go
 backup.SetDeps(backup.Deps{
     DB:        backup.PGConn{Host: …, Port: …, User: …, Password: …, DBName: …},
-    Config:    settingsService,   // the four Get… methods on ConfigStore
+    Config:    settingsService,   // the Get… methods on ConfigStore
     Classes:   backupClasses(),   // slug, dir, order, regenerable, rotates
     Root:      "",                // "" = process working directory
-    BackupDir: "backups",         // legacy archive target — bind mount
     DBDumpDir: "db-dumps",        // pg_dump target — bind mount AND a class
     FreeDisk:  func(ctx) (int64, error) { … },
     DBSize:    func(ctx) (int64, error) { … },
@@ -100,11 +100,11 @@ driver. `Config` stays a host seam rather than becoming `loon/schedule`
 job-config vars: those knobs already live in the host's admin surface, and
 moving them would migrate live operator settings rather than extract a job.
 
-**`BackupDir` and `DBDumpDir` must be bind mounts.** Left on a container's
-overlay they are wiped on every recreate, which turns the job into theatre — it
-runs, logs success, and protects nothing. `DBDumpDir` has the sharper edge: on
-the overlay a dump would be indexed, packed, pulled, and then vanish on the next
-deploy while the array's manifest still claimed to hold it.
+**`DBDumpDir` must be a bind mount.** Left on a container's overlay it is
+wiped on every recreate, which turns the job into theatre — it runs, logs
+success, and protects nothing: a dump would be indexed, packed, pulled, and
+then vanish on the next deploy while the array's manifest still claimed to
+hold it.
 
 **`DBDumpDir` must also be registered as an `AssetClass`** (with `Rotates:
 true`). Writing the dump is only half of getting the database into the backup;
@@ -122,16 +122,19 @@ file.
 
 ## Lifecycle
 
-**Provision** refuses to boot without `Config`, `BackupDir`, or a database name
-— a backup plugin that starts up misconfigured and logs success is the failure
-mode this whole package exists to prevent. It builds the store, registers the
-three jobs, and publishes the pack capability.
+**Provision** refuses to boot the WORKER without `Config` or a database name —
+a backup plugin that starts up misconfigured and logs success is the failure
+mode this whole package exists to prevent. The WEB leg soft-degrades instead
+(logs, skips the page): an admin page that cannot render has no business
+taking the site down, and staging deps only in the worker block once did
+exactly that. It builds the store, registers the two jobs, and publishes the
+pack capability.
 
-**Start** launches one loop per job from `loops()`, which is declared as data so
-a test can assert that every REGISTERED job is also SCHEDULED. That invariant
-was broken once and stayed broken silently: the index job had a Run button and
-an interval but no loop, so it only ran when someone pressed the button and the
-inventory quietly stopped advancing.
+**Start** launches one loop per job from `loops()`, which is declared as data
+so `TestEveryRegisteredJobIsScheduled` can assert that every REGISTERED job is
+also SCHEDULED. That invariant was broken once and stayed broken silently: the
+index job had a Run button and an interval but no loop, so it only ran when
+someone pressed the button and the inventory quietly stopped advancing.
 
 **Stop** is a no-op.
 
@@ -167,7 +170,7 @@ by construction.
 
 ## Files
 
-- `plugin.go` — registration, the three jobs, `loops()`, the pack capability.
+- `plugin.go` — registration, the two jobs, `loops()`, the pack capability.
 - `deps.go` — the host seams and `ConfigStore`.
 - `index_job.go` — the daily pass: shrink gate, rehash fraction, logging.
 - `inventory.go` — the walk, the stat gate, hashing, `detectShrink`, class order.
@@ -175,18 +178,20 @@ by construction.
 - `manifest.go` — generation → pack list, and the served manifest.
 - `pack.go` — pack composition and the STORED-zip writer.
 - `dbdump.go` — `pg_dump -Fd`, atomic dated publish, local retention.
-- `jobs.go` — the legacy archive job (zip + dump + prune).
+- `archive_retired.go` — the retired archive job's leftover-staging cleanup.
+- `mountcheck.go` — the bind-mount sanity checks behind the shrink gate.
 - `views.go` + `templates/backup.html` — the admin page.
 - `stat_unix.go` / `stat_other.go` — `ctime`/`inode` per platform.
 
 ## Testing
 
 Unit-tested: the shrink gate (collapse caught, churn ignored, new classes
-ignored, rotating classes exempt except on collapse), class ordering, the
-archive mode matrix, prune (keeps newest N, ignores foreign folders), the
-zip writer against a golden file, manifest composition, the dump's retention
-listing and stamp ordering, the identifier gate on the exclusion setting, and
-the every-registered-job-is-scheduled invariant.
+ignored, rotating classes exempt except on collapse), class ordering, prune
+(keeps newest N, ignores foreign folders), the zip writer against a golden
+file, manifest composition, the mount checks, the dump's retention listing
+and stamp ordering, the identifier gate on the exclusion setting, and the
+every-registered-job-is-scheduled invariant
+(`TestEveryRegisteredJobIsScheduled`, `plugin_test.go`).
 
 The suite runs under `TZ=UTC`, `America/Los_Angeles` and `Asia/Tokyo`, because
 `stampFormat` carries no zone: `Format` writes local time, so the guard must
