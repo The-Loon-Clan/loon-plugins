@@ -418,19 +418,23 @@ func (p *Plugin) runTagFillLocked(ctx context.Context) {
 	// the current rules — including rows that matched the WRONG rule, which
 	// never sit at the default and so were previously never revisited.
 	if p.catalog != nil {
-		// Large enough to cover the whole table in one run, with headroom.
+		// Large enough to cover the whole table in ONE run, with real headroom.
 		//
-		// Measured rather than guessed: a 10,000-row batch took 154ms of CPU
-		// over 300ms wall and corrected 376 rows. The work is in-process
-		// categorise calls plus an UPDATE for the ~7% that disagree — no
-		// network at all — so a full pass is a few seconds. Spreading that
-		// over 12 runs six hours apart meant three days to apply a rule change
-		// for no benefit.
+		// 100,000 was the first attempt and it was already short: the table
+		// held 118,180 rows at the time, so a pass took two runs six hours
+		// apart, and a rule change landed in halves twelve hours apart. The
+		// symptom was a sweep reporting 169 corrections when 711 were due,
+		// which reads like a broken rule rather than a half-finished pass.
 		//
-		// The cursor still paginates if the index outgrows this; a short page
-		// simply wraps, so every run re-verifies the table and a rule change
-		// lands on the next tag fill instead of a week later.
-		if rc, err := p.st.recategorizeSweep(ctx, p.catalog.Categorize, 100000); err != nil {
+		// Cost is measured, not feared: 10,000 rows took 154ms of CPU over
+		// 300ms wall, and the work is in-process categorise calls plus an
+		// UPDATE only for the few percent that disagree — no network anywhere.
+		// A quarter of a million rows is a few seconds.
+		//
+		// The cursor still paginates if the index outgrows even this, and a
+		// short page wraps — so the worst case degrades to the old behaviour
+		// rather than to a stall.
+		if rc, err := p.st.recategorizeSweep(ctx, p.catalog.Categorize, 250000); err != nil {
 			p.reportErr(ctx, "usenet/recategorize", err)
 		} else if rc > 0 {
 			p.tagJob.Log("recategorized %d release(s)", rc)
