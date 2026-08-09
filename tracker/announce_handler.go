@@ -145,8 +145,17 @@ func (h *Handlers) Announce(c *gin.Context) {
 		})
 	}
 
+	// What the site CREDITS, which is not always what the client reported.
+	// Freeleech, double upload and any other economy a host runs arrive here as
+	// two factors — see multiplier.go. With nothing wired these are the deltas
+	// unchanged, so a tracker with no economy plugin behaves exactly as before.
+	//
+	// The PEER snapshot above keeps the raw figures deliberately: it is the
+	// baseline the next delta is diffed against, and scaling it would compound
+	// the multiplier on every announce.
+	creditUp, creditDown := Credit(ctx, userID, req.InfoHashHex, delta.Up, delta.Down)
 	if err := h.store.ApplyAnnounceDelta(ctx, userID, req.InfoHashHex,
-		delta.Up, delta.Down, delta.Left, delta.Done); err != nil {
+		creditUp, creditDown, delta.Left, delta.Done); err != nil {
 		h.announceFail(c, "stats write failed")
 		return
 	}
