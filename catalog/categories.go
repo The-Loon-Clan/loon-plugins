@@ -262,6 +262,13 @@ func groupCategory(g string) int {
 		return 6070
 	case strings.Contains(g, "ebook"), strings.Contains(g, "e-book"):
 		return 7020
+	// BEFORE the mp3 case, because the groups are named
+	// "alt.binaries.mp3.audiobooks" and the substring that decides is the one
+	// checked first. 5,145 audiobooks on this index sat in Audio/MP3 for
+	// exactly that reason — a shelf that is wrong about what they are, and one
+	// no book source would ever look at.
+	case strings.Contains(g, "audiobook"), strings.Contains(g, "audio.book"):
+		return 3030
 	case strings.Contains(g, "sound"), strings.Contains(g, "mp3"), strings.Contains(g, "music"):
 		return 3010
 	case strings.Contains(g, "console"), strings.Contains(g, "games"):

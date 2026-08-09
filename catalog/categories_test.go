@@ -292,3 +292,33 @@ func TestBareEpisodeNumbersAreTelevision(t *testing.T) {
 		}
 	}
 }
+
+// The group is the fallback for a title no keyword matched, and the order of
+// its cases is the whole answer: the groups are named
+// "alt.binaries.mp3.audiobooks", so whichever substring is tested first wins.
+//
+// 5,145 audiobooks on this index sat in Audio/MP3 because "mp3" was checked
+// before "audiobook" — a shelf that is wrong about what they are, and one no
+// book source would ever look at.
+func TestAudiobookGroupsBeatTheMP3Substring(t *testing.T) {
+	for _, g := range []string{
+		"alt.binaries.mp3.audiobooks",
+		"alt.binaries.mp3.audiobooks.highspeed",
+		"alt.binaries.audio.books",
+	} {
+		if got := categorize(g, "Some Title With No Keywords At All"); got != 3030 {
+			t.Errorf("group %q = %d (%s), want 3030 (Audio/Audiobook)", g, got, categoryName(got))
+		}
+	}
+	// A plain music group is still music.
+	for _, g := range []string{"alt.binaries.mp3", "alt.binaries.sounds.flac", "alt.binaries.music"} {
+		if got := categorize(g, "Some Title With No Keywords At All"); got != 3010 {
+			t.Errorf("group %q = %d (%s), want 3010 (Audio/MP3)", g, got, categoryName(got))
+		}
+	}
+	// And a TITLE that names itself still wins over the group, which is the
+	// rule the group fallback exists underneath.
+	if got := categorize("alt.binaries.mp3.audiobooks", "Some.Movie.2024.1080p.WEB-DL.x264"); got != 2040 {
+		t.Errorf("a film in an audiobook group = %d (%s), want Movies/HD", got, categoryName(got))
+	}
+}
