@@ -76,6 +76,9 @@ func (r *PGFlowStore) GetMockupNodes(ctx context.Context, sortBy string) ([]*Moc
 		order = `ORDER BY n.vote_count DESC, n.created_at DESC`
 	}
 	var rows []*MockupSummary
+	// The caller's sortBy string selects between two literal ORDER BY
+	// clauses above; it never reaches the SQL text itself.
+	// sqllint:allow ORDER BY chosen from two hard-coded literals
 	err := r.db.SelectContext(ctx, &rows, `
 		SELECT n.id, n.label,
 		       COALESCE(n.data_json->>'html', '') AS html,

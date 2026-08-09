@@ -13,9 +13,18 @@ member visits it; this publishes announce endpoints, mints passkeys and starts
 keeping ratio accounting the moment it is reachable.
 
 Lifted out of a host where it was ~1,800 lines across `web/handlers`, `pkg/tracker`
-and the storage layer. The protocol code came across near-verbatim — the bencode
-scanner, the peer store, the announce parsing — because the `info_hash` is the
-SHA-1 of raw `info` dict bytes and any re-encoding changes it.
+and the storage layer. The protocol code came across near-verbatim — the peer
+store, the announce parsing — because the `info_hash` is the SHA-1 of raw `info`
+dict bytes and any re-encoding changes it.
+
+The bencode scanner and encoder are **not** here: they live in `loon/bencode`,
+shared with the feeds importer. This plugin carried a second, identical copy
+until it was folded in. That is a correctness constraint, not housekeeping —
+two encoders that disagree on dict key order produce different SHA-1s for the
+same torrent, and the same missing "is `info` actually a dict" guard had to be
+found and fixed twice, once per copy. Byte-level parity across the move is
+pinned by goldens in `wire_golden_test.go` (announce/scrape bodies) and
+`sanitize_test.go` (info-hash survives a rebuild).
 
 ## Surface
 
@@ -130,8 +139,7 @@ restart, with no migration step.
 
 - `plugin.go` — metadata, config, Provision, the route table, the entitlement gate.
 - `announce.go` / `announce_handler.go` — the announce/scrape wire format and handlers.
-- `bencode.go` — scanner + outer-dict rebuild. Never re-encodes `info`.
-- `sanitize.go` — strips tracker-identifying markers from a scraped `.torrent`.
+- `sanitize.go` — strips tracker-identifying markers from a scraped `.torrent`, and rebuilds one per user with `loon/bencode`. Never re-encodes `info`.
 - `peers.go` — the Redis peer store.
 - `store.go` / `store_pg.go` / `store_mem.go` — the Store triple.
 - `member_handler.go` — member pages, `.torrent` download, passkey mint/rotate.

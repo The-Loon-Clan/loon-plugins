@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+
+	"github.com/the-loon-clan/loon/bencode"
 )
 
 // AnnounceRequest is the parsed form of a BitTorrent tracker GET.
@@ -130,40 +132,40 @@ func ComputeDelta(prev *Peer, cur *AnnounceRequest) AnnounceDelta {
 // EncodeAnnounceResponse produces the bencoded response body. On error, the
 // BEP-3 failure format is used so the client surfaces the reason.
 func EncodeAnnounceResponse(interval int, complete, incomplete int, peers4, peers6 []byte) []byte {
-	e := benc{}
-	e.out = append(e.out, 'd')
+	var w bencode.Writer
+	w.BeginDict()
 
 	// "complete" = seeders
-	e.str("complete")
-	e.intVal(int64(complete))
+	w.Str("complete")
+	w.Int(int64(complete))
 	// "incomplete" = leechers
-	e.str("incomplete")
-	e.intVal(int64(incomplete))
+	w.Str("incomplete")
+	w.Int(int64(incomplete))
 	// "interval" = next announce delay (seconds)
-	e.str("interval")
-	e.intVal(int64(interval))
+	w.Str("interval")
+	w.Int(int64(interval))
 	// "min interval" = hard lower bound
-	e.str("min interval")
-	e.intVal(int64(interval / 2))
+	w.Str("min interval")
+	w.Int(int64(interval / 2))
 	// "peers" = compact IPv4 list (BEP-23)
-	e.str("peers")
-	e.bytes(peers4)
+	w.Str("peers")
+	w.Bytes(peers4)
 	if len(peers6) > 0 {
-		e.str("peers6")
-		e.bytes(peers6)
+		w.Str("peers6")
+		w.Bytes(peers6)
 	}
-	e.out = append(e.out, 'e')
-	return e.out
+	w.End()
+	return w.Out()
 }
 
 // EncodeAnnounceFailure is the standard "failure reason" bencode.
 func EncodeAnnounceFailure(reason string) []byte {
-	e := benc{}
-	e.out = append(e.out, 'd')
-	e.str("failure reason")
-	e.str(reason)
-	e.out = append(e.out, 'e')
-	return e.out
+	var w bencode.Writer
+	w.BeginDict()
+	w.Str("failure reason")
+	w.Str(reason)
+	w.End()
+	return w.Out()
 }
 
 // EncodeScrapeResponse produces the multi-torrent scrape body.
@@ -175,25 +177,25 @@ type ScrapeEntry struct {
 }
 
 func EncodeScrapeResponse(entries []ScrapeEntry) []byte {
-	e := benc{}
-	e.out = append(e.out, 'd')
-	e.str("files")
-	e.out = append(e.out, 'd')
+	var w bencode.Writer
+	w.BeginDict()
+	w.Str("files")
+	w.BeginDict()
 	for _, sc := range entries {
-		e.bytes([]byte(sc.InfoHash))
+		w.Bytes([]byte(sc.InfoHash))
 		// per-torrent stats dict
-		e.out = append(e.out, 'd')
-		e.str("complete")
-		e.intVal(int64(sc.Complete))
-		e.str("downloaded")
-		e.intVal(int64(sc.Downloaded))
-		e.str("incomplete")
-		e.intVal(int64(sc.Incomplete))
-		e.out = append(e.out, 'e')
+		w.BeginDict()
+		w.Str("complete")
+		w.Int(int64(sc.Complete))
+		w.Str("downloaded")
+		w.Int(int64(sc.Downloaded))
+		w.Str("incomplete")
+		w.Int(int64(sc.Incomplete))
+		w.End()
 	}
-	e.out = append(e.out, 'e')
-	e.out = append(e.out, 'e')
-	return e.out
+	w.End()
+	w.End()
+	return w.Out()
 }
 
 // AnnounceInterval is what we tell clients to wait between announces. 30 min

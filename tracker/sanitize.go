@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/the-loon-clan/loon/bencode"
 )
 
 // trackerMarkers is the set of top-level keys stripped from scraped .torrents.
@@ -59,7 +61,7 @@ type TorrentFile struct {
 // metadata. It does not emit a new .torrent — call BuildForUser at download
 // time so each download carries the passkey-specific announce URL.
 func Sanitize(raw []byte) (*Sanitized, error) {
-	top, err := ScanTopDict(raw)
+	top, err := bencode.ScanTopDict(raw)
 	if err != nil {
 		return nil, fmt.Errorf("scan top dict: %w", err)
 	}
@@ -74,7 +76,7 @@ func Sanitize(raw []byte) (*Sanitized, error) {
 	if err != nil {
 		return nil, fmt.Errorf("summarize info: %w", err)
 	}
-	hash, err := InfoHash(raw)
+	hash, err := bencode.InfoHash(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -92,12 +94,12 @@ func Sanitize(raw []byte) (*Sanitized, error) {
 // well-behaved clients disable DHT/PEX/LSD.
 func BuildForUser(infoBytes []byte, announceURL string) []byte {
 	priv := int64(1)
-	fields := []OuterField{
+	fields := []bencode.OuterField{
 		{Key: "announce", Str: announceURL},
 		{Key: "info", Raw: infoBytes},
 		{Key: "private", Int: &priv},
 	}
-	return BuildOuterDict(fields)
+	return bencode.BuildOuterDict(fields)
 }
 
 // SanitizeAndRebuild is a convenience: sanitize in one pass and emit a new
@@ -113,7 +115,7 @@ func SanitizeAndRebuild(raw []byte, announceURL string) ([]byte, error) {
 // SummarizeInfo extracts display-only metadata from a .torrent without
 // copying the info bytes out.
 func SummarizeInfo(raw []byte) (InfoSummary, error) {
-	top, err := ScanTopDict(raw)
+	top, err := bencode.ScanTopDict(raw)
 	if err != nil {
 		return InfoSummary{}, err
 	}
@@ -125,32 +127,32 @@ func SummarizeInfo(raw []byte) (InfoSummary, error) {
 }
 
 func summarizeInfoBytes(info []byte) (InfoSummary, error) {
-	fields, err := ScanTopDict(info)
+	fields, err := bencode.ScanTopDict(info)
 	if err != nil {
 		return InfoSummary{}, err
 	}
 	var sum InfoSummary
 	if s, ok := fields["name"]; ok {
-		b, err := DecodeString(info, s)
+		b, err := bencode.DecodeString(info, s)
 		if err != nil {
 			return InfoSummary{}, err
 		}
 		sum.Name = string(b)
 	}
 	if s, ok := fields["piece length"]; ok {
-		n, err := DecodeInt(info, s)
+		n, err := bencode.DecodeInt(info, s)
 		if err != nil {
 			return InfoSummary{}, err
 		}
 		sum.PieceLength = n
 	}
 	if s, ok := fields["private"]; ok {
-		n, _ := DecodeInt(info, s)
+		n, _ := bencode.DecodeInt(info, s)
 		sum.Private = n == 1
 	}
 	if s, ok := fields["length"]; ok {
 		// single-file mode
-		n, err := DecodeInt(info, s)
+		n, err := bencode.DecodeInt(info, s)
 		if err != nil {
 			return InfoSummary{}, err
 		}
@@ -159,29 +161,29 @@ func summarizeInfoBytes(info []byte) (InfoSummary, error) {
 		return sum, nil
 	}
 	if s, ok := fields["files"]; ok {
-		elems, err := DecodeList(info, s)
+		elems, err := bencode.DecodeList(info, s)
 		if err != nil {
 			return InfoSummary{}, err
 		}
 		sum.Files = make([]TorrentFile, 0, len(elems))
 		for _, el := range elems {
-			fd, err := ScanDict(info, el)
+			fd, err := bencode.ScanDict(info, el)
 			if err != nil {
 				return InfoSummary{}, err
 			}
 			var f TorrentFile
 			if ls, ok := fd["length"]; ok {
-				n, _ := DecodeInt(info, ls)
+				n, _ := bencode.DecodeInt(info, ls)
 				f.Length = n
 			}
 			if ps, ok := fd["path"]; ok {
-				parts, err := DecodeList(info, ps)
+				parts, err := bencode.DecodeList(info, ps)
 				if err != nil {
 					return InfoSummary{}, err
 				}
 				segs := make([]string, 0, len(parts))
 				for _, p := range parts {
-					b, err := DecodeString(info, p)
+					b, err := bencode.DecodeString(info, p)
 					if err != nil {
 						return InfoSummary{}, err
 					}
