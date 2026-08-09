@@ -38,7 +38,25 @@ type Source struct {
 // New builds the source. client is the AniDB-registered client name (Fetch
 // errors without it). titles is the normalized-title→aid index (nil = empty;
 // the host imports anime-titles.xml and passes it here).
+// New returns nil when no client name is configured, which is the convention
+// every other credentialled source here follows and the reason this one was a
+// bug.
+//
+// AniDB requires a registered client name; without one this source can answer
+// nothing. It used to build itself anyway, register at priority 100, take the
+// "anime" domain, and serve every lookup from an empty title index — so anime
+// releases matched nothing AND could not fall through to a source that would
+// have worked. On the reference index that was 1,847 releases at 6.2% cover
+// art against television's 59%, with nothing logged, because from the outside
+// a source that answers "no match" looks like a source that is working.
+//
+// Returning nil hands the domain to the keyless anilist source instead. Note
+// that main.go must not assign this to an interface before checking it — see
+// isNilSource there for the typed-nil trap that once panicked boot.
 func New(client string, titles map[string]int64) *Source {
+	if strings.TrimSpace(client) == "" {
+		return nil
+	}
 	if titles == nil {
 		titles = map[string]int64{}
 	}
