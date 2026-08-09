@@ -215,7 +215,7 @@ type LeaseStore interface {
 // so it swaps with the backend.
 type MaintenanceStore interface {
 	retagUntagged(ctx context.Context, limit int) (int, error)
-	recategorizeDefaults(ctx context.Context, fn func(group, title string) int, limit int) (int, error)
+	recategorizeSweep(ctx context.Context, fn func(group, title string) int, limit int) (int, error)
 	pruneNzbs(ctx context.Context, days int) (int64, error)
 	deleteJunkNzbs(ctx context.Context) (int, error)
 }

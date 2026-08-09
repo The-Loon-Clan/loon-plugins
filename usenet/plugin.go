@@ -414,10 +414,16 @@ func (p *Plugin) runTagFillLocked(ctx context.Context) {
 		return
 	}
 	p.tagJob.Log("re-tagged %d NZB(s)", n)
-	// Recategorize releases still at the default (built before categorization or
-	// before a catalog-rule change).
+	// Re-run the categoriser over the table and correct whatever disagrees with
+	// the current rules — including rows that matched the WRONG rule, which
+	// never sit at the default and so were previously never revisited.
 	if p.catalog != nil {
-		if rc, err := p.st.recategorizeDefaults(ctx, p.catalog.Categorize, 2000); err != nil {
+		// 10,000 rather than the 2,000 this used while it only looked at the
+		// default rows. The sweep now has the whole table to get through, and
+		// it costs no network: a batch is 10,000 in-process categorise calls
+		// and an UPDATE only for the ~7% that disagree. At 2,000 a pass over
+		// 118,000 rows would take 15 days of 6-hourly runs; this makes it 3.
+		if rc, err := p.st.recategorizeSweep(ctx, p.catalog.Categorize, 10000); err != nil {
 			p.reportErr(ctx, "usenet/recategorize", err)
 		} else if rc > 0 {
 			p.tagJob.Log("recategorized %d release(s)", rc)
