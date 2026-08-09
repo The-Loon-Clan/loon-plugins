@@ -1,0 +1,715 @@
+{{define "community_request_detail.html"}}
+    <style>
+        .datagrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:0.75rem 1.25rem; }
+        .datagrid-title { font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:3px; font-weight:500; }
+        .datagrid-content { font-size:0.875rem; color:var(--text-primary); }
+        .scrape-file { padding:3px 0; border-bottom:1px solid var(--border); font-size:0.82rem; }
+        .scrape-file:last-child { border-bottom:none; }
+    </style>
+    <div class="container mt-4 site-container">
+
+        {{if .Duplicate}}
+        <div class="alert alert-warning" role="alert" style="margin-bottom:1rem;">
+            This torrent was <strong>already requested</strong>. You've been redirected here instead of creating a duplicate — feel free to upvote below if you want to boost its priority.
+        </div>
+        {{end}}
+
+        {{if .Revived}}
+        <div class="alert alert-success" role="alert" style="margin-bottom:1rem;">
+            This request has been <strong>revived</strong>. It was previously fulfilled or removed, but your resubmission has reactivated it — votes and priority have been reset, and the request is back in the open queue.
+        </div>
+        {{end}}
+
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb" style="font-size:0.85rem;">
+                <li class="breadcrumb-item"><a href="/community/requests" style="color:var(--text-muted);">Requests</a></li>
+                {{if .Anime}}
+                <li class="breadcrumb-item"><a href="/community/requests?anime_id={{.Anime.AID}}" style="color:var(--text-muted);">{{.Anime.Title}}</a></li>
+                {{end}}
+                <li class="breadcrumb-item active" style="color:var(--text-primary);">#{{.Request.ID}}</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex align-items-start justify-content-between mb-3">
+            <div>
+                <h4 style="font-weight:600;margin-bottom:0.25rem;">{{.Request.Title}}</h4>
+                <div style="font-size:0.82rem;color:var(--text-muted);">
+                    Requested by <strong>{{.Request.Username}}</strong> on {{.Request.CreatedAt.Format "Jan 02, 2006"}}
+                    {{if not .Request.UpdatedAt.IsZero}}
+                    &middot; Updated {{.Request.UpdatedAt.Format "Jan 02, 2006"}}
+                    {{end}}
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                {{if .Request.Fulfilled}}
+                <span class="badge bg-success">Fulfilled</span>
+                {{else}}
+                <span class="badge bg-secondary">Open</span>
+                {{end}}
+                {{if not .Request.Fulfilled}}
+                <button class="btn btn-sm {{if .Voted}}btn-warning{{else}}btn-outline-warning{{end}}" id="vote-btn" data-id="{{.Request.ID}}">
+                    &#9650; <span id="vote-count">{{.Request.VoteCount}}</span>
+                </button>
+                {{else}}
+                <span style="color:var(--text-muted);font-size:0.85rem;">{{.Request.VoteCount}} votes</span>
+                {{end}}
+                {{if .CanEdit}}
+                <button type="button" class="btn btn-sm btn-outline-secondary" title="Edit request"
+                        onclick="document.getElementById('edit-form').style.display='block';this.style.display='none';">
+                    Edit
+                </button>
+                {{end}}
+                {{if .CanDelete}}
+                <form method="POST" action="/community/requests/{{.Request.ID}}/delete" class="d-inline"
+                      onsubmit="return confirm('Delete this request?')">
+                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete request">&#10005;</button>
+                </form>
+                {{end}}
+                {{if not .Request.Fulfilled}}
+                <button class="btn btn-sm {{if .InQueue}}btn-primary{{else}}btn-outline-primary{{end}}" id="queue-btn" data-id="{{.Request.ID}}" title="{{if .InQueue}}In your agent queue{{else}}Add to agent queue{{end}}">
+                    {{if .InQueue}}&#10003; In Queue{{else}}+ Queue{{end}}
+                </button>
+                {{end}}
+            </div>
+        </div>
+
+        {{if .CanEdit}}
+        {{/* Inline edit form. Hidden by default; the Edit button above flips it on. */}}
+        <div class="card mb-3" id="edit-form" style="display:none;">
+            <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">Edit Request</div>
+            <div class="card-body">
+                <form method="POST" action="/community/requests/{{.Request.ID}}/edit">
+                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">Title</label>
+                            <input type="text" name="title" class="form-control form-control-sm" value="{{.Request.Title}}" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">Category</label>
+                            <input type="text" name="category" class="form-control form-control-sm" value="{{.Request.Category}}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">Resolution</label>
+                            <input type="text" name="resolution" class="form-control form-control-sm" value="{{.Request.Resolution}}" placeholder="1080p">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">Source</label>
+                            <input type="text" name="source" class="form-control form-control-sm" value="{{.Request.Source}}" placeholder="WEB-DL">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">Season</label>
+                            <input type="text" name="season" class="form-control form-control-sm" value="{{.Request.Season}}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">Episodes</label>
+                            <input type="text" name="episodes" class="form-control form-control-sm" value="{{.Request.Episodes}}" placeholder="1-12">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">Anime ID</label>
+                            <input type="number" name="anime_id" class="form-control form-control-sm" value="{{if .Request.AnimeID}}{{deref .Request.AnimeID}}{{end}}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">Seeders</label>
+                            <input type="number" name="seed_count" class="form-control form-control-sm" value="{{.Request.SeedCount}}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">MAL ID</label>
+                            <input type="number" name="mal_id" class="form-control form-control-sm" value="{{if .Request.MalID}}{{deref .Request.MalID}}{{end}}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">AniList ID</label>
+                            <input type="number" name="anilist_id" class="form-control form-control-sm" value="{{if .Request.AnilistID}}{{deref .Request.AnilistID}}{{end}}">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">Nyaa URL / Magnet</label>
+                            <input type="text" name="nyaa_url" class="form-control form-control-sm" value="{{.Request.NyaaURL}}">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">Info Hash</label>
+                            <input type="text" name="info_hash" class="form-control form-control-sm font-monospace" value="{{.Request.InfoHash}}" placeholder="(auto-extracted from magnet)">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" style="font-size:0.78rem;color:var(--text-muted);">Notes</label>
+                            <textarea name="notes" rows="3" class="form-control form-control-sm">{{.Request.Notes}}</textarea>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 justify-content-end mt-3">
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                onclick="document.getElementById('edit-form').style.display='none';">Cancel</button>
+                        <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {{end}}
+
+        {{/* Details card */}}
+        <div class="card mb-3">
+            <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">Details</div>
+            <div class="card-body">
+                <div class="datagrid">
+                    {{if .Request.Category}}
+                    <div>
+                        <div class="datagrid-title">Category</div>
+                        <div class="datagrid-content">{{.Request.Category}}</div>
+                    </div>
+                    {{end}}
+                    {{if .Request.Resolution}}
+                    <div>
+                        <div class="datagrid-title">Resolution</div>
+                        <div class="datagrid-content"><span class="badge" style="background:rgba(var(--bs-primary-rgb),0.2);color:var(--bs-primary);">{{.Request.Resolution}}</span></div>
+                    </div>
+                    {{end}}
+                    {{if .Request.Source}}
+                    <div>
+                        <div class="datagrid-title">Source</div>
+                        <div class="datagrid-content"><span class="badge" style="background:rgba(var(--bs-success-rgb),0.15);color:var(--bs-success);">{{.Request.Source}}</span></div>
+                    </div>
+                    {{end}}
+                    {{if .Request.Season}}
+                    <div>
+                        <div class="datagrid-title">Season</div>
+                        <div class="datagrid-content">{{.Request.Season}}</div>
+                    </div>
+                    {{end}}
+                    {{if .Request.Episodes}}
+                    <div>
+                        <div class="datagrid-title">Episodes</div>
+                        <div class="datagrid-content">{{.Request.Episodes}}</div>
+                    </div>
+                    {{end}}
+                    {{if .Request.SeedCount}}
+                    <div>
+                        <div class="datagrid-title">Seeders</div>
+                        <div class="datagrid-content">{{.Request.SeedCount}}</div>
+                    </div>
+                    {{end}}
+                </div>
+
+                {{if .Request.Notes}}
+                <hr style="border-color:var(--border);margin:1rem 0;">
+                <div class="datagrid-title mb-1">Notes</div>
+                <div style="font-size:0.875rem;color:var(--text-muted);">{{markdown .Request.Notes}}</div>
+                {{end}}
+            </div>
+        </div>
+
+        {{/* IDs card */}}
+        {{if or .Request.AnimeID .Request.MalID .Request.AnilistID .Request.InfoHash}}
+        <div class="card mb-3">
+            <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">External IDs</div>
+            <div class="card-body">
+                <div class="datagrid">
+                    {{if .Request.AnimeID}}
+                    <div>
+                        <div class="datagrid-title">AniDB</div>
+                        <div class="datagrid-content"><a href="https://anidb.net/anime/{{deref .Request.AnimeID}}" target="_blank" rel="noopener">{{deref .Request.AnimeID}}</a></div>
+                    </div>
+                    {{end}}
+                    {{if .Request.MalID}}
+                    <div>
+                        <div class="datagrid-title">MyAnimeList</div>
+                        <div class="datagrid-content"><a href="https://myanimelist.net/anime/{{deref .Request.MalID}}" target="_blank" rel="noopener">{{deref .Request.MalID}}</a></div>
+                    </div>
+                    {{end}}
+                    {{if .Request.AnilistID}}
+                    <div>
+                        <div class="datagrid-title">AniList</div>
+                        <div class="datagrid-content"><a href="https://anilist.co/anime/{{deref .Request.AnilistID}}" target="_blank" rel="noopener">{{deref .Request.AnilistID}}</a></div>
+                    </div>
+                    {{end}}
+                    {{if .Request.InfoHash}}
+                    <div style="grid-column:span 2;">
+                        <div class="datagrid-title">Info Hash</div>
+                        <div class="datagrid-content" style="font-family:monospace;font-size:0.78rem;word-break:break-all;">{{.Request.InfoHash}}</div>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+
+        {{/* Nyaa / scrape info */}}
+        {{if .Request.NyaaURL}}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center" style="font-size:0.85rem;color:var(--text-muted);">
+                Source Link
+                {{if .Request.SeedCount}}<span class="badge bg-success bg-opacity-25 text-success">{{.Request.SeedCount}} seeders</span>{{end}}
+            </div>
+            <div class="card-body">
+                <a href="{{.Request.NyaaURL}}" target="_blank" rel="noopener" style="font-size:0.88rem;">{{.Request.NyaaURL}}</a>
+                {{if .Request.InfoHash}}
+                <form method="POST" action="/community/torrents/add" class="d-inline ms-2">
+                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                    <input type="hidden" name="title" value="{{.Request.Title}}">
+                    <input type="hidden" name="info_hash" value="{{.Request.InfoHash}}">
+                    <input type="hidden" name="magnet_url" value="magnet:?xt=urn:btih:{{.Request.InfoHash}}&dn={{.Request.Title}}">
+                    <input type="hidden" name="source" value="{{if contains .Request.NyaaURL "nekobt.to"}}nekobt{{else if contains .Request.NyaaURL "nyaa.si"}}nyaa{{else}}manual{{end}}">
+                    <input type="hidden" name="source_url" value="{{.Request.NyaaURL}}">
+                    <input type="hidden" name="request_id" value="{{.Request.ID}}">
+                    <button type="submit" class="btn btn-outline-primary btn-sm" style="font-size:0.75rem;">+ Add to Torrent Queue</button>
+                </form>
+                {{end}}
+                {{if .Request.ScrapedFiles}}
+                <hr style="border-color:var(--border);margin:0.75rem 0;">
+                <div class="datagrid-title mb-1">Scraped Files</div>
+                <div style="max-height:200px;overflow-y:auto;">
+                    {{range splitComma .Request.ScrapedFiles}}
+                    <div class="scrape-file" style="color:var(--text-muted);">{{.}}</div>
+                    {{end}}
+                </div>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+
+        {{/* Anime info */}}
+        {{if .Anime}}
+        <div class="card mb-3">
+            <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">Linked Anime</div>
+            <div class="card-body">
+                <div class="d-flex gap-3">
+                    {{if .Anime.CoverURL}}
+                    <a href="/anime/{{.Anime.AID}}">
+                        <img src="{{.Anime.CoverURL}}" alt="{{.Anime.Title}}" style="width:80px;aspect-ratio:2/3;object-fit:cover;border-radius:4px;">
+                    </a>
+                    {{end}}
+                    <div>
+                        <a href="/anime/{{.Anime.AID}}" style="font-weight:600;font-size:0.95rem;text-decoration:none;color:var(--text-primary);">{{.Anime.Title}}</a>
+                        {{if .Anime.RomajiTitle}}<div style="font-size:0.8rem;color:var(--text-muted);">{{.Anime.RomajiTitle}}</div>{{end}}
+                        <div class="d-flex flex-wrap gap-1 mt-1">
+                            {{if .Anime.Format}}<span class="badge bg-secondary">{{.Anime.Format}}</span>{{end}}
+                            {{if .Anime.Status}}<span class="badge bg-success bg-opacity-25 text-success">{{.Anime.Status}}</span>{{end}}
+                            {{if .Anime.Episodes}}<span class="badge bg-secondary">{{.Anime.Episodes}} eps</span>{{end}}
+                        </div>
+                        <div class="mt-1">
+                            <a href="/community/requests?anime_id={{.Anime.AID}}" style="font-size:0.78rem;color:var(--blue);">View all requests for this anime &#8594;</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {{end}}
+
+        {{/* Priority card */}}
+        {{if not .Request.Fulfilled}}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center" style="font-size:0.85rem;color:var(--text-muted);">
+                Priority
+                {{if .QueuePos}}<span class="badge bg-secondary" style="font-size:0.7rem;">Queue position: #<span id="queue-pos">{{.QueuePos}}</span></span>{{end}}
+            </div>
+            <div class="card-body">
+                {{/* Priority breakdown */}}
+                <div style="font-size:0.85rem;margin-bottom:0.5rem;">
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                        {{range .Priorities}}
+                        <span title="{{.Label}}: {{.Count}} &times; {{.Weight}} weight">
+                            {{.IconHTML | safeHTML}}
+                            {{if .ShowCount}}<span style="font-size:0.8rem;">{{.Count}}</span>{{end}}
+                        </span>
+                        {{end}}
+                        <span class="text-info" style="font-weight:600;">= <span id="priority-total" title="{{.PriorityTotal}}">{{shortNum .PriorityTotal}}</span> pts</span>
+                    </div>
+                </div>
+                {{/* Boost action */}}
+                <div style="border-top:1px solid var(--bs-border-color);padding-top:0.5rem;">
+                    {{/* Cost breakdown */}}
+                    <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem;">
+                        <span>Base: <strong>{{.Breakdown.BaseCost}} pts</strong></span>
+                        {{if gt .Breakdown.SeedMult 0}}
+                        <span style="color:var(--bs-danger);margin-left:0.5rem;">+{{.Breakdown.SeedMult}}% seeds ({{.Breakdown.SeedLabel}})</span>
+                        {{end}}
+                        {{if gt .Breakdown.SizeMult 0}}
+                        <span style="color:var(--bs-warning);margin-left:0.5rem;">+{{.Breakdown.SizeMult}}% size ({{.Breakdown.SizeLabel}})</span>
+                        {{end}}
+                        <span style="margin-left:0.5rem;">=</span>
+                        <strong style="color:var(--text-primary);"> {{.BoostCost}} pts</strong> per boost
+                    </div>
+                    {{/* Slider + boost button */}}
+                    {{if le .QueuePos 1}}
+                    <div style="font-size:0.78rem;color:var(--text-muted);">Already at #1 in queue — no boost needed.</div>
+                    {{else}}
+                    <div class="d-flex align-items-center gap-3">
+                        <div style="flex:1;">
+                            <div class="d-flex justify-content-between" style="font-size:0.72rem;color:var(--text-muted);">
+                                <span>Boosts: <strong id="boost-amount">1</strong></span>
+                                <span>Cost: <strong id="boost-total-cost">{{.BoostCost}}</strong> pts</span>
+                            </div>
+                            <input type="range" id="boost-slider" class="form-range" min="1" max="1" value="1" style="margin-top:2px;">
+                            <div class="d-flex justify-content-between" style="font-size:0.68rem;color:var(--text-muted);margin-top:-4px;">
+                                <span>#{{.QueuePos}} &#8594; #<span id="queue-pos-preview">{{add .QueuePos -1}}</span></span>
+                                <span>Balance: <span id="user-pts" style="color:var(--bs-warning);font-weight:600;">{{.UserPoints}} pts</span></span>
+                            </div>
+                        </div>
+                        <button class="btn btn-boost btn-sm" id="boost-btn" data-id="{{.Request.ID}}" data-cost="{{.BoostCost}}"
+                                {{if lt .UserPoints .BoostCost}}disabled title="Need {{.BoostCost}} points"{{end}}>
+                            &#9889; Boost
+                        </button>
+                    </div>
+                    <div id="boost-result" style="font-size:0.78rem;margin-top:0.5rem;display:none;"></div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+
+        {{/* Agent progress */}}
+        {{if .ActiveLock}}
+        <div class="card mb-3 border-info">
+            <div class="card-header d-flex align-items-center gap-2" style="font-size:0.85rem;background:rgba(var(--bs-info-rgb),0.08);">
+                <span class="spinner-border spinner-border-sm text-info" role="status"></span>
+                Agent Working
+            </div>
+            <div class="card-body" style="font-size:0.84rem;">
+                <div class="d-flex justify-content-between mb-1">
+                    <div>
+                        <span style="color:var(--text-muted);">Status:</span>
+                        {{if .ActiveLock.Progress}}{{.ActiveLock.Progress}}{{else}}Initializing...{{end}}
+                    </div>
+                    {{if .ActiveLock.Speed}}
+                    <div style="color:var(--text-muted);">{{.ActiveLock.Speed}}</div>
+                    {{end}}
+                </div>
+                <div style="font-size:0.75rem;color:var(--text-muted);">
+                    Started {{.ActiveLock.LockedAt.Format "Jan 02, 15:04"}}
+                    &middot; Last update {{.ActiveLock.UpdatedAt.Format "15:04:05"}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+
+        {{/* Last failed attempt */}}
+        {{if .FailedLock}}
+        {{if not .ActiveLock}}
+        <div class="card mb-3 {{if eq .FailedLock.Status "aborted"}}border-warning{{else}}border-danger{{end}}">
+            <div class="card-header d-flex justify-content-between align-items-center" style="font-size:0.85rem;background:rgba(var(--bs-{{if eq .FailedLock.Status "aborted"}}warning{{else}}danger{{end}}-rgb),0.08);">
+                <span>Last attempt {{.FailedLock.Status}}</span>
+                <form method="POST" action="/community/requests/{{.Request.ID}}/retry" class="d-inline">
+                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                    <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-2" style="font-size:0.75rem;">Retry</button>
+                </form>
+            </div>
+            <div class="card-body" style="font-size:0.84rem;">
+                {{if .FailedLock.FailReason}}<div style="color:var(--bs-{{if eq .FailedLock.Status "aborted"}}warning{{else}}danger{{end}});">{{.FailedLock.FailReason}}</div>{{end}}
+                {{if .FailedLock.Progress}}<div style="color:var(--text-muted);">{{.FailedLock.Progress}}</div>{{end}}
+                <div style="font-size:0.75rem;color:var(--text-muted);">
+                    {{.FailedLock.UpdatedAt.Format "Jan 02, 15:04"}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+        {{end}}
+
+        {{/* Parked request notice */}}
+        {{if and .Request.ParkedUntil (not .ActiveLock)}}
+        <div class="card mb-3 border-warning">
+            <div class="card-header d-flex justify-content-between align-items-center" style="font-size:0.85rem;background:rgba(var(--bs-warning-rgb),0.12);">
+                <span>Parked — needs review</span>
+                {{if .CanUnpark}}
+                <form method="POST" action="/community/requests/{{.Request.ID}}/unpark" class="d-inline"
+                      onsubmit="return confirm('Unpark this request? Agents will start picking it up again.')">
+                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                    <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-2" style="font-size:0.75rem;">Unpark</button>
+                </form>
+                {{end}}
+            </div>
+            <div class="card-body" style="font-size:0.84rem;">
+                {{if .Request.ParkedReason}}<div style="color:var(--bs-warning);">{{.Request.ParkedReason}}</div>{{end}}
+                <div style="font-size:0.75rem;color:var(--text-muted);">
+                    Until {{.Request.ParkedUntil.Format "Jan 02, 15:04"}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+
+        {{/* Fulfilled link.
+             LiveNzbID is non-zero only when an NZB with this info hash
+             actually exists in the catalog right now (status=completed,
+             not soft-deleted). NzbRemoved is set when the request's
+             stored NzbID points at an NZB that has since been deleted —
+             we render an amber "release removed" card in that case so
+             the user gets a useful state instead of a 404 on click. */}}
+        {{if .LiveNzbID}}
+        <div class="card mb-3">
+            <div class="card-body d-flex align-items-center gap-2">
+                <span class="badge bg-success">Fulfilled</span>
+                <a href="/release/{{.LiveNzbID}}" style="font-size:0.88rem;">View release &#8594;</a>
+            </div>
+        </div>
+        {{else if .NzbRemoved}}
+        <div class="card mb-3 border-warning">
+            <div class="card-body d-flex flex-column gap-1">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-warning text-dark">Release removed</span>
+                    <span style="font-size:0.85rem;color:var(--text-muted);">
+                        This request was fulfilled earlier, but the release has since been removed from the catalog.
+                    </span>
+                </div>
+                <div style="font-size:0.78rem;color:var(--text-muted);">
+                    Vote or boost to bump priority for a re-upload, or submit a fresh request with a new torrent link.
+                </div>
+            </div>
+        </div>
+        {{end}}
+
+        {{/* Community proposals — suggest edits or vote-to-delete on
+             this request. Backed by migration 212 + the migration-190
+             review-vote framework (kind='request_action'). */}}
+        {{if .CanPropose}}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-baseline" style="font-size:0.85rem;color:var(--text-muted);">
+                <span>Community Actions</span>
+                <span style="font-size:0.72rem;">
+                    Suggest a torrent change or vote to delete. Mods resolve immediately; community votes resolve at threshold.
+                </span>
+            </div>
+            <div class="card-body">
+                {{if .Actions}}
+                <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.4rem;">Pending / history:</div>
+                <ul class="list-unstyled" style="font-size:0.82rem;margin-bottom:0.8rem;">
+                    {{range .Actions}}
+                    <li style="padding:0.25rem 0;border-bottom:1px solid var(--border-subtle);">
+                        <span class="badge bg-{{if eq .Status "pending"}}warning{{else if eq .Status "approved"}}success{{else}}secondary{{end}}" style="font-size:0.7rem;">{{.Status}}</span>
+                        <strong>{{.Action}}</strong>
+                        by <span class="text-muted">{{.ProposerUsername}}</span>
+                        — {{.Reason}}
+                        {{if eq .Status "pending"}}
+                        <button class="btn btn-sm btn-outline-success py-0 px-2 ms-2 vote-action" data-action-id="{{.ID}}" data-vote="approve" style="font-size:0.7rem;">Approve</button>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-2 vote-action" data-action-id="{{.ID}}" data-vote="reject" style="font-size:0.7rem;">Reject</button>
+                        {{end}}
+                    </li>
+                    {{end}}
+                </ul>
+                {{end}}
+
+                <form id="propose-action" method="POST" action="/community/request/{{.Request.ID}}/actions">
+                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <select name="action" id="propose-action-type" class="form-select form-select-sm">
+                                <option value="edit">Edit (suggest new torrent)</option>
+                                <option value="delete_dead">Delete: dead (no seeds)</option>
+                                <option value="delete_duplicate">Delete: duplicate</option>
+                            </select>
+                        </div>
+                        <div class="col-md-9">
+                            <input name="reason" class="form-control form-control-sm" placeholder="Reason (required for delete; optional for edit)">
+                        </div>
+                    </div>
+                    <div class="row g-2 mt-1" id="edit-fields">
+                        <div class="col-md-6"><input name="new_nyaa_url" class="form-control form-control-sm" placeholder="New Nyaa/source URL"></div>
+                        <div class="col-md-3"><input name="new_info_hash" class="form-control form-control-sm" placeholder="New info_hash"></div>
+                        <div class="col-md-3"><input name="new_seed_count" type="number" min="0" class="form-control form-control-sm" placeholder="Seed count"></div>
+                    </div>
+                    <div class="row g-2 mt-1" id="duplicate-fields" style="display:none;">
+                        <div class="col-md-6"><input name="duplicate_of_request_id" type="number" min="1" class="form-control form-control-sm" placeholder="Duplicate of request ID (number)"></div>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary mt-2" style="font-size:0.78rem;">File Proposal</button>
+                </form>
+            </div>
+        </div>
+        <script>
+        (function() {
+            var sel = document.getElementById('propose-action-type');
+            var editFields = document.getElementById('edit-fields');
+            var dupFields = document.getElementById('duplicate-fields');
+            function sync() {
+                editFields.style.display = (sel.value === 'edit') ? '' : 'none';
+                dupFields.style.display = (sel.value === 'delete_duplicate') ? '' : 'none';
+            }
+            sel.addEventListener('change', sync);
+            sync();
+
+            // POST the form as multipart so the existing ProposeRequestAction
+            // PostForm() reads pick up every field. JSON would also work but
+            // requires more handler glue.
+            document.getElementById('propose-action').addEventListener('submit', function(e) {
+                e.preventDefault();
+                var fd = new FormData(this);
+                fetch(this.action, { method: 'POST', body: fd })
+                    .then(function(r) { return r.json().then(function(j){ return {status:r.status, body:j}; }); })
+                    .then(function(o) {
+                        if (o.body && o.body.ok) {
+                            window.location.reload();
+                        } else {
+                            alert((o.body && o.body.error) || 'Proposal failed (HTTP ' + o.status + ')');
+                        }
+                    }).catch(function(err) { alert('Network error: ' + err); });
+            });
+
+            // Vote buttons on existing pending actions. Uses the shared
+            // /community/review/vote endpoint with kind='request_action'.
+            document.querySelectorAll('.vote-action').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    btn.disabled = true;
+                    fetch('/community/review/vote', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': '{{.CSRFToken}}'},
+                        body: JSON.stringify({kind: 'request_action', item_id: parseInt(btn.dataset.actionId, 10), vote: btn.dataset.vote})
+                    }).then(function(r) { return r.json().then(function(j){ return {status:r.status, body:j}; }); })
+                      .then(function(o) {
+                          if (o.body && o.body.ok) {
+                              window.location.reload();
+                          } else {
+                              alert((o.body && o.body.error) || 'Vote failed');
+                              btn.disabled = false;
+                          }
+                      }).catch(function(err) { alert('Network error: ' + err); btn.disabled = false; });
+                });
+            });
+        })();
+        </script>
+        {{end}}
+
+        <div class="d-flex gap-2 mt-3 mb-4">
+            <a href="/community/requests" class="btn btn-outline-secondary btn-sm">&#8592; All Requests</a>
+            {{if .Anime}}
+            <a href="/community/requests?anime_id={{.Anime.AID}}" class="btn btn-outline-secondary btn-sm">Requests for {{.Anime.Title}}</a>
+            {{end}}
+        </div>
+
+    </div>
+
+    <script>
+    document.getElementById('vote-btn').addEventListener('click', function() {
+        var btn = this;
+        fetch('/community/requests/' + btn.dataset.id + '/vote', {method:'POST', headers:{'X-CSRF-Token':'{{.CSRFToken}}'}})
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (d.count !== undefined) document.getElementById('vote-count').textContent = d.count;
+                if (d.voted) { btn.classList.remove('btn-outline-warning'); btn.classList.add('btn-warning'); }
+                else { btn.classList.remove('btn-warning'); btn.classList.add('btn-outline-warning'); }
+            });
+    });
+
+    // Agent queue button.
+    var queueBtn = document.getElementById('queue-btn');
+    if (queueBtn) {
+        queueBtn.addEventListener('click', function() {
+            var btn = this;
+            var inQueue = btn.classList.contains('btn-primary');
+            var fd = new FormData();
+            fd.append('request_id', btn.dataset.id);
+            fd.append('_csrf', '{{.CSRFToken}}');
+            var url = inQueue ? '/api/agent-queue/remove' : '/api/agent-queue/add';
+            fetch(url, {method:'POST', body:fd})
+                .then(function(r){return r.json()}).then(function(d){
+                    if(d.ok) {
+                        if(inQueue) {
+                            btn.classList.remove('btn-primary');
+                            btn.classList.add('btn-outline-primary');
+                            btn.innerHTML = '+ Queue';
+                        } else {
+                            btn.classList.remove('btn-outline-primary');
+                            btn.classList.add('btn-primary');
+                            btn.innerHTML = '&#10003; In Queue';
+                        }
+                    }
+                });
+        });
+    }
+
+    // Boost slider + button.
+    var boostBtn = document.getElementById('boost-btn');
+    var boostSlider = document.getElementById('boost-slider');
+    var boostAmount = document.getElementById('boost-amount');
+    var boostTotalCost = document.getElementById('boost-total-cost');
+    var queuePreview = document.getElementById('queue-pos-preview');
+    var costPerBoost = {{.BoostCost}};
+    var currentQueuePos = {{.QueuePos}};
+    var userBalance = {{.UserPoints}};
+
+    if (boostSlider) {
+        // Cap slider max: can't boost past #1, and can't exceed balance.
+        var maxByPos = Math.max(0, currentQueuePos - 1);
+        var maxByBalance = Math.floor(userBalance / costPerBoost);
+        var maxBoosts = Math.min(maxByPos, maxByBalance);
+        if (maxBoosts < 1) maxBoosts = 1;
+        boostSlider.max = maxBoosts;
+        boostSlider.addEventListener('input', function() {
+            var n = parseInt(this.value);
+            boostAmount.textContent = n;
+            boostTotalCost.textContent = n * costPerBoost;
+            queuePreview.textContent = Math.max(1, currentQueuePos - n);
+            boostBtn.disabled = (n * costPerBoost > userBalance);
+        });
+    }
+
+    if (boostBtn) {
+        boostBtn.addEventListener('click', function() {
+            var n = boostSlider ? parseInt(boostSlider.value) : 1;
+            var total = n * costPerBoost;
+            if (!confirm('Spend ' + total + ' points for ' + n + ' boost' + (n > 1 ? 's' : '') + '?')) return;
+            boostBtn.disabled = true;
+            boostBtn.textContent = 'Boosting...';
+            // Send N sequential boost requests.
+            var sent = 0;
+            function doBoost() {
+                fetch('/community/requests/' + boostBtn.dataset.id + '/boost', {method:'POST', headers:{'X-CSRF-Token':'{{.CSRFToken}}'}})
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){
+                        if (d.error) { alert(d.error); finish(d); return; }
+                        sent++;
+                        if (sent < n) { doBoost(); return; }
+                        finish(d);
+                    })
+                    .catch(function(){ alert('Boost failed'); boostBtn.disabled = false; boostBtn.innerHTML = '&#9889; Boost'; });
+            }
+            function finish(d) {
+                var result = document.getElementById('boost-result');
+                result.innerHTML = '<span style="color:var(--bs-success);">Boosted ' + sent + 'x! Spent ' + (sent * costPerBoost) + ' pts.</span>';
+                result.style.display = 'block';
+                var posEl = document.getElementById('queue-pos');
+                if (posEl && d.queue_pos) posEl.textContent = d.queue_pos;
+                if (queuePreview && d.queue_pos) queuePreview.textContent = d.queue_pos;
+                currentQueuePos = d.queue_pos || currentQueuePos;
+                var ptsEl = document.getElementById('user-pts');
+                if (ptsEl) ptsEl.textContent = d.points_remaining + ' pts';
+                userBalance = d.points_remaining;
+                var totalEl = document.getElementById('priority-total');
+                if (totalEl && d.priority_score !== undefined) totalEl.textContent = d.priority_score;
+                // Reset slider — cap by new queue position and remaining balance.
+                var newMaxByPos = Math.max(0, currentQueuePos - 1);
+                var newMaxByBal = Math.floor(userBalance / costPerBoost);
+                var newMax = Math.min(newMaxByPos, newMaxByBal);
+                if (newMax < 1) newMax = 1;
+                if (boostSlider) { boostSlider.max = newMax; boostSlider.value = 1; }
+                if (boostAmount) boostAmount.textContent = '1';
+                if (boostTotalCost) boostTotalCost.textContent = costPerBoost;
+                if (queuePreview) queuePreview.textContent = Math.max(1, currentQueuePos - 1);
+                boostBtn.disabled = (userBalance < costPerBoost || currentQueuePos <= 1);
+                boostBtn.innerHTML = '&#9889; Boost';
+            }
+            doBoost();
+        });
+    }
+
+    // Auto-refresh while the agent is working on this request.
+    {{if .ActiveLock}}
+    (function(){
+        var fulfilled = {{if .Request.Fulfilled}}true{{else}}false{{end}};
+        if (fulfilled) return;
+        setInterval(function(){
+            fetch(window.location.href, {headers:{'Accept':'text/html'}})
+                .then(function(r){ return r.text(); })
+                .then(function(html){
+                    // Check if status changed — reload if fulfilled or lock gone.
+                    if (html.indexOf('Fulfilled') > -1 && html.indexOf('badge bg-success">Fulfilled') > -1) {
+                        window.location.reload();
+                    }
+                    // Update the progress section in-place.
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(html, 'text/html');
+                    var newProgress = doc.querySelector('.border-info .card-body');
+                    var curProgress = document.querySelector('.border-info .card-body');
+                    if (newProgress && curProgress) curProgress.innerHTML = newProgress.innerHTML;
+                    // If lock disappeared (completed/failed), full reload.
+                    if (!doc.querySelector('.border-info') && curProgress) window.location.reload();
+                }).catch(function(){});
+        }, 10000);
+    })();
+    {{end}}
+    </script>
+{{end}}

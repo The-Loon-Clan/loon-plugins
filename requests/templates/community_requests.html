@@ -1,0 +1,1441 @@
+{{define "community_requests.html"}}
+    {{.NzbCardCSS}}
+    <style>
+        .vote-btn { cursor:pointer; border:none; background:none; padding:2px 6px; font-size:0.82rem; }
+        .vote-btn:hover { opacity:0.8; }
+        .scrape-result { font-size:0.78rem; color:var(--text-muted); margin-top:0.5rem; }
+        .scrape-file { padding:2px 0; border-bottom:1px solid var(--border); }
+        .scrape-file:last-child { border-bottom:none; }
+        .anime-preview { font-size:0.78rem; color:var(--text-muted); margin-top:0.5rem; padding:0.5rem; background:var(--bg-elevated); border-radius:4px; }
+
+        /* Cover-card overrides for the request/feed grids:
+           - drop-shadow on every card so blank-cover ones still read
+             as cards (the default nzb-card relies on the artwork
+             itself to pop; without art the card disappeared into the
+             page bg).
+           - placeholder gets a subtle stripe pattern so it looks
+             intentional rather than broken. */
+        .cover-card {
+            box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+        }
+        .cover-card:hover {
+            box-shadow: 0 4px 10px rgba(0,0,0,0.55);
+        }
+        .cover-card .cover-img-placeholder {
+            background:
+                repeating-linear-gradient(
+                    45deg,
+                    var(--bg-elevated) 0 12px,
+                    rgba(255,255,255,0.025) 12px 14px
+                );
+            border-bottom:1px solid var(--border);
+        }
+        /* Footer-button uniformity: bootstrap's per-color-variant
+           rendering (and its line-height handling around `Q`-tail
+           glyphs) was making NZB / Queued / Request / Parked render at
+           subtly different heights despite identical classes. Lock the
+           geometry explicitly so visual consistency doesn't depend on
+           glyph metrics. */
+        .cover-card .card-footer .btn {
+            min-height: 30px;
+            padding: 4px 10px;
+            line-height: 1.2;
+            font-size: 0.82rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+    <script>
+    // Pre-set the inactive view's display:none before the body paints so
+    // there's no flash of the wrong layout. Mirrors new_releases.html.
+    (function(){
+        var m = localStorage.getItem('community_view_mode') || 'list';
+        document.write('<style>' + (m === 'grid' ? '#view-table' : '#view-grid') + '{display:none}</style>');
+    })();
+    </script>
+    <div class="container mt-4 site-container">
+
+        {{/* Post-submit success banner — shown when the server redirects
+             back here with ?created=<id>. Dismissible; also auto-hides
+             after 6s so stale navigation away and back doesn't keep
+             showing "request submitted" weeks later. */}}
+        {{if .JustCreatedID}}
+        <div id="request-submitted-banner" class="alert alert-success alert-dismissible fade show" role="alert" style="margin-bottom:1rem;">
+            Your request is in the queue. <a href="/community/request/{{.JustCreatedID}}" style="color:inherit;text-decoration:underline;">View it</a> or keep browsing below.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        <script>setTimeout(function(){ var b = document.getElementById('request-submitted-banner'); if (b) b.style.display = 'none'; }, 6000);</script>
+        {{end}}
+
+        {{if .ErrorMessage}}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="margin-bottom:1rem;">
+            {{.ErrorMessage}}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {{end}}
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <p class="mb-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:500;">
+                    Community
+                </p>
+                <h2 class="mb-0" style="font-size:1.25rem;font-weight:600;">
+                    {{if .Anime}}Requests for <a href="/anime/{{.Anime.AID}}" style="color:var(--text-primary);">{{.Anime.Title}}</a>
+                    {{else}}Requests{{end}}
+                </h2>
+                {{if .Anime}}<a href="/community/requests" style="font-size:0.78rem;color:var(--text-muted);">&#8592; All Requests</a>{{end}}
+            </div>
+            <div class="d-flex gap-2">
+                {{/* Cover/list toggle — same UX as /new-releases. Pref is
+                     stored in localStorage as 'community_view_mode' and
+                     applies to whichever tab the user is currently on
+                     (the inactive grid/table block is hidden via
+                     pre-paint script in <head>). */}}
+                <button id="toggle-view" class="btn btn-outline-secondary btn-sm" type="button">&#128444; Covers</button>
+                {{/* Hide the manual "+ New Request" affordance on the feed tab —
+                     the bot auto-creates requests for the items shown there, and
+                     each row already has its own per-item Request button. Keeps
+                     the feed page focused on browsing, not authoring. */}}
+                {{if not (eq .Tab "feed")}}
+                <button class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#new-request-form">
+                    + New Request
+                </button>
+                {{end}}
+            </div>
+        </div>
+
+        {{/* ── Create form ── Hidden on feed tab; bot does the creating there. */}}
+        {{if not (eq .Tab "feed")}}
+        <div class="collapse mb-4{{if .OpenForm}} show{{end}}" id="new-request-form">
+            <div class="card">
+                <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">New Request</div>
+                <div class="card-body">
+                    <form method="POST" action="/community/requests" id="request-form">
+                        <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                        <div class="mb-3">
+                            <label class="form-label" style="font-size:0.85rem;">Title <span class="text-danger">*</span></label>
+                            <input type="text" name="title" class="form-control" required maxlength="512"
+                                   placeholder="e.g. Attack on Titan S04 1080p BD"
+                                   value="{{index .Prefill "title"}}">
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-3">
+                                <label class="form-label" style="font-size:0.85rem;">Category</label>
+                                <select name="category" class="form-select">
+                                    <option value="">Any</option>
+                                    <option value="Anime">Anime</option>
+                                    <option value="Movie">Movie</option>
+                                    <option value="TV">TV</option>
+                                    <option value="Music">Music</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3">
+                                <label class="form-label" style="font-size:0.85rem;">Resolution</label>
+                                <select name="resolution" class="form-select">
+                                    <option value="">Any</option>
+                                    <option value="480p"{{if eq (index .Prefill "resolution") "480p"}} selected{{end}}>480p</option>
+                                    <option value="720p"{{if eq (index .Prefill "resolution") "720p"}} selected{{end}}>720p</option>
+                                    <option value="1080p"{{if eq (index .Prefill "resolution") "1080p"}} selected{{end}}>1080p</option>
+                                    <option value="2160p"{{if eq (index .Prefill "resolution") "2160p"}} selected{{end}}>2160p (4K)</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3">
+                                <label class="form-label" style="font-size:0.85rem;">Source</label>
+                                <select name="source" class="form-select">
+                                    <option value="">Any</option>
+                                    <option value="BluRay"{{if eq (index .Prefill "source") "BluRay"}} selected{{end}}>BluRay</option>
+                                    <option value="BluRay Remux"{{if eq (index .Prefill "source") "BluRay Remux"}} selected{{end}}>BluRay Remux</option>
+                                    <option value="BDRip"{{if eq (index .Prefill "source") "BDRip"}} selected{{end}}>BDRip</option>
+                                    <option value="WEB-DL"{{if eq (index .Prefill "source") "WEB-DL"}} selected{{end}}>WEB-DL</option>
+                                    <option value="WEBRip"{{if eq (index .Prefill "source") "WEBRip"}} selected{{end}}>WEBRip</option>
+                                    <option value="HDTV"{{if eq (index .Prefill "source") "HDTV"}} selected{{end}}>HDTV</option>
+                                    <option value="SDTV"{{if eq (index .Prefill "source") "SDTV"}} selected{{end}}>SDTV</option>
+                                    <option value="DVD"{{if eq (index .Prefill "source") "DVD"}} selected{{end}}>DVD</option>
+                                    <option value="DVDRip"{{if eq (index .Prefill "source") "DVDRip"}} selected{{end}}>DVDRip</option>
+                                    <option value="VHS"{{if eq (index .Prefill "source") "VHS"}} selected{{end}}>VHS</option>
+                                    <option value="LaserDisc"{{if eq (index .Prefill "source") "LaserDisc"}} selected{{end}}>LaserDisc</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3">
+                                <label class="form-label" style="font-size:0.85rem;">Season</label>
+                                <input type="text" name="season" class="form-control" placeholder="2, 1-3, or *" maxlength="32"
+                                       value="{{index .Prefill "season"}}">
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-3">
+                                <label class="form-label" style="font-size:0.85rem;">Episodes</label>
+                                <input type="text" name="episodes" class="form-control" placeholder="5, 1-12, or *" maxlength="64"
+                                       value="{{index .Prefill "episodes"}}">
+                            </div>
+                            <div class="col-sm-3">
+                                <label class="form-label" style="font-size:0.85rem;">AniDB ID</label>
+                                <input type="number" name="anime_id" id="field-anime-id" class="form-control" min="1" placeholder="Optional"
+                                       value="{{index .Prefill "anime_id"}}">
+                            </div>
+                            <div class="col-sm-3">
+                                <label class="form-label" style="font-size:0.85rem;">Manga ID</label>
+                                <input type="number" name="manga_id" id="field-manga-id" class="form-control" min="1" placeholder="Catalog ID for manga">
+                            </div>
+                            <div class="col-sm-3">
+                                <label class="form-label" style="font-size:0.85rem;">MAL ID</label>
+                                <input type="number" name="mal_id" id="field-mal-id" class="form-control" min="1" placeholder="Optional">
+                            </div>
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-3">
+                                <label class="form-label" style="font-size:0.85rem;">AniList ID</label>
+                                <input type="number" name="anilist_id" id="field-anilist-id" class="form-control" min="1" placeholder="Optional">
+                            </div>
+                            <div class="col-sm-3">
+                                <label class="form-label" style="font-size:0.85rem;">Music ID</label>
+                                <input type="number" name="music_id" id="field-music-id" class="form-control" min="1" placeholder="Catalog ID for music">
+                            </div>
+                        </div>
+
+                        <div id="anime-preview" class="anime-preview" style="display:none;"></div>
+
+                        <div class="row g-3 mb-2">
+                            <div class="col">
+                                <label class="form-label" style="font-size:0.85rem;">Torrent Link <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <input type="url" name="nyaa_url" id="field-nyaa-url" class="form-control" required
+                                           placeholder="https://nyaa.si/view/... or magnet:?xt=urn:btih:..." maxlength="512">
+                                    <button type="button" class="btn btn-outline-secondary" id="btn-scrape">Scrape</button>
+                                </div>
+                                <div class="form-text" style="font-size:0.74rem;color:var(--text-muted);">
+                                    Required. Supported sources:
+                                    {{range $i, $h := .AllowedHosts}}{{if $i}}, {{end}}<code>{{$h}}</code>{{end}},
+                                    or any <code>magnet:?xt=urn:btih:&hellip;</code> link. Use the search below to find one.
+                                </div>
+                            </div>
+                        </div>
+                        <div id="scrape-result" class="scrape-result" style="display:none;"></div>
+
+                        <!-- Torrent search (nekoBT preferred, Prowlarr fallback) -->
+                        <div class="mb-3">
+                            <label class="form-label" style="font-size:0.85rem;">Search Torrents</label>
+                            <div class="input-group">
+                                <input type="text" id="prowlarr-query" class="form-control"
+                                       placeholder="Search by title, e.g. Attack on Titan S04 1080p">
+                                <button type="button" class="btn btn-outline-primary" id="btn-prowlarr-search">Search</button>
+                            </div>
+                        </div>
+                        <div id="prowlarr-results" style="display:none;max-height:350px;overflow-y:auto;margin-bottom:1rem;">
+                            <table class="table table-sm mb-0" style="font-size:0.78rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Title</th>
+                                        <th style="width:80px;">Size</th>
+                                        <th style="width:50px;">S</th>
+                                        <th style="width:80px;">Source</th>
+                                        <th style="width:60px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="prowlarr-tbody"></tbody>
+                            </table>
+                        </div>
+
+                        <input type="hidden" name="info_hash" id="field-info-hash">
+                        <input type="hidden" name="seed_count" id="field-seed-count">
+
+                        {{/* Remux option (migration 213). The container
+                             auto-shows when the title or URL looks like
+                             Bluray content; otherwise it stays hidden so
+                             the form isn't cluttered for non-disc rips.
+                             Pure JS toggle — no server round-trip. */}}
+                        <div class="mb-3" id="remux-container" style="display:none;">
+                            <label class="form-label" style="font-size:0.85rem;">Bluray remux / conversion <span class="text-muted" style="font-weight:normal;">— what should the agent deliver?</span></label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="remux_option" id="remux-none" value="none" checked>
+                                <label class="form-check-label" for="remux-none" style="font-size:0.85rem;">Don't remux — deliver as-is</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="remux_option" id="remux-remux" value="remux">
+                                <label class="form-check-label" for="remux-remux" style="font-size:0.85rem;">Remux only — deliver MKV(s), drop the raw payload</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="remux_option" id="remux-both" value="both">
+                                <label class="form-check-label" for="remux-both" style="font-size:0.85rem;">Both — keep the raw payload AND emit MKV(s)</label>
+                            </div>
+                            <hr style="margin:0.4rem 0;opacity:0.3;">
+                            <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.2rem;">
+                                Re-encode (slower, requires a convert-capable agent):
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="remux_option" id="remux-h264" value="convert_h264">
+                                <label class="form-check-label" for="remux-h264" style="font-size:0.85rem;">Convert to H.264 <span style="color:var(--text-muted);font-size:0.72rem;">(libx264 CRF 21 slow — broadest device compatibility)</span></label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="remux_option" id="remux-h265" value="convert_h265">
+                                <label class="form-check-label" for="remux-h265" style="font-size:0.85rem;">Convert to H.265 / HEVC <span style="color:var(--text-muted);font-size:0.72rem;">(libx265 CRF 23 medium — 30-50% smaller)</span></label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="remux_option" id="remux-av1" value="convert_av1">
+                                <label class="form-check-label" for="remux-av1" style="font-size:0.85rem;">Convert to AV1 <span style="color:var(--text-muted);font-size:0.72rem;">(libsvtav1 preset 6 — smallest, slowest)</span></label>
+                            </div>
+                            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">
+                                Remux is stream-copy (lossless, fast); convert is a real re-encode (slow, quality depends on preset). Audio + subtitles + chapters pass through unchanged on every option.
+                            </div>
+                        </div>
+
+                        {{/* AI upscale (migration 257). Renders only when at
+                             least one opted-in agent advertises a model — an
+                             empty UpscaleOptions list hides the picker so
+                             users aren't offered jobs no agent can run. */}}
+                        {{if .UpscaleOptions}}
+                        <div class="mb-3">
+                            <label class="form-label" style="font-size:0.85rem;">AI upscale <span class="text-muted" style="font-weight:normal;">— optional, runs on a capable GPU agent</span></label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="upscale_option" id="upscale-none" value="" checked>
+                                <label class="form-check-label" for="upscale-none" style="font-size:0.85rem;">No upscale (default)</label>
+                            </div>
+                            {{range .UpscaleOptions}}
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="upscale_option" id="upscale-{{.Key}}" value="{{.Key}}">
+                                <label class="form-check-label" for="upscale-{{.Key}}" style="font-size:0.85rem;">{{.Label}} <span style="color:var(--text-muted);font-size:0.72rem;">({{.Content}}, {{.Scale}}x)</span></label>
+                            </div>
+                            {{end}}
+                            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">
+                                AI upscaling is <strong>very heavy</strong> &mdash; a 2-hour movie can take many hours on a single GPU. The result is delivered as a separate release tagged <em>AI Upscaled</em>, linked back to the source. Pick the model that matches your source: anime models look waxy on live action and vice versa.
+                            </div>
+                        </div>
+                        {{end}}
+
+                        <div class="mb-3">
+                            <label class="form-label" style="font-size:0.85rem;">Notes</label>
+                            <textarea name="notes" class="form-control" rows="2" maxlength="1000"
+                                      placeholder="Any extra details about what you need..."></textarea>
+                        </div>
+                        {{/* Button shows "Submitting..." and disables itself on submit so
+                             the user has visible feedback on slow connections and can't
+                             double-post by clicking twice. Form still posts normally —
+                             the handler redirects to /community/requests?created={id}. */}}
+                        <button type="submit" id="submit-request-btn" class="btn btn-primary btn-sm">Submit Request</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {{end}}{{/* end {{if not (eq .Tab "feed")}} guard around create form */}}
+
+        {{/* ── Tabs ─────────────────────────────────────────────
+             "Open" — the existing open-requests list (default).
+             "Feed" — the bot's full observation log, including items
+                      it skipped (old release, dup hash/title). Lets
+                      users spot-request something the bot rejected.
+             */}}
+        <ul class="nav tabs mb-3">
+            <li class="nav-item">
+                <a class="nav-link {{if or (not .Tab) (eq .Tab "open")}}active{{end}}" href="/community/requests">Open Requests</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{if eq .Tab "feed"}}active{{end}}" href="/community/requests?tab=feed" title="Latest torrents observed across nyaa, tokyotosho, and nekobt feeds — including ones the bot skipped">Feed</a>
+            </li>
+        </ul>
+
+        {{if eq .Tab "feed"}}
+        {{/* ── Feed tab — newest torrents from all three sites ── */}}
+        <div class="card mb-3">
+            <div class="card-body py-2">
+                <form method="GET" action="/community/requests" class="d-flex flex-wrap align-items-center gap-2" style="font-size:0.78rem;">
+                    <input type="hidden" name="tab" value="feed">
+                    <span style="color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Source</span>
+                    <select name="source" class="form-select form-select-sm" style="width:auto;font-size:0.78rem;" onchange="this.form.submit()">
+                        <option value="" {{if eq .FeedSource ""}}selected{{end}}>All</option>
+                        <option value="nyaa" {{if eq .FeedSource "nyaa"}}selected{{end}}>nyaa</option>
+                        <option value="anirena" {{if eq .FeedSource "anirena"}}selected{{end}}>anirena</option>
+                        <option value="tokyotosho" {{if eq .FeedSource "tokyotosho"}}selected{{end}}>tokyotosho</option>
+                        <option value="nekobt" {{if eq .FeedSource "nekobt"}}selected{{end}}>nekobt</option>
+                    </select>
+                    <span style="color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Status</span>
+                    <select name="status" class="form-select form-select-sm" style="width:auto;font-size:0.78rem;" onchange="this.form.submit()">
+                        <option value="" {{if eq .FeedStatus ""}}selected{{end}}>All</option>
+                        <option value="request_created" {{if eq .FeedStatus "request_created"}}selected{{end}}>Auto-requested</option>
+                        <option value="skipped_old" {{if eq .FeedStatus "skipped_old"}}selected{{end}}>Skipped — old</option>
+                        <option value="skipped_dup_hash" {{if eq .FeedStatus "skipped_dup_hash"}}selected{{end}}>Skipped — dup hash</option>
+                        <option value="skipped_dup_title" {{if eq .FeedStatus "skipped_dup_title"}}selected{{end}}>Skipped — dup title</option>
+                    </select>
+                    <input type="text" name="q" value="{{.Query}}" placeholder="Search title..." class="form-control form-control-sm" style="width:auto;font-size:0.78rem;flex:1;min-width:150px;">
+                    <button type="submit" class="btn btn-sm btn-outline-primary" style="font-size:0.78rem;">Filter</button>
+                    <span class="ms-auto" style="color:var(--text-muted);">{{.Total}} item{{if ne .Total 1}}s{{end}}</span>
+                </form>
+            </div>
+        </div>
+
+        <div id="view-table">
+        <div class="card">
+            <div class="table-responsive">
+            <table class="table mb-0">
+                <thead>
+                    <tr style="font-size:0.78rem;">
+                        <th style="width:50px;"></th>
+                        <th>Title</th>
+                        <th style="width:90px;">Source</th>
+                        <th style="width:60px;text-align:center;">Seeds</th>
+                        <th style="width:80px;text-align:right;">Size</th>
+                        <th style="width:140px;">Status</th>
+                        <th style="width:90px;">Seen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .FeedItems}}
+                    {{/* Resolve the title's destination once: a fulfilled
+                         request points at its NZB; an info_hash match in
+                         the catalog points there too; otherwise no
+                         release exists on our side and the title falls
+                         back to plain text (the source-page link lives
+                         on the site badge). */}}
+                    {{$releaseNzbID := int64 0}}
+                    {{if and (derefBool .RequestFulfilled) .RequestNzbID}}{{$releaseNzbID = deref64 .RequestNzbID}}
+                    {{else if .MatchedNzbID}}{{$releaseNzbID = deref64 .MatchedNzbID}}{{end}}
+                    <tr style="font-size:0.85rem;">
+                        <td style="padding:6px;">
+                            {{if .AnimeID}}
+                            {{/* Cover thumbnail. Click → /anime/<aid>. Same
+                                 image-source convention as open-requests
+                                 rows. onerror clears it so missing covers
+                                 don't show a broken-image icon. */}}
+                            <a href="/anime/{{deref .AnimeID}}" title="Anime page">
+                                <img src="/static/covers/{{deref .AnimeID}}.jpg"
+                                     alt=""
+                                     onerror="this.style.display='none'"
+                                     style="width:36px;height:50px;object-fit:cover;border-radius:3px;display:block;">
+                            </a>
+                            {{end}}
+                        </td>
+                        <td style="max-width:520px;">
+                            {{if gt $releaseNzbID 0}}
+                            <a href="/release/{{$releaseNzbID}}" style="color:var(--text-primary);text-decoration:none;font-weight:500;word-break:break-word;" title="Open release on this site">{{.Title}}</a>
+                            {{else}}
+                            <span style="color:var(--text-primary);word-break:break-word;">{{.Title}}</span>
+                            {{end}}
+                            {{if .Category}}<span class="badge bg-secondary ms-2" style="font-size:0.62rem;">{{.Category}}</span>{{end}}
+                        </td>
+                        <td>
+                            {{/* Sources pills — one chip per aggregator that
+                                 has listed this info_hash. First one (the
+                                 original .Source) links to .SourceURL since
+                                 that's the only details URL we cached;
+                                 additional pills are label-only. */}}
+                            {{$srcURL := .SourceURL}}{{$primary := .Source}}
+                            {{range $i, $s := .Sources}}
+                                {{if and (eq $s $primary) $srcURL}}
+                                <a href="{{$srcURL}}" target="_blank" rel="noopener noreferrer" class="badge bg-dark me-1" style="font-size:0.65rem;text-decoration:none;" title="Open torrent page on {{$s}}">{{$s}} ↗</a>
+                                {{else}}
+                                <span class="badge bg-dark me-1" style="font-size:0.65rem;" title="Also listed on {{$s}}">{{$s}}</span>
+                                {{end}}
+                            {{else}}
+                                {{/* sources[] empty (legacy row pre-mig-244 with no backfill) */}}
+                                {{if .SourceURL}}
+                                <a href="{{.SourceURL}}" target="_blank" rel="noopener noreferrer" class="badge bg-dark" style="font-size:0.65rem;text-decoration:none;" title="Open torrent page on {{.Source}}">{{.Source}} ↗</a>
+                                {{else}}
+                                <span class="badge bg-dark" style="font-size:0.65rem;">{{.Source}}</span>
+                                {{end}}
+                            {{end}}
+                        </td>
+                        <td class="text-center" style="color:{{if gt .Seeders 0}}var(--bs-success){{else}}var(--text-muted){{end}};">{{.Seeders}}</td>
+                        <td class="text-end" style="color:var(--text-muted);">{{if gt .SizeBytes 0}}{{formatSize .SizeBytes}}{{end}}</td>
+                        <td>
+                            {{/* Merged Status + Action. Two paths both mean "the
+                                 catalog has this — click for the release":
+                                   1. .RequestFulfilled with .RequestNzbID set
+                                      (someone requested it, agent delivered)
+                                   2. .MatchedNzbID set (catalog already had the
+                                      same info_hash; no request needed)
+                                 They used to render as different badges
+                                 ("✓ completed" green vs "NZB" blue), confusing
+                                 users since the meaning is identical from
+                                 their perspective. $releaseNzbID resolves
+                                 either path to a single id; render one badge. */}}
+                            {{if gt $releaseNzbID 0}}
+                                <a href="/release/{{$releaseNzbID}}" class="badge bg-success" style="font-size:0.62rem;text-decoration:none;" title="View release">✓ NZB</a>
+                            {{else if and .RequestID (derefBool .RequestFulfilled)}}
+                                {{/* Fulfilled but the nzb_id pointer is gone
+                                     (purged release, etc) — show the success
+                                     state without the link. */}}
+                                <span class="badge bg-success" style="font-size:0.62rem;">✓ NZB</span>
+                            {{else if .RequestID}}
+                                <a href="/community/request/{{deref64 .RequestID}}" class="badge bg-info bg-opacity-50 text-info" style="font-size:0.62rem;text-decoration:none;" title="View request">queued</a>
+                            {{else}}
+                                <button type="button" class="btn btn-xs btn-outline-primary feed-request-btn" style="font-size:0.7rem;padding:1px 8px;" title="Queue this immediately"
+                                        data-title="{{.Title}}"
+                                        data-source-url="{{if .SourceURL}}{{.SourceURL}}{{else}}{{.MagnetURL}}{{end}}"
+                                        data-info-hash="{{.InfoHash}}"
+                                        data-category="{{.Category}}"
+                                        data-seed-count="{{.Seeders}}"
+                                        {{if .AnimeID}}data-anime-id="{{deref .AnimeID}}"{{end}}>Request</button>
+                                {{if eq .Status "skipped_old"}}
+                                <div style="font-size:0.62rem;color:var(--text-muted);margin-top:2px;">skipped — old</div>
+                                {{else if or (eq .Status "skipped_dup_hash") (eq .Status "skipped_dup_title")}}
+                                <div style="font-size:0.62rem;color:var(--text-muted);margin-top:2px;">already in catalog</div>
+                                {{end}}
+                            {{end}}
+                        </td>
+                        <td style="color:var(--text-muted);font-size:0.72rem;">{{.SeenAt.Format "Jan 02 15:04"}}</td>
+                    </tr>
+                    {{else}}
+                    <tr><td colspan="7" class="text-center py-4" style="color:var(--text-muted);">No feed items yet — the bot logs each torrent it sees here as it polls every 30 minutes.</td></tr>
+                    {{end}}
+                </tbody>
+            </table>
+            </div>{{/* end .table-responsive */}}
+        </div>
+        </div>{{/* end #view-table */}}
+
+        {{/* ── Feed cover-art view ──
+             Same data as the table above, rendered as poster cards.
+             Footer button rules mirror the merged Status column:
+               - completed (request fulfilled OR catalog match) → NZB
+               - request open                                   → queue
+               - everything else                                → Request
+        */}}
+        <div id="view-grid">
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3">
+                {{range .FeedItems}}
+                {{$releaseNzbID := int64 0}}
+                {{if and (derefBool .RequestFulfilled) .RequestNzbID}}{{$releaseNzbID = deref64 .RequestNzbID}}
+                {{else if .MatchedNzbID}}{{$releaseNzbID = deref64 .MatchedNzbID}}{{end}}
+                <div class="col">
+                    <div class="card h-100 cover-card" style="background:var(--bg-elevated);border-color:var(--border);">
+                        {{$titleHref := ""}}
+                        {{if gt $releaseNzbID 0}}{{$titleHref = printf "/release/%d" $releaseNzbID}}
+                        {{else if .AnimeID}}{{$titleHref = printf "/anime/%d" (deref .AnimeID)}}
+                        {{end}}
+                        <div class="cover-wrap">
+                            {{if .AnimeID}}
+                            {{if $titleHref}}<a href="{{$titleHref}}">{{end}}
+                            <img src="/static/covers/{{deref .AnimeID}}.jpg"
+                                 onerror="this.style.display='none';this.parentElement.innerHTML='<div class=\'cover-img-placeholder\'>&#127916;</div>'"
+                                 alt="{{.Title}}" class="cover-img" loading="lazy">
+                            {{if $titleHref}}</a>{{end}}
+                            {{else}}
+                            <div class="cover-img-placeholder">&#127916;</div>
+                            {{end}}
+                            <div class="cover-overlay">
+                                {{/* One pill per source. Same primary/extra
+                                     pattern as the table view — the first
+                                     source carries the link, the rest
+                                     are label-only. Cover view is space-
+                                     constrained so we cap visible pills
+                                     at 2 and "+N" the rest. */}}
+                                {{$srcURL := .SourceURL}}{{$primary := .Source}}
+                                {{$shown := 0}}{{$extra := 0}}
+                                {{range $i, $s := .Sources}}
+                                    {{if lt $shown 2}}
+                                        {{if and (eq $s $primary) $srcURL}}
+                                        <a href="{{$srcURL}}" target="_blank" rel="noopener noreferrer" class="badge bg-dark" style="font-size:0.58rem;text-decoration:none;" title="Open on {{$s}}">{{$s}} ↗</a>
+                                        {{else}}
+                                        <span class="badge bg-dark" style="font-size:0.58rem;" title="Also on {{$s}}">{{$s}}</span>
+                                        {{end}}
+                                        {{$shown = (add $shown 1)}}
+                                    {{else}}
+                                        {{$extra = (add $extra 1)}}
+                                    {{end}}
+                                {{else}}
+                                    {{if .SourceURL}}
+                                    <a href="{{.SourceURL}}" target="_blank" rel="noopener noreferrer" class="badge bg-dark" style="font-size:0.58rem;text-decoration:none;" title="Open on {{.Source}}">{{.Source}} ↗</a>
+                                    {{else}}
+                                    <span class="badge bg-dark" style="font-size:0.58rem;">{{.Source}}</span>
+                                    {{end}}
+                                {{end}}
+                                {{if gt $extra 0}}<span class="badge bg-dark" style="font-size:0.58rem;" title="+{{$extra}} more aggregator(s)">+{{$extra}}</span>{{end}}
+                                {{if gt .Seeders 0}}<span class="badge" style="background:rgba(var(--bs-success-rgb),0.85);font-size:0.58rem;">{{.Seeders}}S</span>{{end}}
+                            </div>
+                        </div>
+                        <div class="card-body p-2">
+                            {{if $titleHref}}
+                            <a href="{{$titleHref}}" class="cover-title d-block text-decoration-none" style="color:var(--text-primary);">{{.Title}}</a>
+                            {{else}}
+                            <div class="cover-title" style="color:var(--text-primary);">{{.Title}}</div>
+                            {{end}}
+                            <div class="cover-meta">{{if gt .SizeBytes 0}}{{formatSize .SizeBytes}} &middot; {{end}}{{.SeenAt.Format "Jan 02"}}</div>
+                        </div>
+                        <div class="card-footer p-2" style="background:transparent;border-top:1px solid var(--border);">
+                            {{/* Button mirrors the table view's merged Status:
+                                  - request fulfilled with a real NzbID → NZB (download)
+                                  - request open (not fulfilled)         → queued
+                                  - everything else (observed, skipped)  → Request
+                                Catalog-match (.MatchedNzbID) is no longer auto-promoted
+                                to an NZB button — users want the option to request a
+                                different release even when one already exists. */}}
+                            {{/* Match NZB / Queued / Request buttons visually:
+                                 same fw-semibold + text-white treatment so the
+                                 cyan btn-info doesn't render with dark text
+                                 while btn-primary / btn-success stay white. */}}
+                            {{if and .RequestID (derefBool .RequestFulfilled) (gt $releaseNzbID 0)}}
+                                <a href="/download/{{$releaseNzbID}}" class="btn btn-primary btn-sm w-100 fw-semibold">NZB</a>
+                            {{else if .RequestID}}
+                                <a href="/community/request/{{deref64 .RequestID}}" class="btn btn-info btn-sm w-100 fw-semibold text-white">Queued</a>
+                            {{else if .MatchedNzbID}}
+                                {{/* Catalog hash-match already on the site — show NZB
+                                     so the grid is refresh-stable with the in-place
+                                     Request click's in_catalog short-circuit. */}}
+                                <a href="/release/{{deref64 .MatchedNzbID}}" class="btn btn-primary btn-sm w-100 fw-semibold">NZB</a>
+                            {{else}}
+                                <button type="button" class="btn btn-success btn-sm w-100 fw-semibold feed-request-btn"
+                                        data-title="{{.Title}}"
+                                        data-source-url="{{if .SourceURL}}{{.SourceURL}}{{else}}{{.MagnetURL}}{{end}}"
+                                        data-info-hash="{{.InfoHash}}"
+                                        data-category="{{.Category}}"
+                                        data-seed-count="{{.Seeders}}"
+                                        {{if .AnimeID}}data-anime-id="{{deref .AnimeID}}"{{end}}>Request</button>
+                            {{end}}
+                        </div>
+                    </div>
+                </div>
+                {{else}}
+                <div class="col-12 text-center" style="color:var(--text-muted);padding:2rem;">No feed items yet.</div>
+                {{end}}
+            </div>
+        </div>{{/* end #view-grid */}}
+
+        {{.Pagination}}
+        {{else}}
+
+        {{/* ── List ── */}}
+        <div id="view-table">
+        <div class="card">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:24px;padding:4px;"><input type="checkbox" id="select-all" title="Select all"></th>
+                        <th style="width:36px;">Votes</th>
+                        <th style="width:36px;"></th>
+                        <th>Title</th>
+                        <th style="width:80px;">Date</th>
+                        <th style="width:70px;">Status</th>
+                        <th style="width:80px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Requests}}
+                    <tr>
+                        <td class="align-middle text-center" style="padding:4px;width:24px;">
+                            <input type="checkbox" class="queue-check" value="{{.ID}}">
+                        </td>
+                        <td class="text-center align-middle" style="padding:4px 2px;">
+                            <button class="vote-btn vote-request" data-id="{{.ID}}" title="Vote for this request">
+                                &#9650; <span class="vote-count">{{.VoteCount}}</span>
+                            </button>
+                            {{if .Priorities}}
+                            <div style="display:flex;justify-content:center;gap:4px;margin-top:1px;">
+                                {{range .Priorities}}{{if and (ne .TypeSlug "vote") (gt .Count 0)}}<span title="{{.Label}}: {{.Count}}" style="font-size:0.7rem;color:var(--bs-warning);">{{.IconHTML | safeHTML}}{{if .ShowCount}}<span style="font-size:0.6rem;">{{.Count}}</span>{{end}}</span>{{end}}{{end}}
+                            </div>
+                            {{end}}
+                            {{if gt .PriorityScore 0}}
+                            <div style="font-size:0.6rem;color:var(--text-muted);margin-top:1px;" title="Priority score: {{.PriorityScore}}">{{shortNum .PriorityScore}} pts</div>
+                            {{end}}
+                        </td>
+                        <td class="align-middle" style="width:36px;padding:4px;">
+                            {{if .AnimeID}}
+                            <a href="/anime/{{deref .AnimeID}}">
+                                <img src="/static/covers/{{deref .AnimeID}}.jpg"
+                                     onerror="this.style.display='none'"
+                                     style="width:32px;height:46px;object-fit:cover;border-radius:3px;"
+                                     alt="" loading="lazy">
+                            </a>
+                            {{end}}
+                        </td>
+                        <td>
+                            <a href="/community/request/{{.ID}}" style="font-size:0.88rem;color:var(--text-primary);text-decoration:none;">{{.Title}}</a>
+                            {{/* Metadata badges — all use the same tinted-pill
+                                 treatment (bg at 25%, text at full) so the row
+                                 has one visual language. The "Release" CTA
+                                 stays solid (bg-success) on purpose: it's
+                                 clickable and should stand out. */}}
+                            {{if or .Resolution .Category .Season .Episodes}}
+                            <div style="margin-top:2px;">
+                                {{if .Resolution}}<span class="badge bg-primary bg-opacity-25 text-primary" style="font-size:0.65rem;vertical-align:middle;">{{.Resolution}}</span>{{end}}
+                                {{if .Category}}<span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:0.65rem;vertical-align:middle;">{{.Category}}</span>{{end}}
+                                {{if or .Season .Episodes}}<span style="font-size:0.72rem;color:var(--text-muted);">{{if .Season}}S{{.Season}}{{end}}{{if .Episodes}}{{if .Season}} {{end}}E{{.Episodes}}{{end}}</span>{{end}}
+                            </div>
+                            {{end}}
+                            <div style="font-size:0.73rem;color:var(--text-muted);">
+                                <span>{{.Username}}</span>
+                                {{if .AnimeID}} &middot; <a href="/community/requests?anime_id={{deref .AnimeID}}" class="badge bg-warning bg-opacity-25 text-warning" style="font-size:0.65rem;text-decoration:none;">AniDB:{{deref .AnimeID}}</a>{{end}}
+                                {{if .InfoHash}} &middot; <span class="badge bg-info bg-opacity-25 text-info" style="font-size:0.65rem;" title="{{.InfoHash}}">Torrent</span>{{else}} &middot; <span class="badge bg-danger bg-opacity-25 text-danger" style="font-size:0.65rem;">No Torrent</span>{{end}}
+                                {{if .NyaaURL}} &middot; <a href="{{.NyaaURL}}" target="_blank" rel="noopener" class="badge bg-success bg-opacity-25 text-success" style="font-size:0.65rem;text-decoration:none;">{{if contains .NyaaURL "nekobt.to"}}nekoBT{{else}}Nyaa{{end}}{{if .SeedCount}} ({{.SeedCount}}S){{end}}</a>{{end}}
+                                {{if .NzbID}} &middot; <a href="/release/{{deref64 .NzbID}}" class="badge bg-success" style="font-size:0.65rem;text-decoration:none;" title="Released — view it">Release</a>{{end}}
+                            </div>
+                            {{if .Notes}}<div style="font-size:0.72rem;color:var(--text-muted);">{{truncate .Notes 80}}</div>{{end}}
+                        </td>
+                        <td class="align-middle" style="font-size:0.82rem;color:var(--text-muted);">{{.CreatedAt.Format "Jan 02"}}</td>
+                        <td class="align-middle">
+                            {{if .ParkedUntil}}
+                            <span class="badge bg-warning text-dark" title="{{.ParkedReason}}">Parked</span>
+                            {{else}}
+                            <span class="badge bg-secondary">Open</span>
+                            {{end}}
+                        </td>
+                        <td class="text-end align-middle" style="white-space:nowrap;">
+                            {{$canManage := or $.IsAdmin (and (gt $.ViewerID 0) (eq .UserID $.ViewerID))}}
+                            {{if $canManage}}
+                            <form method="POST" action="/community/requests/{{.ID}}/fulfill" class="d-inline">
+                                <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                                <button type="submit" class="btn btn-sm btn-outline-success" title="Mark as fulfilled">&#10003;</button>
+                            </form>
+                            {{end}}
+                            {{if $canManage}}
+                            <form method="POST" action="/community/requests/{{.ID}}/delete" class="d-inline"
+                                  onsubmit="return confirm('Delete this request?')">
+                                <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">&#10005;</button>
+                            </form>
+                            {{end}}
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="7" class="text-center py-4" style="color:var(--text-muted);">
+                            No requests yet. Be the first to submit one!
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        </div>{{/* end #view-table */}}
+
+        {{/* ── Open Requests cover-art view ──
+             Footer button rules:
+               - fulfilled (NzbID set)        → NZB (download link)
+               - parked                        → "Parked" pill
+               - open                          → "queue" → request detail page
+             Cover overlay: resolution + source pill, mirroring nzb-card. */}}
+        <div id="view-grid">
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3">
+                {{range .Requests}}
+                <div class="col">
+                    <div class="card h-100 cover-card" style="background:var(--bg-elevated);border-color:var(--border);">
+                        <a href="/community/request/{{.ID}}">
+                            <div class="cover-wrap">
+                                {{if .AnimeID}}
+                                <img src="/static/covers/{{deref .AnimeID}}.jpg"
+                                     onerror="this.style.display='none';this.parentElement.innerHTML='<div class=\'cover-img-placeholder\'>&#127916;</div>'"
+                                     alt="{{.Title}}" class="cover-img" loading="lazy">
+                                {{else}}
+                                <div class="cover-img-placeholder">&#127916;</div>
+                                {{end}}
+                                {{if or .Resolution .Source}}
+                                <div class="cover-overlay">
+                                    {{if .Resolution}}<span class="badge" style="background:rgba(var(--bs-primary-rgb),0.85);font-size:0.58rem;">{{.Resolution}}</span>{{end}}
+                                    {{if .Source}}<span class="badge" style="background:rgba(var(--bs-success-rgb),0.85);font-size:0.58rem;">{{.Source}}</span>{{end}}
+                                </div>
+                                {{end}}
+                            </div>
+                        </a>
+                        <div class="card-body p-2">
+                            <a href="/community/request/{{.ID}}" class="cover-title d-block text-decoration-none" style="color:var(--text-primary);">{{.Title}}</a>
+                            <div class="cover-meta">
+                                {{if .Season}}S{{.Season}}{{end}}{{if .Episodes}}{{if .Season}} {{end}}E{{.Episodes}}{{end}}
+                                {{if gt .VoteCount 0}}{{if or .Season .Episodes}} &middot; {{end}}&#9650;{{.VoteCount}}{{end}}
+                                {{if gt .PriorityScore 0}} &middot; {{shortNum .PriorityScore}} pts{{end}}
+                            </div>
+                            <div class="cover-date">{{.Username}} &middot; {{.CreatedAt.Format "Jan 02"}}</div>
+                        </div>
+                        {{/* Open Requests are queued by definition (the listing
+                             filters fulfilled=false), so no per-card "queued"
+                             button — the whole card is already a link to the
+                             request detail. Footer renders only for the rare
+                             NZB / Parked edge cases. */}}
+                        {{if .NzbID}}
+                        <div class="card-footer p-2" style="background:transparent;border-top:1px solid var(--border);">
+                            <a href="/download/{{deref64 .NzbID}}" class="btn btn-primary btn-sm w-100 fw-semibold">NZB</a>
+                        </div>
+                        {{else if .ParkedUntil}}
+                        <div class="card-footer p-2" style="background:transparent;border-top:1px solid var(--border);">
+                            <span class="btn btn-warning btn-sm w-100 fw-semibold disabled" title="{{.ParkedReason}}">Parked</span>
+                        </div>
+                        {{end}}
+                    </div>
+                </div>
+                {{else}}
+                <div class="col-12 text-center" style="color:var(--text-muted);padding:2rem;">No requests yet.</div>
+                {{end}}
+            </div>
+        </div>{{/* end #view-grid */}}
+
+        {{.Pagination}}
+        {{end}}{{/* end tab switch */}}
+
+    </div>
+
+    <script>
+    // ── Remux option auto-show. The container hides by default and
+    // appears when the title or torrent URL field carries a Bluray
+    // signal (BluRay / BDMV / BDRemux / Bluray in any case). Pure
+    // client-side — no DB hit. The user can still tick the radios
+    // if it's a Bluray we didn't detect; the field stays in the
+    // form either way once exposed.
+    (function() {
+        var ttlEl = document.querySelector('input[name="title"]');
+        var urlEl = document.getElementById('field-nyaa-url');
+        var box   = document.getElementById('remux-container');
+        if (!box) return;
+        var re = /\b(?:blu[-_\s]?ray|bdmv|bdremux|bdrip)\b/i;
+        function check() {
+            var t = (ttlEl && ttlEl.value) || '';
+            var u = (urlEl && urlEl.value) || '';
+            if (re.test(t) || re.test(u)) {
+                box.style.display = '';
+            } else {
+                box.style.display = 'none';
+                // Reset to 'none' so a hidden field doesn't sneak a
+                // non-default choice into the submission.
+                var noneRadio = document.getElementById('remux-none');
+                if (noneRadio) noneRadio.checked = true;
+            }
+        }
+        if (ttlEl) ttlEl.addEventListener('input', check);
+        if (urlEl) urlEl.addEventListener('input', check);
+        check();
+    })();
+    </script>
+
+    <script>
+    // ── Cover/list toggle ── matches /new-releases. Persists pref to
+    // localStorage under 'community_view_mode' so the choice carries
+    // across tabs and page refreshes.
+    (function(){
+        var btn       = document.getElementById('toggle-view');
+        var tableView = document.getElementById('view-table');
+        var gridView  = document.getElementById('view-grid');
+        if (!btn || !tableView || !gridView) return;
+        var PREF_KEY = 'community_view_mode';
+
+        function setView(mode) {
+            if (mode === 'grid') {
+                tableView.style.display = 'none';
+                gridView.style.display  = 'block';
+                btn.innerHTML = '&#9776; List';
+                btn.title = 'Switch to list view';
+            } else {
+                tableView.style.display = 'block';
+                gridView.style.display  = 'none';
+                btn.innerHTML = '&#128444; Covers';
+                btn.title = 'Switch to cover art view';
+            }
+            localStorage.setItem(PREF_KEY, mode);
+        }
+
+        setView(localStorage.getItem(PREF_KEY) || 'list');
+        btn.addEventListener('click', function() {
+            setView((localStorage.getItem(PREF_KEY) || 'list') === 'grid' ? 'list' : 'grid');
+        });
+    })();
+    </script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function(){
+        // Pre-fill from query params.
+        var params = new URLSearchParams(window.location.search);
+        var title = params.get('title');
+        var animeId = params.get('anime_id');
+        var mangaId = params.get('manga_id');
+        var musicId = params.get('music_id');
+        var category = params.get('category');
+        if (title || animeId || mangaId || musicId || category) {
+            var form = document.getElementById('new-request-form');
+            if (form) new bootstrap.Collapse(form, {toggle: true});
+            if (title) document.querySelector('input[name="title"]').value = title;
+            if (animeId) document.getElementById('field-anime-id').value = animeId;
+            if (mangaId) document.getElementById('field-manga-id').value = mangaId;
+            if (musicId) document.getElementById('field-music-id').value = musicId;
+            if (category) {
+                var catSel = document.querySelector('select[name="category"]');
+                if (catSel) catSel.value = category;
+            }
+        }
+
+        // Submit feedback: disable the button and show a short "Submitting..."
+        // label so slow connections don't look like dead clicks. Form posts
+        // normally — we do NOT preventDefault, just lock the button out.
+        var rForm = document.getElementById('request-form');
+        if (rForm) {
+            rForm.addEventListener('submit', function() {
+                var btn = document.getElementById('submit-request-btn');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = 'Submitting...';
+                }
+            });
+        }
+
+        // Voting.
+        document.querySelectorAll('.vote-request').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var id = this.dataset.id;
+                var countEl = this.querySelector('.vote-count');
+                fetch('/community/requests/' + id + '/vote', {method:'POST'})
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){
+                        if (d.count !== undefined) countEl.textContent = d.count;
+                        btn.style.color = d.voted ? 'var(--bs-warning)' : '';
+                    });
+            });
+        });
+
+        // Anime ID lookup — when any ID field loses focus, try to populate the others.
+        var fields = {
+            anidb: document.getElementById('field-anime-id'),
+            mal: document.getElementById('field-mal-id'),
+            anilist: document.getElementById('field-anilist-id')
+        };
+        var preview = document.getElementById('anime-preview');
+
+        function lookupAnime(type, id) {
+            if (!id) return;
+            fetch('/community/requests/lookup?type=' + type + '&id=' + id)
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    if (d.error) { preview.style.display='none'; return; }
+                    // Auto-fill other ID fields.
+                    if (d.aid && !fields.anidb.value) fields.anidb.value = d.aid;
+                    if (d.mal_id && !fields.mal.value) fields.mal.value = d.mal_id;
+                    if (d.anilist_id && !fields.anilist.value) fields.anilist.value = d.anilist_id;
+                    // Show preview.
+                    var html = '<strong>' + (d.title||'') + '</strong>';
+                    if (d.format) html += ' &middot; ' + d.format;
+                    if (d.status) html += ' &middot; ' + d.status;
+                    if (d.episodes) html += ' &middot; ' + d.episodes + ' eps';
+                    if (d.genres) html += '<br><span style="font-size:0.72rem;">' + d.genres + '</span>';
+                    preview.innerHTML = html;
+                    preview.style.display = 'block';
+                })
+                .catch(function(){ preview.style.display='none'; });
+        }
+
+        // Guard: the create form is hidden on the feed tab, so these
+        // fields don't exist there. Without the nil-check, addEventListener
+        // throws and breaks every subsequent JS block on the page (including
+        // the navbar dropdown handlers that come from Bootstrap's bundle).
+        if (fields.anidb) fields.anidb.addEventListener('change', function(){ lookupAnime('anidb', this.value); });
+        if (fields.mal) fields.mal.addEventListener('change', function(){ lookupAnime('mal', this.value); });
+        if (fields.anilist) fields.anilist.addEventListener('change', function(){ lookupAnime('anilist', this.value); });
+
+        // Nyaa/Tosho scrape.
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+        var btnScrape = document.getElementById('btn-scrape');
+        if (btnScrape) btnScrape.addEventListener('click', function(){
+            var url = document.getElementById('field-nyaa-url').value.trim();
+            if (!url) return;
+            var resultEl = document.getElementById('scrape-result');
+            resultEl.innerHTML = 'Scraping...';
+            resultEl.style.display = 'block';
+            fetch('/community/requests/scrape?url=' + encodeURIComponent(url))
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    if (d.error) { resultEl.innerHTML = '<span class="text-danger">' + d.error + '</span>'; return; }
+                    var html = '';
+                    if (d.duplicate_of) {
+                        var dup = d.duplicate_of;
+                        var href, label, state;
+                        if (dup.nzb_id) {
+                            // Already in the catalog (or fulfilled request) — point at the file.
+                            href = '/release/' + dup.nzb_id;
+                            label = dup.title || ('Release #' + dup.nzb_id);
+                            state = 'already in the catalog';
+                        } else {
+                            // Open request — let the user upvote/boost.
+                            href = '/community/request/' + dup.id;
+                            label = dup.title || ('Request #' + dup.id);
+                            state = 'already in the queue';
+                        }
+                        html += '<div class="alert alert-warning" style="padding:0.4rem 0.6rem;margin-bottom:0.5rem;">'
+                              + 'This torrent is <strong>' + state + '</strong>: '
+                              + '<a href="' + href + '">' + label + '</a>'
+                              + '</div>';
+                    }
+                    if (d.banner_url) html += '<img src="' + d.banner_url + '" style="max-width:100%;max-height:120px;border-radius:4px;margin-bottom:0.5rem;" alt="Banner"><br>';
+                    if (d.title) html += '<strong>' + d.title + '</strong><br>';
+                    if (d.seed_count !== undefined) html += 'Seeders: ' + d.seed_count;
+                    if (d.info_hash) html += ' &middot; Hash: <code>' + d.info_hash + '</code>';
+                    if (d.season) html += ' &middot; Season: ' + d.season;
+                    if (d.episodes) html += ' Ep: ' + d.episodes;
+                    if (d.resolution) html += ' &middot; ' + d.resolution;
+                    if (d.source) html += ' &middot; ' + d.source;
+                    // Category (page-truth) + sub-category from the nyaa
+                    // sidebar. We show them as small badges so they read
+                    // as tags rather than free text — same visual weight
+                    // as the resolution/source pills above.
+                    if (d.categories && d.categories.length) {
+                        html += '<br>';
+                        d.categories.forEach(function(c){
+                            html += '<span class="badge bg-secondary me-1" style="font-size:0.65rem;font-weight:500;">' + escapeHtml(c) + '</span>';
+                        });
+                    }
+                    // Information row — uploader-supplied URL or note.
+                    // Render the URL clickable when present, otherwise
+                    // fall back to plain text.
+                    if (d.information) {
+                        html += '<div class="mt-1" style="font-size:0.78rem;color:var(--text-muted);">'
+                              + 'Info: ';
+                        if (d.information_url) {
+                            html += '<a href="' + d.information_url + '" target="_blank" rel="noopener noreferrer nofollow">' + escapeHtml(d.information) + '</a>';
+                        } else {
+                            html += escapeHtml(d.information);
+                        }
+                        html += '</div>';
+                    }
+                    // Collapsible description preview. The first 200 chars
+                    // are visible by default; the toggle expands to the
+                    // full sanitized HTML so users can read release notes
+                    // before submitting (release group, encoder details,
+                    // etc.). description_html has already been run through
+                    // sanitize.Wiki on the server, so it is safe to drop
+                    // into innerHTML here.
+                    if (d.description_html) {
+                        var summaryText = (d.description_text || '').slice(0, 200);
+                        if ((d.description_text || '').length > 200) summaryText += '…';
+                        html += '<details class="mt-2" style="font-size:0.78rem;">'
+                              + '<summary style="cursor:pointer;color:var(--text-muted);">Description: ' + escapeHtml(summaryText) + '</summary>'
+                              + '<div class="mt-1 p-2" style="background:var(--surface-2);border-radius:4px;max-height:240px;overflow-y:auto;">'
+                              + d.description_html
+                              + '</div>'
+                              + '</details>';
+                    }
+
+                    // Auto-fill form fields. Always overwrites — Scrape
+                    // is an explicit user action, so a second click after
+                    // changing the URL (E01 → E02) must reflect the new
+                    // scrape rather than keep the stale prior values.
+                    // notes is the only field we still guard, since it's
+                    // a long-text area the user often edits between
+                    // scrapes.
+                    function setField(sel, val) {
+                        var f = document.querySelector(sel);
+                        if (f && val !== undefined && val !== null && val !== '') f.value = val;
+                    }
+                    if (d.title) setField('input[name="title"]', d.title);
+                    setField('input[name="season"]', d.season);
+                    setField('input[name="episodes"]', d.episodes);
+                    setField('select[name="resolution"]', d.resolution);
+                    setField('select[name="source"]', d.source);
+                    setField('select[name="category"]', d.category);
+                    // Auto-fill info_hash and seed_count so the agent can pick up the request.
+                    if (d.info_hash) document.getElementById('field-info-hash').value = d.info_hash;
+                    if (d.seed_count !== undefined) document.getElementById('field-seed-count').value = d.seed_count;
+                    // Pre-fill notes with the uploader's description so
+                    // the mod triaging the request has the same release
+                    // context the user saw on nyaa. Capped at the form's
+                    // 1000-char limit; user can edit before submitting.
+                    if (d.description_text) {
+                        var notesEl = document.querySelector('textarea[name="notes"]');
+                        if (notesEl && !notesEl.value.trim()) {
+                            notesEl.value = d.description_text.slice(0, 1000);
+                        }
+                    }
+
+                    // Auto-fill & cross-lookup external IDs.
+                    if (d.external_ids) {
+                        var ids = d.external_ids;
+                        var idParts = [];
+                        if (ids.tvdb_id) idParts.push('<a href="' + ids.tvdb_url + '" target="_blank" rel="noopener">TVDB:' + ids.tvdb_id + '</a>');
+                        else if (ids.tvdb_url) idParts.push('<a href="' + ids.tvdb_url + '" target="_blank" rel="noopener">TVDB</a>');
+                        if (ids.tmdb_id) idParts.push('TMDB:' + ids.tmdb_id);
+                        if (ids.imdb_id) idParts.push('<a href="https://www.imdb.com/title/' + ids.imdb_id + '" target="_blank" rel="noopener">' + ids.imdb_id + '</a>');
+                        if (idParts.length) html += '<br>External IDs: ' + idParts.join(' &middot; ');
+
+                        // Cross-lookup: TVDB → our anime_metadata → fill AniDB/MAL/AniList.
+                        var lookupType = ids.tvdb_id ? 'tvdb' : (ids.tmdb_id ? 'tmdb' : null);
+                        var lookupID = ids.tvdb_id || ids.tmdb_id;
+                        if (lookupType && lookupID) {
+                            html += ' <span id="cross-lookup-status" style="color:var(--text-muted);">(looking up...)</span>';
+                            fetch('/community/requests/lookup?type=' + lookupType + '&id=' + lookupID)
+                                .then(function(r){ return r.ok ? r.json() : null; })
+                                .then(function(a){
+                                    var statusEl = document.getElementById('cross-lookup-status');
+                                    if (!a) { if (statusEl) statusEl.textContent = '(no match in DB)'; return; }
+                                    if (a.aid) { setField('input[name="anime_id"]', a.aid); var f = document.querySelector('input[name="anime_id"]'); if (f && f.value) f.dispatchEvent(new Event('change')); }
+                                    if (a.mal_id) setField('input[name="mal_id"]', a.mal_id);
+                                    if (a.anilist_id) setField('input[name="anilist_id"]', a.anilist_id);
+                                    var found = [];
+                                    if (a.aid) found.push('AniDB:' + a.aid);
+                                    if (a.mal_id) found.push('MAL:' + a.mal_id);
+                                    if (a.anilist_id) found.push('AL:' + a.anilist_id);
+                                    if (statusEl) statusEl.innerHTML = found.length ? '&rarr; ' + found.join(' &middot; ') : '(no match in DB)';
+                                }).catch(function(){ var s = document.getElementById('cross-lookup-status'); if (s) s.textContent = ''; });
+                        }
+                    }
+                    if (d.files && d.files.length) {
+                        html += '<div class="mt-1" style="max-height:150px;overflow-y:auto;">';
+                        d.files.forEach(function(f){
+                            html += '<div class="scrape-file">' + f.name + (f.size ? ' <span style="color:var(--text-muted);">(' + f.size + ')</span>' : '') + '</div>';
+                        });
+                        html += '</div>';
+                    }
+                    resultEl.innerHTML = html || 'No data found';
+                })
+                .catch(function(){ resultEl.innerHTML = '<span class="text-danger">Scrape failed</span>'; });
+        });
+    });
+
+    // Prowlarr torrent search.
+    (function(){
+        var btn = document.getElementById('btn-prowlarr-search');
+        var input = document.getElementById('prowlarr-query');
+        var resultsDiv = document.getElementById('prowlarr-results');
+        var tbody = document.getElementById('prowlarr-tbody');
+        if (!btn) return;
+
+        function doSearch() {
+            var q = input.value.trim();
+            if (!q) return;
+            btn.disabled = true;
+            btn.textContent = 'Searching...';
+            resultsDiv.style.display = 'none';
+            fetch('/community/requests/search?q=' + encodeURIComponent(q))
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    btn.disabled = false;
+                    btn.textContent = 'Search';
+                    if (d.error) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="text-danger">' + d.error + '</td></tr>';
+                        resultsDiv.style.display = 'block';
+                        return;
+                    }
+                    var results = d.results || [];
+                    if (!results.length) {
+                        tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-muted);">No results found.</td></tr>';
+                        resultsDiv.style.display = 'block';
+                        return;
+                    }
+                    // Sort by seeders descending.
+                    results.sort(function(a,b){ return (b.seeders||0) - (a.seeders||0); });
+                    var html = '';
+                    results.forEach(function(r){
+                        var size = '';
+                        if (r.size >= 1073741824) size = (r.size/1073741824).toFixed(2) + ' GB';
+                        else if (r.size >= 1048576) size = (r.size/1048576).toFixed(1) + ' MB';
+                        else size = Math.round(r.size/1024) + ' KB';
+                        // Unified server shape: info_hash + link, with
+                        // optional info_url (Prowlarr only).
+                        var hash = r.info_hash || '';
+                        var link = r.link || '';
+                        var infoUrl = r.info_url || '';
+                        var seedClass = r.seeders > 10 ? 'text-success' : (r.seeders > 0 ? 'text-warning' : 'text-danger');
+                        var safeTitle = r.title.replace(/"/g,'&quot;').replace(/'/g,"\\'");
+                        html += '<tr>';
+                        html += '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + r.title.replace(/"/g,'&quot;') + '">';
+                        if (infoUrl) html += '<a href="' + infoUrl + '" target="_blank" rel="noopener" style="color:var(--text-primary);">';
+                        html += r.title;
+                        if (infoUrl) html += '</a>';
+                        html += '</td>';
+                        html += '<td>' + size + '</td>';
+                        html += '<td class="' + seedClass + '">' + (r.seeders||0) + '</td>';
+                        html += '<td><span class="badge bg-secondary bg-opacity-50" style="font-size:0.65rem;">' + (r.indexer||r.source||'') + '</span></td>';
+                        html += '<td>';
+                        if (hash || link) {
+                            html += '<button type="button" class="btn btn-sm btn-outline-primary py-0" style="font-size:0.68rem;" onclick="selectTorrent(\'' + hash + '\',\'' + safeTitle + '\',\'' + link.replace(/'/g,"\\'") + '\')">Select</button>';
+                        }
+                        html += '</td>';
+                        html += '</tr>';
+                    });
+                    tbody.innerHTML = html;
+                    resultsDiv.style.display = 'block';
+                })
+                .catch(function(){
+                    btn.disabled = false;
+                    btn.textContent = 'Search';
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-danger">Search failed</td></tr>';
+                    resultsDiv.style.display = 'block';
+                });
+        }
+
+        btn.addEventListener('click', doSearch);
+        input.addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+    })();
+
+    // When a search result is selected, fill in the URL + info_hash fields.
+    // Prefers the original link (e.g. https://nekobt.to/torrents/...) so the
+    // server-side host allowlist accepts it; falls back to a magnet URI
+    // when the upstream only gave us an info hash.
+    function selectTorrent(hash, title, link) {
+        var urlField = document.getElementById('field-nyaa-url');
+        if (urlField) {
+            if (link && /^(https?:|magnet:)/i.test(link)) {
+                urlField.value = link;
+            } else if (hash) {
+                urlField.value = 'magnet:?xt=urn:btih:' + hash;
+            }
+        }
+        // Mirror the hash into the hidden field so dedup works even if the
+        // selected link is a non-magnet site URL with no btih in its path.
+        var hashField = document.getElementById('field-info-hash');
+        if (hashField && hash) hashField.value = hash;
+        // Auto-fill title if empty.
+        var titleField = document.getElementById('field-title');
+        if (titleField && !titleField.value.trim()) titleField.value = title;
+        // Highlight the selected row.
+        var rows = document.querySelectorAll('#prowlarr-tbody tr');
+        rows.forEach(function(r){ r.style.background = ''; });
+        // Visual feedback.
+        var resultsDiv = document.getElementById('prowlarr-results');
+        if (resultsDiv) {
+            var msg = document.createElement('div');
+            msg.style.cssText = 'font-size:0.78rem;color:var(--bs-success);padding:0.25rem 0;';
+            msg.textContent = 'Selected: ' + title.substring(0, 80);
+            resultsDiv.parentNode.insertBefore(msg, resultsDiv.nextSibling);
+            setTimeout(function(){ msg.remove(); }, 3000);
+        }
+    }
+    </script>
+    <!-- Floating bulk-add bar -->
+    <div id="queue-bar" style="display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg-surface);border-top:2px solid var(--blue);padding:0.6rem 1.5rem;z-index:1050;font-size:0.85rem;">
+        <div class="d-flex align-items-center justify-content-between" style="max-width:1200px;margin:0 auto;">
+            <span><strong id="queue-count">0</strong> requests selected</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-primary" id="queue-add-btn">+ Add to My Queue</button>
+                {{if .IsAdmin}}
+                <button class="btn btn-sm btn-outline-danger" id="queue-delete-btn" title="Admin: delete selected requests">Delete Selected</button>
+                {{end}}
+                <button class="btn btn-sm btn-outline-secondary" id="queue-clear-btn">Clear</button>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function(){
+        var bar = document.getElementById('queue-bar');
+        var countEl = document.getElementById('queue-count');
+        var selectAll = document.getElementById('select-all');
+        var checks = document.querySelectorAll('.queue-check');
+
+        function updateBar() {
+            var n = document.querySelectorAll('.queue-check:checked').length;
+            countEl.textContent = n;
+            bar.style.display = n > 0 ? 'block' : 'none';
+        }
+        checks.forEach(function(cb){ cb.addEventListener('change', updateBar); });
+        if (selectAll) {
+            selectAll.addEventListener('change', function(){
+                checks.forEach(function(cb){ cb.checked = selectAll.checked; });
+                updateBar();
+            });
+        }
+        document.getElementById('queue-clear-btn').addEventListener('click', function(){
+            checks.forEach(function(cb){ cb.checked = false; });
+            if (selectAll) selectAll.checked = false;
+            updateBar();
+        });
+        document.getElementById('queue-add-btn').addEventListener('click', function(){
+            var ids = [];
+            document.querySelectorAll('.queue-check:checked').forEach(function(cb){ ids.push(cb.value); });
+            if (!ids.length) return;
+            var btn = this;
+            btn.disabled = true;
+            btn.textContent = 'Adding...';
+            var fd = new FormData();
+            fd.append('request_ids', ids.join(','));
+            fetch('/api/agent-queue/add-bulk', {method:'POST', body:fd})
+                .then(function(r){return r.json()}).then(function(d){
+                    btn.textContent = d.added + ' added!';
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn-success');
+                    setTimeout(function(){
+                        checks.forEach(function(cb){ cb.checked = false; });
+                        if (selectAll) selectAll.checked = false;
+                        updateBar();
+                        btn.textContent = '+ Add to My Queue';
+                        btn.classList.remove('btn-success');
+                        btn.classList.add('btn-primary');
+                        btn.disabled = false;
+                    }, 1500);
+                });
+        });
+
+        // ── Toast helper ──
+        // Bottom-right floating notification, used by the feed-page Request
+        // button to surface success / "already in catalog" / error messages
+        // without blocking the page. Multiple toasts stack vertically, each
+        // auto-dismisses after a short timer (longer for errors so the user
+        // can read the reason).
+        var toastHost = null;
+        function ensureToastHost() {
+            if (toastHost) return toastHost;
+            toastHost = document.createElement('div');
+            toastHost.id = 'toast-host';
+            toastHost.style.cssText = 'position:fixed;right:1rem;bottom:1rem;display:flex;flex-direction:column;gap:0.5rem;z-index:9999;max-width:340px;';
+            document.body.appendChild(toastHost);
+            return toastHost;
+        }
+        function showToast(kind, message, linkHref, linkText) {
+            var host = ensureToastHost();
+            var bg = kind === 'error' ? 'var(--bs-danger)' : (kind === 'info' ? 'var(--bs-info)' : 'var(--bs-success)');
+            var t = document.createElement('div');
+            t.style.cssText = 'background:' + bg + ';color:#fff;padding:0.55rem 0.8rem;border-radius:6px;font-size:0.82rem;box-shadow:0 4px 10px rgba(0,0,0,0.3);display:flex;align-items:center;gap:0.5rem;opacity:0;transition:opacity 0.15s ease;';
+            var span = document.createElement('span');
+            span.textContent = message;
+            span.style.flex = '1';
+            t.appendChild(span);
+            if (linkHref) {
+                var a = document.createElement('a');
+                a.href = linkHref;
+                a.textContent = linkText || 'View';
+                a.style.cssText = 'color:#fff;text-decoration:underline;font-weight:500;';
+                t.appendChild(a);
+            }
+            var x = document.createElement('button');
+            x.type = 'button';
+            x.textContent = '×';
+            x.style.cssText = 'background:none;border:none;color:#fff;font-size:1.1rem;line-height:1;padding:0 0.2rem;cursor:pointer;';
+            x.addEventListener('click', function(){ dismiss(); });
+            t.appendChild(x);
+            host.appendChild(t);
+            // fade in
+            requestAnimationFrame(function(){ t.style.opacity = '1'; });
+            var ttl = kind === 'error' ? 7000 : 4500;
+            var timer = setTimeout(dismiss, ttl);
+            function dismiss() {
+                clearTimeout(timer);
+                t.style.opacity = '0';
+                setTimeout(function(){ if (t.parentNode) t.parentNode.removeChild(t); }, 200);
+            }
+        }
+
+        // ── Feed-page in-place Request button ──
+        // Each row's per-item Request button POSTs straight to
+        // /community/requests with Accept: application/json so the
+        // handler returns the new request_id (or existing/in_catalog
+        // status) instead of redirecting. CSRF token is added
+        // automatically by csrf-js.
+        //
+        // Swap rules — each branch matches what the user would see if
+        // they refreshed the page, so the immediate UI doesn't lie:
+        //   - queued / revived / existing → swap button to "Queued"
+        //     (the request row will be present next reload).
+        //   - in_catalog → leave button as "Request" (the row's
+        //     RequestID is null; on refresh the button still reads
+        //     "Request" since matched-by-hash isn't promoted to NZB at
+        //     the row level by design). Toast informs the user instead.
+        //   - error → no swap; error toast.
+        document.querySelectorAll('.feed-request-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                if (btn.disabled) return;
+                btn.disabled = true;
+                var origText = btn.textContent;
+                btn.textContent = '...';
+                var fd = new FormData();
+                fd.append('title', btn.dataset.title || '');
+                fd.append('nyaa_url', btn.dataset.sourceUrl || '');
+                if (btn.dataset.infoHash) fd.append('info_hash', btn.dataset.infoHash);
+                if (btn.dataset.category) fd.append('category', btn.dataset.category);
+                if (btn.dataset.seedCount) fd.append('seed_count', btn.dataset.seedCount);
+                if (btn.dataset.animeId) fd.append('anime_id', btn.dataset.animeId);
+                fetch('/community/requests', {
+                    method: 'POST',
+                    headers: {'Accept': 'application/json'},
+                    body: fd
+                }).then(function(r) {
+                    return r.json().then(function(j) { return {ok: r.ok, body: j}; });
+                }).then(function(resp) {
+                    btn.textContent = origText;
+                    var b = resp.body || {};
+                    if (!resp.ok || !b.ok) {
+                        btn.disabled = false;
+                        showToast('error', 'Request failed: ' + (b.error || 'server error'));
+                        return;
+                    }
+                    if (b.status === 'in_catalog' && b.nzb_id) {
+                        // Promote to an NZB link — server-side template
+                        // does the same thing on refresh when MatchedNzbID
+                        // is set, so the swap stays consistent with what
+                        // a fresh page load would render.
+                        var nzbEl = document.createElement('a');
+                        nzbEl.href = '/release/' + b.nzb_id;
+                        nzbEl.textContent = 'NZB';
+                        nzbEl.style.cssText = btn.style.cssText;
+                        if (btn.classList.contains('w-100')) {
+                            // Grid view: keep the full-width green-replaced-by-primary button shape.
+                            nzbEl.className = btn.className.replace('feed-request-btn', '').replace(/btn-success/, 'btn-primary');
+                        } else {
+                            // Table view: small primary badge to mirror the server-rendered NZB pill.
+                            nzbEl.className = 'badge bg-primary';
+                            nzbEl.style.cssText = 'font-size:0.62rem;text-decoration:none;';
+                            nzbEl.title = 'View release';
+                        }
+                        if (btn.parentNode) btn.parentNode.replaceChild(nzbEl, btn);
+                        showToast('info', 'Already in the catalog.', '/release/' + b.nzb_id, 'Open');
+                        return;
+                    }
+                    if (b.request_id) {
+                        var queuedHref = '/community/request/' + b.request_id;
+                        var newEl = document.createElement('a');
+                        newEl.href = queuedHref;
+                        newEl.textContent = 'Queued';
+                        newEl.style.cssText = btn.style.cssText;
+                        if (btn.classList.contains('w-100')) {
+                            newEl.className = btn.className.replace('feed-request-btn', '').replace(/btn-success/, 'btn-info');
+                            newEl.classList.add('text-white');
+                        } else {
+                            // Table view: badge style matching the server-rendered "queued" pill.
+                            newEl.className = 'badge bg-info bg-opacity-50 text-info';
+                            newEl.style.cssText = 'font-size:0.62rem;text-decoration:none;';
+                            newEl.title = 'View request';
+                        }
+                        if (btn.parentNode) btn.parentNode.replaceChild(newEl, btn);
+                        var msg = b.status === 'revived' ? 'Request revived.'
+                                : b.status === 'existing' ? 'Already requested — your vote was added.'
+                                : 'Request queued.';
+                        showToast('success', msg, queuedHref, 'View');
+                        return;
+                    }
+                    // Unrecognised success shape — fall back to letting
+                    // the user retry rather than silently doing nothing.
+                    btn.disabled = false;
+                    showToast('error', 'Unexpected server response.');
+                }).catch(function(e) {
+                    btn.disabled = false;
+                    btn.textContent = origText;
+                    showToast('error', 'Network error — please retry.');
+                });
+            });
+        });
+
+        var delBtn = document.getElementById('queue-delete-btn');
+        if (delBtn) {
+            delBtn.addEventListener('click', function(){
+                var checked = document.querySelectorAll('.queue-check:checked');
+                if (!checked.length) return;
+                if (!confirm('Delete ' + checked.length + ' request(s)? This cannot be undone.')) return;
+                var ids = [];
+                checked.forEach(function(cb){ ids.push(cb.value); });
+                var btn = this;
+                btn.disabled = true;
+                btn.textContent = 'Deleting...';
+                var fd = new FormData();
+                fd.append('ids', ids.join(','));
+                fetch('/community/requests/bulk-delete', {method:'POST', body:fd})
+                    .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, body:j}; }); })
+                    .then(function(resp){
+                        if (!resp.ok) {
+                            btn.textContent = 'Error: ' + (resp.body.error || 'failed');
+                            setTimeout(function(){ btn.disabled = false; btn.textContent = 'Delete Selected'; }, 2000);
+                            return;
+                        }
+                        checked.forEach(function(cb){
+                            var tr = cb.closest('tr');
+                            if (tr) tr.remove();
+                        });
+                        if (selectAll) selectAll.checked = false;
+                        updateBar();
+                        btn.disabled = false;
+                        btn.textContent = 'Delete Selected';
+                    })
+                    .catch(function(e){
+                        btn.textContent = 'Error';
+                        setTimeout(function(){ btn.disabled = false; btn.textContent = 'Delete Selected'; }, 2000);
+                    });
+            });
+        }
+    })();
+    </script>
+{{end}}
