@@ -1,0 +1,558 @@
+{{/* The admin donate console — six tabs: costs / points / wallet /
+     packages / tipjar / log.
+
+     Lifted verbatim from the host's admin_donate.html (indexer-site,
+     2026-08-09), chrome off. The hash-to-tab script stays in the fragment:
+     it is this page's own behaviour (every save-redirect returns to
+     ?ok=...#section), and it runs on DOMContentLoaded, by which point the
+     host chrome's Bootstrap bundle has executed. Data is adminDonateVM.
+
+     Submit-time CSRF: only the btcpay-health form carries an inline _csrf
+     input; every other form here relies on the host chrome's csrf-js,
+     which injects _csrf into each form as it is submitted. */}}
+{{define "admin_donate.html"}}
+    <style>
+        .preview-table { width:100%; font-size:0.84rem; }
+        .preview-table th, .preview-table td { padding:3px 10px; text-align:right; font-variant-numeric:tabular-nums; }
+        .preview-table th { color:var(--text-muted); border-bottom:1px solid var(--border); }
+        .preview-table td.dollar { text-align:left; color:var(--text-muted); }
+        .donate-section { scroll-margin-top: 70px; }
+        .section-anchor { padding-top:1rem; margin-top:1.5rem; border-top:2px solid var(--border); }
+        .section-anchor:first-of-type { border-top:none; padding-top:0; }
+    </style>
+    <div class="container mt-3 page">
+        <h2 style="font-size:1.3rem;font-weight:600;">Donate &mdash; admin</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;">
+            Every donation setting on one page &mdash; the admin hub links here and nowhere else. Saves on each form apply immediately
+            to the public <a href="/help/donate" style="color:var(--blue);">/help/donate</a> page.
+        </p>
+
+        {{/* Tabs, matching /admin/p/usenet and the rest of the admin pages —
+             this page was the odd one out, six stacked sections behind a strip
+             of scroll anchors. The ids are unchanged, so every save-redirect
+             that returns to #packages or #log still lands on the right place;
+             the script at the bottom turns that hash into the active tab. */}}
+        <ul class="nav tabs" role="tablist">
+            <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#costs">Costs{{if .Costs}} <span class="tab-count">{{len .Costs}}</span>{{end}}</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#points">Points</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#wallet">Wallet &amp; BTCPay</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#packages">Packages{{if .Packages}} <span class="tab-count">{{len .Packages}}</span>{{end}}</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tipjar">Tip jar</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#log">Log</a></li>
+        </ul>
+
+        <div class="tab-content">
+
+        {{if .Saved}}<div class="alert alert-success py-1" style="font-size:0.85rem;">Saved ({{.Saved}}).</div>{{end}}
+        {{if .ErrCode}}<div class="alert alert-danger py-1" style="font-size:0.85rem;">Error: {{.ErrCode}}</div>{{end}}
+
+        {{/* ── Costs ─────────────────────────────────────── */}}
+        <div id="costs" class="tab-pane active">
+            <p style="color:var(--text-muted);font-size:0.82rem;">
+                Each row adds to the public thermometer goal. Goal group <code>site</code> locks donations when fully funded; other groups never close.
+            </p>
+            <div class="card mb-3">
+                <div class="card-header">{{if .Edit}}Edit cost #{{.Edit.ID}}{{else}}Add cost{{end}}</div>
+                <div class="card-body">
+                    <form method="POST" action="/admin/donate/costs">
+                        {{if .Edit}}<input type="hidden" name="id" value="{{.Edit.ID}}">{{end}}
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label" style="font-size:0.78rem;">Label</label>
+                                <input type="text" name="label" class="form-control form-control-sm" required maxlength="200"
+                                       value="{{if .Edit}}{{.Edit.Label}}{{end}}" placeholder="e.g. VPS, Eweka block">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" style="font-size:0.78rem;">Goal group</label>
+                                <input type="text" name="goal_group" class="form-control form-control-sm" maxlength="40"
+                                       value="{{if .Edit}}{{.Edit.GoalGroup}}{{else}}site{{end}}" placeholder="site">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" style="font-size:0.78rem;">Period</label>
+                                <select name="period" class="form-select form-select-sm">
+                                    <option value="monthly" {{if and .Edit (eq .Edit.Period "monthly")}}selected{{end}}>monthly</option>
+                                    <option value="yearly"  {{if and .Edit (eq .Edit.Period "yearly")}}selected{{end}}>yearly</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" style="font-size:0.78rem;">Amount USD</label>
+                                <input type="number" step="0.01" min="0" name="amount_usd" class="form-control form-control-sm" required
+                                       value="{{if .Edit}}{{printf "%.2f" .Edit.AmountUSD}}{{end}}">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" style="font-size:0.78rem;">Category</label>
+                                <input type="text" name="category" class="form-control form-control-sm" maxlength="40"
+                                       value="{{if .Edit}}{{.Edit.Category}}{{else}}other{{end}}">
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-md-8">
+                                <label class="form-label" style="font-size:0.78rem;">Notes</label>
+                                <input type="text" name="notes" class="form-control form-control-sm" maxlength="500" value="{{if .Edit}}{{.Edit.Notes}}{{end}}">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" style="font-size:0.78rem;">Sort order</label>
+                                <input type="number" name="sort_order" class="form-control form-control-sm" value="{{if .Edit}}{{.Edit.SortOrder}}{{else}}0{{end}}">
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="cost-active" name="active" value="1"
+                                           {{if or (not .Edit) (and .Edit .Edit.Active)}}checked{{end}}>
+                                    <label class="form-check-label" for="cost-active" style="font-size:0.85rem;">Active</label>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm mt-2">{{if .Edit}}Save changes{{else}}Add cost{{end}}</button>
+                        {{if .Edit}}<a href="/admin/donate#costs" class="btn btn-outline-secondary btn-sm mt-2">Cancel</a>{{end}}
+                    </form>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">All cost line items</div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0" style="font-size:0.82rem;">
+                        <thead>
+                            <tr style="color:var(--text-muted);">
+                                <th>Label</th><th>Group</th><th>Period</th><th class="text-end">Amount</th><th>Active</th><th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{range .Costs}}
+                            <tr>
+                                <td>{{.Label}}{{if .Notes}}<br><span style="color:var(--text-muted);font-size:0.72rem;">{{.Notes}}</span>{{end}}</td>
+                                <td><code>{{.GoalGroup}}</code></td>
+                                <td>{{.Period}}</td>
+                                <td class="text-end">${{printf "%.2f" .AmountUSD}}</td>
+                                <td>{{if .Active}}✓{{else}}—{{end}}</td>
+                                <td class="text-end">
+                                    <a class="btn btn-link p-0" href="/admin/donate?edit={{.ID}}#costs" style="font-size:0.72rem;">edit</a>
+                                    <form method="POST" action="/admin/donate/costs/{{.ID}}/del" class="d-inline" onsubmit="return confirm('Delete?')">
+                                        <button class="btn btn-link p-0 text-danger" style="font-size:0.72rem;">delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {{else}}
+                            <tr><td colspan="6" class="text-center" style="color:var(--text-muted);">No costs yet.</td></tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {{/* ── Points + master toggle ───────────────────── */}}
+        <div id="points" class="tab-pane">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">Knobs</div>
+                        <div class="card-body">
+                            <form method="POST" action="/admin/donate/points">
+                                <div class="mb-3 p-2" style="background:rgba(var(--bs-warning-rgb),0.08);border:1px solid rgba(var(--bs-warning-rgb),0.3);border-radius:6px;">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="donate-enabled" name="donate_enabled" value="1"
+                                               {{if .DonateEnabled}}checked{{end}}>
+                                        <label class="form-check-label" for="donate-enabled" style="font-size:0.85rem;font-weight:600;">
+                                            Donate page enabled (visible to all signed-in users)
+                                        </label>
+                                    </div>
+                                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">
+                                        {{if .DonateEnabled}}
+                                            Currently <strong style="color:var(--bs-success);">live</strong>. Users see the navbar entry and can visit /help/donate.
+                                        {{else}}
+                                            Currently <strong style="color:var(--bs-warning);">in preview</strong>. /help/donate 404s for users; admins still see it via the PREVIEW-badged navbar link.
+                                        {{end}}
+                                    </div>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label" style="font-size:0.78rem;">Points per dollar (base rate)</label>
+                                    <input type="number" step="0.01" min="0" name="points_per_dollar" class="form-control form-control-sm"
+                                           value="{{printf "%.2f" .Config.PointsPerDollar}}">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label" style="font-size:0.78rem;">Multiplier per $10</label>
+                                    <input type="number" step="0.01" min="1.0" max="3.0" name="multiplier_per_10" class="form-control form-control-sm"
+                                           value="{{printf "%.2f" .Config.MultiplierPer10}}">
+                                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">1.0 = linear; 1.2 = mild bonus; capped at 3.0.</div>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label" style="font-size:0.78rem;">Donator title threshold (USD lifetime)</label>
+                                    <input type="number" step="0.01" min="0" name="donator_threshold_usd" class="form-control form-control-sm"
+                                           value="{{printf "%.2f" .Config.DonatorThresholdUSD}}">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" style="font-size:0.78rem;">Locking goal-groups (CSV)</label>
+                                    <input type="text" name="locking_groups" class="form-control form-control-sm"
+                                           value="{{.LockingGroups}}" placeholder="site">
+                                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">
+                                        Groups whose fully-funded state hides the donate addresses.
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">Curve preview (current saved values)</div>
+                        <div class="card-body">
+                            <table class="preview-table">
+                                <thead><tr><th class="dollar">$</th><th>Points</th></tr></thead>
+                                <tbody>
+                                    {{range .Preview}}
+                                    <tr><td class="dollar">${{printf "%.0f" .Dollars}}</td><td>{{printf "%.2f" .Points}}</td></tr>
+                                    {{end}}
+                                </tbody>
+                            </table>
+                            <p style="font-size:0.72rem;color:var(--text-muted);margin-top:0.5rem;">Save and refresh to see the table reflect new values.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{/* ── Wallet + BTCPay ──────────────────────────── */}}
+        <div id="wallet" class="tab-pane">
+            <p style="color:var(--text-muted);font-size:0.82rem;">
+                Receive addresses shown on <a href="/help/donate" style="color:var(--blue);">/help/donate</a>.
+                BTCPay credentials power the auto-invoice + webhook flow. The webhook at
+                <code>POST /api/btcpay/webhook</code> rejects all traffic when the secret is empty (fail-closed).
+            </p>
+            <div class="card">
+                <div class="card-body">
+                    {{if .IsAdmin}}
+                    <form method="POST" action="/admin/donate/wallet">
+                        <h6 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Receive addresses</h6>
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label" style="font-size:0.78rem;">Bitcoin (BTC)</label>
+                                <input type="text" name="addr_btc" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "btc"}}" placeholder="bc1...">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" style="font-size:0.78rem;">Ethereum (ETH)</label>
+                                <input type="text" name="addr_eth" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "eth"}}" placeholder="0x...">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" style="font-size:0.78rem;">Monero (XMR)</label>
+                                <input type="text" name="addr_xmr" class="form-control form-control-sm" maxlength="200" value="{{index .Wallet "xmr"}}" placeholder="4...">
+                            </div>
+                        </div>
+                        <h6 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-top:1rem;">BTCPay Server</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label" style="font-size:0.78rem;">Server URL</label>
+                                <input type="text" name="btcpay_url" class="form-control form-control-sm" maxlength="200" value="{{index .Wallet "btcpay_url"}}" placeholder="https://btcpay.example.com">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" style="font-size:0.78rem;">Store ID</label>
+                                <input type="text" name="btcpay_store_id" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "btcpay_store_id"}}">
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-md-6">
+                                <label class="form-label" style="font-size:0.78rem;">API key</label>
+                                <input type="password" name="btcpay_api_key" class="form-control form-control-sm" maxlength="200" value="" autocomplete="off" placeholder="{{if index .Wallet "btcpay_api_key"}}configured — leave blank to keep{{else}}BTCPay API key{{end}}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" style="font-size:0.78rem;">Webhook secret <span style="color:var(--text-muted);font-weight:400;">(HMAC-SHA256; empty = webhook off)</span></label>
+                                <input type="password" name="btcpay_webhook_secret" class="form-control form-control-sm" maxlength="200" value="" autocomplete="off" placeholder="{{if index .Wallet "btcpay_secret"}}configured — leave blank to keep{{else}}HMAC-SHA256 secret{{end}}">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm mt-3">Save wallet &amp; BTCPay</button>
+                    </form>
+
+                    {{/* BTCPay live health check — POSTs to
+                         /admin/donate/btcpay-health which makes a real
+                         GET against the configured store using the
+                         saved API key. Surfaces 401/403/404/network
+                         errors inline so admin can fix config BEFORE
+                         a real user clicks Claim and discovers the
+                         misconfiguration via a 502. */}}
+                    <form method="POST" action="/admin/donate/btcpay-health" class="mt-3 d-inline">
+                        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                        <button type="submit" class="btn btn-outline-info btn-sm"
+                                title="Live-tests the saved BTCPay URL + Store ID + API Key by listing one invoice. Doesn't write anything; safe to repeat.">
+                            Test BTCPay connection
+                        </button>
+                    </form>
+                    {{else}}
+                    <p style="color:var(--text-muted);font-size:0.85rem;margin:0;">
+                        Wallet addresses and BTCPay credentials are managed by an administrator.
+                    </p>
+                    {{end}}
+
+                    {{/* Result banners — one of these renders depending
+                         on the ?btcpay_test=... query the handler sets
+                         on redirect. msg is URL-decoded by Gin's QueryArray. */}}
+                    {{$test := .BTCPayTest}}
+                    {{$msg := .BTCPayMsg}}
+                    {{if eq $test "ok"}}
+                    <div class="alert alert-success mt-3 mb-0" style="font-size:0.85rem;">
+                        ✅ <strong>BTCPay connection OK.</strong> URL, Store ID, and API key all verified. The "View Invoices" permission is present.
+                        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
+                            The first Claim attempt will also verify "Create Invoices" permission — if that's missing, you'll see it in <a href="/admin/errors">/admin/errors</a> under <code>donate/claim-invoice</code>.
+                        </div>
+                    </div>
+                    {{else if eq $test "missing"}}
+                    <div class="alert alert-warning mt-3 mb-0" style="font-size:0.85rem;">
+                        ⚠ <strong>BTCPay not configured yet.</strong> Set BTCPay URL, Store ID, and API key above first.
+                    </div>
+                    {{else if eq $test "auth"}}
+                    <div class="alert alert-danger mt-3 mb-0" style="font-size:0.85rem;">
+                        ❌ <strong>API key rejected.</strong> {{if $msg}}{{$msg}}{{end}}
+                        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
+                            Generate a new key in BTCPay (Account → Manage Account → API Keys) with both <code>View invoices</code> and <code>Create invoices</code> permissions.
+                        </div>
+                    </div>
+                    {{else if eq $test "store"}}
+                    <div class="alert alert-danger mt-3 mb-0" style="font-size:0.85rem;">
+                        ❌ <strong>Store not found.</strong> {{if $msg}}{{$msg}}{{end}}
+                        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
+                            Copy the store ID from the BTCPay URL when viewing the store (<code>/stores/&lt;id&gt;/...</code>).
+                        </div>
+                    </div>
+                    {{else if eq $test "err"}}
+                    <div class="alert alert-danger mt-3 mb-0" style="font-size:0.85rem;">
+                        ❌ <strong>BTCPay test failed.</strong> {{if $msg}}{{$msg}}{{end}}
+                        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
+                            Check the URL (must include scheme, e.g. <code>https://btcpay.amenzb.moe</code>), DNS, and that the BTCPay container is up.
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+
+        {{/* ── Donation Packages ─────────────────────────
+             Admin-defined limited-stock contribution slots shown on
+             /help/donate. Each has a label, USD amount, stock total,
+             optional reward + description. Donations land via the
+             BTCPay click-to-claim flow which stamps package_id on
+             settlement. Stock counts settled donations YTD. */}}
+        <div id="packages" class="tab-pane">
+            <p style="color:var(--text-muted);font-size:0.82rem;">
+                Limited-stock "buy this slot" cards on <a href="/help/donate#packages-section" style="color:var(--blue);">/help/donate</a>.
+                Each settled BTCPay invoice with this package's id in its metadata consumes one slot. Stock resets every Jan 1.
+                Set <strong>active=false</strong> to retire a package without losing its historical donations.
+            </p>
+            <div class="row g-3">
+                <div class="col-lg-7">
+                    <div class="card">
+                        <div class="card-header">{{if .EditPkg}}Edit package &mdash; {{.EditPkg.Label}}{{else}}New package{{end}}</div>
+                        <div class="card-body">
+                            <form method="POST" action="/admin/donate/packages">
+                                <input type="hidden" name="id" value="{{if .EditPkg}}{{.EditPkg.ID}}{{end}}">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-7">
+                                        <label class="form-label" style="font-size:0.78rem;">Label</label>
+                                        <input type="text" name="label" class="form-control form-control-sm" maxlength="80" required value="{{if .EditPkg}}{{.EditPkg.Label}}{{end}}" placeholder="Server Patron 2026">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label" style="font-size:0.78rem;">Amount USD</label>
+                                        <input type="number" step="0.01" min="0.01" name="amount_usd" class="form-control form-control-sm" required value="{{if .EditPkg}}{{printf "%.2f" .EditPkg.AmountUSD}}{{end}}" placeholder="250">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label" style="font-size:0.78rem;">Stock</label>
+                                        <input type="number" min="1" name="stock_total" class="form-control form-control-sm" required value="{{if .EditPkg}}{{.EditPkg.StockTotal}}{{end}}" placeholder="2">
+                                    </div>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label" style="font-size:0.78rem;">Description <span style="color:var(--text-muted);font-weight:400;">(short, public)</span></label>
+                                    <input type="text" name="description" class="form-control form-control-sm" maxlength="200" value="{{if .EditPkg}}{{.EditPkg.Description}}{{end}}" placeholder="Covers one year of VPS hosting.">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label" style="font-size:0.78rem;">Reward <span style="color:var(--text-muted);font-weight:400;">(what they get)</span></label>
+                                    <input type="text" name="reward" class="form-control form-control-sm" maxlength="200" value="{{if .EditPkg}}{{.EditPkg.Reward}}{{end}}" placeholder="Permanent 'Server Patron 2026' badge + Hall of Fame slot.">
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-3">
+                                        <label class="form-label" style="font-size:0.78rem;">Sort order</label>
+                                        <input type="number" name="sort_order" class="form-control form-control-sm" value="{{if .EditPkg}}{{.EditPkg.SortOrder}}{{else}}0{{end}}">
+                                    </div>
+                                    <div class="col-md-9 d-flex align-items-end">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="active" value="1" id="pkg_active" {{if or (not .EditPkg) .EditPkg.Active}}checked{{end}}>
+                                            <label class="form-check-label" for="pkg_active" style="font-size:0.82rem;">Active <span style="color:var(--text-muted);font-weight:400;">(uncheck to retire without deleting)</span></label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm">{{if .EditPkg}}Save changes{{else}}Create package{{end}}</button>
+                                {{if .EditPkg}}<a href="/admin/donate#packages" class="btn btn-outline-secondary btn-sm">Cancel</a>{{end}}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="card">
+                        <div class="card-header">Existing packages</div>
+                        <div class="card-body p-0">
+                            <table class="table table-sm mb-0" style="font-size:0.78rem;">
+                                <thead>
+                                    <tr style="color:var(--text-muted);">
+                                        <th>Label</th><th class="text-end">USD</th><th class="text-end">Stock</th><th>Active</th><th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{range .Packages}}
+                                    <tr>
+                                        <td>{{.Label}}</td>
+                                        <td class="text-end">${{printf "%.2f" .AmountUSD}}</td>
+                                        <td class="text-end">{{.StockTotal}}</td>
+                                        <td>{{if .Active}}<span style="color:#4ade80;">yes</span>{{else}}<span style="color:var(--text-muted);">no</span>{{end}}</td>
+                                        <td class="text-end">
+                                            <a href="/admin/donate?edit_pkg={{.ID}}#packages" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.72rem;">Edit</a>
+                                            <form method="POST" action="/admin/donate/packages/{{.ID}}/del" style="display:inline;" onsubmit="return confirm('Delete package &quot;{{.Label}}&quot;? Linked donations stay (package_id becomes NULL).');">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.72rem;">Del</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {{else}}
+                                    <tr><td colspan="5" style="color:var(--text-muted);padding:0.8rem;">No packages defined yet.</td></tr>
+                                    {{end}}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{/* ── Tip Jar goals ─────────────────────────────
+             Two free-form goals shown in the public donate page's
+             "Tip Jar" panel (formerly Community Goals). Each slot
+             carries name + target + raised; leaving name OR target
+             blank hides that card on the public page. Raised is
+             admin-set — update it manually as donations come in. */}}
+        <div id="tipjar" class="tab-pane">
+            <p style="color:var(--text-muted);font-size:0.82rem;">
+                Configure up to two named goals shown on the public donate page's Tip Jar panel.
+                Leave a slot's name or target blank to hide it. <strong>Raised</strong> is set manually here &mdash;
+                update as real donations come in.
+            </p>
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" action="/admin/donate/tipjar">
+                        {{range $slot := list 1 2}}
+                        <h6 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;{{if gt $slot 1}}margin-top:1rem;{{end}}">Goal {{$slot}}</h6>
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-6">
+                                <label class="form-label" style="font-size:0.78rem;">Name</label>
+                                <input type="text" name="goal_{{$slot}}_name" class="form-control form-control-sm" maxlength="80" value="{{index $.TipJar (printf "goal_%d_name" $slot)}}" placeholder="e.g. Animated Profile Effects">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label" style="font-size:0.78rem;">Target USD</label>
+                                <input type="number" step="0.01" min="0" name="goal_{{$slot}}_target_usd" class="form-control form-control-sm" value="{{index $.TipJar (printf "goal_%d_target_usd" $slot)}}" placeholder="250">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label" style="font-size:0.78rem;">Raised USD</label>
+                                <input type="number" step="0.01" min="0" name="goal_{{$slot}}_raised_usd" class="form-control form-control-sm" value="{{index $.TipJar (printf "goal_%d_raised_usd" $slot)}}" placeholder="0">
+                            </div>
+                        </div>
+                        {{end}}
+                        <button type="submit" class="btn btn-primary btn-sm mt-2">Save tip jar</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {{/* ── Donation log ────────────────────────────── */}}
+        <div id="log" class="tab-pane">
+            <div class="row g-3">
+                {{if .IsAdmin}}
+                <div class="col-md-5">
+                    <div class="card">
+                        <div class="card-header">Record a manual / fiat donation</div>
+                        <div class="card-body">
+                            <form method="POST" action="/admin/donate/log">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label class="form-label" style="font-size:0.78rem;">Asset</label>
+                                        <select name="asset" class="form-select form-select-sm">
+                                            <option value="fiat" selected>fiat</option>
+                                            <option value="BTC">BTC</option>
+                                            <option value="ETH">ETH</option>
+                                            <option value="XMR">XMR</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label" style="font-size:0.78rem;">Amount USD</label>
+                                        <input type="number" step="0.01" min="0" name="amount_usd" class="form-control form-control-sm" required>
+                                    </div>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label" style="font-size:0.78rem;">Native amount <span style="color:var(--text-muted);font-weight:400;">(optional, defaults to USD)</span></label>
+                                    <input type="number" step="0.00000001" min="0" name="amount_native" class="form-control form-control-sm">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label" style="font-size:0.78rem;">Donor username <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+                                    <input type="text" name="donor_username" class="form-control form-control-sm" placeholder="leave blank for anon">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label" style="font-size:0.78rem;">Display label</label>
+                                    <input type="text" name="donor_label" class="form-control form-control-sm" maxlength="80" placeholder="how the public sees them">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" style="font-size:0.78rem;">Note (admin only)</label>
+                                    <textarea name="note" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm">Record donation</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+                <div class="col-md-7">
+                    <div class="card">
+                        <div class="card-header">Recent donations (last 200)</div>
+                        <div class="card-body p-0">
+                            <table class="table table-sm mb-0" style="font-size:0.78rem;">
+                                <thead>
+                                    <tr style="color:var(--text-muted);">
+                                        <th>When</th><th>Asset</th><th class="text-end">USD</th><th>Donor</th><th>Note</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{range .Donations}}
+                                    <tr>
+                                        <td>{{.ReceivedAt.Format "Jan 02 15:04"}}</td>
+                                        <td>{{.Asset}}</td>
+                                        <td class="text-end">${{printf "%.2f" .AmountUSD}}</td>
+                                        <td>
+                                            {{if .DonorUserID}}{{index $.Usernames (deref .DonorUserID)}}{{end}}
+                                            {{if .DonorLabel}}<br><span style="color:var(--text-muted);">{{.DonorLabel}}</span>{{end}}
+                                        </td>
+                                        <td style="color:var(--text-muted);">{{.Note}}</td>
+                                    </tr>
+                                    {{else}}
+                                    <tr><td colspan="5" class="text-center" style="color:var(--text-muted);">No donations recorded yet.</td></tr>
+                                    {{end}}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>{{/* /.tab-content */}}
+    </div>
+    <script>
+    // Open the tab named by the URL hash, and keep the hash in step as tabs are
+    // clicked. Both halves matter: every form here redirects back to
+    // ?saved=...#section, so without the first the page would answer each save
+    // by dropping the admin on Costs. Same approach as the usenet settings page.
+    document.addEventListener('DOMContentLoaded', function () {
+        var hash = location.hash;
+        if (/^#[a-z-]+$/.test(hash) && window.bootstrap) {
+            var t = document.querySelector('.nav.tabs .nav-link[href="' + hash + '"]');
+            if (t) bootstrap.Tab.getOrCreateInstance(t).show();
+        }
+        document.querySelectorAll('.nav.tabs [data-bs-toggle="tab"]').forEach(function (el) {
+            el.addEventListener('shown.bs.tab', function (e) {
+                history.replaceState(null, '', e.target.getAttribute('href'));
+            });
+        });
+    });
+    </script>
+{{end}}

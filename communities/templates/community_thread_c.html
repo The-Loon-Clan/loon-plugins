@@ -1,0 +1,204 @@
+{{/* The thread view — OP + paged replies + the shared community sidebar.
+
+     Lifted verbatim from the host's community_thread_c.html (indexer-site,
+     2026-08-09), chrome off, pagination partial replaced by the
+     pre-rendered .Pagination HTML. Data is communityThreadVM; .Posts rows
+     are threadPostVM (post + pre-rendered BodyHTML). */}}
+{{define "community_thread_c.html"}}
+    <style>
+        .ct-page { padding: 1.4rem 1rem 3rem; }
+        .ct-shell { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1.1rem; align-items: start; }
+        @media (max-width: 1000px) { .ct-shell { grid-template-columns: 1fr; } }
+
+        .ct-header { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
+        .ct-header h1 { font-size: 1.45rem; font-weight: 800; margin: 0 0 0.4rem; color: var(--text-primary); }
+        .ct-meta { font-size: 0.78rem; color: var(--text-muted); display: flex; gap: 0.7rem; flex-wrap: wrap; }
+        .ct-meta a { color: var(--blue); text-decoration: none; }
+        .ct-body { font-size: 0.95rem; color: var(--text-primary); margin-top: 0.85rem; line-height: 1.55; }
+        .ct-body p { margin: 0 0 0.7rem; }
+
+        .ct-mod-bar { display: flex; gap: 0.4rem; margin-top: 0.6rem; flex-wrap: wrap; }
+        .ct-mod-bar form { display: inline-block; }
+
+        .ct-post { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.05rem; margin-bottom: 0.6rem; }
+        .ct-post-head { display: flex; align-items: center; gap: 0.55rem; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.45rem; }
+        .ct-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--bg-elevated); overflow: hidden; flex-shrink: 0; display:inline-flex; align-items:center; justify-content:center; font-weight:700; color:var(--blue); font-size: 0.78rem; }
+        .ct-avatar img { width:100%; height:100%; object-fit:cover; }
+        .ct-post-user { color: var(--text-primary); font-weight: 600; text-decoration: none; }
+        .ct-post-body { font-size: 0.92rem; color: var(--text-primary); line-height: 1.5; }
+        .ct-post-body p { margin: 0 0 0.55rem; }
+
+        .ct-reply-form { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1rem; margin-top: 1rem; }
+        .ct-reply-form textarea { width: 100%; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); padding: 0.6rem 0.75rem; font-size: 0.9rem; min-height: 96px; resize: vertical; }
+
+        /* Sidebar reused from community_view */
+        .c-side { display: flex; flex-direction: column; gap: 0.9rem; }
+        .c-side-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.95rem 1rem; }
+        .c-side-card h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--text-muted); margin: 0 0 0.6rem; }
+        .c-rule { border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+        .c-rule:last-child { border-bottom: none; }
+        .c-rule > summary { display: flex; align-items: flex-start; gap: 0.4rem; padding: 0.5rem 0; cursor: pointer; list-style: none; }
+        .c-rule > summary::-webkit-details-marker { display: none; }
+        .c-rule > summary::marker { content: ""; }
+        .c-rule-n { color: var(--text-muted); font-weight: 700; flex-shrink: 0; min-width: 1.1em; }
+        .c-rule-title { font-weight: 600; color: var(--text-primary); flex: 1; min-width: 0; }
+        .c-rule-chev { color: var(--text-muted); flex-shrink: 0; transition: transform 0.15s ease; }
+        .c-rule[open] > summary .c-rule-chev { transform: rotate(180deg); }
+        .c-rule-static { display: flex; align-items: flex-start; gap: 0.4rem; padding: 0.5rem 0; }
+        .c-rule-body { font-size: 0.78rem; color: var(--text-muted); padding: 0 0 0.55rem 1.5rem; white-space: pre-wrap; }
+        .c-mod-list { display: flex; flex-direction: column; gap: 0.4rem; }
+        .c-mod { display: flex; align-items: center; gap: 0.55rem; text-decoration: none; color: var(--text-primary); font-size: 0.82rem; }
+        .c-mod .m-avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--bg-elevated); overflow: hidden; flex-shrink: 0; }
+        .c-mod .m-avatar img { width:100%; height:100%; object-fit:cover; }
+        .c-mod .m-role { font-size: 0.66rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    </style>
+    <div class="container page ct-page">
+        <nav aria-label="breadcrumb" style="font-size:0.8rem;margin-bottom:0.6rem;">
+            <a href="/c" style="color:var(--text-muted);text-decoration:none;">Communities</a>
+            &rsaquo;
+            <a href="/c/{{.Community.Slug}}" style="color:var(--blue);text-decoration:none;">/c/{{.Community.Slug}}</a>
+        </nav>
+
+        <div class="ct-shell">
+            <div>
+                <div class="ct-header">
+                    <h1>
+                        {{if .Thread.Pinned}}<span style="font-size:0.62rem;font-weight:700;text-transform:uppercase;padding:2px 7px;border-radius:5px;background:rgba(34,197,94,0.18);color:#22c55e;border:1px solid rgba(34,197,94,0.4);vertical-align:middle;margin-right:0.4rem;">Pinned</span>{{end}}
+                        {{if .Thread.Locked}}<span style="font-size:0.62rem;font-weight:700;text-transform:uppercase;padding:2px 7px;border-radius:5px;background:rgba(248,113,113,0.18);color:#f87171;border:1px solid rgba(248,113,113,0.4);vertical-align:middle;margin-right:0.4rem;">Locked</span>{{end}}
+                        {{.Thread.Title}}
+                    </h1>
+                    <div class="ct-meta">
+                        <span>Posted by <a href="/u/{{.Thread.Username}}">{{.Thread.Username}}</a></span>
+                        <span>{{.Thread.CreatedAt.Format "Jan 2 2006 15:04"}}</span>
+                        <span>{{.Thread.ReplyCount}} repl{{if eq .Thread.ReplyCount 1}}y{{else}}ies{{end}}</span>
+                    </div>
+                    {{if .Thread.Body}}
+                    <div class="ct-body">{{.BodyHTML}}</div>
+                    {{end}}
+
+                    {{if .Role.CanModerate}}
+                    <div class="ct-mod-bar">
+                        <form method="POST" action="/c/{{.Community.Slug}}/thread/{{.Thread.ID}}/pin">
+                            <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                            <input type="hidden" name="pin" value="{{if .Thread.Pinned}}0{{else}}1{{end}}">
+                            <button class="btn btn-sm btn-outline-secondary" type="submit">{{if .Thread.Pinned}}Unpin{{else}}Pin{{end}}</button>
+                        </form>
+                        <form method="POST" action="/c/{{.Community.Slug}}/thread/{{.Thread.ID}}/lock">
+                            <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                            <input type="hidden" name="lock" value="{{if .Thread.Locked}}0{{else}}1{{end}}">
+                            <button class="btn btn-sm btn-outline-secondary" type="submit">{{if .Thread.Locked}}Unlock{{else}}Lock{{end}}</button>
+                        </form>
+                        <form method="POST" action="/c/{{.Community.Slug}}/thread/{{.Thread.ID}}/remove" onsubmit="return confirm('Remove this thread? It stays in the database for restore.')">
+                            <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                            <input type="text" name="reason" placeholder="Reason (optional)" class="form-control form-control-sm d-inline-block" style="width:200px;font-size:0.75rem;" maxlength="256">
+                            <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                        </form>
+                    </div>
+                    {{end}}
+                </div>
+
+                {{if .Posts}}
+                {{range .Posts}}
+                <div class="ct-post" id="p{{.ID}}">
+                    <div class="ct-post-head">
+                        <span class="ct-avatar">
+                            {{if .AvatarPath}}<img src="{{.AvatarPath}}" alt="">{{else}}{{initial .Username}}{{end}}
+                        </span>
+                        <a class="ct-post-user" href="/u/{{.Username}}">{{.Username}}</a>
+                        <span>· {{.CreatedAt.Format "Jan 2 15:04"}}</span>
+                        {{if .EditedAt}}<span>· edited</span>{{end}}
+                        {{if $.Role.CanModerate}}
+                        <form method="POST" action="/c/{{$.Community.Slug}}/thread/{{$.Thread.ID}}/post/{{.ID}}/remove" class="ms-auto"
+                              onsubmit="return confirm('Remove this reply?')">
+                            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                            <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.7rem;" type="submit">Remove</button>
+                        </form>
+                        {{end}}
+                    </div>
+                    <div class="ct-post-body">{{.BodyHTML}}</div>
+                </div>
+                {{end}}
+                {{.Pagination}}
+                {{end}}
+
+                {{if .User}}
+                {{if .Thread.Locked}}
+                <div class="ct-reply-form text-center text-muted" style="font-size:0.85rem;">This thread is locked. New replies are disabled.</div>
+                {{else}}
+                <form class="ct-reply-form" method="POST" action="/c/{{.Community.Slug}}/thread/{{.Thread.ID}}/reply">
+                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                    <label class="form-label" style="font-size:0.85rem;">Reply</label>
+                    <textarea name="body" required placeholder="Write a reply..."></textarea>
+                    <div class="d-flex justify-content-end mt-2">
+                        <button class="btn btn-sm btn-primary" type="submit">Post reply</button>
+                    </div>
+                </form>
+                {{end}}
+                {{else}}
+                <div class="ct-reply-form text-center" style="font-size:0.85rem;">
+                    <a href="/login" style="color:var(--blue);">Sign in</a> to reply.
+                </div>
+                {{end}}
+            </div>
+
+            <aside class="c-side">
+                <div class="c-side-card">
+                    <h3>About /c/{{.Community.Slug}}</h3>
+                    {{if .Community.Description}}<div style="font-size:0.86rem;color:var(--text-primary);line-height:1.5;">{{.Community.Description}}</div>{{end}}
+                    <div style="display:flex;gap:0.95rem;font-size:0.82rem;margin-top:0.55rem;">
+                        <div><strong style="color:var(--text-primary);font-size:0.95rem;">{{.Community.SubscriberCount}}</strong> <span style="color:var(--text-muted);">members</span></div>
+                        <div><strong style="color:var(--text-primary);font-size:0.95rem;">{{.Community.ThreadCount}}</strong> <span style="color:var(--text-muted);">threads</span></div>
+                    </div>
+                </div>
+
+                {{if .SidebarHTML}}
+                <div class="c-side-card">
+                    <h3>Description</h3>
+                    <div style="font-size:0.86rem;color:var(--text-primary);line-height:1.5;">{{.SidebarHTML}}</div>
+                </div>
+                {{end}}
+
+                {{if .Rules}}
+                <div class="c-side-card">
+                    <h3>Rules</h3>
+                    {{range $i, $r := .Rules}}
+                    {{if $r.Body}}
+                    <details class="c-rule">
+                        <summary>
+                            <span class="c-rule-n">{{add $i 1}}</span>
+                            <span class="c-rule-title">{{$r.Title}}</span>
+                            <span class="c-rule-chev">&#9662;</span>
+                        </summary>
+                        <div class="c-rule-body">{{$r.Body}}</div>
+                    </details>
+                    {{else}}
+                    <div class="c-rule"><div class="c-rule-static">
+                        <span class="c-rule-n">{{add $i 1}}</span>
+                        <span class="c-rule-title">{{$r.Title}}</span>
+                    </div></div>
+                    {{end}}
+                    {{end}}
+                </div>
+                {{end}}
+
+                <div class="c-side-card">
+                    <h3>Moderators</h3>
+                    <div class="c-mod-list">
+                        <a class="c-mod" href="/u/{{.Community.OwnerUsername}}">
+                            <span class="m-avatar">{{if .Community.OwnerAvatarPath}}<img src="{{.Community.OwnerAvatarPath}}" alt="">{{else}}{{initial .Community.OwnerUsername}}{{end}}</span>
+                            <span>{{.Community.OwnerUsername}}</span>
+                            <span class="m-role ms-auto">Owner</span>
+                        </a>
+                        {{range .Mods}}
+                        <a class="c-mod" href="/u/{{.Username}}">
+                            <span class="m-avatar">{{if .AvatarPath}}<img src="{{.AvatarPath}}" alt="">{{else}}{{initial .Username}}{{end}}</span>
+                            <span>{{.Username}}</span>
+                            <span class="m-role ms-auto">Mod</span>
+                        </a>
+                        {{end}}
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+{{end}}

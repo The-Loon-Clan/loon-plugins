@@ -1,0 +1,88 @@
+{{/* The /c landing page — a card grid of non-hidden communities.
+
+     Lifted verbatim from the host's communities_index.html (indexer-site,
+     2026-08-09): the head/navbar/footer chrome came off, the pagination
+     partial became the pre-rendered .Pagination HTML, everything else is
+     byte-for-byte the page prod served. Data is communitiesIndexVM. */}}
+{{define "communities_index.html"}}
+    <style>
+        .c-page { padding: 1.4rem 1rem 3rem; }
+        .c-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:0.95rem; }
+        .c-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+            text-decoration: none;
+            color: inherit;
+            display:flex; flex-direction:column;
+            transition: border-color 0.15s ease, transform 0.15s ease;
+        }
+        .c-card:hover { border-color: var(--blue); transform: translateY(-2px); }
+        .c-banner {
+            height: 80px; background: linear-gradient(135deg, rgba(91,138,245,0.35), rgba(168,85,247,0.25));
+            background-size: cover; background-position: center;
+        }
+        .c-body { padding: 0.85rem 1rem 1rem; }
+        .c-row { display:flex; align-items:center; gap:0.65rem; margin-top:-22px; margin-bottom:0.55rem; }
+        .c-icon {
+            width: 44px; height: 44px; border-radius: 10px;
+            border: 2px solid var(--bg-surface);
+            background: var(--bg-elevated);
+            color: var(--blue);
+            display:inline-flex; align-items:center; justify-content:center;
+            font-weight:800; font-size: 1.05rem;
+            flex-shrink:0;
+        }
+        .c-icon img { width:100%; height:100%; object-fit:cover; border-radius:8px; }
+        .c-name { font-size: 1.02rem; font-weight: 700; line-height: 1.2; color: var(--text-primary); margin: 0; }
+        .c-slug { font-size: 0.72rem; color: var(--text-muted); }
+        .c-desc { font-size: 0.82rem; color: var(--text-muted); margin: 0.25rem 0 0.7rem; line-height: 1.45; min-height: 2.4em; }
+        .c-meta { display:flex; gap:0.85rem; font-size: 0.74rem; color: var(--text-muted); }
+        .c-meta strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+        .c-empty { text-align:center; padding: 3rem 1rem; color: var(--text-muted); font-size: 0.9rem; }
+    </style>
+    <div class="container page c-page">
+        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+            <div>
+                <div class="eyebrow" style="font-size:0.7rem;letter-spacing:0.10em;text-transform:uppercase;color:var(--text-muted);font-weight:700;">Communities</div>
+                <h1 style="margin:0;font-size:1.6rem;font-weight:800;color:var(--text-primary);">Browse Communities</h1>
+            </div>
+            {{if .User}}
+            <a href="/c/new" class="btn btn-primary btn-sm">+ Create community</a>
+            {{else}}
+            <a href="/login" class="btn btn-outline-light btn-sm">Sign in to create</a>
+            {{end}}
+        </div>
+
+        {{if .Communities}}
+        <div class="c-grid">
+            {{range .Communities}}
+            <a class="c-card" href="/c/{{.Slug}}">
+                <div class="c-banner" {{if .BannerURL}}style="background-image:url('{{.BannerURL}}');background-position:center {{.BannerPosition}}%;"{{end}}></div>
+                <div class="c-body">
+                    <div class="c-row">
+                        <span class="c-icon">{{if .IconURL}}<img src="{{.IconURL}}" alt="">{{else}}{{initial .Name}}{{end}}</span>
+                        <div>
+                            <h3 class="c-name">{{.Name}}</h3>
+                            <div class="c-slug">/c/{{.Slug}}</div>
+                        </div>
+                    </div>
+                    {{if .Description}}<div class="c-desc">{{.Description}}</div>{{else}}<div class="c-desc">&mdash;</div>{{end}}
+                    <div class="c-meta">
+                        <span><strong>{{.SubscriberCount}}</strong> members</span>
+                        <span><strong>{{.ThreadCount}}</strong> threads</span>
+                    </div>
+                </div>
+            </a>
+            {{end}}
+        </div>
+        {{.Pagination}}
+        {{else}}
+        <div class="c-empty">
+            No communities yet.
+            {{if .User}}<br><a href="/c/new" style="color:var(--blue);">Be the first to create one →</a>{{end}}
+        </div>
+        {{end}}
+    </div>
+{{end}}

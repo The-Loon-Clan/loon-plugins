@@ -3,7 +3,6 @@ package communities
 import (
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -102,19 +101,34 @@ func (h *Handlers) Index(c *gin.Context) {
 		h.errs.HandlerError(c, "community/index", err)
 		return
 	}
-	pg := deps.Pagination(page, communityPageSize, total, "/c?")
-	c.HTML(http.StatusOK, "communities_index.html", deps.BaseData(c, gin.H{
-		"Communities": rows,
-		"Total":       total,
-		"Pagination":  pg,
-	}))
+	h.render(c, http.StatusOK, "Communities", "communities_index.html",
+		&communitiesIndexVM{
+			Communities: rows,
+			Total:       total,
+			Pagination:  pager(page, total, "/c?"),
+		},
+		gin.H{
+			"Communities": rows,
+			"Total":       total,
+			"Pagination":  legacyPager(page, total, "/c?"),
+		})
 }
 
 // NewCommunityForm — GET /c/new. Authenticated users only; the
 // session check happens in the route group so an anonymous visit
 // redirects to /login.
 func (h *Handlers) NewCommunityForm(c *gin.Context) {
-	c.HTML(http.StatusOK, "community_new.html", deps.BaseData(c, gin.H{}))
+	h.render(c, http.StatusOK, "Create community", "community_new.html",
+		&communityNewVM{}, gin.H{})
+}
+
+// newCommunityFormError re-renders the create form with the entered values
+// and one validation message. 400, not 200: the form is being rejected and
+// the status line should say so.
+func (h *Handlers) newCommunityFormError(c *gin.Context, msg, slug, name, description string) {
+	h.render(c, http.StatusBadRequest, "Create community", "community_new.html",
+		&communityNewVM{Error: msg, Slug: slug, Name: name, Description: description},
+		gin.H{"Error": msg, "Slug": slug, "Name": name, "Description": description})
 }
 
 // CreateCommunity — POST /c. Validates slug + name, inserts the
@@ -129,30 +143,15 @@ func (h *Handlers) CreateCommunity(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("name"))
 	description := strings.TrimSpace(c.PostForm("description"))
 	if !communitySlugRE.MatchString(slug) {
-		c.HTML(http.StatusBadRequest, "community_new.html", deps.BaseData(c, gin.H{
-			"Error":       "Slug must be 3–32 chars, start with a letter, and use only lowercase letters / digits / underscore / dash.",
-			"Slug":        slug,
-			"Name":        name,
-			"Description": description,
-		}))
+		h.newCommunityFormError(c, "Slug must be 3–32 chars, start with a letter, and use only lowercase letters / digits / underscore / dash.", slug, name, description)
 		return
 	}
 	if communitySlugReserved[slug] {
-		c.HTML(http.StatusBadRequest, "community_new.html", deps.BaseData(c, gin.H{
-			"Error":       "That slug is reserved. Please pick another.",
-			"Slug":        slug,
-			"Name":        name,
-			"Description": description,
-		}))
+		h.newCommunityFormError(c, "That slug is reserved. Please pick another.", slug, name, description)
 		return
 	}
 	if name == "" || len(name) > 80 {
-		c.HTML(http.StatusBadRequest, "community_new.html", deps.BaseData(c, gin.H{
-			"Error":       "Name is required (1–80 chars).",
-			"Slug":        slug,
-			"Name":        name,
-			"Description": description,
-		}))
+		h.newCommunityFormError(c, "Name is required (1–80 chars).", slug, name, description)
 		return
 	}
 	if len(description) > 500 {
@@ -169,12 +168,7 @@ func (h *Handlers) CreateCommunity(c *gin.Context) {
 		// Slug uniqueness violation surfaces as a pq error; map to
 		// the same form re-render so the user can correct the slug.
 		if strings.Contains(err.Error(), "communities_slug_key") {
-			c.HTML(http.StatusBadRequest, "community_new.html", deps.BaseData(c, gin.H{
-				"Error":       "That slug is already taken. Please pick another.",
-				"Slug":        slug,
-				"Name":        name,
-				"Description": description,
-			}))
+			h.newCommunityFormError(c, "That slug is already taken. Please pick another.", slug, name, description)
 			return
 		}
 		h.errs.HandlerError(c, "community/create", err)
@@ -243,25 +237,44 @@ func (h *Handlers) View(c *gin.Context) {
 		h.errs.HandlerError(c, "community/view", err)
 		return
 	}
-	pg := deps.Pagination(page, communityPageSize, total, fmt.Sprintf("/c/%s?", slug))
-
 	rules, _ := h.store.ListCommunityRules(ctx, comm.ID)
 	mods, _ := h.store.ListCommunityMods(ctx, comm.ID)
 
-	c.HTML(http.StatusOK, "community_view.html", deps.BaseData(c, gin.H{
-		"Community":       comm,
-		"Threads":         threads,
-		"Total":           total,
-		"Pagination":      pg,
-		"Rules":           rules,
-		"Mods":            mods,
-		"Role":            role,
-		"MyRequest":       myRequest,
-		"PendingCount":    pendingCount,
-		"Flash":           h.popFlash(c),
-		"SidebarHTML":     deps.Markdown(comm.SidebarMD),
-		"DescriptionHTML": deps.Markdown(comm.Description),
-	}))
+	// Hoisted rather than repeated per branch: popFlash consumes the
+	// session message, so a second call would read nothing.
+	flash := h.popFlash(c)
+	sidebarHTML := deps.Markdown(comm.SidebarMD)
+	descriptionHTML := deps.Markdown(comm.Description)
+
+	h.render(c, http.StatusOK, fmt.Sprintf("/c/%s - %s", comm.Slug, comm.Name), "community_view.html",
+		&communityViewVM{
+			Community:       comm,
+			Threads:         threads,
+			Total:           total,
+			Pagination:      pager(page, total, fmt.Sprintf("/c/%s?", slug)),
+			Rules:           rules,
+			Mods:            mods,
+			Role:            role,
+			MyRequest:       myRequest,
+			PendingCount:    pendingCount,
+			Flash:           flash,
+			SidebarHTML:     sidebarHTML,
+			DescriptionHTML: descriptionHTML,
+		},
+		gin.H{
+			"Community":       comm,
+			"Threads":         threads,
+			"Total":           total,
+			"Pagination":      legacyPager(page, total, fmt.Sprintf("/c/%s?", slug)),
+			"Rules":           rules,
+			"Mods":            mods,
+			"Role":            role,
+			"MyRequest":       myRequest,
+			"PendingCount":    pendingCount,
+			"Flash":           flash,
+			"SidebarHTML":     sidebarHTML,
+			"DescriptionHTML": descriptionHTML,
+		})
 }
 
 // popFlash reads + clears the one-shot community flash message set
@@ -407,9 +420,9 @@ func (h *Handlers) NewThreadForm(c *gin.Context) {
 		c.String(http.StatusNotFound, "community not found")
 		return
 	}
-	c.HTML(http.StatusOK, "community_new_thread_c.html", deps.BaseData(c, gin.H{
-		"Community": comm,
-	}))
+	h.render(c, http.StatusOK, fmt.Sprintf("New thread in /c/%s", comm.Slug), "community_new_thread_c.html",
+		&communityNewThreadVM{Community: comm, Editor: editorHTML()},
+		gin.H{"Community": comm})
 }
 
 // CreateThread — POST /c/:slug/submit.
@@ -490,35 +503,44 @@ func (h *Handlers) ViewThread(c *gin.Context) {
 		h.errs.HandlerError(c, "community/view-thread", err)
 		return
 	}
-	pg := deps.Pagination(page, communityPageSize, total, fmt.Sprintf("/c/%s/thread/%d?", slug, threadID))
-
 	rules, _ := h.store.ListCommunityRules(ctx, comm.ID)
 	mods, _ := h.store.ListCommunityMods(ctx, comm.ID)
 
 	// Pre-render markdown bodies once in Go so the template doesn't
 	// re-invoke the renderer per row. Mirrors the forum plugin's
 	// pattern.
-	type postView struct {
-		*CommunityPost
-		BodyHTML template.HTML
-	}
-	views := make([]postView, 0, len(posts))
+	views := make([]threadPostVM, 0, len(posts))
 	for _, p := range posts {
-		views = append(views, postView{CommunityPost: p, BodyHTML: deps.Markdown(p.Body)})
+		views = append(views, threadPostVM{CommunityPost: p, BodyHTML: deps.Markdown(p.Body)})
 	}
+	bodyHTML := deps.Markdown(thread.Body)
+	sidebarHTML := deps.Markdown(comm.SidebarMD)
 
-	c.HTML(http.StatusOK, "community_thread_c.html", deps.BaseData(c, gin.H{
-		"Community":   comm,
-		"Thread":      thread,
-		"BodyHTML":    deps.Markdown(thread.Body),
-		"Posts":       views,
-		"Total":       total,
-		"Pagination":  pg,
-		"Rules":       rules,
-		"Mods":        mods,
-		"Role":        role,
-		"SidebarHTML": deps.Markdown(comm.SidebarMD),
-	}))
+	h.render(c, http.StatusOK, fmt.Sprintf("%s - /c/%s", thread.Title, comm.Slug), "community_thread_c.html",
+		&communityThreadVM{
+			Community:   comm,
+			Thread:      thread,
+			BodyHTML:    bodyHTML,
+			Posts:       views,
+			Total:       total,
+			Pagination:  pager(page, total, fmt.Sprintf("/c/%s/thread/%d?", slug, threadID)),
+			Rules:       rules,
+			Mods:        mods,
+			Role:        role,
+			SidebarHTML: sidebarHTML,
+		},
+		gin.H{
+			"Community":   comm,
+			"Thread":      thread,
+			"BodyHTML":    bodyHTML,
+			"Posts":       views,
+			"Total":       total,
+			"Pagination":  legacyPager(page, total, fmt.Sprintf("/c/%s/thread/%d?", slug, threadID)),
+			"Rules":       rules,
+			"Mods":        mods,
+			"Role":        role,
+			"SidebarHTML": sidebarHTML,
+		})
 }
 
 // Reply — POST /c/:slug/thread/:id/reply.
@@ -665,12 +687,10 @@ func (h *Handlers) RequestQueue(c *gin.Context) {
 	}
 	pending, _ := h.store.ListPendingJoinRequests(c.Request.Context(), comm.ID)
 	invites, _ := h.store.ListCommunityInvites(c.Request.Context(), comm.ID)
-	c.HTML(http.StatusOK, "community_join_requests.html", deps.BaseData(c, gin.H{
-		"Community": comm,
-		"Requests":  pending,
-		"Invites":   invites,
-		"Flash":     h.popFlash(c),
-	}))
+	flash := h.popFlash(c)
+	h.render(c, http.StatusOK, fmt.Sprintf("Join requests - /c/%s", comm.Slug), "community_join_requests.html",
+		&communityJoinRequestsVM{Community: comm, Requests: pending, Invites: invites, Flash: flash},
+		gin.H{"Community": comm, "Requests": pending, "Invites": invites, "Flash": flash})
 }
 
 // ApproveRequest — POST /c/:slug/requests/:rid/approve (mod).
@@ -799,10 +819,10 @@ func (h *Handlers) Settings(c *gin.Context) {
 		c.String(http.StatusForbidden, "owner only")
 		return
 	}
-	c.HTML(http.StatusOK, "community_settings.html", deps.BaseData(c, gin.H{
-		"Community": comm,
-		"Flash":     h.popFlash(c),
-	}))
+	flash := h.popFlash(c)
+	h.render(c, http.StatusOK, fmt.Sprintf("Settings - /c/%s", comm.Slug), "community_settings.html",
+		&communitySettingsVM{Community: comm, Flash: flash},
+		gin.H{"Community": comm, "Flash": flash})
 }
 
 // SaveSettings — POST /c/:slug/settings. Persists join config +

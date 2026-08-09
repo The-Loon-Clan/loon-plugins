@@ -1,0 +1,964 @@
+{{/* The public donate page — hero, goal thermometers, cost breakdown,
+     packages, perks/tiers, tip jar, recent donors, crypto addresses.
+
+     Lifted verbatim from the host's help_donate.html (indexer-site,
+     2026-08-09), chrome off. One data reference was corrected in the lift:
+     the Recent Donors carousel read $d.CreatedAt, a field the Donation
+     model has not had since it was called DonationRecord — against the old
+     map data that rendered as a silent mid-stream abort (the page truncated
+     at the carousel as soon as one donation existed); against the struct VM
+     it is a hard render error, so it is $d.ReceivedAt now and the render
+     test proves it. Data is donatePageVM.
+
+     The two hero/mascot images are host static assets
+     (/static/img/donate/*.png) — an adopting host without them shows empty
+     art panels and loses nothing else. */}}
+{{define "help_donate.html"}}
+    <style>
+        /* ─────────── Hero ─────────── */
+        .donate-hero {
+            position: relative;
+            background:
+                radial-gradient(ellipse at 80% 50%, rgba(91,138,245,0.25) 0%, transparent 60%),
+                linear-gradient(135deg, #0d1b3d 0%, #1a2a5e 40%, #2d1b4e 100%);
+            border: 1px solid rgba(91,138,245,0.3);
+            border-radius: 12px;
+            padding: 2rem 2.5rem;
+            overflow: hidden;
+            min-height: 240px;
+        }
+        .donate-hero .hero-eyebrow {
+            font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: #93b4f5; font-weight: 600; margin-bottom: 0.5rem;
+        }
+        .donate-hero h1 { font-size: 1.85rem; font-weight: 700; color: #fff; margin-bottom: 0.75rem; }
+        .donate-hero p { color: rgba(255,255,255,0.78); font-size: 0.92rem; line-height: 1.5; max-width: 460px; margin-bottom: 1.25rem; }
+        .donate-hero-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .donate-hero-actions .btn { font-size: 0.85rem; padding: 0.45rem 1rem; }
+        .donate-hero .btn-primary { background: #5b8af5; border: 0; }
+        .donate-hero .btn-primary:hover { background: #6f9bff; }
+        .donate-hero .btn-outline { background: transparent; border: 1px solid rgba(255,255,255,0.25); color: #fff; }
+        .donate-hero .btn-outline:hover { background: rgba(255,255,255,0.1); }
+        .donate-hero-art {
+            position: absolute; right: 0; top: 0; bottom: 0; width: 50%;
+            background-image: url("/static/img/donate/hero-rain.png");
+            background-size: cover; background-position: center right;
+            opacity: 0.95;
+        }
+        @media (max-width: 768px) {
+            .donate-hero-art { display: none; }
+            .donate-hero p { max-width: none; }
+        }
+
+        /* ─────────── Goal cards (Monthly / Yearly) ─────────── */
+        .goal-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem;
+        }
+        /* Annual-total headline card — sits under the Monthly/Yearly
+           pair and gives a single bottom-line "what it costs to run
+           ameNZB per year" number. Subtle gradient so it reads as a
+           summary, not a third goal. */
+        .annual-total-card {
+            background: linear-gradient(90deg, rgba(91,138,245,0.10) 0%, rgba(167,139,250,0.10) 100%);
+            border: 1px solid rgba(91,138,245,0.30);
+            border-radius: 10px;
+            padding: 0.8rem 1.1rem;
+        }
+        .annual-total-row { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+        .annual-total-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+        .annual-total-amount { font-size: 1.3rem; font-weight: 700; color: #b3c9ff; font-variant-numeric: tabular-nums; }
+        .annual-total-amount .annual-total-per { font-size: 0.78rem; color: var(--text-muted); font-weight: 500; margin-left: 0.25rem; }
+        .annual-total-breakdown { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem; font-variant-numeric: tabular-nums; }
+        .goal-card .goal-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem; }
+        .goal-card .goal-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600; }
+        .goal-card .goal-title i { color: #5b8af5; margin-right: 4px; }
+        .goal-card .goal-pct { font-size: 0.82rem; color: var(--text-muted); font-weight: 600; }
+        .goal-card .goal-amounts { font-size: 1.55rem; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+        .goal-card .goal-amounts .goal-of { color: var(--text-muted); font-weight: 500; font-size: 1rem; }
+        .goal-card .therm { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.05); overflow: hidden; margin: 0.75rem 0 1rem; }
+        .goal-card .therm-bar {
+            height: 100%; border-radius: 4px;
+            background: linear-gradient(90deg, #5b8af5, #b18cf2);
+            transition: width 0.4s ease;
+        }
+        .goal-card .therm-bar.yearly { background: linear-gradient(90deg, #b18cf2, #f59ec0); }
+        .goal-card .therm-bar.full { background: #22c55e; }
+        .goal-card .goal-foot { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted); }
+        .goal-card .goal-tags { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+        .goal-card .goal-tags .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--text-muted); display: inline-block; margin-right: 6px; vertical-align: middle; }
+
+        /* ─────────── Donation packages (limited stock) ─────────── */
+        .pkg-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem 1.1rem;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+        .pkg-card:hover { transform: translateY(-2px); border-color: rgba(91,138,245,0.5); }
+        .pkg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; margin-bottom: 0.4rem; }
+        .pkg-label { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
+        .pkg-amount { font-size: 1.2rem; font-weight: 700; color: #5b8af5; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+        .pkg-desc { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.5rem; line-height: 1.4; }
+        .pkg-reward { font-size: 0.78rem; color: #b3c9ff; margin-bottom: 0.7rem; }
+        .pkg-reward .reward-emoji { margin-right: 0.25rem; }
+        .pkg-stock { margin-top: auto; margin-bottom: 0.7rem; }
+        .pkg-stock-row { display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--text-muted); margin-bottom: 0.3rem; font-variant-numeric: tabular-nums; }
+        .pkg-stock-row strong { color: var(--text-primary); }
+        .pkg-pct { color: #5b8af5; font-weight: 600; }
+        .pkg-bar { width: 100%; height: 6px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+        .pkg-bar-fill { height: 100%; background: linear-gradient(90deg, #5b8af5, #a78bfa); transition: width 0.4s ease; }
+        .pkg-form { margin: 0; }
+        .pkg-claim { width: 100%; }
+        .pkg-card-funded {
+            background: linear-gradient(90deg, rgba(34,197,94,0.10) 0%, var(--bg-surface) 60%);
+            border-color: rgba(34,197,94,0.40);
+            opacity: 0.85;
+        }
+        .pkg-card-funded .pkg-amount { color: #4ade80; }
+        .pkg-funded-badge { font-size: 0.78rem; color: #4ade80; font-weight: 600; margin-top: 0.3rem; }
+        .pkg-funded-head { font-size: 0.78rem; color: #4ade80; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin: 1.2rem 0 0.6rem; }
+
+        /* ─────────── Cost cards (Where Your Donations Go) ─────────── */
+        .section-head { display: flex; justify-content: space-between; align-items: baseline; margin: 2rem 0 0.25rem; }
+        .section-head h2 { font-size: 1.15rem; font-weight: 600; margin: 0; }
+        .section-head .section-meta { font-size: 0.72rem; color: var(--text-muted); }
+        .section-sub { color: var(--text-muted); font-size: 0.85rem; margin: 0 0 1rem; }
+
+        .cost-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem 1.1rem;
+            height: 100%;
+            /* Column flex so .cost-amount can use margin-top:auto to
+               pin itself at the bottom of every card regardless of how
+               many lines the description above runs. Cards in the same
+               row therefore line their dollar amounts up cleanly even
+               when one card's description is 1 line and another's is 3. */
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+        .cost-card:hover { transform: translateY(-2px); border-color: rgba(91,138,245,0.5); }
+        .cost-card .cost-icon {
+            width: 36px; height: 36px; border-radius: 8px;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: rgba(91,138,245,0.15); color: #5b8af5;
+            font-size: 1.1rem; margin-bottom: 0.6rem;
+        }
+        .cost-card .cost-title { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
+        .cost-card .cost-desc { font-size: 0.74rem; color: var(--text-muted); margin: 0.2rem 0 0.6rem; line-height: 1.35; }
+        .cost-card .cost-amount {
+            font-size: 1.05rem; font-weight: 700; color: #5b8af5;
+            font-variant-numeric: tabular-nums;
+            /* auto-margin-top is what does the bottom-pinning. Pair
+               with the column flex on .cost-card above. */
+            margin-top: auto;
+            padding-top: 0.6rem;
+        }
+        .cost-card .cost-amount .cost-period { font-size: 0.72rem; color: var(--text-muted); font-weight: 500; }
+
+        /* ─────────── Perks grid ─────────── */
+        .perk-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.85rem 1rem;
+            height: 100%;
+            display: flex; gap: 0.65rem; align-items: flex-start;
+        }
+        .perk-card .perk-icon {
+            width: 30px; height: 30px; border-radius: 6px; flex-shrink: 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 1rem;
+        }
+        .perk-card .perk-body { min-width: 0; }
+        .perk-card .perk-title { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
+        .perk-card .perk-desc { font-size: 0.7rem; color: var(--text-muted); line-height: 1.4; margin-top: 2px; }
+        .perk-immunity   .perk-icon { background: rgba(91,138,245,0.15); color: #5b8af5; }
+        .perk-avatar     .perk-icon { background: rgba(167,139,250,0.18); color: #a78bfa; }
+        .perk-border     .perk-icon { background: rgba(245,158,11,0.15); color: #f59e0b; }
+        .perk-effects    .perk-icon { background: rgba(236,72,153,0.15); color: #ec4899; }
+        .perk-badge      .perk-icon { background: rgba(251,191,36,0.18); color: #fbbf24; }
+        .perk-perm       .perk-icon { background: rgba(167,139,250,0.18); color: #a78bfa; }
+        .perk-points     .perk-icon { background: rgba(251,191,36,0.18); color: #fbbf24; }
+        .perk-extra      .perk-icon { background: rgba(167,139,250,0.18); color: #a78bfa; }
+
+        .perks-note {
+            background: rgba(91,138,245,0.10); border: 1px solid rgba(91,138,245,0.25);
+            border-radius: 8px; padding: 0.75rem 1rem;
+            color: #93b4f5; font-size: 0.78rem; display: flex; align-items: center; gap: 0.6rem;
+            margin-top: 1rem;
+        }
+
+        /* ─────────── Tier cards ─────────── */
+        .tier-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.9rem 1.1rem;
+            margin-bottom: 0.6rem;
+            display: flex; align-items: center; gap: 0.8rem;
+            position: relative; overflow: hidden;
+        }
+        .tier-card .tier-icon { width: 32px; flex-shrink: 0; text-align: center; font-size: 1.4rem; }
+        .tier-card .tier-body { flex: 1; min-width: 0; }
+        .tier-card .tier-name { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
+        .tier-card .tier-perks { font-size: 0.7rem; color: var(--text-muted); margin-top: 1px; }
+        .tier-card .tier-price { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+        .tier-card .tier-price .tier-per { color: var(--text-muted); font-weight: 500; font-size: 0.75rem; }
+        .tier-rain    { background: linear-gradient(90deg, rgba(91,138,245,0.18) 0%, var(--bg-surface) 50%); }
+        .tier-storm   { background: linear-gradient(90deg, rgba(124,58,237,0.20) 0%, var(--bg-surface) 50%); }
+        .tier-monsoon { background: linear-gradient(90deg, rgba(245,158,11,0.20) 0%, var(--bg-surface) 50%); }
+        .tier-typhoon { background: linear-gradient(90deg, rgba(236,72,153,0.20) 0%, var(--bg-surface) 50%); }
+        .tier-legend  { background: linear-gradient(90deg, rgba(251,191,36,0.22) 0%, var(--bg-surface) 50%); }
+
+        /* ─────────── Community Goals (stretch) ─────────── */
+        .stretch-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.1rem;
+            display: flex; gap: 1rem; align-items: flex-start;
+        }
+        .stretch-ring {
+            position: relative; width: 70px; height: 70px; flex-shrink: 0;
+        }
+        .stretch-ring svg { transform: rotate(-90deg); width: 70px; height: 70px; }
+        .stretch-ring .ring-track { stroke: rgba(255,255,255,0.08); }
+        .stretch-ring .ring-fill { stroke: url(#stretchGrad); transition: stroke-dashoffset 0.4s ease; }
+        .stretch-ring .ring-label {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            font-size: 0.82rem; font-weight: 700; color: var(--text-primary);
+        }
+        .stretch-body { flex: 1; min-width: 0; }
+        .stretch-eyebrow { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .stretch-title { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin-top: 2px; }
+        .stretch-desc { font-size: 0.74rem; color: var(--text-muted); line-height: 1.4; margin-top: 4px; }
+        .stretch-raised { font-size: 0.82rem; color: var(--text-muted); margin-top: 0.8rem; font-variant-numeric: tabular-nums; }
+        .stretch-raised strong { color: var(--text-primary); font-weight: 600; }
+
+        .stretch-cta {
+            background: rgba(91,138,245,0.10); border: 1px solid rgba(91,138,245,0.25);
+            border-radius: 8px; padding: 0.7rem 1rem; color: #93b4f5;
+            font-size: 0.82rem; text-align: center; margin-top: 0.6rem;
+        }
+
+        /* ─────────── Top supporters / referral / recent donors ─────────── */
+        .panel {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.1rem;
+            /* Fill the parent column so panels in the same Bootstrap row
+               end at the same Y coordinate. Bootstrap rows already make
+               column heights equal — without h-100 the panel only
+               extends as far as its content needs and the column shows
+               empty space below it. */
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .panel h3 { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.8rem; display: flex; justify-content: space-between; align-items: baseline; }
+        .panel h3 .view-all { font-size: 0.78rem; font-weight: 500; color: #5b8af5; }
+        .panel h3 .view-all:hover { text-decoration: underline; }
+
+        .top-row {
+            display: flex; align-items: center; gap: 0.7rem;
+            padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+            font-size: 0.85rem;
+        }
+        .top-row:last-child { border-bottom: 0; }
+        .top-rank {
+            width: 22px; height: 22px; border-radius: 5px; flex-shrink: 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.06); color: var(--text-muted);
+            font-size: 0.72rem; font-weight: 700;
+        }
+        .top-row.rank-1 .top-rank { background: linear-gradient(135deg, #f59e0b, #fbbf24); color: #1f1500; }
+        .top-row.rank-2 .top-rank { background: linear-gradient(135deg, #94a3b8, #cbd5e1); color: #1a1f2b; }
+        .top-row.rank-3 .top-rank { background: linear-gradient(135deg, #b45309, #d97706); color: #ffffff; }
+        .top-avatar {
+            width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+            background: var(--bg-elevated); object-fit: cover;
+        }
+        .top-name { flex: 1; color: var(--text-primary); font-weight: 500; min-width: 0;
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .top-amount { color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+        .referral-code-card {
+            background: linear-gradient(135deg, rgba(91,138,245,0.15) 0%, rgba(167,139,250,0.12) 100%);
+            border: 1px solid rgba(91,138,245,0.3);
+            border-radius: 8px;
+            padding: 0.8rem 1rem;
+            margin-bottom: 0.9rem;
+        }
+        .referral-code-card .ref-label { font-size: 0.7rem; color: var(--text-muted); }
+        .referral-code-card .ref-code {
+            font-family: ui-monospace, "SF Mono", monospace;
+            font-size: 1.4rem; font-weight: 700; color: #93b4f5;
+            letter-spacing: 0.05em; margin: 2px 0;
+            display: flex; align-items: center; gap: 0.4rem;
+        }
+        .referral-code-card .ref-code button {
+            background: rgba(255,255,255,0.08); border: 0; border-radius: 4px;
+            color: var(--text-muted); padding: 0 6px; font-size: 0.8rem; cursor: pointer;
+        }
+        .referral-code-card .ref-code button:hover { color: var(--text-primary); }
+
+        .referral-stats { display: flex; gap: 0.8rem; margin: 0.6rem 0; padding-top: 0.6rem;
+                          border-top: 1px solid rgba(255,255,255,0.04); }
+        .referral-stats .stat { flex: 1; text-align: center; }
+        .referral-stats .stat-label { font-size: 0.7rem; color: var(--text-muted); }
+        .referral-stats .stat-value { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-top: 2px; }
+
+        .referral-rewards { font-size: 0.78rem; }
+        .referral-rewards .reward-row {
+            display: flex; justify-content: space-between; padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .referral-rewards .reward-row:last-child { border-bottom: 0; }
+        .referral-rewards .reward-amount { color: #fbbf24; font-weight: 600; }
+        .referral-cta {
+            display: block; text-align: center; padding: 0.55rem 0; margin-top: 0.9rem;
+            background: rgba(91,138,245,0.12); border: 1px solid rgba(91,138,245,0.25);
+            border-radius: 6px; color: #93b4f5; font-size: 0.82rem; font-weight: 600;
+            text-decoration: none;
+        }
+        .referral-cta:hover { background: rgba(91,138,245,0.18); color: #b3c9ff; }
+        .referral-partners { margin-top: 0.9rem; padding-top: 0.7rem; border-top: 1px solid var(--border); }
+        .ref-partners-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+        .partner-row {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 5px 6px; border-radius: 6px; text-decoration: none;
+            color: var(--text-primary); font-size: 0.78rem;
+            transition: background 0.15s ease;
+        }
+        .partner-row:hover { background: rgba(91,138,245,0.12); color: #b3c9ff; }
+        .partner-row .partner-icon { width: 18px; text-align: center; flex-shrink: 0; }
+        .partner-row .partner-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .partner-row .partner-arrow { color: var(--text-muted); flex-shrink: 0; }
+
+        /* ─────────── Recent donors carousel ─────────── */
+        .recent-donor {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 0.8rem;
+            text-align: center;
+            min-width: 100px;
+            flex: 1 1 110px;
+        }
+        .recent-donor .rd-avatar {
+            width: 38px; height: 38px; border-radius: 50%;
+            background: var(--bg-elevated); object-fit: cover; margin: 0 auto 0.4rem;
+            display: block;
+            border: 2px solid rgba(91,138,245,0.3);
+        }
+        .recent-donor .rd-name { font-size: 0.78rem; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .recent-donor .rd-amt { font-size: 0.72rem; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: 1px; }
+        .recent-donor .rd-when { font-size: 0.65rem; color: var(--text-muted); opacity: 0.7; margin-top: 1px; }
+
+        /* ─────────── Outro banner ─────────── */
+        .outro-banner {
+            background: linear-gradient(90deg, rgba(91,138,245,0.18) 0%, rgba(167,139,250,0.14) 100%);
+            border: 1px solid rgba(91,138,245,0.3);
+            border-radius: 10px;
+            padding: 1.1rem 1.5rem;
+            display: flex; gap: 1rem; align-items: center;
+            margin-top: 1.5rem;
+        }
+        .outro-banner .outro-icon {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: rgba(91,138,245,0.2); color: #93b4f5;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; flex-shrink: 0;
+        }
+        .outro-banner .outro-title { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
+        .outro-banner .outro-text { font-size: 0.82rem; color: var(--text-muted); margin-top: 2px; }
+        .outro-banner .outro-art {
+            width: 90px; height: 90px; flex-shrink: 0;
+            background-image: url("/static/img/donate/mascot-thumb.png");
+            background-size: contain; background-repeat: no-repeat; background-position: center right;
+            margin-left: auto;
+        }
+        @media (max-width: 600px) { .outro-banner .outro-art { display: none; } }
+    </style>
+
+    <div class="container mt-4 pb-5 site-container-wide">
+
+        {{/* ─────────── 1. Hero ─────────── */}}
+        <div class="donate-hero mb-4">
+            <div class="hero-eyebrow">Help</div>
+            <h1>Keep the Rain Falling <span style="margin-left:4px;">☂️</span></h1>
+            <p>
+                ameNZB is 100% community-funded.<br>
+                Your support keeps our servers online,<br>
+                our agents running, and the indexer growing.
+            </p>
+            <div class="donate-hero-actions">
+                <a class="btn btn-primary" href="#send-section">♡ Support ameNZB ♡</a>
+                <a class="btn btn-outline" href="#costs-section">📋 View Costs Breakdown</a>
+            </div>
+            <div class="donate-hero-art" aria-hidden="true"></div>
+        </div>
+
+        {{/* ─────────── 2. Monthly + Yearly goal cards ─────────── */}}
+        {{/* Sums every active goal_group's progress into one Monthly + one
+             Yearly card. If you'd rather render one card per group, the
+             {{range .Groups}} block from the prior template still works
+             as a drop-in. */}}
+        {{/* Pull the per-period totals from the storage layer's group
+             objects. When multiple groups exist, the last group's
+             values win — adequate for the headline cards above the
+             per-group cost breakdown below. If you later want a sum
+             across groups, add a `TotalMonthlyGoalUSD` field to the
+             handler payload rather than computing it in the template. */}}
+        {{$mGoal := 0.0}}{{$mRaised := 0.0}}{{$yGoal := 0.0}}{{$yRaised := 0.0}}
+        {{$mReset := ""}}{{$yReset := ""}}
+        {{range .Groups}}
+            {{if gt .MonthlyGoalUSD 0.0}}{{$mGoal = .MonthlyGoalUSD}}{{end}}
+            {{if gt .YearlyGoalUSD 0.0}}{{$yGoal = .YearlyGoalUSD}}{{end}}
+            {{$mRaised = .MonthlyRaisedUSD}}
+            {{$yRaised = .YearlyRaisedUSD}}
+            {{$mReset = .MonthlyResetAt.Format "Jan 02, 2006"}}
+            {{$yReset = .YearlyResetAt.Format "Jan 02, 2006"}}
+        {{end}}
+        <div class="row g-3 mb-4">
+            <div class="col-lg-6">
+                <div class="goal-card">
+                    {{/* Percent computed once from float dollars via divFloat;
+                         displayed as a rounded integer, and capped at 100
+                         for the bar width (the label shows the true
+                         percent so an over-funded goal still reads e.g.
+                         "120%"). */}}
+                    {{$mPctNum := 0}}{{if gt $mGoal 0.0}}{{$mPctNum = percent (int $mRaised) (int $mGoal)}}{{end}}
+                    {{$mBarPct := $mPctNum}}{{if gt $mPctNum 100}}{{$mBarPct = 100}}{{end}}
+                    <div class="goal-head">
+                        <span class="goal-title"><i>☁</i> MONTHLY GOAL</span>
+                        <span class="goal-pct">{{$mPctNum}}%</span>
+                    </div>
+                    <div class="goal-amounts">${{printf "%.0f" $mRaised}} <span class="goal-of">/ ${{printf "%.0f" $mGoal}}</span></div>
+                    <div class="therm">
+                        <div class="therm-bar{{if ge $mPctNum 100}} full{{end}}" style="width:{{$mBarPct}}%;"></div>
+                    </div>
+                    <div class="goal-foot">
+                        <div class="goal-tags">
+                            {{range .Groups}}{{range .MonthlyItems}}
+                                <span><span class="dot"></span>{{.Label}}</span>
+                            {{end}}{{end}}
+                        </div>
+                        <span>{{if ne $mReset ""}}resets {{$mReset}}{{end}}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="goal-card">
+                    <div class="goal-head">
+                        <span class="goal-title"><i>📅</i> YEARLY GOAL</span>
+                        {{$yPctNum := 0}}{{if gt $yGoal 0.0}}{{$yPctNum = percent (int $yRaised) (int $yGoal)}}{{end}}
+                        <span class="goal-pct">{{$yPctNum}}%</span>
+                    </div>
+                    {{$yBarPct := $yPctNum}}{{if gt $yPctNum 100}}{{$yBarPct = 100}}{{end}}
+                    <div class="goal-amounts">${{printf "%.0f" $yRaised}} <span class="goal-of">/ ${{printf "%.0f" $yGoal}}</span></div>
+                    <div class="therm">
+                        <div class="therm-bar yearly{{if ge $yPctNum 100}} full{{end}}" style="width:{{$yBarPct}}%;"></div>
+                    </div>
+                    <div class="goal-foot">
+                        <div class="goal-tags">
+                            {{range .Groups}}{{range .YearlyItems}}
+                                <span><span class="dot"></span>{{.Label}}</span>
+                            {{end}}{{end}}
+                        </div>
+                        <span>{{if ne $yReset ""}}resets {{$yReset}}{{end}}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{/* Annual total = (monthly × 12) + yearly. Computed in the
+             handler — see donate_handler.go's totalAnnualUSD — to
+             avoid template float arithmetic. Hidden when both
+             totals are zero (fresh install with no costs defined). */}}
+        {{if gt .TotalAnnualUSD 0.0}}
+        <div class="annual-total-card mb-4">
+            <div class="annual-total-row">
+                <span class="annual-total-label">Total annual cost to run ameNZB</span>
+                <span class="annual-total-amount">${{printf "%.0f" .TotalAnnualUSD}}<span class="annual-total-per">/ year</span></span>
+            </div>
+            <div class="annual-total-breakdown">
+                ${{printf "%.0f" .TotalMonthlyUSD}}/mo recurring × 12 + ${{printf "%.0f" .TotalYearlyUSD}}/yr up-front
+            </div>
+        </div>
+        {{end}}
+
+        {{/* ─────────── 3. Where Your Donations Go ─────────── */}}
+        <div class="section-head" id="costs-section">
+            <h2>Where Your Donations Go</h2>
+            <span class="section-meta">All amounts in USD</span>
+        </div>
+        <p class="section-sub">Every dollar goes directly toward keeping ameNZB fast, secure, and online.</p>
+
+        {{/* Iterates each cost row across every group. Items already
+             carry .Label, .AmountUSD, .Period. Icon + Description are
+             derived per-Label below — backend-side .Description column
+             is a TODO if you want full control without a code change. */}}
+        <div class="row g-3 mb-4">
+            {{range .Groups}}{{range .Items}}
+            <div class="col-md-4 col-lg-2">
+                <div class="cost-card">
+                    <div class="cost-icon">
+                        {{/* Map known cost labels to an icon emoji. Falls back
+                             to a generic icon for custom labels. */}}
+                        {{if or (eq .Label "Cloudflare") (eq .Label "CDN")}}☁{{else if eq .Label "Dedicated Server"}}🗄{{else if or (eq .Label "Domain & DNS") (eq .Label "Domain")}}🌐{{else if eq .Label "VPN"}}🛡{{else if or (eq .Label "Usenet & API") (eq .Label "Usenet")}}↗{{else if or (eq .Label "Backups & Tools") (eq .Label "Backups")}}💾{{else if eq .Label "Development"}}⚙{{else}}💵{{end}}
+                    </div>
+                    <div class="cost-title">{{.Label}}</div>
+                    <div class="cost-desc">
+                        {{/* Prefer the admin-edited Notes field (site_costs.notes).
+                             Falls back to a per-Label static description when Notes
+                             is empty, so legacy rows without notes still render
+                             meaningful copy. */}}
+                        {{if .Notes}}{{.Notes}}{{else if eq .Label "Cloudflare"}}DDoS protection, CDN &amp; security{{else if eq .Label "Dedicated Server"}}Powerful hardware for indexing{{else if eq .Label "Domain & DNS"}}Domain registration &amp; DNS services{{else if eq .Label "VPN"}}Secure connections for our agents{{else if eq .Label "Usenet & API"}}API access, testing &amp; usenet costs{{else if eq .Label "Backups & Tools"}}Backups, monitoring &amp; dev tools{{else if eq .Label "Development"}}Tooling, libraries &amp; ongoing work{{else}}Recurring operational cost{{end}}
+                    </div>
+                    <div class="cost-amount">
+                        ${{printf "%.0f" .AmountUSD}} <span class="cost-period">/ {{if eq .Period "monthly"}}month{{else}}year{{end}}</span>
+                    </div>
+                </div>
+            </div>
+            {{end}}{{end}}
+        </div>
+
+        {{/* ─────────── 3b. Donation Packages (limited stock) ───────────
+             Each package is an admin-defined "buy this slot to cover a
+             specific cost" target. Stock decrements per settled
+             donation linked via donations.package_id (set by the
+             BTCPay webhook from the click-to-claim invoice's
+             metadata). Sold-out packages render in a "Funded" sub-row.
+             Section hides entirely when no packages are configured. */}}
+        {{if or .Packages .FundedPackages}}
+        <div class="section-head" id="packages-section">
+            <h2>Help Cover This Year's Costs</h2>
+            <span class="section-meta">Limited slots · one-time</span>
+        </div>
+        <p class="section-sub">Pick a slot. Click claim. We'll show you the crypto checkout. When it settles, the slot turns green and the cost it covers is funded for the year.</p>
+
+        {{if .Packages}}
+        <div class="row g-3 mb-3">
+            {{range .Packages}}
+            <div class="col-md-6 col-lg-4">
+                <div class="pkg-card">
+                    <div class="pkg-head">
+                        <div class="pkg-label">{{.Label}}</div>
+                        <div class="pkg-amount">${{printf "%.0f" .AmountUSD}}</div>
+                    </div>
+                    {{if .Description}}<div class="pkg-desc">{{.Description}}</div>{{end}}
+                    {{if .Reward}}<div class="pkg-reward"><span class="reward-emoji">🎁</span> {{.Reward}}</div>{{end}}
+                    <div class="pkg-stock">
+                        <div class="pkg-stock-row">
+                            <span><strong>{{.StockRemaining}}</strong> of {{.StockTotal}} remaining</span>
+                            <span class="pkg-pct">{{.PercentRound}}%</span>
+                        </div>
+                        <div class="pkg-bar"><div class="pkg-bar-fill" style="width:{{.PercentRound}}%;"></div></div>
+                    </div>
+                    <form method="POST" action="/donate/claim-package/{{.ID}}" class="pkg-form">
+                        {{/* CSRF token middleware injects this on protected
+                             forms; harmless if it's a no-op for this route. */}}
+                        {{if $.CSRFToken}}<input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">{{end}}
+                        <button type="submit" class="btn btn-primary btn-sm pkg-claim">Claim this slot →</button>
+                    </form>
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+
+        {{if .FundedPackages}}
+        <div class="pkg-funded-head">✓ Funded by the community</div>
+        <div class="row g-2 mb-4">
+            {{range .FundedPackages}}
+            <div class="col-md-6 col-lg-4">
+                <div class="pkg-card pkg-card-funded">
+                    <div class="pkg-head">
+                        <div class="pkg-label">{{.Label}}</div>
+                        <div class="pkg-amount">${{printf "%.0f" .AmountUSD}}</div>
+                    </div>
+                    <div class="pkg-funded-badge">All {{.StockTotal}} slots funded — thank you! 🎉</div>
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+        {{end}}
+
+        {{/* ─────────── 4. Donator Perks (left col) + Tiers & Rewards (right col) ─────────── */}}
+        <div class="row g-3 mb-4">
+            <div class="col-lg-7">
+                <div class="section-head" style="margin-top:0;">
+                    <h2>Donator Perks</h2>
+                </div>
+                <p class="section-sub">Thank you! Your support comes with some awesome perks.</p>
+                {{/* 8 perks in a 4x2 grid on desktop. These are static —
+                     they describe what every donor gets regardless of
+                     amount; tier-specific perks are in the Tiers panel. */}}
+                <div class="row g-2">
+                    <div class="col-md-6"><div class="perk-card perk-immunity">
+                        <span class="perk-icon">🛡</span>
+                        <div class="perk-body">
+                            <div class="perk-title">Account Immunity</div>
+                            <div class="perk-desc">Your account will never be removed for inactivity while your donor status is active.</div>
+                        </div>
+                    </div></div>
+                    <div class="col-md-6"><div class="perk-card perk-avatar">
+                        <span class="perk-icon">🖼</span>
+                        <div class="perk-body">
+                            <div class="perk-title">Animated Avatars</div>
+                            <div class="perk-desc">Upload GIF/WebP avatars and show off your style.</div>
+                        </div>
+                    </div></div>
+                    <div class="col-md-6"><div class="perk-card perk-border">
+                        <span class="perk-icon">▣</span>
+                        <div class="perk-body">
+                            <div class="perk-title">Profile Borders</div>
+                            <div class="perk-desc">Exclusive donor profile borders to stand out.</div>
+                        </div>
+                    </div></div>
+                    <div class="col-md-6"><div class="perk-card perk-effects">
+                        <span class="perk-icon">✨</span>
+                        <div class="perk-body">
+                            <div class="perk-title">Profile Effects</div>
+                            <div class="perk-desc">Unlock cool profile effects like rain, stars, blossoms and more.</div>
+                        </div>
+                    </div></div>
+                    <div class="col-md-6"><div class="perk-card perk-badge">
+                        <span class="perk-icon">🏅</span>
+                        <div class="perk-body">
+                            <div class="perk-title">Donor Badges</div>
+                            <div class="perk-desc">Show your support with exclusive donor badges.</div>
+                        </div>
+                    </div></div>
+                    <div class="col-md-6"><div class="perk-card perk-perm">
+                        <span class="perk-icon">⭐</span>
+                        <div class="perk-body">
+                            <div class="perk-title">Permanent Recognition</div>
+                            <div class="perk-desc">Special legacy badges that are never removed. Ever.</div>
+                        </div>
+                    </div></div>
+                    <div class="col-md-6"><div class="perk-card perk-points">
+                        <span class="perk-icon">🪙</span>
+                        <div class="perk-body">
+                            <div class="perk-title">Bonus Points</div>
+                            <div class="perk-desc">Donations convert into points for downloads and requests.</div>
+                        </div>
+                    </div></div>
+                    <div class="col-md-6"><div class="perk-card perk-extra">
+                        <span class="perk-icon">🎁</span>
+                        <div class="perk-body">
+                            <div class="perk-title">Extra Features</div>
+                            <div class="perk-desc">Access to future perks, themes, events and premium features.</div>
+                        </div>
+                    </div></div>
+                </div>
+                <div class="perks-note">
+                    🎁 Perks are granted automatically when you reach a donation tier and are refreshed every month.
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="section-head" style="margin-top:0;">
+                    <h2>Donator Tiers &amp; Rewards</h2>
+                </div>
+                <p class="section-sub">Higher tiers include all lower tier perks.</p>
+                {{/* Tiers are currently static. To make them admin-editable
+                     wire them to `donate_tiers` settings (TODO). */}}
+                <div class="tier-card tier-rain">
+                    <div class="tier-icon">💧</div>
+                    <div class="tier-body">
+                        <div class="tier-name">Rain Supporter</div>
+                        <div class="tier-perks">Badge · Bonus Points</div>
+                    </div>
+                    <div class="tier-price">$5+</div>
+                </div>
+                <div class="tier-card tier-storm">
+                    <div class="tier-icon">⛈</div>
+                    <div class="tier-body">
+                        <div class="tier-name">Storm Supporter</div>
+                        <div class="tier-perks">Badge · Border · Bonus Points</div>
+                    </div>
+                    <div class="tier-price">$25+</div>
+                </div>
+                <div class="tier-card tier-monsoon">
+                    <div class="tier-icon">⛈</div>
+                    <div class="tier-body">
+                        <div class="tier-name">Monsoon Supporter</div>
+                        <div class="tier-perks">Badge · Border · Effects · Bonus Points</div>
+                    </div>
+                    <div class="tier-price">$50+</div>
+                </div>
+                <div class="tier-card tier-typhoon">
+                    <div class="tier-icon">🌀</div>
+                    <div class="tier-body">
+                        <div class="tier-name">Typhoon Supporter</div>
+                        <div class="tier-perks">All Perks · Exclusive Theme · More</div>
+                    </div>
+                    <div class="tier-price">$100+</div>
+                </div>
+                <div class="tier-card tier-legend">
+                    <div class="tier-icon">🌈</div>
+                    <div class="tier-body">
+                        <div class="tier-name">Legendary Supporter</div>
+                        <div class="tier-perks">All Perks · Custom Flair · Hall of Fame</div>
+                    </div>
+                    <div class="tier-price">$250+</div>
+                </div>
+            </div>
+        </div>
+
+        {{/* ─────────── 5. Tip Jar + Top Supporters + Referral ─────────── */}}
+        {{/* Wider screens: 3 columns. Narrower: stacks. */}}
+        <div class="row g-3 mb-4">
+            {{/* Left col: tip-jar goals. Admin configures each slot via
+                 /admin/donate (tipjar_goal_N_name / target_usd /
+                 raised_usd settings keys). The handler returns only
+                 fully-configured slots in .TipJarGoals; empty admin
+                 rows are skipped. RingOffset is pre-computed in Go
+                 so the template doesn't run float arithmetic. */}}
+            <div class="col-lg-5">
+                <div class="panel">
+                    <h3>Tip Jar <span style="font-weight:400;color:var(--text-muted);font-size:0.78rem;">Support a community goal!</span></h3>
+                    {{/* Hidden defs for the ring gradient — defined once, reused. */}}
+                    <svg width="0" height="0" style="position:absolute;">
+                        <defs>
+                            <linearGradient id="stretchGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#5b8af5"/>
+                                <stop offset="100%" stop-color="#a78bfa"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                    {{if .TipJarGoals}}
+                    <div class="row g-2">
+                        {{range .TipJarGoals}}
+                        <div class="col-md-6">
+                            <div class="stretch-card">
+                                <div class="stretch-ring">
+                                    <svg viewBox="0 0 70 70">
+                                        <circle class="ring-track" cx="35" cy="35" r="30" fill="none" stroke-width="6"/>
+                                        <circle class="ring-fill" cx="35" cy="35" r="30" fill="none" stroke-width="6"
+                                                stroke-dasharray="188.5" stroke-dashoffset="{{printf "%.1f" .RingOffset}}" stroke-linecap="round"/>
+                                    </svg>
+                                    <div class="ring-label">{{.PercentRound}}%</div>
+                                </div>
+                                <div class="stretch-body">
+                                    <div class="stretch-eyebrow">${{printf "%.0f" .TargetUSD}} Goal</div>
+                                    <div class="stretch-title">{{.Name}}</div>
+                                    <div class="stretch-raised"><strong>${{printf "%.0f" .RaisedUSD}}</strong> / ${{printf "%.0f" .TargetUSD}} raised</div>
+                                </div>
+                            </div>
+                        </div>
+                        {{end}}
+                    </div>
+                    <div class="stretch-cta" style="margin-top:auto;">⭐ Let's build something epic together! 🚀</div>
+                    {{else}}
+                    <p style="font-size:0.85rem;color:var(--text-muted);margin:0;">
+                        No tip-jar goals configured yet. Admin can set them at <a href="/admin/donate" style="color:#5b8af5;">/admin/donate</a>.
+                    </p>
+                    {{end}}
+                </div>
+            </div>
+
+            {{/* Middle col: Top supporters this month. Backend wiring TODO —
+                 needs a query that sums donations per donor over the current
+                 month, then joins users to get avatar / display name. For
+                 now this uses RecentDonations as a stand-in to make the
+                 page renderable; replace with a real Top Supporters slice
+                 when the storage method lands. */}}
+            <div class="col-lg-4">
+                <div class="panel">
+                    <h3>Top Supporters This Month <a class="view-all" href="#">View All</a></h3>
+                    {{/* TODO: replace with .TopSupporters once the storage
+                         method exists. Until then, recycles .RecentDonations
+                         capped at 5 to keep the layout demonstrable. */}}
+                    {{$rank := 0}}
+                    {{range $i, $d := .RecentDonations}}
+                        {{if lt $i 5}}
+                        {{$rank = inc $i}}
+                        <div class="top-row rank-{{$rank}}">
+                            <span class="top-rank">{{$rank}}</span>
+                            <div class="top-avatar" style="background: linear-gradient(135deg, #5b8af5, #a78bfa);"></div>
+                            <span class="top-name">{{if $d.DonorLabel}}{{$d.DonorLabel}}{{else}}Anonymous{{end}}</span>
+                            <span class="top-amount">${{printf "%.2f" $d.AmountUSD}}</span>
+                        </div>
+                        {{end}}
+                    {{else}}
+                    <p style="font-size:0.82rem;color:var(--text-muted);margin:0;">No donations recorded yet.</p>
+                    {{end}}
+                </div>
+            </div>
+
+            {{/* Right col: Referral program. Backend wiring TODO — the
+                 invite code + counts come from the existing user invite
+                 system but aren't currently in the donate-page handler.
+                 Showing static placeholders for the layout. */}}
+            <div class="col-lg-3">
+                <div class="panel">
+                    <h3>Referral Programs</h3>
+                    <p style="font-size:0.78rem; color: var(--text-muted); margin: 0 0 0.7rem;">
+                        Invite friends, earn rewards!
+                    </p>
+                    <div class="referral-code-card">
+                        <div class="ref-label">Your Invite Code</div>
+                        <div class="ref-code">
+                            <span id="ref-code-value">AME-8421</span>
+                            <button onclick="navigator.clipboard.writeText(document.getElementById('ref-code-value').textContent)" title="Copy code">⧉</button>
+                        </div>
+                    </div>
+                    <div class="referral-stats">
+                        <div class="stat">
+                            <div class="stat-label">Users Invited</div>
+                            <div class="stat-value">12</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Active Users</div>
+                            <div class="stat-value">9</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Points Earned</div>
+                            <div class="stat-value">90,000</div>
+                        </div>
+                    </div>
+                    <div class="referral-rewards">
+                        <div class="reward-row"><span>1 Referral</span><span class="reward-amount">10,000 Points</span></div>
+                        <div class="reward-row"><span>5 Referrals</span><span style="color:#5b8af5;">Exclusive Badge</span></div>
+                        <div class="reward-row"><span>10 Referrals</span><span style="color:#a78bfa;">Profile Border</span></div>
+                        <div class="reward-row"><span>25 Referrals</span><span style="color:#f59e0b;">Custom Theme</span></div>
+                        <div class="reward-row"><span>50 Referrals</span><span style="color:#fbbf24;">Legendary Badge</span></div>
+                    </div>
+                    {{/* Partner referral links — services that power
+                         ameNZB infrastructure. Sign up via these links and
+                         both the site and the new user benefit. Replace
+                         the placeholder hrefs with the real referral URLs
+                         when the admin pastes them in. */}}
+                    <div class="referral-partners">
+                        <div class="ref-partners-label">Partner Referrals</div>
+                        <a class="partner-row" href="#" target="_blank" rel="noopener">
+                            <span class="partner-icon">🌐</span>
+                            <span class="partner-name">RapidSeedbox</span>
+                            <span class="partner-arrow">→</span>
+                        </a>
+                        <a class="partner-row" href="#" target="_blank" rel="noopener">
+                            <span class="partner-icon">🌱</span>
+                            <span class="partner-name">SeedIt4.me</span>
+                            <span class="partner-arrow">→</span>
+                        </a>
+                        <a class="partner-row" href="#" target="_blank" rel="noopener">
+                            <span class="partner-icon">🛠</span>
+                            <span class="partner-name">hostingby.design</span>
+                            <span class="partner-arrow">→</span>
+                        </a>
+                        <a class="partner-row" href="#" target="_blank" rel="noopener">
+                            <span class="partner-icon">☁</span>
+                            <span class="partner-name">greencloudvps.com</span>
+                            <span class="partner-arrow">→</span>
+                        </a>
+                    </div>
+                    <a class="referral-cta" href="#">View Referral Directory →</a>
+                </div>
+            </div>
+        </div>
+
+        {{/* ─────────── 6. Recent Donors carousel ─────────── */}}
+        {{/* Wrapped in a .panel so it visually matches the Send a
+             Donation panel below it. Previously the bare section-head
+             style made it read as an unfinished card on the empty
+             state ("No donations recorded yet" floating between two
+             panels with no boundary). */}}
+        <div class="panel mb-4">
+            <h3>Recent Donors <a class="view-all" href="#" style="color:#5b8af5;">View All Donors</a></h3>
+            <p style="font-size:0.78rem; color: var(--text-muted); margin: 0 0 0.8rem;">
+                Thank you to our amazing community!
+            </p>
+            <div class="d-flex gap-2 flex-wrap">
+                {{range $i, $d := .RecentDonations}}
+                    {{if lt $i 8}}
+                    <div class="recent-donor">
+                        {{/* No avatar field on Donation yet — gradient stand-in. */}}
+                        <div class="rd-avatar" style="background: linear-gradient(135deg, #5b8af5, #a78bfa);"></div>
+                        <div class="rd-name">{{if $d.DonorLabel}}{{$d.DonorLabel}}{{else}}Anonymous{{end}}</div>
+                        <div class="rd-amt">${{printf "%.2f" $d.AmountUSD}}</div>
+                        <div class="rd-when">{{relativeTime $d.ReceivedAt}}</div>
+                    </div>
+                    {{end}}
+                {{else}}
+                <p style="font-size:0.85rem;color:var(--text-muted);margin:0;">No donations recorded yet — you could be first.</p>
+                {{end}}
+            </div>
+        </div>
+
+        {{/* ─────────── 7. Send section (crypto addresses) ─────────── */}}
+        {{if not .AddressesHidden}}
+        <div class="panel mb-4" id="send-section">
+            <h3>Send a Donation</h3>
+            {{if .IsAnon}}
+            <p style="font-size:0.82rem;color:var(--text-muted);margin-top:0;">
+                Tip: <a href="/login" style="color:#5b8af5;">log in</a> first so we can credit points and the Donator title to your account.
+            </p>
+            {{end}}
+            <div style="margin-top:0.5rem;">
+                {{if .BTCAddress}}
+                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.04);">
+                    <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);width:50px;">BTC</span>
+                    <span style="font-family:monospace;font-size:0.78rem;color:var(--text-primary);flex:1;word-break:break-all;" id="addr-btc">{{.BTCAddress}}</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('addr-btc').textContent)">Copy</button>
+                </div>
+                {{end}}
+                {{if .ETHAddress}}
+                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.04);">
+                    <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);width:50px;">ETH</span>
+                    <span style="font-family:monospace;font-size:0.78rem;color:var(--text-primary);flex:1;word-break:break-all;" id="addr-eth">{{.ETHAddress}}</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('addr-eth').textContent)">Copy</button>
+                </div>
+                {{end}}
+                {{if .XMRAddress}}
+                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.04);">
+                    <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);width:50px;">XMR</span>
+                    <span style="font-family:monospace;font-size:0.78rem;color:var(--text-primary);flex:1;word-break:break-all;" id="addr-xmr">{{.XMRAddress}}</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('addr-xmr').textContent)">Copy</button>
+                </div>
+                {{end}}
+                {{if and (not .BTCAddress) (not .ETHAddress) (not .XMRAddress)}}
+                <p style="font-size:0.82rem;color:var(--text-muted);margin-top:0.5rem;">
+                    (No receive addresses configured yet — admin sets them in <code>/admin/settings</code>.)
+                </p>
+                {{end}}
+            </div>
+        </div>
+        {{else}}
+        <div class="panel mb-4">
+            <h3>Send a Donation</h3>
+            <div style="background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.4); border-radius:6px; padding:0.75rem 1rem; color:#22c55e; font-size:0.85rem;">
+                ✓ All locking goals fully funded — donations are paused. They'll reopen at the next monthly / yearly reset. Thank you.
+            </div>
+        </div>
+        {{end}}
+
+        {{/* ─────────── 8. Outro banner ─────────── */}}
+        <div class="outro-banner">
+            <div class="outro-icon">♥</div>
+            <div>
+                <div class="outro-title">ameNZB exists because of you.</div>
+                <div class="outro-text">
+                    Donations are never required, but they help keep the indexer online, improve infrastructure,
+                    and fund future development. Every contribution, large or small, helps keep the rain falling. ☔
+                </div>
+            </div>
+            <div class="outro-art" aria-hidden="true"></div>
+        </div>
+
+    </div>
+{{end}}

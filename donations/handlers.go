@@ -308,22 +308,40 @@ func (h *Handlers) DonatePage(c *gin.Context) {
 		preview = append(preview, DonationPointsRow{Dollars: d, Points: cfg.PointsForDollars(d)})
 	}
 
-	c.HTML(http.StatusOK, "help_donate.html", h.deps.BaseData(c, gin.H{
-		"PageTitle":       "Donate & Costs",
-		"ActiveNav":       "support",
-		"Groups":          groups,
-		"PointsConfig":    cfg,
-		"PointsPreview":   preview,
-		"BTCAddress":      btcAddr,
-		"ETHAddress":      ethAddr,
-		"XMRAddress":      xmrAddr,
-		"RecentDonations": recent,
-		"AddressesHidden": addressesHidden,
-		"TotalMonthlyUSD": totalMonthlyUSD,
-		"TotalYearlyUSD":  totalYearlyUSD,
-		"TotalAnnualUSD":  totalAnnualUSD,
-		"TipJarGoals":     loadTipJarGoals(c, h),
-		"Packages":        pkgViews,
-		"FundedPackages":  fundedPkgs,
-	}))
+	tipJarGoals := loadTipJarGoals(c, h)
+	h.render(c, http.StatusOK, "Donate & Costs", "help_donate.html",
+		&donatePageVM{
+			Groups:          groups,
+			PointsConfig:    cfg,
+			PointsPreview:   preview,
+			BTCAddress:      btcAddr,
+			ETHAddress:      ethAddr,
+			XMRAddress:      xmrAddr,
+			RecentDonations: recent,
+			AddressesHidden: addressesHidden,
+			TotalMonthlyUSD: totalMonthlyUSD,
+			TotalYearlyUSD:  totalYearlyUSD,
+			TotalAnnualUSD:  totalAnnualUSD,
+			TipJarGoals:     tipJarGoals,
+			Packages:        pkgViews,
+			FundedPackages:  fundedPkgs,
+		},
+		gin.H{
+			"PageTitle":       "Donate & Costs",
+			"ActiveNav":       "support",
+			"Groups":          groups,
+			"PointsConfig":    cfg,
+			"PointsPreview":   preview,
+			"BTCAddress":      btcAddr,
+			"ETHAddress":      ethAddr,
+			"XMRAddress":      xmrAddr,
+			"RecentDonations": recent,
+			"AddressesHidden": addressesHidden,
+			"TotalMonthlyUSD": totalMonthlyUSD,
+			"TotalYearlyUSD":  totalYearlyUSD,
+			"TotalAnnualUSD":  totalAnnualUSD,
+			"TipJarGoals":     tipJarGoals,
+			"Packages":        pkgViews,
+			"FundedPackages":  fundedPkgs,
+		})
 }

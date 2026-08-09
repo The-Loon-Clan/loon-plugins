@@ -156,26 +156,48 @@ func (h *Handlers) AdminDonatePage(c *gin.Context) {
 	viewer, _ := h.auth.CurrentUser(c)
 	isAdmin := viewer.AtLeast(core.RoleAdmin)
 
-	c.HTML(http.StatusOK, "admin_donate.html", h.deps.BaseData(c, gin.H{
-		"PageTitle":     "Donate (admin)",
-		"IsAdmin":       isAdmin,
-		"Costs":         costs,
-		"Edit":          pickCostByQueryID(costs, c.Query("edit")),
-		"Config":        cfg,
-		"LockingGroups": lockingGroups,
-		"Preview":       preview,
-		"DonateEnabled": h.deps.IsDonateEnabled(),
-		"Donations":     donations,
-		"Usernames":     usernames,
-		"Wallet":        wallet,
-		"TipJar":        tipJar,
-		"Packages":      pkgs,
-		"EditPkg":       editPkg,
-		"Saved":         c.Query("ok"),
-		"ErrCode":       c.Query("err"),
-		"BTCPayTest":    c.Query("btcpay_test"),
-		"BTCPayMsg":     c.Query("btcpay_msg"),
-	}))
+	editCost := pickCostByQueryID(costs, c.Query("edit"))
+	donateEnabled := h.deps.IsDonateEnabled()
+	h.render(c, http.StatusOK, "Donate (admin)", "admin_donate.html",
+		&adminDonateVM{
+			IsAdmin:       isAdmin,
+			Costs:         costs,
+			Edit:          editCost,
+			Config:        cfg,
+			LockingGroups: lockingGroups,
+			Preview:       preview,
+			DonateEnabled: donateEnabled,
+			Donations:     donations,
+			Usernames:     usernames,
+			Wallet:        wallet,
+			TipJar:        tipJar,
+			Packages:      pkgs,
+			EditPkg:       editPkg,
+			Saved:         c.Query("ok"),
+			ErrCode:       c.Query("err"),
+			BTCPayTest:    c.Query("btcpay_test"),
+			BTCPayMsg:     c.Query("btcpay_msg"),
+		},
+		gin.H{
+			"PageTitle":     "Donate (admin)",
+			"IsAdmin":       isAdmin,
+			"Costs":         costs,
+			"Edit":          editCost,
+			"Config":        cfg,
+			"LockingGroups": lockingGroups,
+			"Preview":       preview,
+			"DonateEnabled": donateEnabled,
+			"Donations":     donations,
+			"Usernames":     usernames,
+			"Wallet":        wallet,
+			"TipJar":        tipJar,
+			"Packages":      pkgs,
+			"EditPkg":       editPkg,
+			"Saved":         c.Query("ok"),
+			"ErrCode":       c.Query("err"),
+			"BTCPayTest":    c.Query("btcpay_test"),
+			"BTCPayMsg":     c.Query("btcpay_msg"),
+		})
 }
 
 // SaveDonatePackage upserts one donation package. POST body fields:

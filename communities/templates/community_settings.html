@@ -1,0 +1,165 @@
+{{/* The owner settings page — appearance + join gating, with the live
+     banner-position preview script.
+
+     Lifted verbatim from the host's community_settings.html (indexer-site,
+     2026-08-09), chrome off. The preview script stays in the fragment: it
+     is this page's own behaviour, not shared chrome. Data is
+     communitySettingsVM. */}}
+{{define "community_settings.html"}}
+    <div class="container page-narrow" style="padding: 1.4rem 1rem 3rem;">
+        <nav aria-label="breadcrumb" style="font-size:0.8rem;margin-bottom:0.6rem;">
+            <a href="/c" style="color:var(--text-muted);text-decoration:none;">Communities</a> &rsaquo;
+            <a href="/c/{{.Community.Slug}}" style="color:var(--blue);text-decoration:none;">/c/{{.Community.Slug}}</a> &rsaquo;
+            <span style="color:var(--text-muted);">settings</span>
+        </nav>
+        <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:1rem;">Settings — {{.Community.Name}}</h1>
+
+        {{if .Flash}}<div class="alert alert-info py-2" style="font-size:0.85rem;">{{.Flash}}</div>{{end}}
+
+        <form method="POST" action="/c/{{.Community.Slug}}/settings" enctype="multipart/form-data">
+            <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+            {{/* ── Appearance ── */}}
+            <div class="card mb-3">
+                <div class="card-header" style="font-size:0.8rem;color:var(--text-muted);">Appearance</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label" style="font-size:0.85rem;">Name</label>
+                        <input type="text" name="name" class="form-control" maxlength="80" value="{{.Community.Name}}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" style="font-size:0.85rem;">Description (card tagline)</label>
+                        <textarea name="description" class="form-control" rows="2" maxlength="500">{{.Community.Description}}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" style="font-size:0.85rem;">Sidebar (markdown)</label>
+                        <textarea name="sidebar_md" class="form-control" rows="5" placeholder="Rendered in the community sidebar. Markdown supported.">{{.Community.SidebarMD}}</textarea>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" style="font-size:0.85rem;">Banner</label>
+                            {{/* Live WYSIWYG preview: a banner-shaped strip
+                                 the same height as the real header. The
+                                 position slider moves the focal point in
+                                 real time, and picking a file swaps the
+                                 preview image — so you see exactly what
+                                 will show before saving. */}}
+                            <div id="bp-preview"
+                                 style="height:120px;border-radius:8px;border:1px solid var(--border);background-size:cover;background-position:center {{.Community.BannerPosition}}%;background-color:var(--bg-elevated);{{if .Community.BannerURL}}background-image:url('{{.Community.BannerURL}}');{{end}}"></div>
+                            <div id="bp-preview-empty" style="font-size:0.72rem;color:var(--text-muted);margin-top:0.2rem;{{if .Community.BannerURL}}display:none;{{end}}">
+                                No banner yet — upload one or paste a URL to preview.
+                            </div>
+                            <input type="file" name="banner" id="bp-file" accept="image/*" class="form-control form-control-sm mt-2">
+                            <input type="text" name="banner_url" id="bp-url" class="form-control form-control-sm mt-1" value="{{.Community.BannerURL}}" placeholder="…or paste an image URL">
+                            <div class="form-text" style="font-size:0.7rem;">Uploads are auto-compressed (capped ~1600px wide). Wide format reads best.</div>
+                            <label class="form-label mt-2" style="font-size:0.8rem;">Banner position <span id="bp-val" style="color:var(--text-muted);">{{.Community.BannerPosition}}%</span></label>
+                            <input type="range" name="banner_position" id="bp-range" min="0" max="100" step="1"
+                                   value="{{.Community.BannerPosition}}" class="form-range">
+                            <div class="form-text" style="font-size:0.7rem;">0% = top of image, 50% = centre, 100% = bottom. Drag to preview above.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" style="font-size:0.85rem;">Icon</label>
+                            {{if .Community.IconURL}}<div class="mb-1"><img src="{{.Community.IconURL}}" alt="" style="height:48px;width:48px;object-fit:cover;border-radius:8px;border:1px solid var(--border);"></div>{{end}}
+                            <input type="file" name="icon" accept="image/*" class="form-control form-control-sm">
+                            <input type="text" name="icon_url" class="form-control form-control-sm mt-1" value="{{.Community.IconURL}}" placeholder="…or paste an image URL">
+                            <div class="form-text" style="font-size:0.7rem;">Square works best.</div>
+                        </div>
+                    </div>
+                    <div class="form-check mt-3" style="font-size:0.85rem;">
+                        <input class="form-check-input" type="checkbox" name="nsfw" value="1" id="nsfw" {{if .Community.NSFW}}checked{{end}}>
+                        <label class="form-check-label" for="nsfw">Mark community NSFW</label>
+                    </div>
+                </div>
+            </div>
+
+            {{/* ── Access / join gating ── */}}
+            <div class="card mb-3">
+                <div class="card-header" style="font-size:0.8rem;color:var(--text-muted);">Access</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label" style="font-size:0.85rem;">Who can join?</label>
+                        <div class="form-check" style="font-size:0.85rem;">
+                            <input class="form-check-input" type="radio" name="join_type" id="jt-open" value="open" {{if eq .Community.JoinType "open"}}checked{{end}}>
+                            <label class="form-check-label" for="jt-open"><strong>Open</strong> — anyone who meets the requirements joins instantly.</label>
+                        </div>
+                        <div class="form-check" style="font-size:0.85rem;">
+                            <input class="form-check-input" type="radio" name="join_type" id="jt-request" value="request" {{if eq .Community.JoinType "request"}}checked{{end}}>
+                            <label class="form-check-label" for="jt-request"><strong>Request to join</strong> — applicants queue for your approval (with an optional message).</label>
+                        </div>
+                        <div class="form-check" style="font-size:0.85rem;">
+                            <input class="form-check-input" type="radio" name="join_type" id="jt-invite" value="invite_only" {{if eq .Community.JoinType "invite_only"}}checked{{end}}>
+                            <label class="form-check-label" for="jt-invite"><strong>Invite only</strong> — no public join; members come in via invite links you issue.</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-1" style="font-size:0.8rem;color:var(--text-muted);">Requirements (applied to open joins + queued requests; invites bypass them):</div>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label" style="font-size:0.8rem;">Min account age (days)</label>
+                            <input type="number" name="min_account_age_days" class="form-control form-control-sm" min="0" max="3650" value="{{.Community.MinAccountAgeDays}}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" style="font-size:0.8rem;">Min rank</label>
+                            <select name="min_role_level" class="form-select form-select-sm">
+                                <option value="0" {{if eq .Community.MinRoleLevel 0}}selected{{end}}>Any (user)</option>
+                                <option value="1" {{if eq .Community.MinRoleLevel 1}}selected{{end}}>Contributor+</option>
+                                <option value="2" {{if eq .Community.MinRoleLevel 2}}selected{{end}}>Mod+</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" style="font-size:0.8rem;">Points to join (spent)</label>
+                            <input type="number" name="join_points_cost" class="form-control form-control-sm" min="0" value="{{.Community.JoinPointsCost}}">
+                        </div>
+                    </div>
+                    <div class="form-text" style="font-size:0.72rem;margin-top:0.4rem;">
+                        Points are deducted on join. For request-to-join they're held in escrow and refunded if you deny the request.
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between">
+                <a href="/c/{{.Community.Slug}}" class="btn btn-sm btn-outline-secondary">Back</a>
+                <button type="submit" class="btn btn-sm btn-primary">Save settings</button>
+            </div>
+        </form>
+    </div>
+    <script>
+    (function(){
+        var range   = document.getElementById('bp-range');
+        var val     = document.getElementById('bp-val');
+        var preview = document.getElementById('bp-preview');
+        var empty   = document.getElementById('bp-preview-empty');
+        var file    = document.getElementById('bp-file');
+        var url     = document.getElementById('bp-url');
+        if (!range || !preview) return;
+
+        function setImage(src) {
+            if (src) {
+                preview.style.backgroundImage = "url('" + src + "')";
+                if (empty) empty.style.display = 'none';
+            } else {
+                preview.style.backgroundImage = '';
+                if (empty) empty.style.display = '';
+            }
+        }
+        // Slider → move the focal point live.
+        range.addEventListener('input', function(){
+            val.textContent = this.value + '%';
+            preview.style.backgroundPosition = 'center ' + this.value + '%';
+        });
+        // Pick a file → preview it immediately (client-side, pre-upload).
+        if (file) file.addEventListener('change', function(){
+            var f = this.files && this.files[0];
+            if (!f) return;
+            var reader = new FileReader();
+            reader.onload = function(e){ setImage(e.target.result); };
+            reader.readAsDataURL(f);
+        });
+        // Paste a URL → preview it (only the file input wins on submit,
+        // but this lets a URL-only banner preview too).
+        if (url) url.addEventListener('input', function(){
+            if (!file || !file.files || !file.files.length) setImage(this.value.trim());
+        });
+    })();
+    </script>
+{{end}}

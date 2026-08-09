@@ -15,17 +15,23 @@ the site's default access policy (`Authenticate`); per-action gating is done
 inside the handlers, because whether you may post depends on the community, not
 on the route.
 
-- **authed** — `GET /c`, `GET /c/new`, `POST /c/new`, `GET /c/:slug`,
+- **authed** — `GET /c`, `GET /c/new`, `POST /c`, `GET /c/:slug`,
   `POST /c/:slug/subscribe`, `GET /c/:slug/submit`, `POST /c/:slug/submit`,
   `GET /c/:slug/thread/:id`, `POST /c/:slug/thread/:id/reply`
-- **mod/owner** — `GET|POST /c/:slug/settings`, `POST /c/:slug/invite`,
-  `POST /c/:slug/requests/:id/approve|deny`,
+- **mod/owner** — `GET|POST /c/:slug/settings`, `GET /c/:slug/requests`,
+  `POST /c/:slug/invites`, `POST /c/:slug/requests/:rid/approve|deny`,
   `POST /c/:slug/thread/:id/pin|lock|remove`,
   `POST /c/:slug/thread/:id/post/:pid/remove`
-- **invite redemption** — `GET /c/invite/:code`
+- **invite redemption** — `GET /c/join/:code`
 
-Process kinds: none declared, so it provisions everywhere the host runs. There
-is no background work.
+Process kinds: none declared, which core treats as **web-only**. There is no
+background work.
+
+The plugin owns all seven pages' markup: `templates/*.html` are embedded
+fragments rendered from the plugin's private template set, wrapped in the
+host's chrome through `Deps.RenderPage`. View models are structs, not maps —
+a fragment reading a field nobody supplies is a render error the tests
+catch, not an empty string in production.
 
 ## Data
 
@@ -50,18 +56,36 @@ Store: self-contained `PGStore` built at Provision. No `MemStore` — the store
 is a SQL passthrough and a map-backed double would test delegation rather than
 behaviour.
 
-`Deps` (SetDeps before `core.Boot`):
+`Deps` (SetDeps before `core.Boot`) — required on **both** contracts:
 
-- `BaseData` — merges host page chrome into a template map. Communities is a
-  full-page surface, so the templates stay host-side and the plugin fills them.
 - `Markdown` — renders post bodies. The host owns the dialect because the same
-  policy governs the forum, and two markdown flavours on one site reads as a
-  bug.
-- `PageOffset`, `Pagination` — the host's paging helpers, passed rather than
-  copied: the value is consumed by the host's pagination *partial*, so a lifted
-  copy would compile and render right up until the partial changed.
-- `Files` — optional `blob.Store` for banner/icon uploads. A host without one
-  loses banner images and keeps everything else.
+  policy governs the forum, and it sanitises: a second allow-list inside the
+  plugin would be a stored-XSS bug waiting on whichever copy is laxer.
+- `PageOffset` — the host's paging arithmetic (shapes the query, not markup).
+
+Current contract (the plugin renders its own embedded fragments):
+
+- `RenderPage` — wraps a finished fragment in the site chrome; status crosses
+  because the create form re-renders with 400 on validation failure.
+- `CSRFToken` — feeds every POST form's hidden `_csrf` input.
+- `RenderPagination` — the host's pager as finished HTML.
+- `RenderEditor` — the host's shared markdown editor as finished HTML (the
+  new-thread form uses it).
+- `RelativeTime` — the site's time wording.
+
+Previous contract, kept working while `loon-demo-site` still wires it (see
+`TestLegacyContractIsStillAccepted`; remove once the demo moves to
+`RenderPage`):
+
+- `BaseData` — merges host page chrome into a template map; the plugin then
+  renders the host's *own* copies of these templates by name.
+- `Pagination` — the host's pager view-model builder, consumed by the host's
+  pagination partial.
+
+Optional on either contract:
+
+- `Files` — `blob.Store` for banner/icon uploads. A host without one loses
+  banner images and keeps everything else.
 
 Config keys: none. `Metadata.Requires`: none.
 
@@ -77,16 +101,25 @@ Config keys: none. `Metadata.Requires`: none.
 
 ## Lifecycle
 
-- **Provision** — checks the render seams are wired (a missing one is a nil
-  call on the first request, not a degraded page), builds the `PGStore` over
-  `Core.Storage.DB()`, constructs the handlers over `Auth`/`Points`/`Errors`,
-  registers the `/c` route group, and publishes `communities.followed`.
+- **Provision** — checks a complete render contract is wired (a missing seam
+  is a nil call on the first request, not a degraded page), parses the
+  embedded fragments on the current contract (a parse failure fails boot,
+  not the first page view), builds the `PGStore` over `Core.Storage.DB()`,
+  constructs the handlers over `Auth`/`Points`/`Errors`, registers the `/c`
+  route group, and publishes `communities.followed`.
 - **Start / Stop** — no-ops. There is no background work.
 
 ## Files
 
 - `plugin.go` — lifecycle, route table, extension publication.
-- `deps.go` — the host seams, the `communities.followed` contract, `noRowsAsNil`.
+- `deps.go` — the host seams (both contracts), the `communities.followed`
+  contract, `noRowsAsNil`.
+- `views.go` — embedded fragment set, FuncMap, struct view models, the
+  dual-contract `render`, the widget seam helpers, the rune-safe
+  `initial`/excerpt helpers.
+- `templates/*.html` — the seven page fragments, lifted verbatim from the
+  origin host (chrome stripped; the pagination partial and md-editor arrive
+  pre-rendered through the seams).
 - `handlers.go` — every HTTP handler and its gating.
 - `store.go` — the `Store` interface.
 - `pg.go` — the Postgres implementation.
@@ -98,6 +131,12 @@ Config keys: none. `Metadata.Requires`: none.
 
 - Unit-tested: slug validation, join-gate decisions, and the pure helpers in
   `communities_test.go`.
+- Render-tested (`views_test.go`): every fragment executes over realistic
+  fixture data with a content marker proving the data landed and a
+  chrome-leak check proving no host chrome is embedded; every POST form is
+  counted against its `_csrf` field (a mismatch is a form that 403s on
+  submit); the empty states render; the fragment set parses in one pass; and
+  the legacy contract stays accepted while a half-wired mixture is refused.
 - Needs integration (live DB): `PGStore` is a SQL passthrough — the join-escrow
   flow in particular spans several statements and a points call, and only a
   real database shows whether the escrow is refunded on deny. That gap predates

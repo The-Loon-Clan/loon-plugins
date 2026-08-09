@@ -55,7 +55,19 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// deliberately excluded: a host with no blob store loses banner images
 	// and keeps the rest, which is a configuration rather than a fault.
 	if !deps.ready() {
-		return fmt.Errorf("communities: SetDeps not called, or missing BaseData/Markdown/PageOffset/Pagination — wire it in main() before core.Boot")
+		return fmt.Errorf("communities: SetDeps not called, or a render seam is missing — " +
+			"Markdown and PageOffset plus either the current contract (RenderPage, CSRFToken, " +
+			"RenderPagination, RenderEditor, RelativeTime) or the previous one (BaseData, " +
+			"Pagination); wire it in main() before core.Boot")
+	}
+	// Parsed here, not at package init: the FuncMap binds deps.RelativeTime,
+	// which SetDeps only just supplied. A parse failure fails boot rather
+	// than the first page view. Skipped on the legacy contract, where the
+	// host renders its own copies of these templates by name.
+	if deps.RenderPage != nil {
+		if err := parseTemplates(); err != nil {
+			return err
+		}
 	}
 	db := c.Storage.DB()
 	if db == nil {

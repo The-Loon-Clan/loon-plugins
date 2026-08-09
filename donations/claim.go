@@ -109,11 +109,9 @@ func (h *Handlers) ClaimPackage(c *gin.Context) {
 	storeID = strings.TrimSpace(storeID)
 	apiKey = strings.TrimSpace(apiKey)
 	if base == "" || storeID == "" || apiKey == "" {
-		c.HTML(http.StatusServiceUnavailable, "error.html", h.deps.BaseData(c, gin.H{
-			"Code":    503,
-			"Title":   "Click-to-claim isn't set up yet",
-			"Message": "BTCPay Server isn't configured on this site. Send a direct crypto donation from the donate page — the admin will match it to your slot manually.",
-		}))
+		h.renderError(c, http.StatusServiceUnavailable,
+			"Click-to-claim isn't set up yet",
+			"BTCPay Server isn't configured on this site. Send a direct crypto donation from the donate page — the admin will match it to your slot manually.")
 		return
 	}
 
@@ -146,11 +144,9 @@ func (h *Handlers) ClaimPackage(c *gin.Context) {
 	if err != nil {
 		log.Printf("donate/claim: BTCPay invoice create failed for package=%d: %v", pkg.ID, err)
 		h.errs.Report(ctx, "donate/claim-invoice", err)
-		c.HTML(http.StatusBadGateway, "error.html", h.deps.BaseData(c, gin.H{
-			"Code":    502,
-			"Title":   "Couldn't reach BTCPay right now",
-			"Message": "Please try again in a moment, or send a direct crypto donation from the donate page.",
-		}))
+		h.renderError(c, http.StatusBadGateway,
+			"Couldn't reach BTCPay right now",
+			"Please try again in a moment, or send a direct crypto donation from the donate page.")
 		return
 	}
 	if resp.CheckoutLink == "" {

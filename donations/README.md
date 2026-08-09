@@ -64,21 +64,37 @@ reached via `Core.Storage.DB()`:
 - **Store**: self-contained `*PGStore` built at `Provision` from `c.Storage.DB()` — the donation
   tables are plugin-private, so there is no shared storage repository for them. SQL is
   byte-identical to the pre-lift in-tree plugin.
-- **`SetDeps` (required, before `core.Boot`)** — the host seams; `Provision` fails loud if any
-  field is nil:
-  - `BaseData` — page-chrome injector (template envelope).
-  - `Settings` — the plugin's own two-method structural interface (`GetSetting`/`SetSetting`);
-    the host's settings repository satisfies it directly.
-  - `IsDonateEnabled` / `SetDonateEnabled` — the master-toggle pair (read the in-process state;
-    flip it now + persist, no restart).
-  - `LookupUsername` / `LookupUserID` — narrow user lookups wrapping the host's user
-    repository; the plugin never sees the host's user model.
+- **`SetDeps` (required, before `core.Boot`)** — the host seams; `Provision` fails loud when a
+  data seam is missing or neither render contract is complete:
+  - Data seams, required on both contracts:
+    - `Settings` — the plugin's own two-method structural interface (`GetSetting`/`SetSetting`);
+      the host's settings repository satisfies it directly.
+    - `IsDonateEnabled` / `SetDonateEnabled` — the master-toggle pair (read the in-process state;
+      flip it now + persist, no restart).
+    - `LookupUsername` / `LookupUserID` — narrow user lookups wrapping the host's user
+      repository; the plugin never sees the host's user model.
+  - Current render contract (the plugin renders its own embedded fragments):
+    - `RenderPage` — wraps a finished fragment in the site chrome.
+    - `RenderError` — shows the host's error page (see the error.html note below).
+    - `CSRFToken` — minted by host middleware; feeds the pages' inline token inputs.
+    - `RelativeTime` — the site's time wording.
+  - Previous render contract, kept working while `loon-demo-site` still wires it (remove once
+    the demo moves to `RenderPage`):
+    - `BaseData` — page-chrome injector; the plugin then renders the host's *own* copies of
+      `help_donate.html` / `admin_donate.html` / `error.html` by name.
 - **Config keys**: none. No `plugins.donations.*` namespace; all runtime config lives in
   `site_settings` via `Deps.Settings`.
 - **Metadata.Requires**: none (leaf plugin; depends only on always-available core services).
-- **Host templates (the template contract)** — the plugin renders the HOST's templates by name:
-  `help_donate.html`, `admin_donate.html`, and `error.html` (for the claim flow's 502/503
-  pages). An adopting host supplies those three in its template set.
+- **Template ownership** — the plugin owns `help_donate.html` and `admin_donate.html`
+  (`templates/`, embedded fragments, struct view models). `error.html` deliberately did NOT
+  move: it is the host's site-wide error surface (the global 404, the download-limit page, the
+  page behind other plugins' `RenderError` seams) with a dozen host render sites against two
+  here — moving a copy in would fork the page every visitor sees when anything breaks. The
+  claim flow reaches it through `Deps.RenderError` instead, the same arrangement offers/lists
+  use, with a title parameter added because the BTCPay-unconfigured 503 carries custom copy.
+  The lift also fixed a latent streamed-render abort: the public page's Recent Donors carousel
+  read `$d.CreatedAt`, a field `Donation` lost in a rename — it reads `ReceivedAt` now, and a
+  render test pins it.
 
 ## Hooks & Callbacks
 
@@ -89,16 +105,22 @@ reached via `Core.Storage.DB()`:
 
 ## Lifecycle
 
-- **Provision**: validates `SetDeps` was called with every field (fails loud otherwise), builds
-  the `*PGStore` from `c.Storage.DB()`, constructs `Handlers` (store + Deps + `core.AuthService`
-  + `core.ErrorReporter`), and registers the public/authed/admin route groups on the router.
+- **Provision**: validates the data seams and a complete render contract (fails loud
+  otherwise), parses the embedded fragments on the current contract (a parse failure fails
+  boot, not the first page view), builds the `*PGStore` from `c.Storage.DB()`, constructs
+  `Handlers` (store + Deps + `core.AuthService` + `core.ErrorReporter`), and registers the
+  public/authed/admin route groups on the router.
 - **Start / Stop**: no-ops. The plugin runs no background jobs, connections, or goroutines —
   settlement arrives via the inbound webhook, not a poller.
 
 ## Files
 
-- `plugin.go` — plugin registration, `Deps`/`SetDeps`, the structural `Settings` interface,
-  `Provision` route wiring, `Metadata`.
+- `plugin.go` — plugin registration, `Deps`/`SetDeps` (+ `renderContractOK`), the structural
+  `Settings` interface, `Provision` route wiring, `Metadata`.
+- `views.go` — embedded fragment set, FuncMap, struct view models (`donatePageVM`,
+  `adminDonateVM`), the dual-contract `render`, and `renderError`.
+- `templates/*.html` — the two page fragments, lifted verbatim from the origin host (chrome
+  stripped; the Recent Donors field corrected as noted above).
 - `models.go` — `SiteCost`, `Donation`, `DonationPackage`/`DonationPackageView` (+ `Recompute`),
   `DonationGoalGroup` (lock/percent/items helpers, `pct`), `DonationPointsConfig`
   (`PointsForDollars` curve). Pure logic lives here.
@@ -129,6 +151,15 @@ the yearly goal boundary, so packages auto-reopen Jan 1.
   clamping, funded flag), `DonationGoalGroup` monthly/yearly lock + `FullyFunded` + percent
   (via `pct`), `Monthly/YearlyItems` period filtering, and `verifyBTCPaySig` (constant-time
   HMAC verify, bad-prefix / bad-hex / wrong-secret / tamper cases).
+- **Render-tested** (`views_test.go`): both fragments execute over realistic fixture data with
+  content markers and a chrome-leak check; the Recent Donors timestamp regression is pinned
+  (the `ReceivedAt` fix, plus content *after* the carousel proving no mid-stream abort); the
+  POST-form inventory and the two inline CSRF tokens are counted (submit-time CSRF for the
+  rest is the host chrome's csrf-js, documented in the fragment); the admin page's
+  tab-structure invariants moved here from the host's `admin_donate_tabs_test.go` with the
+  markup they pin (every tab has a pane and vice versa, exactly one active pane, hash-to-tab
+  handling, house chrome, guarded tab counts); the fragment set parses in one pass; and both
+  render contracts are checked (`renderContractOK`, `renderError` seam routing).
 - **Needs integration (live DB)**: everything in `store_pg.go` — the `CreateDonation`
   transaction (donation insert + atomic `users` counter bump + Donator-flag flip + `(asset,txid)`
   dedup), site-cost/package CRUD, and the SUM/COUNT aggregation queries. These are thin SQL

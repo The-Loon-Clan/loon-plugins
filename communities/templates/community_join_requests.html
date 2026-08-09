@@ -1,0 +1,99 @@
+{{/* The mod queue — pending join requests + invite management.
+
+     Lifted verbatim from the host's community_join_requests.html
+     (indexer-site, 2026-08-09), chrome off. Data is
+     communityJoinRequestsVM. */}}
+{{define "community_join_requests.html"}}
+    <style>
+        .rq-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.15rem; margin-bottom: 0.7rem; }
+        .rq-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+        .rq-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--bg-elevated); overflow: hidden; display:inline-flex; align-items:center; justify-content:center; font-weight:700; color:var(--blue); }
+        .rq-avatar img { width:100%; height:100%; object-fit:cover; }
+        .rq-stats { display:flex; gap:0.7rem; font-size:0.74rem; color: var(--text-muted); flex-wrap:wrap; }
+        .rq-msg { font-size: 0.86rem; color: var(--text-primary); background: var(--bg-elevated); border-radius: 8px; padding: 0.5rem 0.7rem; margin: 0.5rem 0; }
+        .rq-actions { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; }
+        .rq-actions input[type=text] { width: 220px; font-size: 0.78rem; }
+        .inv-row { display:flex; align-items:center; gap:0.6rem; font-size:0.8rem; padding:0.4rem 0; border-bottom:1px solid var(--border); }
+        .inv-row:last-child { border-bottom:none; }
+        .inv-code { font-family:monospace; color:var(--blue); }
+    </style>
+    <div class="container page-narrow" style="padding: 1.4rem 1rem 3rem;">
+        <nav aria-label="breadcrumb" style="font-size:0.8rem;margin-bottom:0.6rem;">
+            <a href="/c" style="color:var(--text-muted);text-decoration:none;">Communities</a> &rsaquo;
+            <a href="/c/{{.Community.Slug}}" style="color:var(--blue);text-decoration:none;">/c/{{.Community.Slug}}</a> &rsaquo;
+            <span style="color:var(--text-muted);">requests</span>
+        </nav>
+        <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:1rem;">Join requests — {{.Community.Name}}</h1>
+
+        {{if .Flash}}<div class="alert alert-info py-2" style="font-size:0.85rem;">{{.Flash}}</div>{{end}}
+
+        {{if .Requests}}
+        {{range .Requests}}
+        <div class="rq-card">
+            <div class="rq-head">
+                <span class="rq-avatar">{{if .AvatarPath}}<img src="{{.AvatarPath}}" alt="">{{else}}{{initial .Username}}{{end}}</span>
+                <div>
+                    <a href="/u/{{.Username}}" style="color:var(--text-primary);font-weight:600;text-decoration:none;">{{.Username}}</a>
+                    <div class="rq-stats">
+                        <span>{{.Role}}</span>
+                        <span>{{.UserPoints}} pts</span>
+                        <span>joined {{.AccountCreated.Format "Jan 2006"}}</span>
+                        <span>requested {{.CreatedAt.Format "Jan 02 15:04"}}</span>
+                        {{if gt .PointsHeld 0}}<span>· {{.PointsHeld}} pts held</span>{{end}}
+                    </div>
+                </div>
+            </div>
+            {{if .Message}}<div class="rq-msg">{{.Message}}</div>{{end}}
+            <div class="rq-actions">
+                <form method="POST" action="/c/{{$.Community.Slug}}/requests/{{.ID}}/approve" class="d-flex gap-2 align-items-center">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                    <input type="text" name="response" class="form-control form-control-sm" placeholder="Reply (optional)" maxlength="1000">
+                    <button class="btn btn-sm btn-success" type="submit">Approve</button>
+                </form>
+                <form method="POST" action="/c/{{$.Community.Slug}}/requests/{{.ID}}/deny" class="d-inline">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Deny{{if gt .PointsHeld 0}} + refund{{end}}</button>
+                </form>
+            </div>
+        </div>
+        {{end}}
+        {{else}}
+        <div style="text-align:center;padding:2.5rem 1rem;color:var(--text-muted);font-size:0.9rem;">No pending requests.</div>
+        {{end}}
+
+        {{/* Invite management — create + list. */}}
+        <div class="rq-card" style="margin-top:1.5rem;">
+            <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:0.7rem;">Invites</h3>
+            <form method="POST" action="/c/{{.Community.Slug}}/invites" class="d-flex gap-2 align-items-end flex-wrap mb-3">
+                <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                <div>
+                    <label class="form-label" style="font-size:0.72rem;margin-bottom:2px;">Note</label>
+                    <input type="text" name="note" class="form-control form-control-sm" style="width:180px;" placeholder="e.g. for translators" maxlength="120">
+                </div>
+                <div>
+                    <label class="form-label" style="font-size:0.72rem;margin-bottom:2px;">Max uses (0 = unlimited)</label>
+                    <input type="number" name="max_uses" class="form-control form-control-sm" style="width:120px;" value="1" min="0">
+                </div>
+                <div>
+                    <label class="form-label" style="font-size:0.72rem;margin-bottom:2px;">Expires (days, 0 = never)</label>
+                    <input type="number" name="expires_days" class="form-control form-control-sm" style="width:140px;" value="7" min="0">
+                </div>
+                <button class="btn btn-sm btn-primary" type="submit">Generate invite</button>
+            </form>
+            {{if .Invites}}
+            {{range .Invites}}
+            <div class="inv-row">
+                <span class="inv-code">/c/join/{{.Code}}</span>
+                {{if .Note}}<span style="color:var(--text-muted);">{{.Note}}</span>{{end}}
+                <span class="ms-auto" style="color:var(--text-muted);">
+                    {{.UseCount}}{{if gt .MaxUses 0}}/{{.MaxUses}}{{end}} used
+                    {{if .ExpiresAt}}· expires {{.ExpiresAt.Format "Jan 02"}}{{end}}
+                </span>
+            </div>
+            {{end}}
+            {{else}}
+            <div style="font-size:0.8rem;color:var(--text-muted);">No invites yet.</div>
+            {{end}}
+        </div>
+    </div>
+{{end}}

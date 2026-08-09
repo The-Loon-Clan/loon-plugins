@@ -7,6 +7,7 @@ package donations
 import (
 	"context"
 	"fmt"
+	"html/template"
 
 	"github.com/gin-gonic/gin"
 
@@ -31,9 +32,32 @@ type Settings interface {
 // toggle, page chrome) arrive here. SetDeps must be called before
 // core.Boot; Provision fails loud otherwise.
 type Deps struct {
-	// BaseData merges the host's page chrome (user, nav, CSRF, ...)
-	// into a template data map — every page render goes through it.
+	// RenderPage wraps a finished fragment in the site chrome. The
+	// plugin owns both pages' markup now (templates/, embedded), so
+	// chrome crosses rather than a data map.
+	RenderPage func(c *gin.Context, status int, title string, body template.HTML)
+	// RenderError shows the host's error page. error.html is the
+	// site-wide error surface (the global 404, the download-limit
+	// page) and stays host-owned; donations only needs to reach it.
+	// title crosses because the BTCPay-unconfigured 503 carries
+	// custom copy; empty title lets the page pick its per-code
+	// default.
+	RenderError func(c *gin.Context, code int, title, msg string)
+	// CSRFToken feeds the pages' POST forms — minted by host
+	// middleware, so only the host can answer it.
+	CSRFToken func(c *gin.Context) string
+	// RelativeTime is the site's time wording ("2 hours ago").
+	RelativeTime func(v any) string
+
+	// BaseData is the PREVIOUS contract, where the HOST owned
+	// help_donate.html / admin_donate.html / error.html and the
+	// plugin rendered them by name. Kept working because
+	// loon-demo-site still wires it and compiles against this
+	// working tree; remove it, and the branches in
+	// render()/renderError() that read it, once the demo has moved
+	// to RenderPage.
 	BaseData func(c *gin.Context, extra gin.H) gin.H
+
 	// Settings is the shared site-settings store (donate_* keys,
 	// BTCPay credentials, tip-jar goals).
 	Settings Settings
@@ -56,6 +80,16 @@ var deps *Deps
 // SetDeps hands the plugin its host seams. Call from main() before
 // core.Boot.
 func SetDeps(d Deps) { deps = &d }
+
+// renderContractOK reports whether Deps carries a complete render contract —
+// the current one (fragments + host chrome/error seams) or the previous one
+// (BaseData, render-by-name). Half of either is not a contract: a host that
+// wired some seams would serve some pages and blank others.
+func (d *Deps) renderContractOK() bool {
+	modern := d.RenderPage != nil && d.RenderError != nil &&
+		d.CSRFToken != nil && d.RelativeTime != nil
+	return modern || d.BaseData != nil
+}
 
 // Handlers serves the donation surfaces.
 type Handlers struct {
@@ -83,9 +117,23 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if deps == nil {
 		return fmt.Errorf("donations: SetDeps was not called before core.Boot — wire it in main()")
 	}
-	if deps.BaseData == nil || deps.Settings == nil || deps.IsDonateEnabled == nil ||
+	// Data seams are required on both contracts; the render side accepts
+	// either the current one (RenderPage + RenderError + CSRFToken +
+	// RelativeTime) or the previous one (BaseData, render-by-name).
+	if deps.Settings == nil || deps.IsDonateEnabled == nil ||
 		deps.SetDonateEnabled == nil || deps.LookupUsername == nil || deps.LookupUserID == nil {
 		return fmt.Errorf("donations: Deps missing a required field")
+	}
+	if !deps.renderContractOK() {
+		return fmt.Errorf("donations: Deps carries neither render contract — wire RenderPage/RenderError/CSRFToken/RelativeTime, or the legacy BaseData")
+	}
+	// Parsed here, not at package init: the FuncMap binds deps.RelativeTime.
+	// A parse failure fails boot rather than the first page view. Skipped on
+	// the legacy contract, where the host renders its own copies by name.
+	if deps.RenderPage != nil {
+		if err := parseTemplates(); err != nil {
+			return err
+		}
 	}
 	db := c.Storage.DB()
 	if db == nil {
