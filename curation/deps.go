@@ -44,6 +44,11 @@ type AnimeFacts struct {
 	// one bucket for EVERY entry it touches, so counting it would make every
 	// unlinked sequel look like a single-season show.
 	TMDBSeasons int
+	// MappedSeason is which season of its mapped show this entry IS,
+	// per the community anidb→tvdb/tmdb mapping (Fribb anime-lists).
+	// 0 = unmapped. Authoritative when present: AniDB entries are
+	// season-scoped and the mapping exists precisely to answer this.
+	MappedSeason int
 }
 
 // Stats are the live numbers the admin page leads with.

@@ -23,6 +23,11 @@ func TestDecide(t *testing.T) {
 	// host seam filters it out by source, so an unlinked sequel arrives here
 	// with TMDBSeasons 0 — and must stay unresolved, not default to S1.
 	finalSeason := &AnimeFacts{Title: "Shingeki no Kyojin: The Final Season", Format: "TV", TMDBSeasons: 0}
+	// The same entry once the Fribb mapping knows it: no ordinal in the
+	// name, but the community mapping says outright it is season 4.
+	finalSeasonMapped := &AnimeFacts{Title: "Shingeki no Kyojin: The Final Season", Format: "TV", MappedSeason: 4}
+	mappedAndNamed := &AnimeFacts{Title: "Yama no Susume 2nd Season", Format: "TV", MappedSeason: 2}
+	movieMapped := &AnimeFacts{Title: "Kimi no Na wa.", Format: "MOVIE", MappedSeason: 1}
 
 	cases := []struct {
 		name       string
@@ -45,7 +50,11 @@ func TestDecide(t *testing.T) {
 		{"single TMDB season defaults to S1", nil, nil, tv1, RuleMetaSingleSeason, ip(1), nil},
 		{"ONA with single season defaults too", nil, nil, onaSingle, RuleMetaSingleSeason, ip(1), nil},
 		{"multi-season show stays unresolved", nil, nil, tvMulti, RuleUnresolved, nil, nil},
-		{"unnamed sequel with no TMDB stays unresolved", nil, nil, finalSeason, RuleUnresolved, nil, nil},
+		{"unnamed sequel with no mapping stays unresolved", nil, nil, finalSeason, RuleUnresolved, nil, nil},
+		{"mapping resolves the unnamed sequel", nil, nil, finalSeasonMapped, RuleMetaMapped, ip(4), nil},
+		{"mapping outranks the entry-name ordinal", nil, nil, mappedAndNamed, RuleMetaMapped, ip(2), nil},
+		{"movie stays non-seasonal even when mapped", nil, nil, movieMapped, RuleNonSeasonal, nil, nil},
+		{"title still outranks the mapping", ip(3), nil, finalSeasonMapped, RuleTitle, ip(3), nil},
 		{"unknown format refuses the S1 default", nil, nil, unknownFormat, RuleUnresolved, nil, nil},
 		{"episode survives a non-seasonal verdict", nil, ip(1), ovaByType, RuleNonSeasonal, nil, ip(1)},
 		{"episode survives unresolved", nil, ip(7), tvMulti, RuleUnresolved, nil, ip(7)},

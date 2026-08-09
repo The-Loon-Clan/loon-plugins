@@ -11,6 +11,11 @@ const (
 	// RuleTitle: the release title itself carried a season marker; the
 	// host's canonical parser found it. Highest trust.
 	RuleTitle = "title"
+	// RuleMetaMapped: the community anidb→show mapping (Fribb anime-lists)
+	// says outright which season of its mapped show this entry is. The
+	// strongest metadata rule — it resolves sequels whose names carry no
+	// ordinal at all ("...: The Final Season").
+	RuleMetaMapped = "meta-mapped"
 	// RuleMetaOrdinal: the AniDB entry's own name carries a season ordinal
 	// ("2nd Season", "Season 3", a roman-numeral or bare-numeral sequel
 	// suffix). AniDB names each season as its own entry, so the entry name
@@ -120,6 +125,12 @@ func Decide(parsedSeason, parsedEpisode *int, facts *AnimeFacts) Decision {
 	}
 	if nonSeasonal(facts) {
 		d.Rule = RuleNonSeasonal
+		return d
+	}
+	if facts.MappedSeason > 0 {
+		n := facts.MappedSeason
+		d.Season = &n
+		d.Rule = RuleMetaMapped
 		return d
 	}
 	if n := metadataOrdinal(facts.Title); n > 0 {

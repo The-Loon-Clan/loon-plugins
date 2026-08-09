@@ -85,8 +85,8 @@ func (p *Plugin) runSweep(ctx context.Context) {
 	}
 
 	summary := fmt.Sprintf(
-		"scanned %d: title %d, entry-name %d, single-season %d, non-seasonal %d, unresolved %d (no metadata %d), wrote %d, write errors %d — %s",
-		c.scanned, c.byRule[RuleTitle], c.byRule[RuleMetaOrdinal],
+		"scanned %d: title %d, mapped %d, entry-name %d, single-season %d, non-seasonal %d, unresolved %d (no metadata %d), wrote %d, write errors %d — %s",
+		c.scanned, c.byRule[RuleTitle], c.byRule[RuleMetaMapped], c.byRule[RuleMetaOrdinal],
 		c.byRule[RuleMetaSingleSeason], c.byRule[RuleNonSeasonal],
 		c.byRule[RuleUnresolved], c.factsMissing,
 		c.wrote, c.writeErrs, time.Since(start).Round(time.Millisecond))

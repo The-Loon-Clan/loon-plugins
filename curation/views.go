@@ -127,6 +127,9 @@ func factsSummary(f *AnimeFacts) string {
 	} else if f.Type != "" {
 		parts = append(parts, f.Type)
 	}
+	if f.MappedSeason > 0 {
+		parts = append(parts, fmt.Sprintf("mapped S%d", f.MappedSeason))
+	}
 	if f.TMDBSeasons > 0 {
 		parts = append(parts, fmt.Sprintf("%d TMDB season(s)", f.TMDBSeasons))
 	} else {
