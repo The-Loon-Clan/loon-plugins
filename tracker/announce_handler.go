@@ -134,6 +134,22 @@ func (h *Handlers) Announce(c *gin.Context) {
 		return
 	}
 
+	// The site's admission rule, asked BEFORE any accounting so a refused
+	// announce changes nothing — see guard.go. With nothing wired this always
+	// allows, which is what happened before the seam existed.
+	if ok, reason := Admit(ctx, GuardRequest{
+		UserID:   userID,
+		InfoHash: req.InfoHashHex,
+		PeerID:   req.PeerID,
+		IP:       req.IP,
+		Port:     req.Port,
+		Event:    req.Event,
+		Left:     req.Left,
+	}); !ok {
+		h.announceFail(c, reason)
+		return
+	}
+
 	delta := ComputeDelta(prev, req)
 	if delta.Stopped {
 		_ = h.peers.Remove(ctx, req.InfoHashHex, req.PeerID)

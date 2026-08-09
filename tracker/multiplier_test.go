@@ -81,3 +81,56 @@ func TestCreditPassesWhoAndWhat(t *testing.T) {
 		t.Errorf("multiplier saw (%d,%q), want (42,\"abc123\")", gotUser, gotHash)
 	}
 }
+
+// ── The admission seam ──────────────────────────────────────────────────────
+
+// With nothing wired every announce is allowed, which is what happened before
+// guard.go existed. Same property the multiplier needed, and for the same
+// reason: every host running this today wires nothing.
+func TestUnwiredGuardAllowsEverything(t *testing.T) {
+	SetAnnounceGuard(nil)
+	if ok, reason := Admit(context.Background(), GuardRequest{UserID: 1, InfoHash: "aa"}); !ok {
+		t.Errorf("unwired guard refused an announce: %q", reason)
+	}
+}
+
+func TestGuardCanRefuseWithAReason(t *testing.T) {
+	defer SetAnnounceGuard(nil)
+	SetAnnounceGuard(func(context.Context, GuardRequest) (bool, string) {
+		return false, "already seeding from another host"
+	})
+	ok, reason := Admit(context.Background(), GuardRequest{UserID: 1, InfoHash: "aa"})
+	if ok || reason != "already seeding from another host" {
+		t.Errorf("Admit = (%v,%q), want a refusal with the reason", ok, reason)
+	}
+}
+
+// A refusal nobody can read is indistinguishable from a broken tracker. The
+// safe failure is to let the announce through rather than strand a member with
+// a blank error in their client.
+func TestSilentRefusalIsTreatedAsAllow(t *testing.T) {
+	defer SetAnnounceGuard(nil)
+	SetAnnounceGuard(func(context.Context, GuardRequest) (bool, string) { return false, "" })
+	if ok, _ := Admit(context.Background(), GuardRequest{UserID: 1}); !ok {
+		t.Error("a reasonless refusal blocked the announce")
+	}
+}
+
+// A guard deciding WHERE somebody may seed from cannot be written without the
+// peer's address, and one that releases a claim on "stopped" needs the event.
+func TestGuardIsToldEnoughToDecide(t *testing.T) {
+	defer SetAnnounceGuard(nil)
+	var got GuardRequest
+	SetAnnounceGuard(func(_ context.Context, in GuardRequest) (bool, string) {
+		got = in
+		return true, ""
+	})
+	want := GuardRequest{
+		UserID: 7, InfoHash: "abc", PeerID: "-LT1000-x", IP: "203.0.113.9",
+		Port: 6881, Event: "started", Left: 1234,
+	}
+	Admit(context.Background(), want)
+	if got != want {
+		t.Errorf("guard saw %+v, want %+v", got, want)
+	}
+}
