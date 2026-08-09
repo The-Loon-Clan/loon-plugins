@@ -570,7 +570,13 @@ func (h *Handlers) SuggestReleaseGroupForm(c *gin.Context) {
 		group = g
 	}
 
-	h.render(c, http.StatusOK, "Suggest a Release Group", "release_group_suggest.html", gin.H{
+	// Mode-dependent title, matching the original page's wording: an
+	// edit-mode tab/bookmark must name the group.
+	title := "Suggest a Group"
+	if group != nil {
+		title = "Suggest Edit · " + group.Name
+	}
+	h.render(c, http.StatusOK, title, "release_group_suggest.html", gin.H{
 		"Group": group,
 		"IsNew": group == nil,
 	})
