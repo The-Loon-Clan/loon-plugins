@@ -121,6 +121,31 @@ func TestPickFilmPrefersTheMatchingYear(t *testing.T) {
 	}
 }
 
+// An uploader handle stamped on the front becomes the first word of the title
+// unless it is removed, so an ordinary film searched as "@Benzmovies -Spider
+// Man : Homecoming" and matched nothing. 301 uncovered movie releases on the
+// reference index start this way.
+func TestUploaderHandlePrefixIsStripped(t *testing.T) {
+	for _, tc := range []struct {
+		raw, title string
+		year       int
+	}{
+		{"@Benzmovies -Spider Man : Homecoming (2017) 1080p BLURAY x265 HEVC 10bit", "Spider Man : Homecoming", 2017},
+		{"@Cinemalu_Adda - House Mates (2025) TRUE WEB-DL - 4K UHD", "House Mates", 2025},
+		{"@Benzmovies -Devadasu (2006) 1080p DVDRIP x264 AVC", "Devadasu", 2006},
+	} {
+		q := ParseReleaseName(tc.raw)
+		if q.Title != tc.title || q.Year != tc.year {
+			t.Errorf("ParseReleaseName(%q) = title %q year %d, want title %q year %d",
+				tc.raw, q.Title, q.Year, tc.title, tc.year)
+		}
+	}
+	// An email-ish or mid-name @ is not a leading handle.
+	if got := ParseReleaseName("Cafe @ Midnight 2019 1080p").Title; got != "Cafe @ Midnight" {
+		t.Errorf("stripped a mid-title @: got %q", got)
+	}
+}
+
 // A YEAR IS NOT AN IDENTITY. Found against live Wikipedia over 60 uncovered
 // movie releases: "The Champion 2024" returned "Chandu Champion" and
 // "Mia Moglie 2022" returned "Hey Sinamika" — both real films, both of the

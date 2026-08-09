@@ -154,7 +154,17 @@ var (
 	// An indexer banner on the front of the name, with the ">" some of them
 	// add after it.
 	reSitePrefix = regexp.MustCompile(`^\s*\([^)]*www\.[^)]*\)\s*>?\s*`)
-	reYear       = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
+	// The other banner shape: a Telegram/uploader handle in front of the name.
+	// "@Benzmovies -Spider Man : Homecoming (2017) 1080p BLURAY x265 ..." and
+	// "@Cinemalu_Adda - House Mates (2025) TRUE WEB-DL". 301 uncovered movie
+	// releases here start this way, and the handle became the first word of the
+	// title — so a perfectly ordinary film searched as "@Benzmovies -Spider
+	// Man : Homecoming" and matched nothing.
+	//
+	// The dash is optional and the space after it often missing, which is why
+	// this is anchored on the handle rather than on " - ".
+	reHandlePrefix = regexp.MustCompile(`^\s*@[A-Za-z0-9_]+\s*-?\s*`)
+	reYear         = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
 	// Everything from the first quality/source/codec marker onwards is
 	// packaging, not title. Anchored on the FIRST match so a title containing
 	// one of these words keeps whatever precedes it.
@@ -196,7 +206,11 @@ type Query struct {
 // year is read BEFORE the noise is cut: it is the boundary marker, and cutting
 // first would sometimes take it with the rest.
 func ParseReleaseName(raw string) Query {
-	s := strings.ReplaceAll(raw, "_", " ")
+	// The handle goes FIRST, before underscores become spaces: a handle is
+	// commonly written "@Cinemalu_Adda", and splitting it first left "Adda" in
+	// front of the title as if it were a word of the name.
+	s := reHandlePrefix.ReplaceAllString(raw, "")
+	s = strings.ReplaceAll(s, "_", " ")
 	// An indexer's banner, stamped on the front of 87 movie releases here:
 	// "(www.Thunder-News.org) >Men.in.Black.3.LD.German...". Removed before
 	// anything else, or it becomes the first words of the title.

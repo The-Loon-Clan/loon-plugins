@@ -196,6 +196,72 @@ func TestCategorizeReadsLooseEpisodeForms(t *testing.T) {
 	}
 }
 
+// Three episode shapes that fell BETWEEN the existing rules and shelved 336
+// television releases under Movies — a top-level category no film source can
+// ever match them out of.
+//
+// The season+episode rule needs both words; hasBareEpisodeToken needs the
+// digits to follow the "e" immediately. "Episode 12" satisfies neither.
+func TestCategorizeReadsEpisodeFormsThatFellBetweenTheRules(t *testing.T) {
+	for _, title := range []string{
+		// Spelled out, no season anywhere.
+		"Death Note - Episode 12 - Love 1080p Hybrid ITA BDRip DTS-HD MA 2.0",
+		"Kuroko's Basketball - Episode 37 - Thanks 1080p BDRip x265 PCM 2.0",
+		// A season whose episode number is not introduced by an "E".
+		"Askimiz.Yeter.2024.S02.12.Bolum.1080p.TABII.WEB-DL.H.264.TR",
+		// A merged season file.
+		"Avatar the Last Airbender S02 Episodes [ 1 to 20 ] 480p Merge File",
+	} {
+		if got := categorize("", title); topLevelOf(got) != 5000 {
+			t.Errorf("categorize(%q) = %d (%s) — an episode not filed under TV",
+				title, got, categoryName(got))
+		}
+	}
+}
+
+// The new rules are aggressive about bare numbers, so these assert what must
+// NOT move. Each would be a real film wrongly called television.
+func TestEpisodeRulesDoNotClaimFilms(t *testing.T) {
+	for _, title := range []string{
+		// Roman numerals, which the digit rules never see.
+		"Star Wars Episode IV A New Hope 1977 1080p BluRay x264",
+		// A season followed by a YEAR, not an episode number.
+		"Some.Show.S01.2024.1080p.WEB-DL",
+		// An apostrophe-s before a number is not a season marker.
+		"Ocean's 11 2001 1080p BluRay x264",
+	} {
+		if got := categorize("alt.binaries.movies", title); topLevelOf(got) == 5000 {
+			t.Errorf("categorize(%q) = %d (%s) — a film filed as television",
+				title, got, categoryName(got))
+		}
+	}
+}
+
+// Fansub groups also number episodes with no checksum at all, putting a bare
+// number between the title and a bracketed tag block. All 161 releases matching
+// this on the reference index are anime, and every one was shelved as a FILM.
+func TestFansubNumberingMeansAnime(t *testing.T) {
+	for _, title := range []string{
+		"[Toonworld4all] Naruto Shippuden - 015 [1080p BD x265 10bit] [Multi Audio]",
+		"Haikyuu!! - 04 [Hindi AAC 2.0 + English FLAC 2.0 + Japanese FLAC 2.0]",
+		"The Vision of Escaflowne - 04 [Director's Cut] [BD 1440 x 1080 x264 FLAC]",
+		"[Legion] Black Lagoon - 19 [BD x264 1080p 10bit FLAC][Dual Audio]",
+	} {
+		if got := categorize("alt.binaries.misc", title); got != 5070 {
+			t.Errorf("categorize(%q) = %d (%s), want 5070 (TV/Anime)",
+				title, got, categoryName(got))
+		}
+	}
+	// The BRACKET is what makes a bare number safe to key on. Without it this
+	// is a part marker or a title, not fansub numbering.
+	if hasFansubNumbering("Rocky - 3 1982 1080p BluRay") {
+		t.Error("claimed fansub numbering on a bare number with no bracket")
+	}
+	if hasFansubNumbering("Some Movie - 2024 [1080p]") {
+		t.Error("claimed fansub numbering on a four-digit year")
+	}
+}
+
 // A bracketed CRC32 is a fansub habit, which makes it a sharper anime signal
 // than the word "anime". Without it these carry a resolution and land in
 // Movies — a wrong shelf, where Other/Misc was merely an unknown one.

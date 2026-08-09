@@ -83,10 +83,18 @@ var catRules = []struct {
 // fallback for titles that keyword-match nothing — otherwise a group like
 // "a.b.multimedia.anime" would force every release (even an ebook) to Anime.
 func categorize(group, title string) int {
+	g := strings.ToLower(group)
 	if cat := categorizeText(strings.ToLower(title)); cat != 8010 {
+		// An episodic title posted to an ANIME group is anime. The title only
+		// established that the release is television; the group is the better
+		// evidence for which shelf of television, and a bare "Episode 5" says
+		// nothing either way.
+		if cat/1000 == 5 && cat != 5070 && groupCategory(g) == 5070 {
+			return 5070
+		}
 		return cat
 	}
-	return groupCategory(strings.ToLower(group))
+	return groupCategory(g)
 }
 
 // categorizeText applies the keyword/episode/resolution rules to one string.
@@ -99,6 +107,16 @@ func categorizeText(h string) int {
 		// called HD because it is television. Same tiers as the movie shelves
 		// below, which is why they share resolutionTier.
 		return 5000 + resolutionTier(h)
+	}
+	// A fansub signal is as strong as an episode pattern, so it is read at the
+	// same height — BEFORE the keyword rules.
+	//
+	// It used to sit after them, which cost "Haikyuu!! - 04 [Hindi AAC 2.0 +
+	// English FLAC 2.0 + Japanese FLAC 2.0]" its shelf: the title carries no
+	// resolution, so isVideo is false, so nothing stopped the lossless-audio
+	// rule claiming an anime episode as an ALBUM.
+	if hasCRCTag(h) || hasFansubNumbering(h) {
+		return 5070
 	}
 	// Resolved once: several rules below ask the same question.
 	video := isVideo(h)
@@ -113,11 +131,6 @@ func categorizeText(h string) int {
 				return r.cat
 			}
 		}
-	}
-	// Fansub CRC32 before the video fallback, because these titles carry a
-	// resolution and would otherwise be filed as films.
-	if hasCRCTag(h) {
-		return 5070
 	}
 	// No keyword matched, so the video markers decide — and the resolution
 	// says which shelf. See isVideo for what counts and why.
@@ -141,6 +154,40 @@ func categorizeText(h string) int {
 // It runs AFTER the keyword rules — most titles match one of those and never
 // reach here — and only scans forward from a '[', so titles without brackets
 // pay one byte comparison per character.
+// hasFansubNumbering spots the other fansub convention: a bare episode number
+// between the title and a bracketed tag block, with no CRC32 to give it away.
+//
+//	[Toonworld4all] Naruto Shippuden - 015 [1080p BD x265 10bit]
+//	Haikyuu!! - 04 [Hindi AAC 2.0 + English FLAC 2.0]
+//	The Vision of Escaflowne - 04 [Director's Cut] [BD 1440 x 1080 x264 FLAC]
+//
+// Anime rather than plain television, because this naming belongs to fansub
+// groups specifically — every one of the 161 releases matching it on this
+// index is anime, and they were all shelved as FILMS because the number is not
+// attached to an "E" or an "S" and no keyword rule fires.
+//
+// The bracket is what makes this safe to key on a bare number: " - 04 " alone
+// would catch a film's part marker, but " - 04 [" is the fansub shape.
+func hasFansubNumbering(h string) bool {
+	for i := 0; i+4 < len(h); i++ {
+		if h[i] != '-' || h[i+1] != ' ' {
+			continue
+		}
+		j := i + 2
+		start := j
+		for j < len(h) && isDigit(h[j]) {
+			j++
+		}
+		if n := j - start; n < 1 || n > 3 {
+			continue
+		}
+		if j+1 < len(h) && h[j] == ' ' && h[j+1] == '[' {
+			return true
+		}
+	}
+	return false
+}
+
 func hasCRCTag(h string) bool {
 	for i := 0; i+9 < len(h); i++ {
 		if h[i] != '[' || h[i+9] != ']' {
@@ -322,7 +369,98 @@ func hasEpisodePattern(s string) bool {
 	if strings.Contains(s, "season ") && strings.Contains(s, "episode ") {
 		return true
 	}
-	return hasBareEpisodeToken(s)
+	return hasSpelledEpisodeNumber(s) || hasSeasonNumberForm(s) || hasBareEpisodeToken(s)
+}
+
+// hasSpelledEpisodeNumber spots "Episode 12" with NO season anywhere near it:
+//
+//	Death Note - Episode 12 - Love 1080p Hybrid ITA BDRip
+//	Kuroko's Basketball - Episode 37 - Thanks 1080p BDRip
+//
+// The season+episode rule above needs BOTH words, and hasBareEpisodeToken
+// needs the digits to follow the "e" immediately — so the spelled-out word
+// with the digits after it fell between the two and 102 releases sat in
+// MOVIES.
+//
+// Digits only, one to three. "Star Wars: Episode IV" is Roman and never
+// matches; measured over every 2xxx release on this index, none of the 102
+// hits is a film.
+func hasSpelledEpisodeNumber(s string) bool {
+	const word = "episode"
+	for i := 0; i+len(word) < len(s); i++ {
+		if !strings.HasPrefix(s[i:], word) {
+			continue
+		}
+		if i > 0 && alnumByte(s[i-1]) {
+			continue // mid-word
+		}
+		j := i + len(word)
+		if j < len(s) && s[j] == 's' {
+			j++ // "Episodes"
+		}
+		for j < len(s) && isSeparatorByte(s[j]) {
+			j++
+		}
+		start := j
+		for j < len(s) && isDigit(s[j]) {
+			j++
+		}
+		if n := j - start; n >= 1 && n <= 3 {
+			return true
+		}
+	}
+	return false
+}
+
+// hasSeasonNumberForm spots a season marker whose episode number is NOT
+// introduced by an "E":
+//
+//	Askimiz.Yeter.2024.S02.12.Bolum.1080p.TABII.WEB-DL   (Turkish: bolum = episode)
+//	Avatar the Last Airbender S02 Episodes [ 1 to 20 ]   (a merged-season file)
+//
+// hasEpisodePattern above requires an "e" after the season, so both forms
+// missed and landed in MOVIES.
+//
+// The trailing number is capped at three digits so a season followed by a YEAR
+// ("S01 2024") is not read as an episode, and it must stand alone so a
+// resolution or codec running on from it does not qualify.
+func hasSeasonNumberForm(s string) bool {
+	for i := 0; i+2 < len(s); i++ {
+		if s[i] != 's' || !isDigit(s[i+1]) {
+			continue
+		}
+		if i > 0 && alnumByte(s[i-1]) {
+			continue // mid-word, so "Ocean's 11" and codec tags are safe
+		}
+		j := i + 1
+		for j < len(s) && isDigit(s[j]) {
+			j++
+		}
+		k := j
+		for k < len(s) && isSeparatorByte(s[k]) {
+			k++
+		}
+		if k == j {
+			continue // season and what follows must actually be separated
+		}
+		if strings.HasPrefix(s[k:], "episode") {
+			return true
+		}
+		start := k
+		for k < len(s) && isDigit(s[k]) {
+			k++
+		}
+		if n := k - start; n >= 1 && n <= 3 {
+			if k >= len(s) || !alnumByte(s[k]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isSeparatorByte(b byte) bool {
+	return b == ' ' || b == '.' || b == '-' || b == '_'
 }
 
 // hasBareEpisodeToken spots an episode number with NO season beside it:
