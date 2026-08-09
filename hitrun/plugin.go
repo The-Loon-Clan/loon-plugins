@@ -23,6 +23,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"html/template"
 	"log"
 	"time"
 
@@ -31,6 +32,9 @@ import (
 
 //go:embed migrations/*.sql
 var migrations embed.FS
+
+//go:embed templates/*.html
+var tmplFS embed.FS
 
 const jobName = "Hit and Run Sweep"
 
@@ -49,6 +53,7 @@ type Plugin struct {
 	st   Store
 	job  core.Job
 	ctx  context.Context
+	h    *Handlers
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -88,6 +93,32 @@ func (p *Plugin) Provision(c *core.Core) error {
 			p.cfg.normalise().GraceDays, p.cfg.normalise().MaxWarnings)
 	} else {
 		log.Printf("hitrun: disabled (plugins.hitrun.enabled) — warnings still EXPIRE, none are issued")
+	}
+
+	// The member page, when the host wired a renderer. Mounted only for the
+	// web process — the api process serves machines, which have no use for a
+	// page explaining what somebody owes.
+	if c.Process != "api" && pageReady() {
+		tmpl, err := template.ParseFS(tmplFS, "templates/*.html")
+		if err != nil {
+			return fmt.Errorf("hitrun: parsing templates: %w", err)
+		}
+		p.h = NewHandlers(p.st, c.Auth, p.Policy)
+		p.h.SetTemplates(tmpl)
+		if c.Router != nil {
+			// Behind the host's auth chain: a member's own standing is nobody
+			// else's business, and an anonymous visitor deserves a login prompt
+			// rather than an empty page.
+			g := c.Router.Engine().Group("/hitrun")
+			g.Use(c.Auth.RequireUser(core.RoleUser)...)
+			g.GET("", p.h.StandingPage)
+			g.GET("/", p.h.StandingPage)
+		}
+	} else if c.Process != "api" {
+		// A host that wired no renderer gets the rules and the enforcement but
+		// no page. Say so: a member told their downloads are disabled, with
+		// nowhere to see why, is the worst version of this feature.
+		log.Printf("hitrun: no RenderPage seam wired — the member page at /hitrun is NOT mounted")
 	}
 
 	if c.Scheduler != nil {

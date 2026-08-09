@@ -255,3 +255,42 @@ func roundDuration(d time.Duration) string {
 		return fmt.Sprintf("%d minutes", int(d.Minutes()))
 	}
 }
+
+// AtRisk reports whether a snatch is heading for a warning if nothing changes.
+//
+// The member page needs this and Evaluate cannot answer it: Evaluate says what
+// to DO right now, so a snatch inside its notice period and one that was
+// already seeded to term both come back Satisfied. To a member those are
+// opposite situations — one needs action today, the other needs nothing ever.
+//
+// Deliberately independent of the clocks. Whether somebody has been gone one
+// day or nine does not change whether they owe seeding; it only changes how
+// soon it costs them. A page that hid a debt until the notice went out would be
+// telling members about problems only once it was too late to avoid them.
+func AtRisk(p Policy, s Snatch) bool {
+	p = p.normalise()
+	if !p.Enabled || s.Immune || s.Seeding {
+		return false
+	}
+	if s.TorrentSize > 0 && s.Downloaded <= s.TorrentSize/100*int64(p.BufferPercent) {
+		return false
+	}
+	if s.Seedtime >= int64(p.Seedtime) {
+		return false
+	}
+	if p.RatioSatisfies && s.Downloaded > 0 && s.Uploaded >= s.Downloaded {
+		return false
+	}
+	return true
+}
+
+// Owed is how much longer a snatch must be seeded, for a member to read.
+// Zero once the requirement is met.
+func Owed(p Policy, s Snatch) time.Duration {
+	p = p.normalise()
+	remaining := int64(p.Seedtime) - s.Seedtime
+	if remaining <= 0 {
+		return 0
+	}
+	return time.Duration(remaining) * time.Second
+}

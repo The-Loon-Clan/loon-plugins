@@ -39,6 +39,10 @@ type Store interface {
 	ClearWarning(ctx context.Context, userID int64, infoHash string) error
 	// Standing is what a member is shown about themselves.
 	Standing(ctx context.Context, userID int64) (Standing, error)
+	// UserSnatches returns everything one member has taken, for their own
+	// page. Unfiltered by policy: the page decides what to show, because the
+	// answer depends on rules the store does not know.
+	UserSnatches(ctx context.Context, userID int64) ([]Candidate, error)
 }
 
 // Candidate is one snatch plus the prewarning state the evaluator needs.
@@ -204,6 +208,45 @@ func (s *PGStore) ClearWarning(ctx context.Context, userID int64, infoHash strin
 			  WHERE user_id = $1 AND info_hash = $2 AND cleared_at IS NULL`, userID, infoHash)
 		return err
 	})
+}
+
+// UserSnatches is Candidates narrowed to one member, and WITHOUT the
+// already-warned exclusion — a member should still see a torrent they were
+// warned for, since reseeding it is how the warning stops mattering.
+func (s *PGStore) UserSnatches(ctx context.Context, userID int64) ([]Candidate, error) {
+	var out []Candidate
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT s.info_hash, t.name, t.size, s.downloaded, s.uploaded,
+			       s.seedtime, s.last_seen,
+			       COALESCE(p.sent_at, 'epoch'::timestamptz)
+			  FROM tracker.user_stats s
+			  JOIN tracker.torrents  t ON t.info_hash = s.info_hash
+			  LEFT JOIN prewarnings  p ON p.user_id = s.user_id AND p.info_hash = s.info_hash
+			 WHERE s.user_id = $1 AND s.downloaded > 0
+			 ORDER BY s.last_seen DESC`, userID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		now := time.Now()
+		for rows.Next() {
+			c := Candidate{Snatch: Snatch{UserID: userID}}
+			var prewarned time.Time
+			if err := rows.Scan(&c.Snatch.InfoHash, &c.TorrentName, &c.Snatch.TorrentSize,
+				&c.Snatch.Downloaded, &c.Snatch.Uploaded, &c.Snatch.Seedtime,
+				&c.Snatch.LastSeen, &prewarned); err != nil {
+				return err
+			}
+			c.Snatch.Seeding = now.Sub(c.Snatch.LastSeen) < activeWindow
+			if prewarned.Year() > 1971 {
+				c.PrewarnedAt = prewarned
+			}
+			out = append(out, c)
+		}
+		return rows.Err()
+	})
+	return out, err
 }
 
 func (s *PGStore) Standing(ctx context.Context, userID int64) (Standing, error) {

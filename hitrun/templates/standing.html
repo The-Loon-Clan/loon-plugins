@@ -1,0 +1,102 @@
+{{/* A member's own hit-and-run standing.
+
+     Ordered by what they can DO about it. The debts come first because
+     reseeding one is the only action that changes anything; the warnings are
+     below because they are a consequence, not a task. A page that opened with
+     the punishment would be telling somebody off rather than telling them how
+     to stop. */}}
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">Seeding requirements</h2>
+    </header>
+    <div class="panel__body">
+        {{if .Blocked}}
+        <p class="alert alert-danger">
+            <strong>Downloads are disabled.</strong>
+            You have {{.ActiveWarnings}} active warnings, which is the limit of {{.Policy.MaxWarnings}}.
+            Seeding still works, and warnings expire {{.ExpireDays}} days after they are issued —
+            so this lifts on its own.
+        </p>
+        {{else if .ActiveWarnings}}
+        <p class="alert alert-warning">
+            You have {{.ActiveWarnings}} of {{.Policy.MaxWarnings}} warnings.
+            Downloads are disabled at {{.Policy.MaxWarnings}}.
+        </p>
+        {{end}}
+
+        <p class="text-muted small">
+            Seed everything you download for <strong>{{.SeedtimeText}}</strong>.
+            {{if .Policy.RatioSatisfies}}Uploading back as much as you took also satisfies it, however long that takes.{{end}}
+            You are notified {{.Policy.PrewarnDays}} day(s) after you stop, and have
+            {{.Policy.GraceDays}} more day(s) to return before a warning is issued.
+        </p>
+    </div>
+</section>
+
+{{/* The actionable half. */}}
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            Needs seeding <span class="panel__grouping">({{len .AtRisk}})</span>
+        </h2>
+    </header>
+    <div class="panel__body panel__body--flush">
+        {{if .AtRisk}}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Torrent</th>
+                    <th class="data-table__num">Seeded</th>
+                    <th class="data-table__num">Still owed</th>
+                    <th class="data-table__nowrap">Last seen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .AtRisk}}
+                <tr>
+                    <td>{{.Name}}</td>
+                    <td class="data-table__num">{{.SeededText}}</td>
+                    <td class="data-table__num">{{.OwedText}}</td>
+                    <td class="data-table__nowrap">{{.LastSeenText}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <p class="text-muted">Nothing outstanding — everything you have taken is seeded or still seeding.</p>
+        {{end}}
+    </div>
+</section>
+
+{{if .Warnings}}
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            Warnings <span class="panel__grouping">({{len .Warnings}})</span>
+        </h2>
+    </header>
+    <div class="panel__body panel__body--flush">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Torrent</th>
+                    <th>Why</th>
+                    <th class="data-table__nowrap">Expires</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Warnings}}
+                <tr>
+                    <td>{{.Name}}</td>
+                    {{/* The reason the sweep recorded, in the numbers that were
+                         in force when it was issued — see the warnings table. */}}
+                    <td class="text-muted small">{{.Reason}}</td>
+                    <td class="data-table__nowrap">{{.ExpiresText}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</section>
+{{end}}

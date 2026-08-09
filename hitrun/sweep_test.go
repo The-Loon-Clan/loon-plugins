@@ -42,6 +42,10 @@ func (f *fakeStore) ExpireWarnings(context.Context, time.Time) (int, error) {
 }
 
 func (f *fakeStore) ClearWarning(context.Context, int64, string) error { return nil }
+
+func (f *fakeStore) UserSnatches(context.Context, int64) ([]Candidate, error) {
+	return f.cands, nil
+}
 func (f *fakeStore) Standing(context.Context, int64) (Standing, error) { return Standing{}, nil }
 
 func snatchFor(user int64, hash string, now time.Time) Candidate {

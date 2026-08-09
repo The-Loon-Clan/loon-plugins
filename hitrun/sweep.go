@@ -14,26 +14,6 @@ import (
 // snatch is due, so splitting them would mean three walks over the same rows
 // and three chances for them to disagree about the time.
 
-// Notifier is how a member is told. Both are optional: a host that wires
-// neither still gets the accounting, just silently, which is worse for the
-// member but not wrong for the site.
-type Notifier struct {
-	// Prewarn is the courtesy notice. It is the one message that can still
-	// change the outcome, so it names the torrent and what is required.
-	Prewarn func(ctx context.Context, userID int64, torrentName, reason string)
-	// Warn is the punishment notice.
-	Warn func(ctx context.Context, userID int64, torrentName, reason string)
-	// LimitReached fires when a member's active warnings hit the maximum.
-	//
-	// This plugin does NOT disable downloads itself. It cannot: the tracker
-	// owns the download path and belongs to another plugin, and reaching across
-	// to flip a flag in it would put the rule in one place and its enforcement
-	// somewhere that never mentions it. The host decides what losing privileges
-	// means — revoking the tracker entitlement, a role change, an email — and
-	// this is where it finds out.
-	LimitReached func(ctx context.Context, userID int64, activeWarnings int)
-}
-
 // SweepResult is what one pass did, for the job log.
 type SweepResult struct {
 	Considered int

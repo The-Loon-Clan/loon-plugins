@@ -222,3 +222,63 @@ func TestGraceIsMeasuredFromTheNoticeAndFromTheLastAnnounce(t *testing.T) {
 		t.Errorf("both spent = %s (%q), want warn", got.Verdict, got.Reason)
 	}
 }
+
+// The member page asks a different question from the sweep, and Evaluate
+// cannot answer it: a snatch inside its notice period and one seeded to term
+// both come back Satisfied, yet to a member those are opposite situations.
+func TestAtRiskSeesDebtBeforeTheClocksDo(t *testing.T) {
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	p := on()
+
+	// Left an hour ago, nowhere near the seedtime: no action is due yet, but
+	// the member owes seeding and should be told now rather than after the
+	// notice, when it is too late to avoid it.
+	fresh := offender(now)
+	fresh.LastSeen = now.Add(-time.Hour)
+	if got := Evaluate(p, fresh, time.Time{}, now); got.Verdict != Satisfied {
+		t.Fatalf("setup: want no action yet, got %s", got.Verdict)
+	}
+	if !AtRisk(p, fresh) {
+		t.Error("AtRisk = false for a snatch that owes seeding — the page would hide it")
+	}
+
+	// Everything that excuses a snatch also clears the debt.
+	for _, tc := range []struct {
+		name   string
+		mutate func(*Snatch)
+	}{
+		{"still seeding", func(s *Snatch) { s.Seeding = true }},
+		{"seedtime met", func(s *Snatch) { s.Seedtime = 604800 }},
+		{"full copy returned", func(s *Snatch) { s.Uploaded = s.Downloaded }},
+		{"below the buffer", func(s *Snatch) { s.Downloaded = 100 << 20 }},
+		{"exempt", func(s *Snatch) { s.Immune = true }},
+	} {
+		s := offender(now)
+		tc.mutate(&s)
+		if AtRisk(p, s) {
+			t.Errorf("%s: AtRisk = true, want false", tc.name)
+		}
+	}
+
+	// Off means nothing is owed.
+	if AtRisk(DefaultPolicy(), offender(now)) {
+		t.Error("AtRisk = true with the rules disabled")
+	}
+}
+
+func TestOwedCountsDownAndStopsAtZero(t *testing.T) {
+	p := on()
+	s := offender(time.Now())
+	s.Seedtime = 604800 - 3600 // an hour short
+	if got := Owed(p, s); got != time.Hour {
+		t.Errorf("Owed = %v, want 1h", got)
+	}
+	s.Seedtime = 604800
+	if got := Owed(p, s); got != 0 {
+		t.Errorf("Owed once met = %v, want 0", got)
+	}
+	s.Seedtime = 999999 // over-seeded: still zero, never negative
+	if got := Owed(p, s); got != 0 {
+		t.Errorf("Owed when over = %v, want 0", got)
+	}
+}
