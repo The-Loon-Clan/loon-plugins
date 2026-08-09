@@ -152,6 +152,20 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// must not fail boot — a host with no invite system is a legitimate host.
 	// Look it up softly; grantReward fails the individual purchase, and only
 	// for invite items, if it is missing.
+	// The perk granter, on the same terms as invites below: published by a
+	// sibling plugin that a host may simply not install, so its absence is a
+	// per-purchase failure rather than a boot one. A wrong TYPE under the right
+	// name is still a wiring bug and still fails loudly.
+	var perks pluginapi.PerkGranter
+	if svc, ok := c.Lookup(pluginapi.PerkGranterName); ok {
+		g, ok := svc.(pluginapi.PerkGranter)
+		if !ok {
+			return fmt.Errorf("store: %q is %T, not pluginapi.PerkGranter",
+				pluginapi.PerkGranterName, svc)
+		}
+		perks = g
+	}
+
 	var invites pluginapi.InviteGranter
 	if svc, ok := c.Lookup(pluginapi.InviteGranterName); ok {
 		if g, ok := svc.(pluginapi.InviteGranter); ok {
@@ -174,6 +188,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		points:  c.Points,
 		granter: granter,
 		invites: invites,
+		perks:   perks,
 		errs:    c.Errors,
 		core:    c,
 	}

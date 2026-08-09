@@ -111,3 +111,20 @@ func TestOnlyKnownKindsDoAnything(t *testing.T) {
 		t.Errorf("unknown kind gave (%v,%v), want (1,1)", up, down)
 	}
 }
+
+// The store sells tokens by KIND, and the kind is an admin-editable string on
+// a catalog row. A typo there must fail the purchase rather than mint a token
+// whose effect never arrives — points taken for nothing is the one failure a
+// member has no way to see.
+func TestGrantRejectsAnUnknownKind(t *testing.T) {
+	if Known("freeleach") {
+		t.Fatal("a typo was accepted as a kind")
+	}
+	// The guard lives in Store.Grant, which needs a database; Known is the
+	// predicate it uses, and the table below is the second line of defence.
+	tab := NewTable()
+	tab.Replace([]Active{{UserID: 1, InfoHash: "aa", Kind: "freeleach"}})
+	if up, down := tab.Factors(1, "aa", time.Now()); up != 1 || down != 1 {
+		t.Errorf("a mistyped kind altered accounting: (%v,%v)", up, down)
+	}
+}

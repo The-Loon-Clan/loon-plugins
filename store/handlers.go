@@ -31,7 +31,10 @@ type Handlers struct {
 	// cannot be declared in Metadata.Requires and a host without an invite
 	// system is legitimate. Only invite items need it — see grantReward.
 	invites pluginapi.InviteGranter
-	errs    core.ErrorReporter
+	// perks may be nil for the same reason invites may: a host with no tracker
+	// economy is legitimate, and only perk items need it.
+	perks pluginapi.PerkGranter
+	errs  core.ErrorReporter
 }
 
 // StorePage lists purchasable items and the viewer's balance.
@@ -239,6 +242,26 @@ func (h *Handlers) grantReward(ctx context.Context, userID int, item *Item) (str
 			return "", fmt.Errorf("grant invites: %w", err)
 		}
 		return label, nil
+	case RewardPerk:
+		// Same shape as invites: a host with no tracker economy is legitimate,
+		// so an absent capability fails THIS purchase rather than boot, and the
+		// caller unwinds the points.
+		if h.perks == nil {
+			return "", fmt.Errorf("perk item %d: no %s registered on this host",
+				item.ID, pluginapi.PerkGranterName)
+		}
+		// No default here, unlike invites. A perk kind is not a quantity — a
+		// wrong one has no sensible fallback, and guessing "freeleech" because
+		// an admin typed "freeleach" would sell a member something they did not
+		// choose. The perks plugin rejects an unknown kind, which is the check
+		// that matters; this only makes the empty case say so plainly.
+		if item.RewardRef == "" {
+			return "", fmt.Errorf("perk item %d has no reward_ref (the perk kind)", item.ID)
+		}
+		if err := h.perks.GrantPerk(ctx, int64(userID), item.RewardRef); err != nil {
+			return "", fmt.Errorf("grant perk %q: %w", item.RewardRef, err)
+		}
+		return item.RewardRef + " token", nil
 	default:
 		return "", fmt.Errorf("unknown reward_type %q on item %d", item.RewardType, item.ID)
 	}

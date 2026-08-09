@@ -18,6 +18,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 	"github.com/the-loon-clan/loon-plugins/tracker"
 	"github.com/the-loon-clan/loon/core"
 )
@@ -90,6 +91,11 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// this package.
 	if err := c.Register(ExtensionName, p); err != nil {
 		return fmt.Errorf("perks: registering %q: %w", ExtensionName, err)
+	}
+	// And the granter, under the shared pluginapi name, so the store can sell
+	// tokens without importing this package.
+	if err := c.Register(pluginapi.PerkGranterName, p); err != nil {
+		return fmt.Errorf("perks: registering %q: %w", pluginapi.PerkGranterName, err)
 	}
 	log.Printf("perks: tracker credit seam installed (tokens last %s)", p.tokenDuration())
 	return nil
@@ -171,6 +177,13 @@ func (p *Plugin) Spend(ctx context.Context, userID int64, kind Kind, infoHash st
 // Unspent is a member's wallet.
 func (p *Plugin) Unspent(ctx context.Context, userID int64) (map[Kind]int, error) {
 	return p.st.Unspent(ctx, userID)
+}
+
+// GrantPerk implements pluginapi.PerkGranter: the store calls this when a
+// member buys a token. Kind arrives as a plain string from an admin-editable
+// store item, so it is validated rather than trusted.
+func (p *Plugin) GrantPerk(ctx context.Context, userID int64, kind string) error {
+	return p.st.Grant(ctx, userID, Kind(kind))
 }
 
 // HasFreeleech answers the hit-and-run framework.

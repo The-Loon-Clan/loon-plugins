@@ -72,3 +72,23 @@ type InviteGranter interface {
 	// human label for the receipt ("1 invite"). n must be > 0.
 	GrantInvites(ctx context.Context, userID, n int) (label string, err error)
 }
+
+// PerkGranterName is the Core extension-registry key under which the perks
+// plugin publishes its PerkGranter.
+const PerkGranterName = "perks.granter"
+
+// PerkGranter mints a tracker perk token — the capability the perks plugin
+// exposes so the store can sell freeleech and double-upload without importing
+// the perks package.
+//
+// GRANT-ONLY, on the same terms as RankGranter: the caller has already debited
+// whatever the token cost, and this never touches the points ledger. It mints
+// an UNSPENT token; choosing which torrent to spend it on is the member's, and
+// happens later.
+type PerkGranter interface {
+	// GrantPerk credits userID one unspent token of the named kind
+	// ("freeleech", "upload2x"). An unknown kind is an error rather than a
+	// stored token, because points taken for an effect that will never arrive
+	// is the one failure a member cannot see.
+	GrantPerk(ctx context.Context, userID int64, kind string) error
+}

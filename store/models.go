@@ -17,6 +17,13 @@ const (
 	// not expire. Invokes pluginapi.InviteGranter, published by the host
 	// rather than a sibling plugin because invites live on users.
 	RewardInvite RewardType = "invite"
+
+	// RewardPerk credits a tracker perk token: RewardRef = the kind
+	// ("freeleech", "upload2x"). RewardDays is unused — a token does not
+	// expire while it is held, and the perks plugin owns how long it lasts
+	// once SPENT, which is a different clock and not the store's to set.
+	// Invokes pluginapi.PerkGranter.
+	RewardPerk RewardType = "perk"
 )
 
 // Item is a purchasable catalog entry priced in points. PointsCost is
@@ -56,6 +63,8 @@ func (i *Item) Icon() string {
 		return "shield"
 	case RewardInvite:
 		return "envelope"
+	case RewardPerk:
+		return "bolt"
 	}
 	// Deliberately generic. The migration comments name freeleech and points
 	// bonuses as the next reward types; until they exist, a neutral tag reads
