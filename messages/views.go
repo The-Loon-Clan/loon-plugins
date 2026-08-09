@@ -37,6 +37,15 @@ func parseTemplates() {
 	pageTmpl = template.Must(template.New("messages").Funcs(template.FuncMap{
 		"markdown":     func(s string) template.HTML { return deps.Markdown(s) },
 		"relativeTime": func(v any) string { return deps.RelativeTime(v) },
+		// initial is rune-safe on purpose: `slice name 0 1` counts BYTES, so
+		// a multi-byte username renders half a rune and an empty one is a
+		// template ERROR — which aborts the streamed page mid-render.
+		"initial": func(s string) string {
+			for _, r := range s {
+				return string(r)
+			}
+			return "?"
+		},
 		// dict is reimplemented: it builds a map, and unlike the two above
 		// there is no answer here that could drift.
 		"dict": func(values ...any) map[string]any {
