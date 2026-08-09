@@ -1,0 +1,48 @@
+{{define "release_group_bio_edit.html"}}
+    <style>
+        .bio-page { margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+        .bio-page textarea {
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 0.85rem;
+            min-height: 320px;
+            line-height: 1.5;
+        }
+        .bio-help { font-size: 0.78rem; color: var(--text-muted); }
+        .bio-help code { background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; font-size: 0.78em; }
+    </style>
+
+    <div class="container page-narrow bio-page">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 style="font-size:1.25rem;margin:0;">
+                <a href="/release-groups/{{.Group.Slug}}" style="color:var(--text-muted);text-decoration:none;">&larr; {{.Group.Name}}</a>
+                <span style="color:var(--text-muted);">/ bio</span>
+            </h1>
+        </div>
+
+        {{if eq .BioFlash "saved"}}
+        <div class="alert alert-success py-2 mb-3" style="font-size:0.85rem;">Bio updated.</div>
+        {{end}}
+
+        <form method="POST" action="/release-groups/{{.Group.Slug}}/bio">
+            <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+            <div class="mb-3">
+                <label class="form-label" style="font-size:0.85rem;font-weight:600;">Bio markdown</label>
+                <textarea name="bio_markdown" class="form-control" maxlength="16384" placeholder="## About us
+Brief intro...
+
+[Discord](https://discord.gg/your-server) · [Twitter](https://x.com/your-handle)
+
+![Mascot](https://your-host/mascot.png)">{{.BioSource}}</textarea>
+                <div class="bio-help mt-2">
+                    Markdown is supported: headings (<code>##</code>, <code>###</code>), bold (<code>**text**</code>), italics (<code>*text*</code>),
+                    links (<code>[label](url)</code>), images (<code>![alt](url)</code>), lists, blockquotes, code blocks. Emoji works inline (just paste 💧).
+                    Up to 16 KB.
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">Save bio</button>
+                <a href="/release-groups/{{.Group.Slug}}" class="btn btn-outline-secondary btn-sm">Cancel</a>
+            </div>
+        </form>
+    </div>
+{{end}}

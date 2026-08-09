@@ -1,0 +1,82 @@
+{{define "release_group_suggest.html"}}
+    <style>
+        .suggest-page { margin: 0 auto; padding: 2rem 1rem 4rem; }
+        .suggest-page .eyebrow {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+        .suggest-page h1 {
+            font-size: 1.65rem;
+            font-weight: 800;
+            margin: 0 0 1.5rem 0;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+        }
+        .suggest-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.6rem 1.8rem;
+        }
+    </style>
+
+    <div class="container page-narrow suggest-page">
+        <div class="eyebrow">Release Groups</div>
+        <h1>{{if .IsNew}}Suggest a Group{{else}}Suggest Edit · {{.Group.Name}}{{end}}</h1>
+
+        <div class="suggest-card">
+            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1.5rem;">
+                {{if .IsNew}}
+                    Propose a new release group. A moderator will review and approve before it appears on the public list.
+                {{else}}
+                    Suggest changes to this group's info. Leave fields blank to keep the current value. A moderator will review your changes.
+                {{end}}
+            </p>
+
+            <form method="POST" action="{{if .IsNew}}/suggest-release-group{{else}}/release-groups/{{.Group.Slug}}/suggest{{end}}">
+                <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+                <div class="mb-3">
+                    <label class="form-label small">Name {{if .IsNew}}*{{end}}</label>
+                    <input class="form-control form-control-sm" name="name"
+                           value="{{if not .IsNew}}{{.Group.Name}}{{end}}"
+                           {{if .IsNew}}required{{end}}>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small">Website URL</label>
+                    <input class="form-control form-control-sm" name="website_url" type="url"
+                           value="{{if not .IsNew}}{{.Group.WebsiteURL}}{{end}}"
+                           placeholder="https://…">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small">Logo URL</label>
+                    <input class="form-control form-control-sm" name="logo_url" type="url"
+                           value="{{if not .IsNew}}{{.Group.LogoURL}}{{end}}"
+                           placeholder="https://…">
+                    <div class="form-text" style="font-size:0.72rem;">Direct link to a square logo image.</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small">Description</label>
+                    <textarea class="form-control form-control-sm" name="description" rows="4">{{if not .IsNew}}{{.Group.Description}}{{end}}</textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small">Notes for moderator</label>
+                    <textarea class="form-control form-control-sm" name="notes" rows="2" placeholder="Optional context, sources, why this change…"></textarea>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center">
+                    <a href="{{if .IsNew}}/release-groups{{else}}/release-groups/{{.Group.Slug}}{{end}}" class="btn btn-outline-secondary btn-sm">Cancel</a>
+                    <button type="submit" class="btn btn-primary btn-sm">Submit Suggestion</button>
+                </div>
+            </form>
+        </div>
+    </div>
+{{end}}

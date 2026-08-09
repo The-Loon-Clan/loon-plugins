@@ -1,0 +1,273 @@
+{{define "release_groups_list.html"}}
+    <style>
+        .rg-page { margin: 0 auto; padding: 2rem 1rem 4rem; }
+        .rg-page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .rg-page-header .eyebrow {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+        .rg-page-header h1 {
+            font-size: 1.65rem;
+            font-weight: 800;
+            margin: 0;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+        }
+
+        .rg-search { margin-bottom: 1.5rem; }
+
+        .rg-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1rem;
+        }
+        .rg-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.2rem 1.4rem;
+            text-decoration: none;
+            transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        .rg-card:hover {
+            border-color: var(--blue);
+            background: var(--bg-elevated);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+        }
+        .rg-card:hover .rg-name { color: var(--blue); }
+
+        .rg-logo {
+            width: 56px;
+            height: 56px;
+            border-radius: 8px;
+            background: var(--bg-elevated);
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        .rg-logo.placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        .rg-info { min-width: 0; flex: 1; }
+        .rg-name {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            transition: color 0.2s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .rg-meta {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 0.35rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 600;
+        }
+        .rg-empty {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+    </style>
+
+    <div class="container page rg-page">
+        <div class="rg-page-header">
+            <div>
+                <div class="eyebrow">Groups</div>
+                <h1>Release Groups</h1>
+            </div>
+            <div class="d-flex gap-2">
+                {{if .IsAdmin}}
+                <button class="btn btn-outline-info btn-sm" id="scrape-now-btn" onclick="scrapeNow()" title="Trigger the Release Group Scraper job now (same as the play icon on /admin/jobs)">⟳ Scrape Now</button>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addGroupModal">+ Add Group</button>
+                {{end}}
+                <a class="btn btn-outline-secondary btn-sm" href="/suggest-release-group">Suggest a Group</a>
+            </div>
+        </div>
+
+        {{if eq (.Suggested) "1"}}
+        <div class="alert alert-success py-2" style="font-size:0.85rem;">Thanks — your suggestion is awaiting review.</div>
+        {{end}}
+
+        <ul class="nav tabs mb-3">
+            <li class="nav-item">
+                <a class="nav-link {{if eq .Tab "confirmed"}}active{{end}}" href="/release-groups?tab=confirmed">
+                    Confirmed <span class="tab-count">{{.ConfirmedCount}}</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{if eq .Tab "unknown"}}active{{end}}" href="/release-groups?tab=unknown">
+                    Unknown <span class="tab-count">{{.UnknownCount}}</span>
+                </a>
+            </li>
+        </ul>
+
+        <form class="rg-search" method="GET" action="/release-groups">
+            <input type="hidden" name="tab" value="{{.Tab}}">
+            <div class="input-group input-group-sm">
+                <input type="text" class="form-control" name="q" placeholder="Search groups…" value="{{.Query}}">
+                <button class="btn btn-outline-secondary" type="submit">Search</button>
+                {{if .Query}}<a href="/release-groups?tab={{.Tab}}" class="btn btn-outline-secondary">Clear</a>{{end}}
+            </div>
+        </form>
+
+        {{if .Groups}}
+        <div class="rg-grid">
+            {{range .Groups}}
+            <a class="rg-card" href="/release-groups/{{.Slug}}">
+                {{if .LogoURL}}
+                <img class="rg-logo" src="{{.LogoURL}}" alt="">
+                {{else}}
+                <div class="rg-logo placeholder">{{initial .Name}}</div>
+                {{end}}
+                <div class="rg-info">
+                    <div class="rg-name">{{.Name}}</div>
+                    <div class="rg-meta">
+                        {{.NzbCountCached}} release{{if ne .NzbCountCached 1}}s{{end}}
+                        {{if .ArchiveTorrentCountCached}} &middot; {{.ArchiveTorrentCountCached}} on nekoBT{{end}}
+                        {{if .WebsiteURL}} &middot; site{{end}}
+                    </div>
+                </div>
+            </a>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="rg-empty">
+            {{if .Query}}No groups match &ldquo;{{.Query}}&rdquo;.{{else}}No release groups in this tab yet.{{end}}
+        </div>
+        {{end}}
+
+        {{.Pagination}}
+    </div>
+
+    {{if .IsAdmin}}
+    <div class="modal fade" id="addGroupModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="/admin/release-groups-create">
+                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                    <div class="modal-header">
+                        <h6 class="modal-title">Add Release Group</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-2"><label class="form-label small">Name *</label><input class="form-control form-control-sm" name="name" id="add-name" required></div>
+                        <div class="mb-2"><label class="form-label small">Website URL</label><input class="form-control form-control-sm" name="website_url" type="url"></div>
+                        <div class="mb-2">
+                            <label class="form-label small">Logo URL</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control form-control-sm" name="logo_url" id="add-logo-url" type="text" placeholder="Paste a URL then click Scrape">
+                                <button type="button" class="btn btn-outline-info" onclick="scrapeLogoFromModal('add-name', 'add-logo-url', 'add-logo-status')">Scrape</button>
+                            </div>
+                            <div id="add-logo-status" class="form-text" style="font-size:0.72rem;"></div>
+                        </div>
+                        <div class="mb-2"><label class="form-label small">Description</label><textarea class="form-control form-control-sm" name="description" rows="3"></textarea></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-sm">Create</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {{end}}
+
+    {{if .IsAdmin}}
+    <script>
+    // Scrape Now: triggers the Release Group Scraper background job.
+    // Same as clicking the play icon on /admin/jobs but discoverable
+    // from the page admins are already on. Returns immediately — the
+    // job runs in the background; the operator can watch progress on
+    // /admin/jobs.
+    function scrapeNow() {
+        var btn = document.getElementById('scrape-now-btn');
+        var orig = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '⟳ Triggering…';
+        fetch('/admin/release-groups-scrape', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}})
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (d.ok) {
+                    btn.textContent = '⟳ Job triggered';
+                    setTimeout(function(){
+                        btn.disabled = false;
+                        btn.textContent = orig;
+                    }, 2500);
+                } else {
+                    btn.textContent = '⟳ ' + (d.error || 'failed');
+                    setTimeout(function(){
+                        btn.disabled = false;
+                        btn.textContent = orig;
+                    }, 4000);
+                }
+            })
+            .catch(function(){
+                btn.textContent = '⟳ request failed';
+                setTimeout(function(){
+                    btn.disabled = false;
+                    btn.textContent = orig;
+                }, 4000);
+            });
+    }
+
+    // Scrape from inside an Add/Edit modal. Reads the current value of
+    // the Logo URL field, posts it through the same image-bomb-defended
+    // pipeline the scraper job uses, and replaces the field value with
+    // the local /static/release_groups/<slug>.jpg path on success. Lets
+    // an admin verify the result before saving the form.
+    function scrapeLogoFromModal(nameId, logoId, statusId) {
+        var name  = document.getElementById(nameId).value.trim();
+        var logo  = document.getElementById(logoId).value.trim();
+        var stat  = document.getElementById(statusId);
+        if (!name)  { stat.textContent = 'Set the Name field first.'; stat.style.color = '#fbbf24'; return; }
+        if (!logo)  { stat.textContent = 'Paste a logo URL first.';   stat.style.color = '#fbbf24'; return; }
+        stat.textContent = 'Fetching…';
+        stat.style.color = 'var(--text-muted)';
+        var fd = new FormData();
+        fd.append('name', name);
+        fd.append('url',  logo);
+        fetch('/admin/release-groups-scrape-logo', {method:'POST', body: fd})
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (d.ok) {
+                    document.getElementById(logoId).value = d.local_url;
+                    stat.textContent = '✓ Saved to ' + d.local_url;
+                    stat.style.color = '#4ade80';
+                } else {
+                    stat.textContent = '✕ ' + (d.error || 'failed');
+                    stat.style.color = '#f87171';
+                }
+            })
+            .catch(function(e){
+                stat.textContent = '✕ request failed';
+                stat.style.color = '#f87171';
+            });
+    }
+    </script>
+    {{end}}
+{{end}}

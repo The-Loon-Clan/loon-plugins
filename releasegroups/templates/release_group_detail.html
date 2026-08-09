@@ -1,0 +1,893 @@
+{{define "release_group_detail.html"}}
+    {{.NzbCardCSS}}
+    <style>
+        .rg-page { margin: 0 auto; padding: 2rem 1rem 4rem; }
+        .rg-header-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.6rem 1.8rem;
+            margin-bottom: 1.75rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: flex-start;
+        }
+        .rg-header-logo {
+            width: 96px;
+            height: 96px;
+            border-radius: 12px;
+            background: var(--bg-elevated);
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        .rg-header-logo.placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.4rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        .rg-header-info { min-width: 0; flex: 1; }
+        .rg-header-info .eyebrow {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+        .rg-header-info h1 {
+            font-size: 1.7rem;
+            font-weight: 800;
+            margin: 0 0 0.5rem 0;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+        }
+        .rg-header-info .desc {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            line-height: 1.55;
+            margin: 0.5rem 0 0.75rem 0;
+        }
+        .rg-header-stats {
+            display: flex;
+            gap: 1.5rem;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+        .rg-header-stats strong { color: var(--text-primary); font-size: 0.95rem; display: block; }
+        .rg-header-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+        .badge-status {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-weight: 700;
+        }
+        .badge-confirmed { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+        .badge-unknown   { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+    </style>
+
+    <div class="container page rg-page">
+        {{/* Claim + verify flash banners. Strings come from the
+             handler via .ClaimFlash / .VerifyFlash (set off the
+             handler's redirect target — see release_group_handler.go).
+             Migration 222 + 223. */}}
+        {{$claimFlash := .ClaimFlash}}
+        {{$verifyFlash := .VerifyFlash}}
+        {{if $claimFlash}}
+        <div class="alert {{if eq $claimFlash "created"}}alert-info{{else if eq $claimFlash "bad_url"}}alert-warning{{else}}alert-secondary{{end}} py-2 mb-3" style="font-size:0.85rem;">
+            {{if eq $claimFlash "created"}}Claim filed. Add the verification token below to your URL and click Verify.
+            {{else if eq $claimFlash "already_owner"}}You already own this group.
+            {{else if eq $claimFlash "already_pending"}}You already have a pending claim on this group.
+            {{else if eq $claimFlash "bad_url"}}Verification URL must start with http:// or https://.
+            {{else}}{{$claimFlash}}{{end}}
+        </div>
+        {{end}}
+        {{if $verifyFlash}}
+        <div class="alert {{if eq $verifyFlash "approved"}}alert-success{{else if eq $verifyFlash "token_missing"}}alert-warning{{else if eq $verifyFlash "cooldown"}}alert-secondary{{else}}alert-danger{{end}} py-2 mb-3" style="font-size:0.85rem;">
+            {{if eq $verifyFlash "approved"}}Verified — you're now an owner of this release group.
+            {{else if eq $verifyFlash "token_missing"}}We couldn't find your verification code on that page. Make sure the snippet (or comment) is published at the URL you nominated, then try again.
+            {{else if eq $verifyFlash "cooldown"}}Slow down — wait a minute between verification attempts.
+            {{else if eq $verifyFlash "no_claim"}}No pending claim to verify.
+            {{else}}Verification failed. Check the URL and try again.{{end}}
+        </div>
+        {{end}}
+
+        <div class="rg-header-card">
+            {{if .Group.LogoURL}}
+            <img class="rg-header-logo" src="{{.Group.LogoURL}}" alt="">
+            {{else}}
+            <div class="rg-header-logo placeholder">{{initial .Group.Name}}</div>
+            {{end}}
+            <div class="rg-header-info">
+                <div class="eyebrow">Release Group</div>
+                <h1>
+                    {{.Group.Name}}
+                    {{if eq .Group.Status "confirmed"}}<span class="badge-status badge-confirmed">Confirmed</span>{{else}}<span class="badge-status badge-unknown">Unknown</span>{{end}}
+                    {{if .Owners}}<span class="badge bg-success bg-opacity-25 text-success ms-2" style="font-size:0.6rem;vertical-align:middle;" title="Claimed by an owner">Owned</span>{{end}}
+                </h1>
+                {{/* External links — admin-set. WebsiteURL is the
+                     group's own site (used as the claim-verify URL
+                     when nekoBT is unset); ScrapeURL is the alternate
+                     archive source (Nyaa user, etc., per migration 236).
+                     Show both, deduped if they happen to point at the
+                     same host so we don't render "Nyaa ↗ · Nyaa ↗". */}}
+                {{if or .Group.WebsiteURL .Group.ScrapeURL}}
+                <span style="font-size:0.85rem;">
+                    {{if .Group.WebsiteURL}}
+                    <a href="{{.Group.WebsiteURL}}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;" title="{{.Group.WebsiteURL}}">{{urlPlatform .Group.WebsiteURL}} ↗</a>
+                    {{end}}
+                    {{if and .Group.ScrapeURL (ne .Group.ScrapeURL .Group.WebsiteURL)}}
+                    {{if .Group.WebsiteURL}}<span style="color:var(--text-muted);margin:0 0.3rem;">·</span>{{end}}
+                    <a href="{{.Group.ScrapeURL}}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;" title="{{.Group.ScrapeURL}}">{{urlPlatform .Group.ScrapeURL}} ↗</a>
+                    {{end}}
+                </span>
+                {{end}}
+                {{if .Group.Description}}
+                <div class="desc">{{.Group.Description}}</div>
+                {{end}}
+                {{if .Owners}}
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.4rem;">
+                    Owners: {{range $i, $o := .Owners}}{{if $i}}, {{end}}<a href="/u/{{$o.Username}}" style="color:var(--text);text-decoration:none;">@{{$o.Username}}</a>{{if ne $o.Role "owner"}} <span style="opacity:0.6;">({{$o.Role}})</span>{{end}}{{end}}
+                </div>
+                {{end}}
+                <div class="rg-header-stats">
+                    <div><strong>{{.Total}}</strong> release{{if ne .Total 1}}s{{end}}</div>
+                    {{if .Group.ArchiveTorrentCountCached}}
+                    <div>
+                        {{/* Header archive-count link: prefer nekoBT
+                             group when the id is set; otherwise fall
+                             back to the configured scrape source +
+                             scrape URL (typically a Nyaa user page). */}}
+                        {{if .Group.NekobtGroupID}}
+                        <a href="https://nekobt.to/groups/{{.Group.NekobtGroupID}}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;" title="Open this group on nekoBT">
+                            <strong>{{.Group.ArchiveTorrentCountCached}}</strong> on nekoBT ↗
+                        </a>
+                        {{else if and (eq .Group.ScrapeSource "nyaa") .Group.ScrapeURL}}
+                        <a href="{{.Group.ScrapeURL}}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;" title="Open this user on Nyaa">
+                            <strong>{{.Group.ArchiveTorrentCountCached}}</strong> on Nyaa ↗
+                        </a>
+                        {{else}}
+                        <span title="Releases in this group's archive — see Torrents tab"><strong>{{.Group.ArchiveTorrentCountCached}}</strong> in archive</span>
+                        {{end}}
+                    </div>
+                    {{end}}
+                    <div><strong>{{.FollowerCount}}</strong> follower{{if ne .FollowerCount 1}}s{{end}}</div>
+                    <div><strong>{{.Group.CreatedAt.Format "Jan 2006"}}</strong> first seen</div>
+                    <div>
+                        <a href="/browse?release_group={{.Group.Slug}}" style="color:var(--blue);text-decoration:none;font-size:0.8rem;">Open in search ↗</a>
+                    </div>
+                </div>
+            </div>
+            <div class="rg-header-actions">
+                {{if .User}}
+                <form method="POST" action="/release-groups/{{.Group.Slug}}/follow" class="d-inline">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                    <button id="rg-follow-btn" type="submit" class="btn btn-sm {{if .ViewerIsFollowing}}btn-success{{else}}btn-outline-primary{{end}}"
+                            data-following="{{if .ViewerIsFollowing}}1{{else}}0{{end}}">
+                        <span id="rg-follow-label">{{if .ViewerIsFollowing}}Following{{else}}Follow{{end}}</span>
+                    </button>
+                </form>
+                {{end}}
+                {{if and .User (not .ViewerIsOwner) (not .ViewerClaim)}}
+                <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#claimGroupModal">Claim ownership</button>
+                {{end}}
+                <a href="/release-groups/{{.Group.Slug}}/suggest" class="btn btn-outline-secondary btn-sm">Suggest Edit</a>
+                {{if .IsAdmin}}
+                <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editGroupModal">Edit</button>
+                {{end}}
+            </div>
+        </div>
+
+        {{/* Pending-claim verification panel — only shown to the user
+             who filed the claim, while it's still pending. Surfaces
+             the token, the URL we'll scrape, and the Verify button.
+             Once approved this block disappears (ViewerClaim is nil
+             after resolution) and the user moves into the Owners
+             list above. */}}
+        {{/* Hide-torrent action flash (mig 231). Whitelisted enum so
+             a hand-edited query string can't inject content. */}}
+        {{if .HideFlash}}
+        <div class="alert {{if eq .HideFlash "ok"}}alert-success{{else}}alert-warning{{end}} py-2 mb-3" style="font-size:0.85rem;">
+            {{if eq .HideFlash "ok"}}Hidden from this group's archive.
+            {{else if eq .HideFlash "forbidden"}}Only owners (or admins) can hide torrents.
+            {{else if eq .HideFlash "bad_id"}}Couldn't identify which torrent to hide.
+            {{else}}{{.HideFlash}}{{end}}
+        </div>
+        {{end}}
+
+        {{/* Bio flash banner (migration 228). Set by the bio-edit
+             handler's redirect target; whitelisted to known values
+             so a hand-edited query string can't inject content. */}}
+        {{if .BioFlash}}
+        <div class="alert {{if eq .BioFlash "saved"}}alert-success{{else}}alert-warning{{end}} py-2 mb-3" style="font-size:0.85rem;">
+            {{if eq .BioFlash "saved"}}Bio updated.
+            {{else if eq .BioFlash "forbidden"}}Only owners can edit the bio.
+            {{else}}{{.BioFlash}}{{end}}
+        </div>
+        {{end}}
+
+        {{/* Owner-authored bio (migration 228). Rendered above the
+             scraper-sourced Description. Owners + admins see an
+             "Edit bio" affordance below; the bio card itself only
+             renders when content exists, so a fresh group doesn't
+             show an empty box. */}}
+        {{if .BioHTML}}
+        <div class="card mb-3" style="background:var(--bg-surface);border-color:var(--border);">
+            <div class="card-body rg-bio" style="font-size:0.9rem;line-height:1.55;">
+                {{.BioHTML}}
+            </div>
+        </div>
+        {{end}}
+        {{if or .ViewerIsOwner .IsAdmin}}
+        <div class="mb-3">
+            <a href="/release-groups/{{.Group.Slug}}/bio" class="btn btn-outline-secondary btn-sm" style="font-size:0.75rem;">
+                {{if .BioHTML}}Edit bio{{else}}Write a bio &rarr;{{end}}
+            </a>
+        </div>
+        {{end}}
+
+        {{if and .ViewerClaim (eq .ViewerClaim.Status "pending")}}
+        {{/* Snippets mirror the two presentations a release-group page
+             typically wants — a 40px social icon (matches the pattern
+             nekobt groups use alongside Discord/Telegram/etc.) and a
+             text button ("Find us on ameNZB") for pages that prefer
+             a labelled CTA. We host the icon ourselves so the preview
+             survives third-party favicon fetchers — drop the file at
+             web/static/img/amenzb-icon.png (128×128 PNG). Both hrefs
+             carry ?owner=<id> so only the legitimate claimant gets a
+             snippet that names their own user id. */}}
+        {{/* Verification snippet — minimal anchor whose href carries
+             the per-claim token in the path. Sanitizing platforms (e.g.
+             nekobt's markdown renderer strips HTML comments down to
+             `<!---->`) preserve hrefs even when they strip styles,
+             comments, and event handlers, so the token survives in the
+             rendered output. Visitors see a small "amnzb" link; our
+             scraper finds the token substring in the page source. */}}
+        {{$tok := .ViewerClaim.VerificationToken}}
+        {{$verifyURL := printf "%s/v/%s" $.BaseURL $tok}}
+        {{$hiddenSnippet := printf `<a href="%s">ameNZB 💧</a>` $verifyURL}}
+        <div class="card mb-3" style="border-color:var(--blue);">
+            <div class="card-body" style="font-size:0.85rem;">
+                <h6 style="margin:0 0 0.5rem;font-weight:600;">Your pending ownership claim</h6>
+                <p style="margin:0 0 0.8rem;color:var(--text-muted);">
+                    Pick one of the snippets below and paste it into your group's description at
+                    {{if .ViewerClaim.VerificationURL}}<a href="{{.ViewerClaim.VerificationURL}}" target="_blank" rel="noopener" style="color:var(--blue);">{{.ViewerClaim.VerificationURL}} ↗</a>{{else}}the URL you nominated{{end}}.
+                    Each snippet bundles a unique verification token in a trailing comment — that's the part our scraper matches on, so you only have to paste one thing. Hit <strong>Verify now</strong> when it's live.
+                </p>
+
+                {{/* Single presentation: tiny anchor whose href carries
+                     the token. Survives sanitizing markdown renderers
+                     (nekobt, etc.) that strip HTML comments — sanitizers
+                     keep hrefs even when they kill styles and comments.
+                     Renders as a small "amnzb" link the user can keep
+                     in their description footer. */}}
+                <div class="mb-3" style="background:var(--bg-elevated);border-radius:6px;padding:0.85rem 0.95rem;">
+                    <div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:0.5rem;">
+                        Copy this snippet &amp; paste it anywhere in your description
+                    </div>
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <a href="{{$verifyURL}}" target="_blank" rel="noopener" style="font-size:0.85rem;color:var(--blue);">ameNZB &#128167;</a>
+                        <span style="flex:1;font-size:0.78rem;color:var(--text-muted);">
+                            Renders as a small "ameNZB 💧" link &mdash; your per-claim token lives in the URL.
+                        </span>
+                        <button type="button" class="btn btn-primary btn-sm"
+                                onclick="navigator.clipboard.writeText(document.getElementById('rg-snippet-hidden').textContent); this.textContent='Copied';">
+                            Copy HTML
+                        </button>
+                    </div>
+                    <code id="rg-snippet-hidden" style="display:block;background:var(--bg-base);padding:0.45rem 0.7rem;border-radius:4px;font-size:0.78rem;user-select:all;overflow:auto;white-space:nowrap;">{{$hiddenSnippet}}</code>
+                    <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.5rem;">
+                        The token in the href is unique to this claim &mdash; nobody else has the same one. Sanitizing platforms (nekobt strips HTML comments) preserve hrefs, so this snippet survives where a plain comment doesn't.
+                    </div>
+                </div>
+
+                <form method="POST" action="/release-groups/{{.Group.Slug}}/claim/verify" class="d-inline">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                    <button type="submit" class="btn btn-primary btn-sm">Verify now</button>
+                </form>
+                {{if gt .ViewerClaim.VerificationAttempts 0}}
+                <span style="margin-left:0.5rem;color:var(--text-muted);font-size:0.75rem;">{{.ViewerClaim.VerificationAttempts}} attempt{{if ne .ViewerClaim.VerificationAttempts 1}}s{{end}} so far</span>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+
+        {{/* Claim modal — shown when ViewerClaim is nil. The default
+             verification URL is the group's own website_url; user can
+             override (e.g. point at their twitter bio when the group
+             has no central site). The preview shows the exact icon-
+             link HTML the user will copy on the next screen so they
+             can decide before filing whether the flow fits their
+             page. ClaimBacklink is built handler-side from
+             h.baseURL + slug + ?owner=<session-user-id>. */}}
+        {{if and .User (not .ViewerIsOwner) (not .ViewerClaim)}}
+        <div class="modal fade" id="claimGroupModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <form method="POST" action="/release-groups/{{.Group.Slug}}/claim">
+                        <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                        <div class="modal-header">
+                            <h5 class="modal-title" style="font-size:1rem;">Claim ownership of {{.Group.Name}}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body" style="font-size:0.85rem;">
+                            <p style="color:var(--text-muted);">
+                                On the next step we'll generate a one-time verification token and give you a small HTML snippet to paste into your group's description. We scrape the URL you nominate, find the token, and auto-approve the claim.
+                            </p>
+                            <p style="color:var(--text-muted);">
+                                Don't have a website? Free link-in-bio services like <a href="https://nekobt.to" target="_blank" rel="noopener" style="color:var(--blue);">nekobt.to</a> work for this in a minute.
+                            </p>
+
+                            <div class="mb-3">
+                                <label class="form-label" style="font-size:0.8rem;">Verification URL</label>
+                                <input type="url" name="verification_url" class="form-control form-control-sm"
+                                    value="{{.Group.WebsiteURL}}"
+                                    placeholder="https://nekobt.to/yourhandle or your own site"
+                                    required>
+                                <div class="form-text" style="font-size:0.72rem;">
+                                    Defaults to the group's listed website. Override with any URL you control: a nekobt.to page, a pinned twitter post, your github profile, etc.
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" style="font-size:0.8rem;">Optional note <span class="text-muted">(visible to admins + voters)</span></label>
+                                <textarea name="claim_message" class="form-control form-control-sm" rows="2" maxlength="1000"
+                                    placeholder="I run @ToonsHub. We'll put the snippet in our pinned bio."></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary btn-sm">Continue</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {{end}}
+
+        {{/* News flash banner. Strings come from release_group_handler.go's
+             redirect target (?news=...). Migration 222. */}}
+        {{if .NewsFlash}}
+        <div class="alert {{if eq .NewsFlash "posted"}}alert-success{{else if eq .NewsFlash "deleted"}}alert-secondary{{else}}alert-warning{{end}} py-2 mb-3" style="font-size:0.85rem;">
+            {{if eq .NewsFlash "posted"}}Posted. Followers have been notified.
+            {{else if eq .NewsFlash "deleted"}}Post deleted.
+            {{else if eq .NewsFlash "forbidden"}}Only owners and admins can manage news posts.
+            {{else if eq .NewsFlash "missing_title"}}Title is required.
+            {{else if eq .NewsFlash "not_found"}}That post no longer exists.
+            {{else}}{{.NewsFlash}}{{end}}
+        </div>
+        {{end}}
+
+        {{/* News section (migration 222). Owners + admins see the
+             "New post" form above the list; everyone sees the list.
+             Soft-deleted posts are filtered server-side via the
+             partial index on (group, time) WHERE deleted_at IS NULL. */}}
+        {{$canPostNews := or .IsAdmin .ViewerIsOwner}}
+        {{if or $canPostNews .NewsPosts}}
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 style="font-size:0.85rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin:0;">News</h6>
+            <span style="font-size:0.78rem;color:var(--text-muted);">{{.NewsTotal}} post{{if ne .NewsTotal 1}}s{{end}}</span>
+        </div>
+
+        {{if $canPostNews}}
+        <details class="card mb-3" style="border-color:var(--blue);">
+            <summary class="card-header" style="font-size:0.82rem;font-weight:600;cursor:pointer;list-style:none;">
+                + New post <span style="color:var(--text-muted);font-weight:400;font-size:0.78rem;">(visible to everyone; fans out to all followers)</span>
+            </summary>
+            <div class="card-body">
+                <form method="POST" action="/release-groups/{{.Group.Slug}}/news">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                    <div class="mb-2">
+                        <input type="text" name="title" class="form-control form-control-sm" placeholder="Post title (required, ≤ 200 chars)" maxlength="200" required>
+                    </div>
+                    <div class="mb-2">
+                        <textarea name="body" class="form-control form-control-sm" rows="4" placeholder="Post body — describe what's new, what's coming, what you're recruiting for…" maxlength="10000"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">Publish</button>
+                </form>
+            </div>
+        </details>
+        {{end}}
+
+        {{if .NewsPosts}}
+        <div class="mb-4">
+            {{range .NewsPosts}}
+            <div class="card mb-2" id="news-{{.ID}}">
+                <div class="card-body" style="font-size:0.88rem;">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div style="min-width:0;">
+                            <h6 style="margin:0;font-size:0.95rem;font-weight:600;">{{.Title}}</h6>
+                            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
+                                by <a href="/u/{{.AuthorName}}" style="color:var(--text);text-decoration:none;">@{{.AuthorName}}</a> &middot; {{.CreatedAt.Format "Jan 2, 2006 15:04"}}
+                            </div>
+                        </div>
+                        {{if or $.IsAdmin (and $.User (eq .AuthorUserID $.User.ID)) $.ViewerIsOwner}}
+                        <form method="POST" action="/release-groups/{{$.Group.Slug}}/news/{{.ID}}/delete" onsubmit="return confirm('Delete this post?');" style="margin:0;">
+                            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.7rem;">Delete</button>
+                        </form>
+                        {{end}}
+                    </div>
+                    {{if .Body}}<div style="color:var(--text);">{{markdown .Body}}</div>{{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+        {{else if $canPostNews}}
+        <div class="text-center py-3 mb-3" style="color:var(--text-muted);font-size:0.82rem;">
+            No posts yet. Use the form above to introduce your group, announce a new project, or recruit.
+        </div>
+        {{end}}
+        {{end}}
+
+        {{/* Tabs: NZBs (what we have) | Torrents (what nekoBT has).
+             BOTH tabs render unconditionally so the visual cue is
+             always present — empty states inside each pane explain
+             what's missing rather than hiding the tab outright. The
+             owner-only Refresh + Bulk-request controls live inside
+             the Torrents pane so they're discoverable without a
+             separate /archive page hunt. */}}
+        {{$canManage := or .ViewerIsOwner .IsAdmin}}
+        <ul class="nav tabs mb-3" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#rgNzbsPane" type="button" role="tab">
+                    NZBs <span class="tab-count">{{.Total}}</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#rgTorrentsPane" type="button" role="tab">
+                    Torrents
+                    {{/* Live count of visible rows in external_release_group_torrents.
+                         Bumps within 30 min of a feed cross-write, instead of waiting
+                         for the daily sweep to refresh archive_torrent_count_cached. */}}
+                    {{if .ArchiveTotal}}
+                    <span class="tab-count">{{.ArchiveTotal}}</span>
+                    {{end}}
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            {{/* NZBs pane — the existing cover-card grid. */}}
+            <div id="rgNzbsPane" class="tab-pane fade show active" role="tabpanel">
+                {{if .Nzbs}}
+                <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3">
+                    {{range .Nzbs}}
+                    <div class="col">{{.Card}}</div>
+                    {{end}}
+                </div>
+                {{else}}
+                <div class="text-center py-5" style="color:var(--text-muted);">
+                    No releases linked to this group yet.
+                </div>
+                {{end}}
+                {{.Pagination}}
+            </div>
+
+            {{/* Torrents pane — per-row layout sourced from the
+                 external_release_group_torrents cache (mig 229). Owner /
+                 admin gets Refresh + Request-all controls inline. */}}
+            <div id="rgTorrentsPane" class="tab-pane fade" role="tabpanel">
+                {{/* Archive source for this group — nyaa-only groups
+                     (no NekobtGroupID, ScrapeSource=nyaa) get "Nyaa"
+                     wording in chrome (Refresh button, empty-state
+                     copy) instead of the default "nekoBT". Per-row
+                     buttons key off .ImportedNyaaID separately so a
+                     mixed-source group still renders correctly. */}}
+                {{$isNyaaSource := and (eq .Group.ScrapeSource "nyaa") (eq .Group.NekobtGroupID "")}}
+                {{$sourceLabel  := "nekoBT"}}
+                {{if $isNyaaSource}}{{$sourceLabel = "Nyaa"}}{{end}}
+                {{if $canManage}}
+                <div class="d-flex gap-2 mb-3 flex-wrap">
+                    <form method="POST" action="/release-groups/{{.Group.Slug}}/archive/refresh" class="d-inline">
+                        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Refresh from {{$sourceLabel}}</button>
+                    </form>
+                    {{if .ArchiveTorrents}}
+                    <form method="POST" action="/release-groups/{{.Group.Slug}}/archive/request-missing" class="d-inline"
+                          onsubmit="return confirm('File a download request for every Missing release on this page (up to 50)?');">
+                        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                        <button type="submit" class="btn btn-outline-success btn-sm">Request all missing</button>
+                    </form>
+                    {{end}}
+                    {{if .Group.ArchiveLastRefreshAt}}
+                    <span class="align-self-center" style="font-size:0.78rem;color:var(--text-muted);">last refreshed {{relativeTime .Group.ArchiveLastRefreshAt}}</span>
+                    {{end}}
+                </div>
+                {{end}}
+
+                {{if .ArchiveTorrents}}
+                {{/* View toggle — same pattern as /browse and /trending.
+                     localStorage key 'rg_torrents_view' so the user's
+                     pick survives a page reload. Cover thumbnails come
+                     from the JOIN'd nzbs.cover_url; rows without an
+                     OurNzbID fall back to the group logo (or a
+                     placeholder) so the grid stays visually consistent. */}}
+                <div class="d-flex justify-content-end mb-2">
+                    <button type="button" id="rg-torrents-toggle-view" class="btn btn-outline-secondary btn-sm" style="font-size:0.75rem;" title="Switch view">&#9776; List</button>
+                </div>
+
+                <div id="rg-torrents-view-table">
+                <div class="card">
+                    <div class="card-body p-0">
+                        <table class="table table-sm mb-0" style="font-size:0.85rem;">
+                            <thead style="font-size:0.72rem;color:var(--text-muted);">
+                                <tr>
+                                    <th style="width:60px;"></th>
+                                    <th>Title</th>
+                                    <th style="width:90px;">Size</th>
+                                    <th style="width:110px;">Languages</th>
+                                    <th style="width:90px;">Uploaded</th>
+                                    <th style="width:220px;text-align:right;">&nbsp;</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range .ArchiveTorrents}}
+                                {{$cover := .CoverURL}}
+                                {{if eq $cover ""}}{{$cover = $.Group.LogoURL}}{{end}}
+                                {{/* Per-row source selection: torrents imported from
+                                     Nyaa carry an ImportedNyaaID and the NekobtTorrentID
+                                     is a synthetic placeholder that would 404 on
+                                     nekobt.to. Pick the correct primary button per row
+                                     so a nyaa-sourced release group surfaces nyaa
+                                     buttons + URLs instead of dead nekoBT links. */}}
+                                {{$isNyaa  := .ImportedNyaaID}}
+                                {{$primaryLabel := "nekoBT"}}
+                                {{$primaryURL   := printf "https://nekobt.to/torrents/%s" .NekobtTorrentID}}
+                                {{if $isNyaa}}
+                                    {{$primaryLabel = "Nyaa"}}
+                                    {{$primaryURL   = printf "https://nyaa.si/view/%s" (derefStr .ImportedNyaaID)}}
+                                {{end}}
+                                <tr>
+                                    <td style="vertical-align:middle;width:60px;padding:4px;">
+                                        {{if $cover}}
+                                        <img src="{{$cover}}" alt="" style="width:48px;height:64px;object-fit:cover;border-radius:3px;background:var(--bg-elevated);" loading="lazy">
+                                        {{else}}
+                                        <div style="width:48px;height:64px;display:flex;align-items:center;justify-content:center;border-radius:3px;background:var(--bg-elevated);color:var(--text-muted);font-size:1.2rem;">?</div>
+                                        {{end}}
+                                    </td>
+                                    <td style="vertical-align:middle;">
+                                        <div style="font-weight:500;">{{.Title}}</div>
+                                        {{if .InfoHash}}
+                                        <div style="font-size:0.7rem;color:var(--text-muted);" title="{{.InfoHash}}">{{slice .InfoHash 0 12}}…</div>
+                                        {{end}}
+                                    </td>
+                                    <td style="vertical-align:middle;color:var(--text-muted);">{{if .FilesizeBytes}}{{formatBytes .FilesizeBytes}}{{else}}—{{end}}</td>
+                                    <td style="vertical-align:middle;color:var(--text-muted);font-size:0.75rem;">
+                                        {{if .AudioLang}}A:{{.AudioLang}}{{end}}
+                                        {{if .FsubLang}} F:{{.FsubLang}}{{end}}
+                                        {{if .SubLang}} S:{{.SubLang}}{{end}}
+                                    </td>
+                                    <td style="vertical-align:middle;color:var(--text-muted);font-size:0.75rem;">{{.UploadedAt.Format "Jan 02 2006"}}</td>
+                                    <td style="vertical-align:middle;text-align:right;white-space:nowrap;">
+                                        {{/* NZB: only when we have a matching infohash. */}}
+                                        {{if .OurNzbID}}
+                                        <a href="/release/{{deref64 .OurNzbID}}" class="btn btn-success btn-sm py-0 px-2" style="font-size:0.7rem;">NZB</a>
+                                        {{end}}
+                                        {{/* Magnet: opens the user's torrent client. */}}
+                                        {{if .InfoHash}}
+                                        <a href="magnet:?xt=urn:btih:{{.InfoHash}}&dn={{urlquery .Title}}" class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size:0.7rem;" title="Open in torrent client">Magnet</a>
+                                        {{end}}
+                                        {{/* Primary split-button labelled per-row source
+                                             (Nyaa or nekoBT). Dropdown arrow renders
+                                             only when owner/admin (the curate-this-row
+                                             Hide action rides in the menu) — there's
+                                             no longer a duplicate "other source" entry
+                                             because every torrent has exactly one
+                                             upstream of record. */}}
+                                        <div class="btn-group" role="group">
+                                            <a href="{{$primaryURL}}" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.7rem;">{{$primaryLabel}}</a>
+                                            {{if $canManage}}
+                                            <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle dropdown-toggle-split py-0 px-1" data-bs-toggle="dropdown" aria-expanded="false" style="font-size:0.7rem;">
+                                                <span class="visually-hidden">Curate</span>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end" style="font-size:0.78rem;">
+                                                <li>
+                                                    <form method="POST" action="/release-groups/{{$.Group.Slug}}/archive/torrents/{{.NekobtTorrentID}}/hide" class="px-2 py-1"
+                                                          onsubmit="return confirm('Hide this torrent from your group&apos;s archive? You can unhide later via psql.');">
+                                                        <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                                                        <input type="text" name="reason" placeholder="Reason (optional)" class="form-control form-control-sm mb-1" style="font-size:0.72rem;" maxlength="256">
+                                                        <button type="submit" class="btn btn-outline-danger btn-sm w-100" style="font-size:0.72rem;">Hide from archive</button>
+                                                    </form>
+                                                </li>
+                                            </ul>
+                                            {{end}}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
+                    {{if gt .ArchiveTotalPages 1}}
+                    <div class="card-footer py-2" style="font-size:0.75rem;color:var(--text-muted);">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <span>Page {{.ArchivePage}} of {{.ArchiveTotalPages}} — {{.ArchiveTotal}} torrent{{if ne .ArchiveTotal 1}}s{{end}} total</span>
+                            {{.ArchivePagination}}
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+                </div>{{/* /rg-torrents-view-table */}}
+
+                {{/* Card / grid view — same data, cover-forward layout
+                     copied from /browse cover mode. Per-card buttons
+                     mirror the table-row actions (NZB / Magnet / nekoBT).
+                     Hidden by default; the toggle button shows it. */}}
+                <div id="rg-torrents-view-cards" style="display:none;">
+                    <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3">
+                        {{range .ArchiveTorrents}}
+                        {{$cover := .CoverURL}}
+                        {{if eq $cover ""}}{{$cover = $.Group.LogoURL}}{{end}}
+                        {{/* Same per-row source pick as the table view above. */}}
+                        {{$primaryLabel := "nekoBT"}}
+                        {{$primaryURL   := printf "https://nekobt.to/torrents/%s" .NekobtTorrentID}}
+                        {{if .ImportedNyaaID}}
+                            {{$primaryLabel = "Nyaa"}}
+                            {{$primaryURL   = printf "https://nyaa.si/view/%s" (derefStr .ImportedNyaaID)}}
+                        {{end}}
+                        <div class="col">
+                            <div class="card h-100" style="background:var(--bg-elevated);border-color:var(--border);">
+                                <div style="aspect-ratio:2/3;background:var(--bg-surface);overflow:hidden;border-radius:6px 6px 0 0;">
+                                    {{if $cover}}
+                                    <img src="{{$cover}}" alt="" style="width:100%;height:100%;object-fit:cover;" loading="lazy">
+                                    {{else}}
+                                    <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:2.5rem;">?</div>
+                                    {{end}}
+                                </div>
+                                <div class="card-body p-2" style="font-size:0.78rem;">
+                                    <div class="text-truncate" style="font-weight:500;" title="{{.Title}}">{{.Title}}</div>
+                                    <div style="color:var(--text-muted);font-size:0.7rem;margin-top:2px;">
+                                        {{if .FilesizeBytes}}{{formatBytes .FilesizeBytes}}{{else}}—{{end}}
+                                        &middot; {{.UploadedAt.Format "Jan 02 2006"}}
+                                    </div>
+                                    <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">
+                                        {{if .OurNzbID}}
+                                        <a href="/release/{{deref64 .OurNzbID}}" class="btn btn-success btn-sm py-0 px-2" style="font-size:0.68rem;">NZB</a>
+                                        {{end}}
+                                        {{if .InfoHash}}
+                                        <a href="magnet:?xt=urn:btih:{{.InfoHash}}&dn={{urlquery .Title}}" class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size:0.68rem;" title="Open in torrent client">Magnet</a>
+                                        {{end}}
+                                        <a href="{{$primaryURL}}" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.68rem;">{{$primaryLabel}}</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {{end}}
+                    </div>
+                    {{if gt .ArchiveTotalPages 1}}
+                    <div class="mt-3" style="font-size:0.75rem;color:var(--text-muted);">
+                        <div class="text-center mb-1">Page {{.ArchivePage}} of {{.ArchiveTotalPages}} — {{.ArchiveTotal}} torrents total</div>
+                        {{.ArchivePagination}}
+                    </div>
+                    {{end}}
+                </div>{{/* /rg-torrents-view-cards */}}
+
+                {{else}}
+                {{/* Empty-state messaging. Nyaa-sourced groups get a
+                     dedicated single-branch message — nekobt_status
+                     doesn't apply when the archive isn't backed by
+                     nekoBT in the first place. Otherwise we branch
+                     on the existing nekobt_status field (mig 231):
+                       - linked     → archive exists but empty; suggest Refresh
+                       - not_found  → group genuinely isn't on nekoBT
+                       - unchecked  → never tried; admin can paste an ID or
+                                      mark as not-found
+
+                     Admin path is self-serve — "Link to nekoBT" pops
+                     the same edit modal with the nekobt-id field in
+                     focus, no field-name knowledge required. */}}
+                <div class="text-center py-5" style="color:var(--text-muted);font-size:0.88rem;">
+                    {{if $isNyaaSource}}
+                        Connected to Nyaa but no torrents cached yet. <strong>Refresh from Nyaa</strong> above pulls them in.
+                    {{else if eq .Group.NekobtStatus "not_found"}}
+                        This group has no nekoBT presence — releases will only appear on the NZBs tab.
+                        {{if .IsAdmin}}
+                        <div class="mt-2" style="font-size:0.78rem;">
+                            (If that's wrong, an admin can paste a nekoBT ID from the Edit modal to override.)
+                        </div>
+                        {{end}}
+                    {{else if eq .Group.NekobtStatus "linked"}}
+                        Connected to nekoBT but no torrents cached yet. <strong>Refresh from nekoBT</strong> above pulls them in.
+                    {{else}}{{/* unchecked */}}
+                        We haven't connected this group to nekoBT yet, so there's no archive to show.
+                        {{if .IsAdmin}}
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editGroupModal">Link to nekoBT</button>
+                            <div style="font-size:0.74rem;margin-top:0.4rem;">
+                                Paste the group's nekoBT ID (the numeric part of <code style="font-size:0.72rem;">nekobt.to/groups/<strong>11101956255038</strong></code>).
+                            </div>
+                        </div>
+                        {{else}}
+                        An admin can link it from the group's Edit page.
+                        {{end}}
+                    {{end}}
+                </div>
+                {{end}}
+            </div>
+        </div>
+    </div>
+
+    {{if .IsAdmin}}
+    <div class="modal fade" id="editGroupModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="/admin/release-groups/{{.Group.ID}}/edit">
+                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                    <div class="modal-header">
+                        <h6 class="modal-title">Edit {{.Group.Name}}</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-2"><label class="form-label small">Name *</label><input class="form-control form-control-sm" name="name" id="edit-name" value="{{.Group.Name}}" required></div>
+                        <div class="mb-2"><label class="form-label small">Website URL</label><input class="form-control form-control-sm" name="website_url" type="url" value="{{.Group.WebsiteURL}}"></div>
+                        <div class="mb-2">
+                            <label class="form-label small">Logo URL</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control form-control-sm" name="logo_url" id="edit-logo-url" type="text" value="{{.Group.LogoURL}}" placeholder="Paste a URL then click Scrape">
+                                <button type="button" class="btn btn-outline-info" onclick="scrapeLogoFromEditModal()">Scrape</button>
+                            </div>
+                            <div id="edit-logo-status" class="form-text" style="font-size:0.72rem;"></div>
+                        </div>
+                        <div class="mb-2"><label class="form-label small">Description</label><textarea class="form-control form-control-sm" name="description" rows="4">{{.Group.Description}}</textarea></div>
+                        <div class="mb-2">
+                            <label class="form-label small">nekoBT group ID</label>
+                            <input class="form-control form-control-sm" name="nekobt_group_id" type="text" value="{{.Group.NekobtGroupID}}" placeholder="e.g. 11101956255038">
+                            <div class="form-text" style="font-size:0.7rem;">
+                                Upstream snowflake from <code style="font-size:0.7rem;">https://nekobt.to/groups/&lt;id&gt;</code>. Takes priority for both archive scraping AND claim verification.
+                            </div>
+                        </div>
+                        <fieldset class="mb-2" style="border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.6rem;">
+                            <legend class="form-label small" style="float:none;width:auto;padding:0 0.3rem;font-size:0.78rem;">Alternate archive source</legend>
+                            <div class="mb-2">
+                                <label class="form-label small">Scrape source</label>
+                                <select class="form-select form-select-sm" name="scrape_source">
+                                    {{$cur := .Group.ScrapeSource}}
+                                    <option value=""    {{if eq $cur ""}}selected{{end}}>— none (nekoBT only, if set above) —</option>
+                                    <option value="nyaa" {{if eq $cur "nyaa"}}selected{{end}}>nyaa</option>
+                                </select>
+                            </div>
+                            <div class="mb-1">
+                                <label class="form-label small">Scrape URL</label>
+                                <input class="form-control form-control-sm" name="scrape_url" type="url" value="{{.Group.ScrapeURL}}" placeholder="https://nyaa.si/user/subsplease">
+                                <div class="form-text" style="font-size:0.7rem;">
+                                    Used only when the nekoBT ID above is empty. For Nyaa, paste the user page URL.
+                                </div>
+                            </div>
+                        </fieldset>
+                        <div style="font-size:0.72rem;color:var(--text-muted);">Saving will mark this group as confirmed. Verification falls back to the Website URL above when nekoBT isn't set.</div>
+                    </div>
+                    <div class="modal-footer d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="if(confirm('Delete this group?')) deleteGroup({{.Group.ID}})">Delete</button>
+                        <div>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script>
+    // Follow / unfollow button in-place toggle. Submits via fetch
+    // (Accept: application/json) so the server returns the new state
+    // + count without forcing a redirect; the form action remains a
+    // valid no-JS fallback.
+    (function(){
+        var form = document.querySelector('form[action="/release-groups/{{.Group.Slug}}/follow"]');
+        if (!form) return;
+        form.addEventListener('submit', function(e){
+            e.preventDefault();
+            var btn = document.getElementById('rg-follow-btn');
+            var label = document.getElementById('rg-follow-label');
+            btn.disabled = true;
+            fetch(form.action, {method: 'POST', headers: {'Accept': 'application/json', 'X-CSRF-Token': (form.querySelector('input[name="_csrf"]')||{}).value||''}})
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    if (d && d.ok) {
+                        var nowFollowing = !!d.following;
+                        btn.classList.toggle('btn-success', nowFollowing);
+                        btn.classList.toggle('btn-outline-primary', !nowFollowing);
+                        label.textContent = nowFollowing ? 'Following' : 'Follow';
+                        btn.setAttribute('data-following', nowFollowing ? '1' : '0');
+                    }
+                })
+                .catch(function(){ /* fall through to a page reload */ form.submit(); })
+                .finally(function(){ btn.disabled = false; });
+        });
+    })();
+
+    function deleteGroup(id) {
+        fetch('/admin/release-groups/' + id + '/delete', {
+            method: 'POST',
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        }).then(function(r){ return r.json(); }).then(function(d){
+            if (d.ok) location.href = '/release-groups';
+            else alert('Failed: ' + (d.error || 'unknown'));
+        });
+    }
+
+    // Scrape the current Logo URL field through the same image-bomb-defended
+    // pipeline the scraper job uses, then replace the field with the local
+    // /static/release_groups/<slug>.jpg path. Lets the admin verify the
+    // result before clicking Save.
+    function scrapeLogoFromEditModal() {
+        var name = document.getElementById('edit-name').value.trim();
+        var logo = document.getElementById('edit-logo-url').value.trim();
+        var stat = document.getElementById('edit-logo-status');
+        if (!name) { stat.textContent = 'Set the Name field first.'; stat.style.color = '#fbbf24'; return; }
+        if (!logo) { stat.textContent = 'Paste a logo URL first.';   stat.style.color = '#fbbf24'; return; }
+        stat.textContent = 'Fetching…';
+        stat.style.color = 'var(--text-muted)';
+        var fd = new FormData();
+        fd.append('name', name);
+        fd.append('url',  logo);
+        fetch('/admin/release-groups-scrape-logo', {method:'POST', body: fd})
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (d.ok) {
+                    document.getElementById('edit-logo-url').value = d.local_url;
+                    stat.textContent = '✓ Saved to ' + d.local_url;
+                    stat.style.color = '#4ade80';
+                } else {
+                    stat.textContent = '✕ ' + (d.error || 'failed');
+                    stat.style.color = '#f87171';
+                }
+            })
+            .catch(function(){
+                stat.textContent = '✕ request failed';
+                stat.style.color = '#f87171';
+            });
+    }
+    </script>
+    {{end}}
+
+    <script>
+    // Torrents-tab view toggle. Mirrors the /browse list↔cover toggle:
+    // persists the user's pick in localStorage under a tab-specific
+    // key. No-op when the page rendered without the Torrents tab
+    // (no torrents on this group, or nekoBT not linked).
+    (function(){
+        var btn   = document.getElementById('rg-torrents-toggle-view');
+        var tbl   = document.getElementById('rg-torrents-view-table');
+        var cards = document.getElementById('rg-torrents-view-cards');
+        if (!btn || !tbl || !cards) return;
+        var KEY = 'rg_torrents_view';
+        function apply(mode) {
+            if (mode === 'cards') {
+                tbl.style.display   = 'none';
+                cards.style.display = 'block';
+                btn.innerHTML = '&#9776; List';
+            } else {
+                tbl.style.display   = 'block';
+                cards.style.display = 'none';
+                btn.innerHTML = '&#128444; Covers';
+            }
+            try { localStorage.setItem(KEY, mode); } catch(e) {}
+        }
+        var saved = 'list';
+        try { saved = localStorage.getItem(KEY) || 'list'; } catch(e) {}
+        apply(saved);
+        btn.addEventListener('click', function(){
+            var cur = 'list';
+            try { cur = localStorage.getItem(KEY) || 'list'; } catch(e) {}
+            apply(cur === 'cards' ? 'list' : 'cards');
+        });
+    })();
+
+    // Torrents tab auto-open: when the URL carries ?tpage=N the user
+    // came from a torrent-pagination link, so honour their intent
+    // and surface the Torrents tab instead of the NZBs default.
+    (function(){
+        if (!new URLSearchParams(window.location.search).has('tpage')) return;
+        var tabBtn = document.querySelector('[data-bs-target="#rgTorrentsPane"]');
+        if (tabBtn && window.bootstrap && bootstrap.Tab) {
+            new bootstrap.Tab(tabBtn).show();
+        }
+    })();
+    </script>
+{{end}}
