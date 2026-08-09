@@ -25,6 +25,51 @@ func TestCategorize(t *testing.T) {
 	}
 }
 
+// FLAC, MP3 and 320kbps describe a video's SOUNDTRACK as readily as they name
+// an album, and the video is the release.
+//
+// 806 of the 810 titles in Audio on this index were video. It was not a
+// rounding error in a small category — it was the whole category, and it made
+// the index look like it held music worth fetching metadata for.
+func TestAudioCodecsDoNotClaimVideo(t *testing.T) {
+	for _, tc := range []struct {
+		title string
+		want  int
+	}{
+		// Real cases from the Audio category, with what they actually are.
+		{"Naruto.204.v4.480p.DVD.Dual-Audio.FLAC2.0.Hi10P.x264-JySzE", 2030},
+		{"[Fabre-RAW] Detective Conan - 0045 [BDRip 1080p][FLAC][v2]", 2040},
+		{"House.Mates.2025.Tamil 1080p ZEE5 WEB-DL x264 [AAC.2.0 - 320kbps]", 2040},
+		{"The.Big.Sleep.1946.1080p.BluRay.x264.FLAC2.0-Pahe.in", 2050},
+		{"The Royal Hunt (1976) {imdb-tt0074926} [480p][MP3][2.0][x264]", 2030},
+		// A fansub checksum still wins for anime.
+		{"[NH] The Rising of the Shield Hero - 25 (BD 1080p x264 10-bit FLAC) [C9C1EE03]", 5070},
+	} {
+		if got := categorize("alt.binaries.sounds.flac", tc.title); got != tc.want {
+			t.Errorf("categorize(%q) = %d (%s), want %d (%s)",
+				tc.title, got, categoryName(got), tc.want, categoryName(tc.want))
+		}
+	}
+
+	// Music with no video marker anywhere is still music. This is the case the
+	// rule must NOT break, and the reason it keys off video markers rather
+	// than dropping the audio keywords.
+	for _, tc := range []struct {
+		title string
+		want  int
+	}{
+		{"(Progressive Rock) Last Knight - Talking to the Moon - 2024, FLAC", 3040},
+		{"Great Album - Artist 2023 FLAC", 3040},
+		{"Some Artist - Some Album 2024 MP3 320kbps", 3010},
+		{"Stephen Fry - The Hitchhikers Guide audiobook", 3030},
+	} {
+		if got := categorize("alt.binaries.sounds.mp3", tc.title); got != tc.want {
+			t.Errorf("categorize(%q) = %d (%s), want %d (%s) — real music must stay in Audio",
+				tc.title, got, categoryName(got), tc.want, categoryName(tc.want))
+		}
+	}
+}
+
 // Standard-definition video used to fall through to Other/Misc, because the
 // resolution fallback only knew 1080p, 2160p and 720p. Half of everything the
 // categoriser could not place was video it simply could not see.

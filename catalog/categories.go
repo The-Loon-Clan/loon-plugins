@@ -32,13 +32,25 @@ var taxonomy = []pluginapi.Category{
 func topLevelOf(id int) int { return (id / 1000) * 1000 }
 
 // keyword buckets for Categorize, checked in priority order (first match wins).
+//
+// audioOnly marks a bucket whose keywords are AUDIO-TRACK descriptors as often
+// as they are release types. FLAC, MP3 and 320kbps describe the soundtrack of a
+// video just as readily as they describe an album, and the video is the release
+// — so these buckets are skipped when the title carries a video marker.
+//
+// Without that, 806 of the 810 releases in Audio on this index were video:
+// "Naruto.075.v4.480p.DVD.Dual-Audio.FLAC2.0.Hi10P.x264" filed as Lossless,
+// "House.Mates.2025.Tamil 1080p WEB-DL x264 [AAC.2.0 - 320kbps]" filed as MP3.
+// 99.5% of a whole top-level category, and the reason it looked like the index
+// held music worth fetching metadata for.
 var catRules = []struct {
-	cat      int
-	keywords []string
+	cat       int
+	keywords  []string
+	audioOnly bool
 }{
-	{5070, []string{"anime", "subsplease", "erai-raws", "horriblesubs", "vostfr"}},
-	{6070, []string{"xxx", "porn", "erotica", "brazzers", "onlyfans", "sex"}},
-	{7020, []string{"ebook", "epub", "mobi", ".pdf", " pdf", "azw3"}},
+	{cat: 5070, keywords: []string{"anime", "subsplease", "erai-raws", "horriblesubs", "vostfr"}},
+	{cat: 6070, keywords: []string{"xxx", "porn", "erotica", "brazzers", "onlyfans", "sex"}},
+	{cat: 7020, keywords: []string{"ebook", "epub", "mobi", ".pdf", " pdf", "azw3"}},
 	// "cbr" is NOT here. As a comic archive it is a file extension; as a video
 	// term it is the constant-bitrate marker, and release names carry it as its
 	// own dot-delimited token ("Yuddha.Kaandam.2022.1080p.CBR.AMZN.WEB-DL") —
@@ -47,17 +59,17 @@ var catRules = []struct {
 	// the title: see contentKindFromArticles in the usenet plugin, which reads
 	// the actual file names and sets the Manga hint. "cbz" stays because it has
 	// no second meaning.
-	{7030, []string{"comic", "cbz", "manga"}},
-	{7010, []string{"magazine"}},
-	{3040, []string{"flac", "lossless", "24bit", "dsd"}},
-	{3030, []string{"audiobook"}},
-	{3010, []string{"mp3", "320kbps", " m4a"}},
-	{4010, []string{"crack", "keygen", "0day", "activator", "regged"}},
-	{4020, []string{".iso", "installer", "portable", "setup"}},
-	{4050, []string{"repack", "fitgirl", "dodi", "-codex", "-plaza", "-flt"}},
-	{1000, []string{"nsw", "switch", "ps4", "ps5", "xbox", "-goldberg"}},
-	{2050, []string{"bluray", "blu-ray", "remux"}},
-	{5040, []string{"season", "hdtv", "pdtv"}},
+	{cat: 7030, keywords: []string{"comic", "cbz", "manga"}},
+	{cat: 7010, keywords: []string{"magazine"}},
+	{cat: 3040, keywords: []string{"flac", "lossless", "24bit", "dsd"}, audioOnly: true},
+	{cat: 3030, keywords: []string{"audiobook"}, audioOnly: true},
+	{cat: 3010, keywords: []string{"mp3", "320kbps", " m4a"}, audioOnly: true},
+	{cat: 4010, keywords: []string{"crack", "keygen", "0day", "activator", "regged"}},
+	{cat: 4020, keywords: []string{".iso", "installer", "portable", "setup"}},
+	{cat: 4050, keywords: []string{"repack", "fitgirl", "dodi", "-codex", "-plaza", "-flt"}},
+	{cat: 1000, keywords: []string{"nsw", "switch", "ps4", "ps5", "xbox", "-goldberg"}},
+	{cat: 2050, keywords: []string{"bluray", "blu-ray", "remux"}},
+	{cat: 5040, keywords: []string{"season", "hdtv", "pdtv"}},
 }
 
 // categorize maps a group + title to a best-fit Newznab category id. The TITLE
@@ -82,27 +94,28 @@ func categorizeText(h string) int {
 		// below, which is why they share resolutionTier.
 		return 5000 + resolutionTier(h)
 	}
+	// Resolved once: several rules below ask the same question.
+	video := isVideo(h)
 	for _, r := range catRules {
+		// An audio codec on a video release describes its soundtrack, not the
+		// release. Skipping lets the title fall through to the video rules.
+		if r.audioOnly && video {
+			continue
+		}
 		for _, kw := range r.keywords {
 			if containsToken(h, kw) {
 				return r.cat
 			}
 		}
 	}
-	// A resolution or a video-source marker with no other signal means "this is
-	// video", and the resolution says which shelf.
-	//
-	// Only 1080p/2160p/720p were recognised, so everything standard-definition
-	// fell through to Other/Misc: 1,427 releases on this index, plus 789 more
-	// carrying a source marker (DVDRip, WEB-DL, XviD) and no pixel count at
-	// all. Between them that is 43% of everything the categoriser could not
-	// place — SD content was not mis-shelved so much as invisible.
 	// Fansub CRC32 before the video fallback, because these titles carry a
 	// resolution and would otherwise be filed as films.
 	if hasCRCTag(h) {
 		return 5070
 	}
-	if isVideo(h) {
+	// No keyword matched, so the video markers decide — and the resolution
+	// says which shelf. See isVideo for what counts and why.
+	if video {
 		return 2000 + resolutionTier(h)
 	}
 	return 8010
