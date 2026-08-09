@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 
 	"github.com/the-loon-clan/loon/core"
 )
@@ -31,6 +32,8 @@ type Store interface {
 	ActivePerks(ctx context.Context, now time.Time) ([]Active, error)
 	// SpentBy lists a member's applied perks, newest first.
 	SpentBy(ctx context.Context, userID int64) ([]Active, error)
+	// SpendTargets lists torrents a member could spend a token on.
+	SpendTargets(ctx context.Context, userID int64) ([]Spendable, error)
 }
 
 type PGStore struct{ db *core.SchemaDB }
@@ -182,6 +185,58 @@ func (s *PGStore) SpentBy(ctx context.Context, userID int64) ([]Active, error) {
 				a.ExpiresAt = exp
 			}
 			out = append(out, a)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// Spendable is a torrent a member could put a token on: something they are
+// downloading or seeding right now.
+//
+// Scoped to their OWN torrents deliberately. A perk is only worth spending on
+// something you are actually transferring, and a free-text info-hash box would
+// be both unusable and a way to spend tokens on torrents a member has never
+// touched.
+type Spendable struct {
+	InfoHash string
+	Name     string
+	// Applied names the perks already on this torrent, so the page can offer
+	// what is left rather than a button that fails.
+	Applied []Kind
+}
+
+// SpendTargets lists a member's current torrents with the perks already on
+// each.
+func (s *PGStore) SpendTargets(ctx context.Context, userID int64) ([]Spendable, error) {
+	var out []Spendable
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT t.info_hash, t.name,
+			       COALESCE(array_agg(k.kind) FILTER (WHERE k.kind IS NOT NULL), '{}') AS applied
+			  FROM tracker.user_stats s
+			  JOIN tracker.torrents t ON t.info_hash = s.info_hash
+			  LEFT JOIN tokens k ON k.user_id = s.user_id
+			                    AND k.info_hash = s.info_hash
+			                    AND (k.expires_at IS NULL OR k.expires_at > now())
+			 WHERE s.user_id = $1
+			 GROUP BY t.info_hash, t.name, s.last_seen
+			 ORDER BY s.last_seen DESC
+			 LIMIT 100`, userID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var sp Spendable
+			var applied pq.StringArray
+			if err := rows.Scan(&sp.InfoHash, &sp.Name, &applied); err != nil {
+				return err
+			}
+			for _, k := range applied {
+				sp.Applied = append(sp.Applied, Kind(k))
+			}
+			out = append(out, sp)
 		}
 		return rows.Err()
 	})

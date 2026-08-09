@@ -15,6 +15,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"html/template"
 	"log"
 	"time"
 
@@ -25,6 +26,9 @@ import (
 
 //go:embed migrations/*.sql
 var migrations embed.FS
+
+//go:embed templates/*.html
+var tmplFS embed.FS
 
 func init() {
 	core.RegisterPlugin("perks", func() core.Plugin { return &Plugin{} })
@@ -97,6 +101,28 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if err := c.Register(pluginapi.PerkGranterName, p); err != nil {
 		return fmt.Errorf("perks: registering %q: %w", pluginapi.PerkGranterName, err)
 	}
+	// The wallet page, when the host wired a renderer. Web only — the api
+	// process serves torrent clients, which have no wallet.
+	if c.Process != "api" && pageReady() {
+		tmpl, err := template.ParseFS(tmplFS, "templates/*.html")
+		if err != nil {
+			return fmt.Errorf("perks: parsing templates: %w", err)
+		}
+		h := NewHandlers(p, c.Auth)
+		h.SetTemplates(tmpl)
+		if c.Router != nil {
+			g := c.Router.Engine().Group("/perks")
+			g.Use(c.Auth.RequireUser(core.RoleUser)...)
+			g.GET("", h.WalletPage)
+			g.POST("/spend", h.SpendAction)
+		}
+	} else if c.Process != "api" {
+		// Tokens can still be bought and will still apply; there is simply
+		// nowhere to spend one. Say so, because that is a store selling
+		// something a member cannot use.
+		log.Printf("perks: no RenderPage seam wired — the wallet at /perks is NOT mounted, so tokens cannot be spent")
+	}
+
 	log.Printf("perks: tracker credit seam installed (tokens last %s)", p.tokenDuration())
 	return nil
 }

@@ -1,0 +1,78 @@
+{{/* A member's perk wallet: what they hold, and the one action that matters —
+     putting a held token on a torrent.
+
+     The spend control is a POST per ROW rather than one form with a dropdown,
+     because the choice IS the row: a member is looking at a list of their own
+     torrents deciding which to make free, and a select box would ask them to
+     hold that decision in their head twice. */}}
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">Your tokens</h2>
+    </header>
+    <div class="panel__body">
+        {{if .Held}}
+        <ul class="meta__chips">
+            {{range .Held}}
+            <li class="meta-chip">
+                <span class="meta-chip__name">{{.Label}}</span>
+                <span class="meta-chip__value">{{.Count}}</span>
+            </li>
+            {{end}}
+        </ul>
+        <p class="text-muted small">
+            Spend one on a torrent below. A token lasts {{.DurationText}} once spent,
+            and freeleech also excuses that torrent from seeding requirements.
+        </p>
+        {{else}}
+        <p class="text-muted">
+            You have no tokens. They are bought with points in the <a href="/store">store</a>.
+        </p>
+        {{end}}
+        {{if .Message}}<p class="alert alert-info">{{.Message}}</p>{{end}}
+        {{if .Error}}<p class="alert alert-warning">{{.Error}}</p>{{end}}
+    </div>
+</section>
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            Your torrents <span class="panel__grouping">({{len .Targets}})</span>
+        </h2>
+    </header>
+    <div class="panel__body panel__body--flush">
+        {{if .Targets}}
+        <table class="data-table">
+            <thead>
+                <tr><th>Torrent</th><th>Perks</th><th class="data-table__nowrap">Spend</th></tr>
+            </thead>
+            <tbody>
+                {{range .Targets}}
+                <tr>
+                    <td>{{.Name}}</td>
+                    <td class="text-muted small">{{if .AppliedText}}{{.AppliedText}}{{else}}&mdash;{{end}}</td>
+                    <td class="data-table__nowrap">
+                        {{/* Only what is still available on this torrent — a
+                             button that is guaranteed to fail is worse than no
+                             button, because it reads as the site being broken
+                             rather than as the perk already being there. */}}
+                        {{range .Offers}}
+                        <form method="post" action="/perks/spend" style="display:inline">
+                            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+                            <input type="hidden" name="info_hash" value="{{.InfoHash}}">
+                            <input type="hidden" name="kind" value="{{.Kind}}">
+                            <button class="btn btn-sm btn-outline-primary" type="submit">{{.Label}}</button>
+                        </form>
+                        {{end}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <p class="text-muted">
+            Nothing to spend on yet — start a download and it will appear here.
+        </p>
+        {{end}}
+    </div>
+</section>
