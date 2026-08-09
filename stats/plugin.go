@@ -86,7 +86,10 @@ func (p *Plugin) run(ctx context.Context) {
 	var all []pluginapi.Stat
 	contributors := pluginapi.StatContributors(p.core)
 	for _, sc := range contributors {
+		// Every early return after SetRunning must SetIdle, or the job
+		// reads as running forever and stalls the host's shutdown drain.
 		if ctx.Err() != nil {
+			p.job.SetIdle(time.Now().Add(time.Hour))
 			return
 		}
 		stats, err := sc.Stats(ctx)

@@ -291,8 +291,11 @@ func (p *Plugin) runImport(ctx context.Context) {
 		if it.airing {
 			totals.CreatedAiring++
 			// Mark airing content with new_release priority so agents pick
-			// it up faster.
-			_ = p.deps.BumpPriority(ctx, newID, "new_release")
+			// it up faster. Dispatch state: a silent failure means airing
+			// content quietly queues like everything else.
+			if err := p.deps.BumpPriority(ctx, newID, "new_release"); err != nil {
+				job.Log("bump new_release req=%d: %v", newID, err)
+			}
 		}
 		if it.infoHash != "" {
 			existing[it.infoHash] = true
@@ -427,8 +430,11 @@ func (p *Plugin) runTopSearched(ctx context.Context, existing map[string]bool) (
 		}
 		// Tag with the top_searched priority badge so the request listing
 		// distinguishes search-driven discoveries from RSS firehose imports
-		// and dead-release resurrections.
-		_ = p.deps.BumpPriority(ctx, newID, "top_searched")
+		// and dead-release resurrections. Same dispatch-state rule as the
+		// new_release bump: failures reach the job log, not the void.
+		if err := p.deps.BumpPriority(ctx, newID, "top_searched"); err != nil {
+			job.Log("bump top_searched req=%d: %v", newID, err)
+		}
 		created++
 		if hit.infoHash != "" {
 			existing[hit.infoHash] = true

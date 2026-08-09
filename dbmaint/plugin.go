@@ -62,6 +62,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if deps.Nzbs == nil || deps.Maintenance == nil {
 		return fmt.Errorf("dbmaint: SetDeps missing Nzbs/Maintenance (needed for VACUUM FULL)")
 	}
+	// FreeDisk is fail-soft on ERROR by contract, but a nil func is a panic
+	// mid-preflight, not a skipped preflight; and a zero Repack target means
+	// pg_repack dials an empty host and fails with a message that reads like
+	// a database outage. Both are wiring mistakes — refuse at boot.
+	if deps.FreeDisk == nil || deps.Repack.Host == "" {
+		return fmt.Errorf("dbmaint: SetDeps missing FreeDisk/Repack — the repack job cannot run without them")
+	}
 	p.provisionRepack()
 	p.provisionReindex()
 	p.provisionVerify()

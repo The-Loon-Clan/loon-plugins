@@ -143,7 +143,10 @@ func (p *Plugin) runScan(ctx context.Context) {
 	var cursor int64
 	var tagged int
 	for {
+		// Every early return after SetRunning must SetIdle, or the job
+		// reads as running forever and stalls the host's shutdown drain.
 		if ctx.Err() != nil {
+			p.scanJob.SetIdle(nextMidnight())
 			return
 		}
 		rows, next, err := deps.Nzbs.UntaggedBatch(ctx, cursor, 500)
@@ -191,6 +194,7 @@ func (p *Plugin) runFill(ctx context.Context) {
 	var filled int
 	for _, aid := range ids {
 		if ctx.Err() != nil {
+			p.fillJob.SetIdle(time.Time{})
 			return
 		}
 		m, err := p.fetchMetadata(ctx, aid)

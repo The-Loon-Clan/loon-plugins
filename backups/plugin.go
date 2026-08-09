@@ -75,7 +75,10 @@ func (p *Plugin) run(ctx context.Context) {
 	// 2. every plugin's Backupable hook, discovered off the extension registry.
 	hooks := pluginapi.Backups(p.core)
 	for _, b := range hooks {
+		// Every early return after SetRunning must SetIdle, or the job
+		// reads as running forever and stalls the host's shutdown drain.
 		if ctx.Err() != nil {
+			p.job.SetIdle(time.Now().Add(7 * 24 * time.Hour))
 			return
 		}
 		if err := p.writeEntry(ctx, b.BackupName()+".bak", b.Backup); err != nil {

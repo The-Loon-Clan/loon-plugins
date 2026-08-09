@@ -126,7 +126,10 @@ func (p *Plugin) runFill(ctx context.Context) {
 
 	var enriched, skipped int
 	for _, src := range p.registry.Sources() {
+		// Every early return after SetRunning must SetIdle, or the job
+		// reads as running forever and stalls the host's shutdown drain.
 		if ctx.Err() != nil {
+			p.fillJob.SetIdle(time.Now().Add(p.fillInterval()))
 			return
 		}
 		key := src.Domain().Key
@@ -145,6 +148,7 @@ func (p *Plugin) runFill(ctx context.Context) {
 		}
 		for _, id := range ids {
 			if ctx.Err() != nil {
+				p.fillJob.SetIdle(time.Now().Add(p.fillInterval()))
 				return
 			}
 			entry, err := src.Fetch(ctx, id)

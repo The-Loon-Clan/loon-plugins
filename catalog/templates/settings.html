@@ -11,6 +11,7 @@
                     <td class="text-muted small">{{.Subcats}}</td>
                     <td>
                         <form method="post" action="/admin/settings/catalog/toggle" style="display:inline">
+                            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <input type="hidden" name="id" value="{{.ID}}">
                             <input type="hidden" name="enabled" value="{{if .Enabled}}false{{else}}true{{end}}">
                             <button class="btn btn-sm py-0 {{if .Enabled}}btn-primary{{else}}btn-outline-secondary{{end}}" type="submit">{{if .Enabled}}enabled{{else}}enable{{end}}</button>

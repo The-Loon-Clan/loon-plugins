@@ -27,7 +27,7 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	return c.RegisterView(core.View{
 		Slug: "catalog", Title: "Categories", Slot: core.SlotAdminSettings,
 		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.renderSettings(gc.Request.Context(), gc.Query("msg"))
+			return p.renderSettings(gc.Request.Context(), gc.Query("msg"), csrfToken(gc))
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			"toggle": p.actionToggle,
@@ -42,7 +42,7 @@ type categoryVM struct {
 	Enabled bool
 }
 
-func (p *Plugin) renderSettings(ctx context.Context, msg string) (template.HTML, error) {
+func (p *Plugin) renderSettings(ctx context.Context, msg, csrf string) (template.HTML, error) {
 	disabled, err := p.st.DisabledSet(ctx)
 	if err != nil {
 		return "", err
@@ -59,7 +59,7 @@ func (p *Plugin) renderSettings(ctx context.Context, msg string) (template.HTML,
 		rows[i] = categoryVM{ID: c.ID, Name: c.Name, Subcats: subs, Enabled: !disabled[c.ID]}
 	}
 	var buf bytes.Buffer
-	if err := p.tmpl.ExecuteTemplate(&buf, "settings.html", map[string]any{"Categories": rows, "Msg": msg}); err != nil {
+	if err := p.tmpl.ExecuteTemplate(&buf, "settings.html", map[string]any{"Categories": rows, "Msg": msg, "CSRFToken": csrf}); err != nil {
 		return "", err
 	}
 	return template.HTML(buf.String()), nil

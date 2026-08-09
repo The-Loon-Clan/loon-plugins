@@ -839,7 +839,9 @@ func (h *Handlers) DeleteRequest(c *gin.Context) {
 	// /community/request/:id/actions). Plain users still fall through
 	// to the owner-scoped UPDATE so they can delete their own row.
 	canDeleteAny := user.Contributor
-	_ = h.deps.Requests.DeleteNzbRequest(ctx, id, user.ID, canDeleteAny)
+	if err := h.deps.Requests.DeleteNzbRequest(ctx, id, user.ID, canDeleteAny); err != nil {
+		h.errs.Report(ctx, "requests/delete", err)
+	}
 	c.Redirect(http.StatusFound, "/community/requests")
 }
 
@@ -924,8 +926,24 @@ func (h *Handlers) BoostRequest(c *gin.Context) {
 		jsonError(c, http.StatusBadRequest, "not enough points")
 		return
 	}
-	_ = h.deps.Requests.BoostRequest(ctx, id)
-	_ = h.deps.Requests.IncrementRequestPriority(ctx, id, "boost")
+	// The deduction has landed, so from here every failure is a paid-for
+	// boost that did not happen. A failed boost write refunds and errors
+	// out; a failed priority bump keeps the boost (refunding a landed
+	// boost would double-state) but must reach the error log — nothing
+	// recomputes priority later, so silence here is a paid bump that
+	// never moves the queue.
+	if err := h.deps.Requests.BoostRequest(ctx, id); err != nil {
+		h.errs.Report(ctx, "requests/boost-write", err)
+		if _, rerr := h.points.Refund(ctx, int64(user.ID), cost, "refund_boost",
+			fmt.Sprintf("Boost of request #%d failed", id), id); rerr != nil {
+			h.errs.Report(ctx, "requests/boost-refund", rerr)
+		}
+		jsonError(c, http.StatusInternalServerError, "boost failed — points refunded")
+		return
+	}
+	if err := h.deps.Requests.IncrementRequestPriority(ctx, id, "boost"); err != nil {
+		h.errs.Report(ctx, "requests/boost-priority", err)
+	}
 
 	// Return updated boost count, priority score, and new queue position.
 	req, _ := h.deps.Requests.GetNzbRequestByID(ctx, id)
@@ -958,7 +976,12 @@ func (h *Handlers) RetryRequest(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/community/requests")
 		return
 	}
-	_ = h.deps.AgentLocks.ClearFailedLocks(ctx, id)
+	// Dispatch state: a silent failure here looks exactly like the retry
+	// button doing nothing, which is what it looked like while this was
+	// swallowed.
+	if err := h.deps.AgentLocks.ClearFailedLocks(ctx, id); err != nil {
+		h.errs.Report(ctx, "requests/retry-clear-locks", err)
+	}
 	c.Redirect(http.StatusFound, fmt.Sprintf("/community/request/%d", id))
 }
 
@@ -980,7 +1003,11 @@ func (h *Handlers) UnparkRequest(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/community/requests")
 		return
 	}
-	_ = h.deps.Requests.UnparkRequest(ctx, id)
+	// Unparking is the un-flip of the dispatch kill switch — a silent
+	// failure leaves the request parked while the page implies otherwise.
+	if err := h.deps.Requests.UnparkRequest(ctx, id); err != nil {
+		h.errs.Report(ctx, "requests/unpark", err)
+	}
 	c.Redirect(http.StatusFound, fmt.Sprintf("/community/request/%d", id))
 }
 
@@ -1015,7 +1042,14 @@ func (h *Handlers) FulfillRequest(c *gin.Context) {
 			nzbID = &n
 		}
 	}
-	_ = h.deps.Requests.FulfillNzbRequest(ctx, id, user.ID, nzbID)
+	// A closing action: if the write fails the request is still open, and
+	// the redirect must not pretend otherwise — send the user back to the
+	// request they tried to close, with the failure in the error log.
+	if err := h.deps.Requests.FulfillNzbRequest(ctx, id, user.ID, nzbID); err != nil {
+		h.errs.Report(ctx, "requests/fulfill", err)
+		c.Redirect(http.StatusFound, fmt.Sprintf("/community/request/%d", id))
+		return
+	}
 	c.Redirect(http.StatusFound, "/community/requests")
 }
 

@@ -31,7 +31,10 @@ func (p *Plugin) runMatch(ctx context.Context) {
 	}
 	matched := 0
 	for _, c := range cands {
+		// Every early return after SetRunning must SetIdle, or the job
+		// reads as running forever and stalls the host's shutdown drain.
 		if ctx.Err() != nil {
+			p.matchJob.SetIdle(time.Now().Add(p.fillInterval()))
 			return
 		}
 		src := p.sourceForCategory(c.Category)

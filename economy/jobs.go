@@ -56,8 +56,14 @@ func (s *grabBonus) run(ctx context.Context) {
 	totalPts := 0
 	for _, row := range rows {
 		// Delta idempotency: only credit grabs beyond what earn_grabs already
-		// recorded (reference_id = total-grabs-at-award-time).
-		alreadyCredited, _ := s.deps.GrabsAlreadyCredited(ctx, row.UserID)
+		// recorded (reference_id = total-grabs-at-award-time). A FAILED read
+		// must skip the row, not default to zero — zero means "never
+		// credited", which re-awards the user's entire grab history.
+		alreadyCredited, err := s.deps.GrabsAlreadyCredited(ctx, row.UserID)
+		if err != nil {
+			log.Printf("economy/grabs: high-water read uid=%d: %v", row.UserID, err)
+			continue
+		}
 		newGrabs, pts := grabAward(row.TotalGrabs, alreadyCredited, ptsPerGrab)
 		if pts <= 0 {
 			continue
