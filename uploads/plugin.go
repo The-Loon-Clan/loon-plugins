@@ -3,6 +3,7 @@ package uploads
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 
@@ -46,7 +47,17 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// with this tab bookmarked, or a forum post linking it, must not discover
 	// the lift — the point of moving code is that nobody outside can tell.
 	g := engine.Group("/account-settings/uploads")
-	g.Use(c.Auth.RequireUser(core.RoleUser)...)
+	// Authenticate, not RequireUser. RequireUser answers an anonymous request
+	// with 401, which is right for an admin API and wrong for a page a member
+	// reaches from a nav link: a lapsed session should land on the login form,
+	// not a bare status code. Authenticate is the site's own access policy —
+	// what /inbox, /lists and /chat use — and the viewer gate below finishes
+	// the job by redirecting when there is nobody signed in.
+	//
+	// The host page this replaced returned 302 here. The first deploy of this
+	// plugin returned 401, which is how the difference was found: measured
+	// against the live site rather than reasoned about.
+	g.Use(c.Auth.Authenticate()...)
 	g.GET("", p.index)
 	g.POST("/bulk", p.bulkAction)
 	g.POST("/torrent-visibility", p.torrentVisibility)
@@ -64,10 +75,12 @@ var _ core.Plugin = (*Plugin)(nil)
 func (p *Plugin) viewer(c *gin.Context) *Viewer {
 	v := deps.Viewer(c)
 	if v == nil {
-		// RequireUser above should make this unreachable. Answering anyway
-		// rather than dereferencing nil: an auth adapter that changes shape
-		// should cost a redirect, not a panic on the request path.
-		c.Redirect(302, "/login")
+		// The real gate for anonymous visitors on a public-mode site, since
+		// Authenticate lets them through by design. Abort as well as redirect:
+		// without it the handler keeps running and renders a page nobody is
+		// signed in for.
+		c.Redirect(http.StatusFound, "/login")
+		c.Abort()
 		return nil
 	}
 	return v
