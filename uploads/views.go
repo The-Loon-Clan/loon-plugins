@@ -20,17 +20,34 @@ var pageTmpl = template.Must(template.New("uploads").Funcs(template.FuncMap{
 
 const pageSize = 50
 
+// The three tabs, as the surface this replaced had them. Kept as a closed set
+// so an unknown ?tab= falls back to the first rather than rendering an empty
+// page — a stale bookmark should show something.
+const (
+	tabPublic         = "public"
+	tabPrivateNZB     = "private-nzb"
+	tabPrivateTorrent = "private-torrent"
+)
+
 // vm is a struct rather than a map: a field the markup reads and the handler
 // forgets is then a render error instead of a silently empty cell, and
 // html/template streams — so a missing map key shows half a page with nothing
 // logged. That exact bug cost a Report button on a lifted list page.
 type vm struct {
-	Uploads        []Upload
-	Total          int
-	Page           int
-	CSRFToken      string
-	PaginationHTML template.HTML
-	Flash          string
+	ActiveTab string
+
+	Public              []Upload
+	PublicTotal         int
+	PublicPagination    template.HTML
+	PrivateNZB          []Upload
+	PrivateNZBTotal     int
+	PrivateNZBPager     template.HTML
+	PrivateTorrent      []Upload
+	PrivateTorrentTotal int
+	PrivateTorrentPager template.HTML
+
+	CSRFToken string
+	Flash     string
 }
 
 func (p *Plugin) index(c *gin.Context) {
@@ -38,27 +55,55 @@ func (p *Plugin) index(c *gin.Context) {
 	if v == nil {
 		return
 	}
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if page < 1 {
-		page = 1
+	// Three page parameters, one per tab, under the names the previous surface
+	// used — its own links passed npage/tpage, and they are in members' history
+	// and in other pages' markup.
+	pages := Pages{
+		Public:         atoiMin1(c.DefaultQuery("page", "1")),
+		PrivateNZB:     atoiMin1(c.DefaultQuery("npage", "1")),
+		PrivateTorrent: atoiMin1(c.DefaultQuery("tpage", "1")),
 	}
-	rows, total, err := deps.ListUploads(c.Request.Context(), v.ID, pageSize, (page-1)*pageSize)
+
+	lists, err := deps.ListUploads(c.Request.Context(), v.ID, pages, pageSize)
 	if err != nil {
 		p.core.Errors.Report(c.Request.Context(), "uploads/list", err)
-		// An error here must not read as "you have never uploaded anything".
+		// This must not read as "you have never uploaded anything".
 		deps.RenderPage(c, http.StatusInternalServerError, "My Uploads",
 			template.HTML(`<p class="text-danger">Your uploads could not be loaded. This has been logged.</p>`))
 		return
 	}
 
-	body, err := p.render(c, vm{
-		Uploads:        rows,
-		Total:          total,
-		Page:           page,
-		CSRFToken:      deps.CSRFToken(c),
-		PaginationHTML: deps.RenderPagination(page, pageSize, total, "/account-settings/uploads"),
-		Flash:          c.Query("msg"),
-	})
+	tab := c.DefaultQuery("tab", tabPublic)
+	switch tab {
+	case tabPublic, tabPrivateNZB, tabPrivateTorrent:
+	default:
+		tab = tabPublic
+	}
+
+	// Each tab's pager keeps the OTHER tabs' page numbers in the link, so
+	// paging one does not silently reset the others.
+	base := func(active string, keep ...string) string {
+		return "/account-settings/uploads?tab=" + active + "&" + strings.Join(keep, "&") + "&"
+	}
+	data := vm{
+		ActiveTab:           tab,
+		Public:              lists.Public,
+		PublicTotal:         lists.PublicTotal,
+		PrivateNZB:          lists.PrivateNZB,
+		PrivateNZBTotal:     lists.PrivateNZBTotal,
+		PrivateTorrent:      lists.PrivateTorrent,
+		PrivateTorrentTotal: lists.PrivateTorrentTotal,
+		CSRFToken:           deps.CSRFToken(c),
+		Flash:               c.Query("msg"),
+	}
+	data.PublicPagination = deps.RenderPagination(pages.Public, pageSize, lists.PublicTotal,
+		base(tabPublic, "npage="+strconv.Itoa(pages.PrivateNZB), "tpage="+strconv.Itoa(pages.PrivateTorrent)))
+	data.PrivateNZBPager = deps.RenderPagination(pages.PrivateNZB, pageSize, lists.PrivateNZBTotal,
+		base(tabPrivateNZB, "page="+strconv.Itoa(pages.Public), "tpage="+strconv.Itoa(pages.PrivateTorrent)))
+	data.PrivateTorrentPager = deps.RenderPagination(pages.PrivateTorrent, pageSize, lists.PrivateTorrentTotal,
+		base(tabPrivateTorrent, "page="+strconv.Itoa(pages.Public), "npage="+strconv.Itoa(pages.PrivateNZB)))
+
+	body, err := p.render(data)
 	if err != nil {
 		p.core.Errors.Report(c.Request.Context(), "uploads/render", err)
 		deps.RenderPage(c, http.StatusInternalServerError, "My Uploads", "")
@@ -67,12 +112,20 @@ func (p *Plugin) index(c *gin.Context) {
 	deps.RenderPage(c, http.StatusOK, "My Uploads", body)
 }
 
-func (p *Plugin) render(c *gin.Context, data vm) (template.HTML, error) {
+func (p *Plugin) render(data vm) (template.HTML, error) {
 	var b strings.Builder
 	if err := pageTmpl.ExecuteTemplate(&b, "uploads.html", data); err != nil {
 		return "", err
 	}
 	return template.HTML(b.String()), nil
+}
+
+func atoiMin1(s string) int {
+	n, _ := strconv.Atoi(s)
+	if n < 1 {
+		return 1
+	}
+	return n
 }
 
 // bulkAction applies one action to one upload, or to everything the member
@@ -163,7 +216,7 @@ func (p *Plugin) torrentVisibility(c *gin.Context) {
 		p.redirect(c, "bad id")
 		return
 	}
-	keep := c.PostForm("keep_private") == "1"
+	keep := c.PostForm("keep_private") == "true" || c.PostForm("keep_private") == "1"
 	if err := deps.Actions.KeepPrivate(c.Request.Context(), v.ID, id, keep); err != nil {
 		p.core.Errors.Report(c.Request.Context(), "uploads/keep-private", err)
 		p.redirect(c, "that did not save. It has been logged.")

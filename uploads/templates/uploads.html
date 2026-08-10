@@ -2,33 +2,44 @@
 <div class="uploads">
     {{if .Flash}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Flash}}</div>{{end}}
 
+    <ul class="nav tabs mb-3">
+        <li class="nav-item"><a class="nav-link {{if eq .ActiveTab "public"}}active{{end}}"
+            href="/account-settings/uploads?tab=public">Public
+            <span class="tab-count">{{.PublicTotal}}</span></a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .ActiveTab "private-nzb"}}active{{end}}"
+            href="/account-settings/uploads?tab=private-nzb">Private NZB
+            <span class="tab-count">{{.PrivateNZBTotal}}</span></a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .ActiveTab "private-torrent"}}active{{end}}"
+            href="/account-settings/uploads?tab=private-torrent">Private Torrents
+            <span class="tab-count">{{.PrivateTorrentTotal}}</span></a></li>
+    </ul>
+
+    {{if eq .ActiveTab "public"}}
     <div class="card mb-3">
         <div class="card-body" style="font-size:0.9rem;color:var(--text-muted);">
-            Everything you have uploaded. Deleting hides a release from the site but keeps it
+            Everything you have uploaded publicly. Deleting hides a release from the site but keeps it
             recoverable here. Going <strong>anonymous</strong> hides your name publicly and can be
-            undone. Going <strong>permanently anonymous</strong> unlinks the upload from your
-            account for good — it leaves this page and cannot be brought back.
+            undone. Going <strong>permanently anonymous</strong> unlinks the upload from your account
+            for good — it leaves this page and cannot be brought back.
         </div>
     </div>
 
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <span>My uploads</span>
-            <small style="color:var(--text-muted);">{{.Total}} total</small>
+            <span>Public uploads</span>
+            <small style="color:var(--text-muted);">{{.PublicTotal}} total</small>
         </div>
-
-        {{if .Uploads}}
+        {{if .Public}}
         <div style="overflow-x:auto;">
         <table class="table table-sm mb-0 align-middle">
             <thead><tr>
-                <th>Release</th><th>Kind</th><th class="text-end">Size</th>
-                <th>Uploaded</th><th>Visibility</th><th style="width:230px;"></th>
+                <th>Release</th><th class="text-end">Size</th><th>Uploaded</th>
+                <th>Visibility</th><th style="width:230px;"></th>
             </tr></thead>
             <tbody>
-            {{range .Uploads}}
+            {{range .Public}}
                 <tr{{if .Deleted}} style="opacity:.55"{{end}}>
                     <td><a href="/release/{{.ID}}" style="color:var(--blue);">{{.Title}}</a></td>
-                    <td><span class="badge bg-secondary">{{.Kind}}</span></td>
                     <td class="text-end">{{bytes .SizeBytes}}</td>
                     <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt}}</td>
                     <td style="font-size:0.85rem;">
@@ -56,15 +67,15 @@
             </tbody>
         </table>
         </div>
-        {{.PaginationHTML}}
+        {{.PublicPagination}}
         {{else}}
         <div class="card-body text-center" style="color:var(--text-muted);padding:2rem;">
-            You have not uploaded anything yet.
+            You have not uploaded anything publicly yet.
         </div>
         {{end}}
     </div>
 
-    {{if .Uploads}}
+    {{if .Public}}
     <div class="card mt-3">
         <div class="card-header">Everything at once</div>
         <div class="card-body">
@@ -81,6 +92,84 @@
                 <button name="action" value="true-anonymous" class="btn btn-sm btn-danger">Permanently anonymous</button>
             </form>
         </div>
+    </div>
+    {{end}}
+    {{end}}
+
+    {{if eq .ActiveTab "private-nzb"}}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Private NZB uploads</span>
+            <small style="color:var(--text-muted);">{{.PrivateNZBTotal}} total</small>
+        </div>
+        {{if .PrivateNZB}}
+        <div style="overflow-x:auto;">
+        <table class="table table-sm mb-0 align-middle">
+            <thead><tr><th>Title</th><th class="text-end">Size</th><th>Uploaded</th></tr></thead>
+            <tbody>
+            {{range .PrivateNZB}}
+                <tr>
+                    <td><a href="/community/request/{{.ID}}?private=1" style="color:var(--blue);">{{.Title}}</a></td>
+                    <td class="text-end">{{bytes .SizeBytes}}</td>
+                    <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt}}</td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+        </div>
+        {{.PrivateNZBPager}}
+        {{else}}
+        <div class="card-body text-center" style="color:var(--text-muted);padding:2rem;">
+            No private NZB uploads.
+        </div>
+        {{end}}
+    </div>
+    {{end}}
+
+    {{if eq .ActiveTab "private-torrent"}}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Private torrent uploads</span>
+            <small style="color:var(--text-muted);">{{.PrivateTorrentTotal}} total</small>
+        </div>
+        {{if .PrivateTorrent}}
+        <div style="overflow-x:auto;">
+        <table class="table table-sm mb-0 align-middle">
+            <thead><tr>
+                <th>Title</th><th>Info hash</th><th>Uploaded</th>
+                <th>After fulfilment</th><th style="width:150px;"></th>
+            </tr></thead>
+            <tbody>
+            {{range .PrivateTorrent}}
+                <tr>
+                    <td><a href="/community/request/{{.ID}}?private=1" style="color:var(--blue);">{{.Title}}</a></td>
+                    <td><code style="font-size:0.72rem;">{{.InfoHash}}</code></td>
+                    <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt}}</td>
+                    <td style="font-size:0.85rem;color:var(--text-muted);">
+                        {{if .KeptPrivate}}Kept private{{else}}Published{{end}}
+                    </td>
+                    <td>
+                        <form method="POST" action="/account-settings/uploads/torrent-visibility">
+                            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                            <input type="hidden" name="request_id" value="{{.ID}}">
+                            <select name="keep_private" class="form-select form-select-sm d-inline"
+                                    style="width:auto" onchange="this.form.submit()">
+                                <option value="false" {{if not .KeptPrivate}}selected{{end}}>Publish</option>
+                                <option value="true"  {{if .KeptPrivate}}selected{{end}}>Keep private</option>
+                            </select>
+                        </form>
+                    </td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+        </div>
+        {{.PrivateTorrentPager}}
+        {{else}}
+        <div class="card-body text-center" style="color:var(--text-muted);padding:2rem;">
+            No private torrent uploads.
+        </div>
+        {{end}}
     </div>
     {{end}}
 </div>

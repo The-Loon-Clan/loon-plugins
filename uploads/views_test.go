@@ -7,15 +7,29 @@ import (
 
 func fullVM() vm {
 	return vm{
-		Uploads: []Upload{
+		ActiveTab: tabPublic,
+		Public: []Upload{
 			{ID: 1, Title: "A Release", Kind: "nzb", SizeBytes: 1610612736,
-				CreatedAt: "10 Aug 2026", Anonymous: false, Deleted: false, Queued: true},
-			{ID: 2, Title: "Hidden One", Kind: "private-torrent", SizeBytes: 524288,
+				CreatedAt: "10 Aug 2026", Queued: true},
+			{ID: 2, Title: "Hidden One", Kind: "nzb", SizeBytes: 524288,
 				CreatedAt: "09 Aug 2026", Anonymous: true, Deleted: true},
 		},
-		Total: 2, Page: 1, CSRFToken: "test-csrf",
-		PaginationHTML: "<nav>pager</nav>",
-		Flash:          "upload updated",
+		PublicTotal:      2,
+		PublicPagination: "<nav>pager</nav>",
+		PrivateNZB: []Upload{
+			{ID: 30, Title: "A Private NZB", Kind: "private-nzb", SizeBytes: 1048576,
+				CreatedAt: "08 Aug 2026"},
+		},
+		PrivateNZBTotal: 1,
+		PrivateNZBPager: "<nav>npager</nav>",
+		PrivateTorrent: []Upload{
+			{ID: 40, Title: "A Private Torrent", Kind: "private-torrent",
+				CreatedAt: "07 Aug 2026", InfoHash: "abc123def456", KeptPrivate: true},
+		},
+		PrivateTorrentTotal: 1,
+		PrivateTorrentPager: "<nav>tpager</nav>",
+		CSRFToken:           "test-csrf",
+		Flash:               "upload updated",
 	}
 }
 
@@ -46,8 +60,8 @@ func TestPageRenders(t *testing.T) {
 // html/template streams, so a field the markup reads and the handler forgot
 // truncates the page silently. An empty VM must still render a whole page.
 func TestPageRendersEmpty(t *testing.T) {
-	out := render(t, vm{Page: 1, CSRFToken: "t"})
-	if !strings.Contains(out, "not uploaded anything yet") {
+	out := render(t, vm{ActiveTab: tabPublic, CSRFToken: "t"})
+	if !strings.Contains(out, "not uploaded anything publicly yet") {
 		t.Errorf("empty state missing:\n%s", out)
 	}
 	// The sweeping-actions card must NOT appear with nothing to sweep — offering
@@ -111,5 +125,69 @@ func TestFlashEscaping(t *testing.T) {
 	}
 	if !strings.Contains(got, "%3C") {
 		t.Errorf("expected percent-encoding, got %s", got)
+	}
+}
+
+// Each tab must render its OWN content. This is the test that would have caught
+// the regression this page shipped with for one commit: the first cut served a
+// single merged list and ignored ?tab=, so the account-settings links straight
+// to ?tab=private-nzb and ?tab=private-torrent silently showed the public list
+// instead. Three tabs, three sources, three pagers.
+func TestEachTabRendersItsOwnContent(t *testing.T) {
+	cases := []struct {
+		tab      string
+		wantSome []string
+		wantNone []string
+	}{
+		{tabPublic,
+			[]string{"A Release", "<nav>pager</nav>", "Public uploads"},
+			[]string{"A Private NZB", "A Private Torrent", "abc123def456"}},
+		{tabPrivateNZB,
+			[]string{"A Private NZB", "<nav>npager</nav>", "/community/request/30?private=1"},
+			[]string{"A Release", "A Private Torrent"}},
+		{tabPrivateTorrent,
+			[]string{"A Private Torrent", "<nav>tpager</nav>", "abc123def456", "Keep private"},
+			[]string{"A Release", "A Private NZB"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tab, func(t *testing.T) {
+			v := fullVM()
+			v.ActiveTab = tc.tab
+			out := render(t, v)
+			for _, w := range tc.wantSome {
+				if !strings.Contains(out, w) {
+					t.Errorf("tab %s is missing %q", tc.tab, w)
+				}
+			}
+			for _, w := range tc.wantNone {
+				if strings.Contains(out, w) {
+					t.Errorf("tab %s leaked another tab's content: %q", tc.tab, w)
+				}
+			}
+			// Every tab shows all three counts, so a member can see there is
+			// something in the others without clicking through.
+			for _, count := range []string{">2<", ">1<"} {
+				if !strings.Contains(out, count) {
+					t.Errorf("tab %s does not show the other tabs' counts", tc.tab)
+				}
+			}
+		})
+	}
+}
+
+// The torrent tab's visibility form is a POST like any other and needs its
+// token — it was added after the first CSRF count test was written, which is
+// exactly the case that test exists to catch.
+func TestTorrentTabFormCarriesCSRF(t *testing.T) {
+	v := fullVM()
+	v.ActiveTab = tabPrivateTorrent
+	out := render(t, v)
+	forms := strings.Count(out, `method="POST"`)
+	tokens := strings.Count(out, `name="_csrf"`)
+	if forms == 0 {
+		t.Fatal("no POST form on the torrent tab — the test would pass vacuously")
+	}
+	if forms != tokens {
+		t.Errorf("%d POST form(s) but %d _csrf field(s)", forms, tokens)
 	}
 }

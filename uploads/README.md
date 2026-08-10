@@ -14,7 +14,7 @@ independently useful and a half-finished 3,400-line lift is not.
 
 | Route | Access | What |
 |---|---|---|
-| `GET /account-settings/uploads` | member | The owner's list: everything they have uploaded, paginated |
+| `GET /account-settings/uploads` | member | Three tabs — public uploads, private NZBs, private torrents — each paginated independently (`?tab=`, `page`/`npage`/`tpage`) |
 | `POST /account-settings/uploads/bulk` | member | One row or all rows: delete, restore, anonymous, permanently anonymous |
 | `POST /account-settings/uploads/torrent-visibility` | member | Keep a private request's artifact private |
 
@@ -38,7 +38,8 @@ worker in the `feeds` / `curation` mould rather than a schema owner.
   `Provision` refuses a partial wiring: a management page that renders an empty
   list looks exactly like a member who has never uploaded anything, so a
   missing seam must fail loudly at boot rather than quietly at read time.
-  - `Viewer`, `ListUploads`
+  - `Viewer`, `ListUploads` (returns all three tab groups in one call, so the
+    agent-queue lookup is shared rather than repeated per tab)
   - `Actions` — nine owner-scoped mutations (see `deps.go`)
   - `RenderPage`, `CSRFToken`, `RenderPagination`
 - No config keys, no `Metadata.Requires`.
@@ -70,8 +71,15 @@ letting a member delete somebody else's upload.
 
 Unit-tested: a full render, the empty state (which must still be a whole page,
 because `html/template` streams and a missing field truncates it silently), the
-POST-form-count-versus-`_csrf`-count invariant, both of the irreversible
-action's guards, byte humanising, and flash escaping.
+POST-form-count-versus-`_csrf`-count invariant on two different tabs, both of
+the irreversible action's guards, byte humanising, and flash escaping.
+
+`TestEachTabRendersItsOwnContent` exists because of a regression this page
+shipped with for exactly one commit: the first cut served a single merged list
+and ignored `?tab=`, so the account-settings links straight to
+`?tab=private-nzb` and `?tab=private-torrent` silently showed the public list.
+Three independently-paginated tabs is what the surface being replaced did, and
+"lift, don't rewrite" is in this repo's conventions for this reason.
 
 Needs integration (live DB): nothing here — the data access is entirely host
 seams, exercised by the host's own storage tests.

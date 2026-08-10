@@ -53,6 +53,28 @@ type Upload struct {
 	// Queued reports that an agent has this upload's request in its queue, for
 	// the sidebar link. False when nothing is dispatched.
 	Queued bool
+	// InfoHash and KeptPrivate describe a private torrent request. Empty and
+	// false on the other kinds.
+	InfoHash    string
+	KeptPrivate bool
+}
+
+// Lists is the three groups the page shows, each paginated independently —
+// because a member with 900 public uploads and two private torrents should not
+// have to page through the former to see the latter, which is why the surface
+// this replaced had three page parameters rather than one.
+type Lists struct {
+	Public              []Upload
+	PublicTotal         int
+	PrivateNZB          []Upload
+	PrivateNZBTotal     int
+	PrivateTorrent      []Upload
+	PrivateTorrentTotal int
+}
+
+// Pages carries the three page numbers, one per tab.
+type Pages struct {
+	Public, PrivateNZB, PrivateTorrent int
 }
 
 // OwnerActions are the owner-scoped mutations the management page performs.
@@ -94,9 +116,10 @@ type Deps struct {
 	// Viewer resolves the signed-in member from the request.
 	Viewer func(c *gin.Context) *Viewer
 
-	// ListUploads returns one page of the member's uploads, newest first,
-	// with the total for pagination.
-	ListUploads func(ctx context.Context, userID, limit, offset int) ([]Upload, int, error)
+	// ListUploads returns all three groups, each at its own page. One call
+	// rather than three seams so the host can share the agent-queue lookup
+	// across them instead of repeating it per tab.
+	ListUploads func(ctx context.Context, userID int, pages Pages, pageSize int) (Lists, error)
 
 	// Actions are the owner-scoped mutations.
 	Actions OwnerActions
