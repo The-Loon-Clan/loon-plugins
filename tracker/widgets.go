@@ -57,11 +57,19 @@ func (p *Plugin) registerWidgets(c *core.Core) {
 			if t.Uploaded == 0 && t.Downloaded == 0 && t.Seeding == 0 && t.Leeching == 0 {
 				return "", nil
 			}
-			return kv(
-				row("Uploaded", humanBytes(t.Uploaded)),
-				row("Downloaded", humanBytes(t.Downloaded)),
-				row("Ratio", ratioLabel(t)),
-				rowInt("Seeding", t.Seeding),
+			// Icons rather than words. This is the shape every tracker's top
+			// bar has, and it is the only shape that fits one: four labelled
+			// pairs is a paragraph, four icons is a glance.
+			//
+			// Each figure still carries its label as visually-hidden text and
+			// a title. An icon-only readout is unreadable to a screen reader
+			// and ambiguous to anyone who has not seen a tracker before, and
+			// neither costs a pixel to fix.
+			return figures(
+				figure("up", "chevron-up", "Uploaded", humanBytes(t.Uploaded)),
+				figure("down", "chevron-down", "Downloaded", humanBytes(t.Downloaded)),
+				figure("ratio", "shield", "Ratio", ratioLabel(t)),
+				figure("seed", "users", "Seeding", fmt.Sprintf("%d", t.Seeding)),
 			), nil
 		},
 	})
@@ -130,11 +138,11 @@ func (p *Plugin) registerWidgets(c *core.Core) {
 				leech += t.Leechers
 				snatch += t.Snatches
 			}
-			return kv(
-				rowInt("Torrents", total),
-				rowInt("Seeders", seed),
-				rowInt("Leechers", leech),
-				rowInt("Snatches", snatch),
+			return figures(
+				figure("torrents", "database", "Torrents", fmt.Sprintf("%d", total)),
+				figure("up", "chevron-up", "Seeders", fmt.Sprintf("%d", seed)),
+				figure("down", "chevron-down", "Leechers", fmt.Sprintf("%d", leech)),
+				figure("seed", "download", "Snatches", fmt.Sprintf("%d", snatch)),
 			), nil
 		},
 	})
@@ -163,10 +171,10 @@ func (p *Plugin) registerWidgets(c *core.Core) {
 			if err != nil || t == nil {
 				return "", nil
 			}
-			return kv(
-				rowInt("Seeders", t.Seeders),
-				rowInt("Leechers", t.Leechers),
-				rowInt("Snatches", t.Snatches),
+			return figures(
+				figure("up", "chevron-up", "Seeders", fmt.Sprintf("%d", t.Seeders)),
+				figure("down", "chevron-down", "Leechers", fmt.Sprintf("%d", t.Leechers)),
+				figure("seed", "download", "Snatches", fmt.Sprintf("%d", t.Snatches)),
 			), nil
 		},
 	})
@@ -179,22 +187,33 @@ func (p *Plugin) registerWidgets(c *core.Core) {
 // the counters are ints and cannot carry markup, but the byte figures go
 // through the escaper anyway rather than relying on that staying true.
 
-func kv(rows ...string) template.HTML {
-	out := `<dl class="key-value">`
-	for _, r := range rows {
-		out += r
+func figures(items ...string) template.HTML {
+	out := `<div class="stat-figures">`
+	for _, it := range items {
+		out += it
 	}
-	return template.HTML(out + `</dl>`)
+	return template.HTML(out + `</div>`)
 }
 
-func row(label, value string) string {
-	return fmt.Sprintf(`<div class="key-value__group"><dt>%s</dt><dd>%s</dd></div>`,
-		template.HTMLEscapeString(label), template.HTMLEscapeString(value))
-}
-
-func rowInt(label string, n int) string {
-	return fmt.Sprintf(`<div class="key-value__group"><dt>%s</dt><dd>%d</dd></div>`,
-		template.HTMLEscapeString(label), n)
+// figure is one icon + value.
+//
+// kind names WHAT it is ("up", "down", "ratio"), not what colour to be. The
+// host's stylesheet decides how each kind looks, so the figures follow the
+// theme and a plugin never ships a literal colour — the same split the rest of
+// this widget file keeps by emitting the host's class names rather than styles.
+//
+// The icon id must exist in the host's sprite. A missing symbol renders as
+// nothing at all, silently, which is why these are limited to ids the host has
+// carried since before this file existed.
+func figure(kind, icon, label, value string) string {
+	return fmt.Sprintf(
+		`<span class="stat-figure stat-figure--%s" title="%s">`+
+			`<svg class="icon" aria-hidden="true"><use href="#%s"></use></svg>`+
+			`<span class="stat-figure__value">%s</span>`+
+			`<span class="visually-hidden">%s</span>`+
+			`</span>`,
+		kind, template.HTMLEscapeString(label), icon,
+		template.HTMLEscapeString(value), template.HTMLEscapeString(label))
 }
 
 // ratioLabel renders Totals.Ratio the way a tracker does: two decimals, and the
