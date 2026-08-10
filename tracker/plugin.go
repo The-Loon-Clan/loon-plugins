@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -42,6 +43,9 @@ type Config struct {
 	// when it will actually be used, so importing the plugin cannot break a
 	// host's boot.
 	Enabled bool `json:"enabled"`
+	// Cheat is the detection policy (cheat.go). Off by default like the rest of
+	// this file's switches that can end up accusing somebody.
+	Cheat CheatPolicy `json:"cheat"`
 	// SiteURL is the absolute base (scheme + host) the announce URL is built
 	// from and baked into every downloaded .torrent.
 	//
@@ -58,6 +62,16 @@ type Plugin struct {
 	peers *PeerStore
 	h     *Handlers
 	tmpl  *template.Template
+
+	// cheat is the SAME store as p.store, held concretely.
+	//
+	// Detection is separate machinery — a host can run the tracker without it —
+	// so its reads are on *PGStore rather than in the Store interface every
+	// implementation would then have to satisfy. MemStore deliberately does not
+	// have them, and the test tracker is none the worse for it.
+	cheat    *PGStore
+	cheatJob core.Job
+	ctx      context.Context
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -129,9 +143,16 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if db == nil {
 		return fmt.Errorf("tracker: Core.Storage.SchemaDB is nil")
 	}
-	p.store = NewPGStore(db)
+	pg := NewPGStore(db)
+	p.store, p.cheat = pg, pg
 	p.peers = NewPeerStore(c.Redis.Client())
 	p.h = NewHandlers(p.store, p.peers, NewGate(c), c.Auth, p.cfg.SiteURL)
+
+	// Cheat detection (cheat_job.go). Registered even when the rules are off:
+	// the sampling still runs so that switching detection on starts working at
+	// the next sweep rather than the one after, and an operator can see the job
+	// exists.
+	p.registerCheatJob(c)
 
 	// Placeable widgets (widgets.go). Registered HERE rather than at the top of
 	// Provision because they read p.store, and because everything above this
@@ -205,7 +226,19 @@ func (p *Plugin) requireEntitled(gc *gin.Context) {
 	}
 }
 
-func (p *Plugin) Start(ctx context.Context) error { return nil }
-func (p *Plugin) Stop(ctx context.Context) error  { return nil }
+func (p *Plugin) Start(ctx context.Context) error {
+	p.ctx = ctx
+	// No job means the tracker is off or the host wired no scheduler; either
+	// way there is nothing to loop.
+	if p.cheatJob == nil || p.core == nil || p.core.Scheduler == nil {
+		return nil
+	}
+	// Two minutes after boot, not immediately: the announce path should be up
+	// and taking readings before its accounting is judged, and a restart must
+	// not be the thing that decides somebody cheated.
+	p.core.Scheduler.RunLoop(ctx, p.cheatJob, 2*time.Minute, CheatSweepInterval, p.runCheatSweep)
+	return nil
+}
+func (p *Plugin) Stop(ctx context.Context) error { return nil }
 
 var _ core.Plugin = (*Plugin)(nil)
