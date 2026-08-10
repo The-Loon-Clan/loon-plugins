@@ -109,6 +109,13 @@ type Store interface {
 
 	UpsertTorrent(ctx context.Context, t *Torrent) error
 	Torrent(ctx context.Context, infoHash string) (*Torrent, error)
+
+	// TorrentByNzbID finds the torrent made from a host RELEASE, newest first
+	// when a release has more than one. nil with a nil error means the release
+	// has no torrent, which is the ordinary case on an index far larger than
+	// the tracker — so a caller renders nothing rather than "0 seeders", which
+	// would claim a dead torrent instead of no torrent.
+	TorrentByNzbID(ctx context.Context, nzbID int64) (*Torrent, error)
 	ListTorrents(ctx context.Context, limit, offset int) ([]*Torrent, int, error)
 
 	// ── The announce path ───────────────────────────────────────────────────

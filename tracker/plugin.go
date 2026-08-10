@@ -133,6 +133,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.peers = NewPeerStore(c.Redis.Client())
 	p.h = NewHandlers(p.store, p.peers, NewGate(c), c.Auth, p.cfg.SiteURL)
 
+	// Placeable widgets (widgets.go). Registered HERE rather than at the top of
+	// Provision because they read p.store, and because everything above this
+	// point is a reason the tracker is not running — a widget offered by a
+	// tracker that idled for want of Redis is a widget that can only render
+	// nothing.
+	p.registerWidgets(c)
+
 	engine := c.Router.Engine()
 	if engine == nil {
 		return fmt.Errorf("tracker: Core.Router.Engine() is nil")

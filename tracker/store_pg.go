@@ -128,6 +128,22 @@ func (s *PGStore) Torrent(ctx context.Context, infoHash string) (*Torrent, error
 	return &t, nil
 }
 
+func (s *PGStore) TorrentByNzbID(ctx context.Context, nzbID int64) (*Torrent, error) {
+	var t Torrent
+	// ORDER BY added_at DESC: the schema permits two torrents for one release,
+	// and a caller showing "the" swarm should show the current upload rather
+	// than whichever row the planner reached first.
+	err := s.get(ctx, &t,
+		`SELECT `+torrentCols+` FROM torrents WHERE nzb_id = $1 ORDER BY added_at DESC LIMIT 1`, nzbID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("torrent for release %d: %w", nzbID, err)
+	}
+	return &t, nil
+}
+
 func (s *PGStore) ListTorrents(ctx context.Context, limit, offset int) ([]*Torrent, int, error) {
 	if limit <= 0 {
 		limit = 100

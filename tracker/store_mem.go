@@ -121,6 +121,28 @@ func (m *MemStore) UpsertTorrent(ctx context.Context, t *Torrent) error {
 	return nil
 }
 
+func (m *MemStore) TorrentByNzbID(ctx context.Context, nzbID int64) (*Torrent, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var newest *Torrent
+	for _, t := range m.torrents {
+		if t.NzbID == nil || *t.NzbID != nzbID {
+			continue
+		}
+		// Newest wins, matching the PG store's ORDER BY added_at DESC — a map
+		// has no order, so picking the first match would make this store
+		// disagree with the real one depending on iteration.
+		if newest == nil || t.AddedAt.After(newest.AddedAt) {
+			newest = t
+		}
+	}
+	if newest == nil {
+		return nil, nil
+	}
+	cp := *newest
+	return &cp, nil
+}
+
 func (m *MemStore) Torrent(ctx context.Context, infoHash string) (*Torrent, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
