@@ -22,7 +22,7 @@
 # `usenet` schema. Pass --schema accordingly.
 #
 # Requires: psql on PATH, or run it through a container, e.g.
-#   docker run --rm -e PGPASSWORD="$PGPASSWORD" postgres:16-alpine \
+#   docker run --rm -e PGPASSWORD="$PGPASSWORD" postgres:18-alpine \
 #     psql -h HOST -U USER -d DB -At -F $'\t' -c "<the query below>"
 set -euo pipefail
 
