@@ -90,6 +90,20 @@ func (p *Plugin) Provision(c *core.Core) error {
 		// event is misconfigured when it is merely early.
 		p.job = schedule.RegisterJob("Event Windows",
 			"Materialise scheduled-event windows ahead of time")
+		// And actually wire the trigger the comment above promises. It was
+		// described and then not installed, so /admin/jobs and the ops API both
+		// accepted a Run for this job and silently did nothing — the operator
+		// loop the comment defends ("create an event, see its windows") was
+		// exactly as broken as having no button, with the added cost that the
+		// button looked like it worked. Background context, not the request's:
+		// an operator's click must not be cancelled when their page finishes.
+		p.job.SetTrigger(func() {
+			go func() {
+				if err := p.generate(context.Background()); err != nil {
+					p.job.Log("generate (triggered): %v", err)
+				}
+			}()
+		})
 	}
 	return nil
 }
