@@ -1,0 +1,152 @@
+package ranks
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
+)
+
+func widgetPlugin(t *testing.T) (*Plugin, *MemStore) {
+	t.Helper()
+	st := NewMemStore()
+	return &Plugin{store: st}, st
+}
+
+func noBoost() pluginapi.APIBoost { return pluginapi.APIBoost{Factor: 1} }
+
+// The table is built from the catalog, so what it includes and excludes is the
+// behaviour worth pinning: a hidden group is staff machinery an operator marked
+// not-for-display, and a group conferring no quota says nothing about
+// allowances.
+func TestAllowancesTableSelectsRows(t *testing.T) {
+	ctx := context.Background()
+	p, st := widgetPlugin(t)
+	seedGroup(t, st, &Group{Name: "Power User", Slug: "power", Kind: "paid", Visible: true,
+		Grants: map[string]int64{entAPIDaily: 25000, entDownloadDaily: 250}})
+	seedGroup(t, st, &Group{Name: "Staff", Slug: "staff", Kind: "assigned", Visible: false,
+		Grants: map[string]int64{entAPIDaily: 99999, entDownloadDaily: 9999}})
+	seedGroup(t, st, &Group{Name: "Badge Only", Slug: "badge", Kind: "earned", Visible: true})
+
+	got, err := p.allowancesTable(ctx, noBoost())
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := string(got)
+	if !strings.Contains(out, "Power User") {
+		t.Error("a visible rank with quotas is missing")
+	}
+	if strings.Contains(out, "Staff") {
+		t.Error("a hidden rank is on a public card")
+	}
+	if strings.Contains(out, "Badge Only") {
+		t.Error("a rank conferring no quota is listed, inviting the reader to wonder what they are missing")
+	}
+	// Grouped digits: these numbers exist to be compared, and comparing them by
+	// counting zeroes is what makes the table useless.
+	if !strings.Contains(out, "25,000") {
+		t.Errorf("API allowance is not digit-grouped:\n%s", out)
+	}
+}
+
+// Nothing to show must be an empty fragment, not an empty table: the host drops
+// the widget entirely rather than drawing a box around nothing.
+func TestAllowancesTableEmptyWhenNoQuotasExist(t *testing.T) {
+	p, st := widgetPlugin(t)
+	seedGroup(t, st, &Group{Name: "Badge", Slug: "badge", Kind: "earned", Visible: true})
+	got, err := p.allowancesTable(context.Background(), noBoost())
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if got != "" {
+		t.Errorf("want an empty fragment, got:\n%s", got)
+	}
+}
+
+// With a boost active the card must show BOTH numbers. Showing only the boosted
+// one silently redefines the rank, and the day the window closes a member's
+// allowance appears to have been cut.
+func TestAllowancesTableShowsBoostAndBase(t *testing.T) {
+	ctx := context.Background()
+	p, st := widgetPlugin(t)
+	seedGroup(t, st, &Group{Name: "Member", Slug: "member", Kind: "assigned", Visible: true,
+		Grants: map[string]int64{entAPIDaily: 10000, entDownloadDaily: 100}})
+
+	ends := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	boost := pluginapi.APIBoost{Factor: 10, Slug: "load-testing-month",
+		Name: "Load Testing Month", Ends: ends}
+
+	got, err := p.allowancesTable(ctx, boost)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := string(got)
+	for _, want := range []string{
+		"Load Testing Month", // the banner names the event
+		"×10",                // and the factor
+		"10 Sep 2026",        // and when it lapses
+		"100,000",            // the boosted allowance
+		"<s>10,000</s>",      // with the base still visible
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("boosted card is missing %q:\n%s", want, out)
+		}
+	}
+
+	// Grabs must NOT be multiplied: a grab costs provider bandwidth, an API
+	// call costs a query, and the two are deliberately different decisions.
+	if strings.Contains(out, "1,000") {
+		t.Errorf("the download allowance was boosted too:\n%s", out)
+	}
+}
+
+// A perpetual window's end is a sentinel in the year 9000; printing it would be
+// worse than printing nothing, so the host strips it and the banner must cope.
+func TestAllowancesBannerOmitsUnknownEnd(t *testing.T) {
+	ctx := context.Background()
+	p, st := widgetPlugin(t)
+	seedGroup(t, st, &Group{Name: "Member", Slug: "member", Kind: "assigned", Visible: true,
+		Grants: map[string]int64{entAPIDaily: 10000}})
+	got, _ := p.allowancesTable(ctx, pluginapi.APIBoost{Factor: 2, Name: "Forever"})
+	out := string(got)
+	if !strings.Contains(out, "Forever") || !strings.Contains(out, "×2") {
+		t.Errorf("banner missing its label or factor:\n%s", out)
+	}
+	if strings.Contains(out, "until") {
+		t.Errorf("banner claimed an end date it does not have:\n%s", out)
+	}
+}
+
+// The rank colour is operator-supplied and reaches a style attribute, so it is
+// validated as a hex literal rather than trusted. An operator field arriving
+// unchecked in CSS is how a catalog row starts closing tags.
+func TestRankColourMustBeHex(t *testing.T) {
+	if got := rankNameHTML(rankRow{Name: "Elite", Color: "#ff0000"}); !strings.Contains(got, `color:#ff0000`) {
+		t.Errorf("a valid hex colour was dropped: %s", got)
+	}
+	hostile := rankNameHTML(rankRow{Name: "Elite", Color: `red;"></span><script>alert(1)</script>`})
+	if strings.Contains(hostile, "<script") || strings.Contains(hostile, "style=") {
+		t.Errorf("a non-hex colour reached the markup: %s", hostile)
+	}
+	if !strings.Contains(hostile, "Elite") {
+		t.Errorf("rejecting the colour also lost the name: %s", hostile)
+	}
+	// The name itself is escaped whatever the colour does.
+	esc := rankNameHTML(rankRow{Name: `<b>x</b>`, Color: "#fff"})
+	if strings.Contains(esc, "<b>") {
+		t.Errorf("rank name was not escaped: %s", esc)
+	}
+}
+
+func TestThousands(t *testing.T) {
+	for in, want := range map[int64]string{
+		0: "0", 7: "7", 999: "999", 1000: "1,000", 10000: "10,000",
+		100000: "100,000", 999999: "999,999", 1000000: "1,000,000", -1234: "-1,234",
+	} {
+		if got := thousands(in); got != want {
+			t.Errorf("thousands(%d) = %q, want %q", in, got, want)
+		}
+	}
+}

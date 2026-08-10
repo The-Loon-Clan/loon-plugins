@@ -131,6 +131,11 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return fmt.Errorf("ranks: register view: %w", err)
 	}
 
+	// The member-facing counterpart to that admin catalog: a placeable card
+	// listing what each rank confers. Registered on the same legs, after the
+	// view, and non-fatal on failure — see registerWidgets.
+	p.registerWidgets(c)
+
 	return nil
 }
 
