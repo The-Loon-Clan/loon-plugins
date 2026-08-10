@@ -105,9 +105,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// The query string is carried across because the old page's severity
 	// filter lived there, and this page understands `severity:` in its DSL —
 	// so a bookmarked ?severity=fatal keeps meaning something.
-	legacy := engine.Group("/admin/errors")
-	legacy.Use(c.Auth.RequireUser(core.RoleAdmin)...)
-	legacy.GET("", func(gc *gin.Context) {
+	// Deliberately UNGATED, unlike the JSON endpoints above. This route
+	// answers with a Location header and nothing else — no log data, not even
+	// whether any exists — so gating it buys no secrecy and costs the thing
+	// the redirect is for: RequireUser answers 401, and an admin whose session
+	// lapsed would get a bare status code instead of being carried to the
+	// login form and on to the page they bookmarked. The target gates.
+	engine.GET("/admin/errors", func(gc *gin.Context) {
 		target := "/admin/p/logs"
 		if sev := gc.Query("severity"); sev != "" {
 			target += "?q=" + url.QueryEscape("severity:"+sev)
