@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/gin-gonic/gin"
 
@@ -92,6 +93,26 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// it bookmarked; send them on rather than 404.
 	adm.GET("", func(gc *gin.Context) {
 		gc.Redirect(http.StatusMovedPermanently, "/admin/p/logs?"+gc.Request.URL.RawQuery)
+	})
+
+	// /admin/errors is the OTHER address the same error sink was served at —
+	// the host page this plugin superseded, which read the identical
+	// error_logs table with a severity filter and a row-level archive. Both of
+	// those exist here, alongside the query DSL, facets and histogram the host
+	// page never had, so it is retired rather than kept in parallel: two views
+	// over one table drift, and an operator cannot tell which one is lying.
+	//
+	// The query string is carried across because the old page's severity
+	// filter lived there, and this page understands `severity:` in its DSL —
+	// so a bookmarked ?severity=fatal keeps meaning something.
+	legacy := engine.Group("/admin/errors")
+	legacy.Use(c.Auth.RequireUser(core.RoleAdmin)...)
+	legacy.GET("", func(gc *gin.Context) {
+		target := "/admin/p/logs"
+		if sev := gc.Query("severity"); sev != "" {
+			target += "?q=" + url.QueryEscape("severity:"+sev)
+		}
+		gc.Redirect(http.StatusMovedPermanently, target)
 	})
 	return nil
 }
