@@ -111,9 +111,16 @@ type Deps struct {
 	Settings Settings
 
 	// CSRFToken answers the host middleware's per-session token for the
-	// admin settings form. Without it every save POST 403s under the host's
-	// global CSRF check — which is exactly what happened to this form
-	// between the lift and the 2026-08-09 consistency audit.
+	// admin settings form.
+	//
+	// A 2026-08-09 audit reported that this form 403'd every save for want of
+	// the field. That was WRONG, and the correction is recorded here because
+	// the claim was repeated: the ameNZB host's csrf-js partial creates the
+	// hidden input at submit time for any form lacking one, and the admin
+	// settings page includes it, so the form worked. Rendering the token
+	// server-side is still right — it does not depend on the host shipping
+	// that partial, or on the member running JavaScript — but it fixed a
+	// robustness gap, not an outage.
 	CSRFToken func(c *gin.Context) string
 
 	// NewHub constructs this bot's own chat-hub instance. The hub stays

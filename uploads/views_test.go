@@ -71,9 +71,13 @@ func TestPageRendersEmpty(t *testing.T) {
 	}
 }
 
-// Every POST form needs the token or it 403s on submit. Counting rather than
-// spot-checking, because the bug this catches is a form ADDED later without
-// one — which is exactly how the discord settings form shipped broken.
+// Every POST form carries the token. Counting rather than spot-checking,
+// because the bug this catches is a form ADDED later without one.
+//
+// The host's csrf-js would inject a missing input at submit time, so this is
+// not the difference between working and 403 on that host — it is the
+// difference between working everywhere and working only where that partial
+// ships and JavaScript runs.
 func TestEveryPostFormCarriesCSRF(t *testing.T) {
 	out := render(t, fullVM())
 	forms := strings.Count(out, `method="POST"`)
@@ -82,7 +86,7 @@ func TestEveryPostFormCarriesCSRF(t *testing.T) {
 		t.Fatal("no POST forms rendered — the test would pass vacuously")
 	}
 	if forms != tokens {
-		t.Errorf("%d POST form(s) but %d _csrf field(s) — one would 403 on submit", forms, tokens)
+		t.Errorf("%d POST form(s) but %d _csrf field(s) — one relies on the host's JS", forms, tokens)
 	}
 }
 

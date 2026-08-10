@@ -127,10 +127,15 @@ type Deps struct {
 	// RenderPage wraps a fragment in the site's chrome. The plugin owns its
 	// markup and the host owns the page around it.
 	RenderPage func(c *gin.Context, status int, title string, body template.HTML)
-	// CSRFToken answers the host middleware's per-session token. Required, not
-	// optional: every action on this page is a POST, and a form without it
-	// 403s on submit — which is how the discord settings form spent its whole
-	// life broken.
+	// CSRFToken answers the host middleware's per-session token, rendered into
+	// every POST form here.
+	//
+	// Required rather than optional, but NOT because the page breaks without
+	// it: the ameNZB host ships a csrf-js partial that creates the hidden
+	// input at submit time for any form missing one, so a tokenless form still
+	// works there. It is required because relying on that is relying on the
+	// host having it AND on the member having JavaScript, and neither is this
+	// plugin's to assume. A server-rendered token is correct on its own terms.
 	CSRFToken func(c *gin.Context) string
 	// RenderPagination returns the site's pager markup for a page of results.
 	// Signature matched to the other lifted plugins (roadmap, messages, forum)
