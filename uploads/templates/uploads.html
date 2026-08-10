@@ -1,0 +1,87 @@
+{{define "uploads.html"}}
+<div class="uploads">
+    {{if .Flash}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Flash}}</div>{{end}}
+
+    <div class="card mb-3">
+        <div class="card-body" style="font-size:0.9rem;color:var(--text-muted);">
+            Everything you have uploaded. Deleting hides a release from the site but keeps it
+            recoverable here. Going <strong>anonymous</strong> hides your name publicly and can be
+            undone. Going <strong>permanently anonymous</strong> unlinks the upload from your
+            account for good — it leaves this page and cannot be brought back.
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>My uploads</span>
+            <small style="color:var(--text-muted);">{{.Total}} total</small>
+        </div>
+
+        {{if .Uploads}}
+        <div style="overflow-x:auto;">
+        <table class="table table-sm mb-0 align-middle">
+            <thead><tr>
+                <th>Release</th><th>Kind</th><th class="text-end">Size</th>
+                <th>Uploaded</th><th>Visibility</th><th style="width:230px;"></th>
+            </tr></thead>
+            <tbody>
+            {{range .Uploads}}
+                <tr{{if .Deleted}} style="opacity:.55"{{end}}>
+                    <td><a href="/release/{{.ID}}" style="color:var(--blue);">{{.Title}}</a></td>
+                    <td><span class="badge bg-secondary">{{.Kind}}</span></td>
+                    <td class="text-end">{{bytes .SizeBytes}}</td>
+                    <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt}}</td>
+                    <td style="font-size:0.85rem;">
+                        {{if .Anonymous}}<span class="badge bg-dark">anonymous</span>{{else}}<span style="color:var(--text-muted);">named</span>{{end}}
+                        {{if .Queued}} <span class="badge bg-info text-dark">queued</span>{{end}}
+                    </td>
+                    <td>
+                        <form method="POST" action="/account-settings/uploads/bulk" style="display:inline">
+                            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                            <input type="hidden" name="id" value="{{.ID}}">
+                            {{if .Deleted}}
+                            <button name="action" value="restore" class="btn btn-sm btn-outline-success">Restore</button>
+                            {{else}}
+                            <button name="action" value="delete" class="btn btn-sm btn-outline-danger">Delete</button>
+                            {{end}}
+                            {{if .Anonymous}}
+                            <button name="action" value="deanonymous" class="btn btn-sm btn-outline-secondary">Show name</button>
+                            {{else}}
+                            <button name="action" value="anonymous" class="btn btn-sm btn-outline-secondary">Anonymous</button>
+                            {{end}}
+                        </form>
+                    </td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+        </div>
+        {{.PaginationHTML}}
+        {{else}}
+        <div class="card-body text-center" style="color:var(--text-muted);padding:2rem;">
+            You have not uploaded anything yet.
+        </div>
+        {{end}}
+    </div>
+
+    {{if .Uploads}}
+    <div class="card mt-3">
+        <div class="card-header">Everything at once</div>
+        <div class="card-body">
+            <form method="POST" action="/account-settings/uploads/bulk" style="display:inline">
+                <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                <button name="action" value="delete" class="btn btn-sm btn-outline-danger">Delete all</button>
+                <button name="action" value="restore" class="btn btn-sm btn-outline-success">Restore all</button>
+                <button name="action" value="anonymous" class="btn btn-sm btn-outline-secondary">Make all anonymous</button>
+            </form>
+            <form method="POST" action="/account-settings/uploads/bulk" style="display:inline"
+                  onsubmit="return confirm('This unlinks every upload from your account permanently. They will leave this page and cannot be recovered. Continue?')">
+                <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                <input type="hidden" name="confirm" value="permanent">
+                <button name="action" value="true-anonymous" class="btn btn-sm btn-danger">Permanently anonymous</button>
+            </form>
+        </div>
+    </div>
+    {{end}}
+</div>
+{{end}}
