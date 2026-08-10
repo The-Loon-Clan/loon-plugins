@@ -66,6 +66,48 @@ func (p *Plugin) registerWidgets(c *core.Core) {
 		},
 	})
 
+	// ── the member's announce URL ───────────────────────────────────────────
+	//
+	// The most-copied string on a private tracker, and until now it lived on
+	// one page a member had to go and find. As a widget they can keep it where
+	// they actually work.
+	//
+	// It READS a passkey and never mints one. passkeyFor on the member page
+	// creates one on first use, which is right for a page somebody deliberately
+	// opened, and wrong for a widget that could be rendered into the footer of
+	// every page on the site: a member who has never touched the tracker should
+	// not be issued a credential by walking past it.
+	_ = c.RegisterWidget(core.Widget{
+		Slug:        "tracker-announce",
+		Title:       "Your announce URL",
+		Description: "The passkey URL to paste into a torrent client.",
+		Weight:      12,
+		Render: func(gc *gin.Context) (template.HTML, error) {
+			if c.Auth == nil {
+				return "", nil
+			}
+			u, ok := c.Auth.CurrentUser(gc)
+			if !ok || u == nil {
+				return "", nil
+			}
+			pk, has, err := p.store.Passkey(gc.Request.Context(), u.ID)
+			if err != nil || !has || pk == "" {
+				// No passkey yet — say where to get one rather than minting it
+				// here. The tracker page mints on arrival.
+				return template.HTML(
+					`<p class="text-muted">No passkey yet. ` +
+						`<a href="/tracker">Open the tracker</a> to get one.</p>`), nil
+			}
+			url := p.cfg.SiteURL + "/api/tracker/announce/" + pk
+			// <code> and nothing clever. A member selects and copies this, and
+			// a copy button would need JavaScript on a site that has none.
+			return template.HTML(fmt.Sprintf(
+				`<p class="text-muted small">Paste this into your client.</p>`+
+					`<code class="announce-url">%s</code>`,
+				template.HTMLEscapeString(url))), nil
+		},
+	})
+
 	// ── the swarm, site-wide ────────────────────────────────────────────────
 	//
 	// Public: it describes the tracker rather than a member.

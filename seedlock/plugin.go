@@ -101,6 +101,11 @@ func (p *Plugin) Provision(c *core.Core) error {
 		}
 	}
 
+	// The placeable widget (widgets.go). Registered whatever Enabled says: a
+	// claim is a Redis TTL and outlives the switch, so a member has to be able
+	// to see and clear what is already held.
+	p.registerWidgets(c)
+
 	tracker.SetAnnounceGuard(p.admit)
 	log.Printf("seedlock: ARMED — one host per torrent, claim lapses %s after the last announce, identified by %s",
 		p.cfg.LockWindow(), p.cfg.IdentifyBy)

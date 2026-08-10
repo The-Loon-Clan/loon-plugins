@@ -95,6 +95,15 @@ func (p *Plugin) Provision(c *core.Core) error {
 		log.Printf("hitrun: disabled (plugins.hitrun.enabled) — warnings still EXPIRE, none are issued")
 	}
 
+	// The placeable widget (widgets.go). Web process only, for the same reason
+	// as the page below: the api process serves machines, and a widget is
+	// chrome. Registered whatever cfg.Enabled says, because warnings already
+	// issued still EXPIRE while the rules are off — a member with an
+	// outstanding warning must still be able to see it.
+	if c.Process != "api" {
+		p.registerWidgets(c)
+	}
+
 	// The member page, when the host wired a renderer. Mounted only for the
 	// web process — the api process serves machines, which have no use for a
 	// page explaining what somebody owes.

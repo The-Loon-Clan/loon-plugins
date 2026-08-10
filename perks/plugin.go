@@ -86,6 +86,11 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// than by the host so that installing this plugin IS the wiring — a host
 	// that compiles it in and forgets a line would otherwise sell tokens that
 	// never take effect.
+	// The placeable widget (widgets.go). It reads the same Table the
+	// multiplier below consults, so a member is shown the perks actually being
+	// applied to their traffic rather than rows that say they should be.
+	p.registerWidgets(c)
+
 	tracker.SetMultiplier(func(_ context.Context, userID int64, infoHash string) (float64, float64) {
 		return p.table.Factors(userID, infoHash, time.Now())
 	})

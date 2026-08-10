@@ -69,6 +69,33 @@ func (t *Table) Replace(all []Active) {
 	t.mu.Unlock()
 }
 
+// ActiveFor lists a member's perks that have not lapsed, across every torrent.
+//
+// For a member-facing surface rather than the announce path: the announce knows
+// which torrent it is about and asks Factors, while a page or a widget wants
+// "what do I currently hold". Scans the whole table, which is fine because it
+// holds only perks IN FORCE — spent tokens leave it on the next refresh.
+//
+// now is a parameter for the same reason as Factors: the table is refreshed on
+// a timer and can still be holding a token that lapsed a minute ago. Showing a
+// member a perk they no longer have is worse than the cost of checking.
+func (t *Table) ActiveFor(userID int64, now time.Time) []Active {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	var out []Active
+	for k, list := range t.byID {
+		if k.userID != userID {
+			continue
+		}
+		for _, a := range list {
+			if a.ExpiresAt.After(now) {
+				out = append(out, a)
+			}
+		}
+	}
+	return out
+}
+
 // Factors returns the upload and download multipliers for one (member,
 // torrent), in the shape tracker.Multiplier wants.
 //
