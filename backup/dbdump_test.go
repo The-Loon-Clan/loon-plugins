@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/the-loon-clan/loon/schedule"
 )
 
 // publishedDumps decides what retention DELETES, so its two refusals matter more
@@ -266,5 +268,88 @@ func TestSweepPrecedesTheDiskCheck(t *testing.T) {
 	if sweep > check {
 		t.Error("the disk check runs before the sweep, so it will refuse on space " +
 			"the sweep would have reclaimed")
+	}
+}
+
+// ─── retention ordering: the outage fix ────────────────────────────────────
+
+// mkDumps creates n published dump directories with ascending stamps, oldest
+// first, and returns their names.
+func mkDumps(t *testing.T, dir string, n int) []string {
+	t.Helper()
+	var names []string
+	base := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < n; i++ {
+		name := base.AddDate(0, 0, i).Format(dumpStampFormat)
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name, "toc.dat"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+func TestPruneDumpsToKeepsTheNewest(t *testing.T) {
+	dir := t.TempDir()
+	names := mkDumps(t, dir, 5)
+
+	SetDeps(Deps{DBDumpDir: dir})
+	p := &Plugin{dumpJob: schedule.RegisterJob("test-prune-keeps-newest", "test")}
+
+	if got := p.pruneDumpsTo(2); got != 3 {
+		t.Fatalf("pruned %d dump(s), want 3", got)
+	}
+	left := publishedDumps(dir)
+	if len(left) != 2 {
+		t.Fatalf("%d dump(s) left, want 2: %v", len(left), left)
+	}
+	// publishedDumps is newest-first, and the newest two are the LAST two created.
+	if left[0] != names[4] || left[1] != names[3] {
+		t.Errorf("kept %v, want the newest two %v", left, []string{names[4], names[3]})
+	}
+}
+
+// A keep of zero or less must never mean "delete every dump we have". The
+// pre-flight path derives its argument by subtracting one, so this is the guard
+// on keep=1 turning into "empty the directory, then start a dump that may fail".
+func TestPruneDumpsToNeverEmptiesTheDirectory(t *testing.T) {
+	dir := t.TempDir()
+	mkDumps(t, dir, 3)
+
+	SetDeps(Deps{DBDumpDir: dir})
+	p := &Plugin{dumpJob: schedule.RegisterJob("test-prune-refuses-zero", "test")}
+
+	for _, keep := range []int{0, -1} {
+		if got := p.pruneDumpsTo(keep); got != 0 {
+			t.Errorf("pruneDumpsTo(%d) pruned %d, want 0", keep, got)
+		}
+	}
+	if left := publishedDumps(dir); len(left) != 3 {
+		t.Errorf("%d dump(s) left, want all 3", len(left))
+	}
+}
+
+// The ordering bug that cost an outage: retention ran only after a SUCCESSFUL
+// dump, while the disk pre-flight could refuse and return before ever reaching
+// it. Too full to dump therefore meant too full to prune, permanently. This is
+// the sibling of TestSweepPrecedesTheDiskCheck — same file, same mistake, third
+// instance — so it is pinned the same way.
+func TestPrunePrecedesTheDiskCheck(t *testing.T) {
+	src, err := os.ReadFile("dbdump.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(src)
+	prune := strings.Index(s, "p.pruneDumpsTo(room)")
+	check := strings.Index(s, "deps.FreeDisk(ctx)")
+	if prune < 0 || check < 0 {
+		t.Fatal("could not locate both the pre-flight prune and the disk check")
+	}
+	if prune > check {
+		t.Error("the disk check runs before retention, so a full disk means no dump " +
+			"AND no prune — the ratchet that filled 257 GB and took the site offline")
 	}
 }

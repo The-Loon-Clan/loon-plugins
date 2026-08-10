@@ -110,6 +110,31 @@ func (p *Plugin) runDBDump(ctx context.Context) {
 			n, humanBytes(freed))
 	}
 
+	// Retention for PUBLISHED dumps also runs before the disk check, and this
+	// ordering is not a tidiness preference — it is the fix for an outage.
+	//
+	// pruneDumps used to run only at the END of a successful dump. So every night
+	// the box was too full to dump was also a night nothing was pruned: refuse →
+	// return → no prune → still full → refuse. The spool ratcheted to ~257 GB and
+	// took the disk to zero, which took the site down. The retired archive job
+	// died of the *identical* loop (its retention also sat after its pre-flight),
+	// and the sweep above was moved here for the same reason with the same
+	// reasoning written next to it. Three instances of one mistake in one file.
+	//
+	// So the rule, stated once: ANY cleanup this job owns runs before the check
+	// that can refuse, unconditionally, on every run.
+	//
+	// It prunes to keep-1, not keep, because the new dump is about to be written
+	// beside the survivors — so keep-1 during the dump is keep afterwards, which
+	// is what the pre-flight below already assumes when it says "plan for two".
+	// Floored at 1: keep=1 must not mean "delete the only dump we have, then
+	// start a dump that might fail".
+	if room := p.dumpKeep(ctx) - 1; room >= 1 {
+		if pruned := p.pruneDumpsTo(room); pruned > 0 {
+			p.dumpJob.Log("pruned %d old dump(s) before the disk check, making room for this one", pruned)
+		}
+	}
+
 	// Pre-flight. A dump that fills prod's disk is an OUTAGE, not a failed
 	// backup, and the peak is two dumps: the new one is written alongside the
 	// previous so a failure never leaves us with neither.
@@ -299,11 +324,24 @@ func exclusionNote(excl []string) string {
 // dumps on the production box protects nothing that the array does not already
 // protect better.
 func (p *Plugin) pruneDumps(ctx context.Context) int {
-	keep := 2
+	return p.pruneDumpsTo(p.dumpKeep(ctx))
+}
+
+// dumpKeep is how many published dumps stay on PROD's disk, admin-settable.
+func (p *Plugin) dumpKeep(ctx context.Context) int {
 	if deps.Config != nil {
 		if n := deps.Config.GetBackupDBKeep(ctx); n > 0 {
-			keep = n
+			return n
 		}
+	}
+	return 2
+}
+
+// pruneDumpsTo deletes all but the newest keep published dumps. Split out from
+// pruneDumps so the pre-flight can ask for one fewer — see runDBDump.
+func (p *Plugin) pruneDumpsTo(keep int) int {
+	if keep < 1 {
+		return 0 // never asked to delete everything
 	}
 	dumps := publishedDumps(deps.DBDumpDir)
 	if len(dumps) <= keep {
