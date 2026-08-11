@@ -320,7 +320,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 	if p.core.Process != "worker" && p.core.Process != "all" {
 		return nil
 	}
-	p.job = schedule.RegisterJob("Reward Windows", "Materialise event windows ahead and expire lapsed grants")
+	p.job = schedule.RegisterJob("Reward Windows", "Materialise event windows ahead and expire lapsed grants").MarkWrites()
 	// Triggerable, because the operator loop is "create an event, see its
 	// windows". Without this the answer to "where are my windows" is "wait up
 	// to thirty minutes", which reads as broken and is how someone concludes

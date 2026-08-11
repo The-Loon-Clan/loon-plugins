@@ -46,7 +46,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if deps == nil || deps.OpenEntry == nil {
 		return fmt.Errorf("backups: SetDeps not called with OpenEntry before core.Boot")
 	}
-	p.job = c.Scheduler.RegisterJob("Backup", "Dumps the DB and every plugin's backup hook into one archive").MarkOffPeak()
+	p.job = c.Scheduler.RegisterJob("Backup", "Dumps the DB and every plugin's backup hook into one archive").MarkOffPeak().MarkWrites()
 	p.job.SetTrigger(func() { go p.run(p.ctx) })
 	return nil
 }

@@ -100,6 +100,7 @@ func (p *Plugin) registerCheatJob(c *core.Core) {
 		return
 	}
 	p.cheatJob = c.Scheduler.RegisterJob(cheatJobName,
-		"Samples the tracker's counters and flags readings no real client could have produced")
+		"Samples the tracker's counters and flags readings no real client could have produced").
+		MarkWrites()
 	p.cheatJob.SetTrigger(func() { go p.runCheatSweep(p.ctx) })
 }

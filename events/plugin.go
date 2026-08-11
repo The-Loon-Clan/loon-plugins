@@ -89,7 +89,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 		// minutes" — which reads as broken and is how somebody concludes the
 		// event is misconfigured when it is merely early.
 		p.job = schedule.RegisterJob("Event Windows",
-			"Materialise scheduled-event windows ahead of time")
+			"Materialise scheduled-event windows ahead of time").
+			MarkWrites()
 		// And actually wire the trigger the comment above promises. It was
 		// described and then not installed, so /admin/jobs and the ops API both
 		// accepted a Run for this job and silently did nothing — the operator

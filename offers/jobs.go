@@ -14,12 +14,12 @@ import (
 var offerSweeperJob = schedule.RegisterJob(
 	"Offer Sweeper",
 	"Reopens offer_requests whose claim expired without delivery. Bumps the claimer's failed_count and notifies the requester.",
-)
+).MarkWrites()
 
 var offerPrunerJob = schedule.RegisterJob(
 	"Offer Pruner",
 	"Drops offer rows whose Python script hasn't heartbeat-pinged in 60+ days (zero-fulfillment only — reputation evidence is kept).",
-)
+).MarkWrites()
 
 // offerSweeper expires stale claims on offer_requests.
 //

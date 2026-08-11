@@ -94,7 +94,7 @@ func (p *Plugin) provisionRepack() {
 		"Runs `pg_repack -t nzbs -x` to reclaim disk space and rebuild indexes "+
 			"online — no maintenance window. Replaces the legacy weekly VACUUM "+
 			"FULL job. Skips with a logged warning if the pg_repack binary or "+
-			"extension isn't installed.").MarkOffPeak()
+			"extension isn't installed.").MarkOffPeak().MarkWrites()
 	p.repack.IntervalMin = pgRepackIntervalMin
 	p.repack.SetTrigger(func() { go p.runRepack(context.Background()) })
 	p.repack.DeclareConfig(deps.ConfigStore,
@@ -127,7 +127,7 @@ func (p *Plugin) provisionReindex() {
 		"Runs REINDEX INDEX CONCURRENTLY on the largest indexes in the public "+
 			"schema once a month, skipping any tables already covered by "+
 			"pg_repack -x. Online operation — site stays up, brief locks only "+
-			"at swap time.").MarkOffPeak()
+			"at swap time.").MarkOffPeak().MarkWrites()
 	p.reindex.IntervalMin = reindexIntervalMin
 	p.reindex.SetTrigger(func() { go p.runReindex(context.Background()) })
 	p.reindex.DeclareConfig(deps.ConfigStore,
@@ -156,6 +156,8 @@ func (p *Plugin) provisionReindex() {
 }
 
 func (p *Plugin) provisionVerify() {
+	// Deliberately NOT MarkWrites: bt_index_check only reads, so it is safe to
+	// keep running while the site is read-only for a migration.
 	p.verify = schedule.RegisterJob("Verify Indexes",
 		"Reads every collatable btree index against its table with amcheck's "+
 			"bt_index_check and reports any that disagree. Detects the silent "+
@@ -229,7 +231,7 @@ func (p *Plugin) provisionVacuum() {
 		"Runs VACUUM FULL on the nzbs table to reclaim disk space. Holds an "+
 			"exclusive lock for the duration, so the site is put into "+
 			"maintenance mode while it runs. Scheduled weekly; can also be "+
-			"triggered manually from the admin jobs page.").MarkOffPeak()
+			"triggered manually from the admin jobs page.").MarkOffPeak().MarkWrites()
 	p.vacuum.IntervalMin = vacuumFullIntervalMin
 	p.vacuum.SetTrigger(func() { go p.runVacuum(context.Background()) })
 	p.vacuum.DeclareConfig(deps.ConfigStore,

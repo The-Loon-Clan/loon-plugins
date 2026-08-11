@@ -30,7 +30,8 @@ func newFlowSnapshots(flow FlowStore) *flowSnapshots {
 		"Periodic JSONB snapshot of the /flow graph for rollback. "+
 			"Keeps "+fmt.Sprintf("%d", flowSnapshotKeepDays)+" days of "+
 			"automatic snapshots; manual / pre-restore ones are kept "+
-			"indefinitely. Cheap operation — graph fits in a few KB.")
+			"indefinitely. Cheap operation — graph fits in a few KB.").
+		MarkWrites()
 	s.job.IntervalMin = flowSnapshotIntervalMin
 	// Background, not the trigger's request context: an /admin/jobs POST
 	// must not cancel the run it fired.

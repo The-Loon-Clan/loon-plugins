@@ -51,7 +51,8 @@ func newScraperService(d JobDeps, errs core.ErrorReporter) *scraperService {
 	s.job = schedule.RegisterJob(scraperJobName,
 		"Scrapes release-group profiles (name, website, logo) from nekobt.to's "+
 			"JSON API and merges them into the release_groups table — promoting "+
-			"auto-detected 'unknown' rows to 'confirmed'.")
+			"auto-detected 'unknown' rows to 'confirmed'.").
+		MarkWrites()
 	s.job.IntervalMin = int(scraperDefaultInterval.Minutes())
 	s.job.SetTrigger(func() { go s.run(context.Background()) })
 	return s
@@ -349,7 +350,8 @@ func newArchiveService(d JobDeps, errs core.ErrorReporter) *archiveService {
 	s := &archiveService{deps: d, errs: errs}
 	s.job = schedule.RegisterJob(archiveJobName,
 		"Daily refresh of per-group nekoBT torrent listings for claimed "+
-			"release groups (migration 229).")
+			"release groups (migration 229).").
+		MarkWrites()
 	s.job.IntervalMin = int(archiveDefaultInterval.Minutes())
 	// Off-peak gate: this calls an external API in a loop and writes to PG;
 	// we don't want it competing with site traffic on a loaded box.

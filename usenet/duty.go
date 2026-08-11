@@ -151,6 +151,19 @@ func (j dutyJob) MarkOffPeak() core.Job {
 	return j
 }
 
+// MarkWrites exists for exactly the reason MarkOffPeak above does, and is
+// declared explicitly rather than left to embedding for that reason.
+//
+// core.Job is embedded, so a promoted MarkWrites would compile and work — and
+// would return the INNER job, so `wrap(name, job).MarkWrites()` would hand back
+// something with no duty accounting attached. That is the bug the comment above
+// records shipping once already; a second method with the same shape is a second
+// chance to ship it.
+func (j dutyJob) MarkWrites() core.Job {
+	j.Job.MarkWrites()
+	return j
+}
+
 // Unwrap exposes the scheduler-minted handle underneath. RunLoop needs the
 // concrete job its RegisterJob returned and walks Unwrap to find it — without
 // this the first RunLoop call panics the worker at boot, which is exactly how

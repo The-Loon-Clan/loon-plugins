@@ -135,12 +135,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 
 	p.indexJob = schedule.RegisterJob("Backup Index",
-		"Walks the asset directories and records every file's size and content hash")
+		"Walks the asset directories and records every file's size and content hash").
+		MarkWrites()
 	p.indexJob.IntervalMin = indexIntervalMin
 	p.indexJob.SetTrigger(func() { go p.runIndex(context.Background()) })
 
 	p.dumpJob = schedule.RegisterJob("Backup Database",
-		"Dumps PostgreSQL into the asset tree so the pull pipeline carries it")
+		"Dumps PostgreSQL into the asset tree so the pull pipeline carries it").
+		MarkWrites()
 	p.dumpJob.IntervalMin = dbDumpIntervalMin
 	p.dumpJob.SetTrigger(func() { go p.runDBDump(context.Background()) })
 

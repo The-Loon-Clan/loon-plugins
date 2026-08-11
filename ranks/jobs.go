@@ -32,7 +32,8 @@ type rankExpiry struct {
 func newRankExpiry(store Store, ents *entSync, sched core.SchedulerService) *rankExpiry {
 	s := &rankExpiry{store: store, ents: ents, sched: sched}
 	s.job = sched.RegisterJob("Rank Expiry",
-		"Removes expired rank subscriptions and logs deranks to history")
+		"Removes expired rank subscriptions and logs deranks to history").
+		MarkWrites()
 	// The manual "run now" button. It does NOT go through RunLoop, so the
 	// pause check inside run() is what stops it firing on a paused job.
 	s.job.SetTrigger(func() { go s.run(context.Background()) })

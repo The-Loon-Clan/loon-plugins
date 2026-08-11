@@ -24,7 +24,8 @@ const cleanupIntervalMin = 24 * 60 // daily
 // /admin/jobs registry with its historical name even before Provision
 // wires the worker deps — a manual trigger just no-ops until then.
 var cleanupJob = schedule.RegisterJob("Error Log Cleanup",
-	"Deletes error_log rows older than 30 days. Lightweight — runs daily.")
+	"Deletes error_log rows older than 30 days. Lightweight — runs daily.").
+	MarkWrites()
 
 // cleaner prunes stale error-log rows on a daily tick, threaded through
 // ServiceLoop so it inherits off-peak gating + SIGTERM-aware sleep.

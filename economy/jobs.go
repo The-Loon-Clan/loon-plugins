@@ -25,7 +25,8 @@ type grabBonus struct {
 func newGrabBonus(deps Deps, points core.PointsService) *grabBonus {
 	s := &grabBonus{deps: deps, points: points}
 	s.job = schedule.RegisterJob("Points Grab Bonus",
-		"Awards points to uploaders for each NZB download/grab on their uploads")
+		"Awards points to uploaders for each NZB download/grab on their uploads").
+		MarkWrites()
 	s.job.IntervalMin = 24 * 60
 	s.job.SetTrigger(func() { go s.run(context.Background()) })
 	return s

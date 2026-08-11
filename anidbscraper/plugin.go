@@ -79,15 +79,16 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// registers six; the exemplar wires the three that carry the core loop.
 	p.titlesJob = c.Scheduler.RegisterJob(
 		"AniDB Titles Index",
-		"Downloads and indexes anime titles from AniDB (refreshes daily)")
+		"Downloads and indexes anime titles from AniDB (refreshes daily)").
+		MarkWrites()
 	p.scanJob = c.Scheduler.RegisterJob(
 		"AniDB NZB Scanner",
 		"Scans NZB titles against the AniDB index and tags matched anime_id").
-		MarkOffPeak()
+		MarkOffPeak().MarkWrites()
 	p.fillJob = c.Scheduler.RegisterJob(
 		"AniDB Metadata Fill",
 		"Fetches images and metadata from AniList for the anime catalog").
-		MarkOffPeak()
+		MarkOffPeak().MarkWrites()
 
 	// Manual /admin/jobs "run now" buttons (bypass the off-peak gate). The
 	// callback has no ctx of its own, so it borrows the root ctx captured in

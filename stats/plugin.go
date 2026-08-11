@@ -52,7 +52,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 		if deps == nil || deps.Cache == nil {
 			return fmt.Errorf("stats: SetDeps not called with a Cache sink before core.Boot")
 		}
-		p.job = c.Scheduler.RegisterJob("Stats Cache", "Collects plugin StatContributor hooks into the cached stats snapshot")
+		// MarkWrites even though it only writes cache rows: holding cache
+		// writes back during a migration keeps the row-count verification clean.
+		p.job = c.Scheduler.RegisterJob("Stats Cache", "Collects plugin StatContributor hooks into the cached stats snapshot").MarkWrites()
 		p.job.SetTrigger(func() { go p.run(p.ctx) })
 	}
 

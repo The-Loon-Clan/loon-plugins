@@ -168,7 +168,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 		sources += ", nekoBT"
 	}
 	p.job = schedule.RegisterJob(jobName,
-		fmt.Sprintf("Polls RSS feeds (%s) for new anime torrents and auto-creates requests", sources))
+		fmt.Sprintf("Polls RSS feeds (%s) for new anime torrents and auto-creates requests", sources)).
+		MarkWrites()
 	p.job.IntervalMin = int(defaultInterval.Minutes())
 	// Background rather than the trigger's request context — the /admin/jobs
 	// POST that fired it must not cancel the run. runImport's TryLock refuses

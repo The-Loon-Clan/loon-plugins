@@ -83,13 +83,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.fillJob = c.Scheduler.RegisterJob(
 		"Metadata Fill",
 		"Enriches catalog entries missing metadata across every registered source").
-		MarkOffPeak()
+		MarkOffPeak().MarkWrites()
 	p.fillJob.SetTrigger(func() { go p.runFill(p.ctx) })
 
 	p.matchJob = c.Scheduler.RegisterJob(
 		"Catalog Match",
 		"Matches releases to catalog sources by title + category and links cover art").
-		MarkOffPeak()
+		MarkOffPeak().MarkWrites()
 	p.matchJob.SetTrigger(func() { go p.runMatch(p.ctx) })
 	return nil
 }

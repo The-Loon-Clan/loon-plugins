@@ -71,7 +71,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// wants it NOW.
 	p.job = schedule.RegisterJob(jobName,
 		"Fills season/episode on anime releases from title, AniDB entry name and TMDB season structure; unresolved rows feed the curation page").
-		MarkOffPeak()
+		MarkOffPeak().MarkWrites()
 	p.job.IntervalMin = int(defaultInterval.Minutes())
 	p.job.SetTrigger(func() { go p.runSweep(context.Background()) })
 	return nil

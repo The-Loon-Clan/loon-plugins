@@ -273,18 +273,25 @@ func (p *Plugin) Provision(c *core.Core) error {
 		// Every job handle is wrapped for duty accounting (duty.go): busy
 		// windows record themselves at the SetRunning/SetIdle boundary the
 		// jobs already drive, and telemetry publishes a trailing duty%.
+		// Every job in this pipeline WRITES, so all six carry MarkWrites and hold
+		// back while the site is read-only: crawl and backfill fill staging, build
+		// assembles NZB rows, tag fill recategorises, prune DELETES, health rewrites
+		// verdicts. This is the pipeline read-only exists to stop — during a
+		// migration that copies from a live database, a crawler still writing is the
+		// failure that leaves no trace, because the dump's snapshot is taken at its
+		// start and everything committed afterwards vanishes at cutover unlogged.
 		p.crawlJob = p.duty.wrap(jobNameCrawl, c.Scheduler.RegisterJob(jobNameCrawl,
-			"Fetches recent article overviews from active newsgroups").MarkOffPeak())
+			"Fetches recent article overviews from active newsgroups").MarkOffPeak().MarkWrites())
 		p.backfillJob = p.duty.wrap(jobNameBackfill, c.Scheduler.RegisterJob(jobNameBackfill,
-			"Walks each group's history backward to fill the retention window").MarkOffPeak())
+			"Walks each group's history backward to fill the retention window").MarkOffPeak().MarkWrites())
 		p.buildJob = p.duty.wrap(jobNameBuild, c.Scheduler.RegisterJob(jobNameBuild,
-			"Assembles complete article sets into downloadable NZB files").MarkOffPeak())
+			"Assembles complete article sets into downloadable NZB files").MarkOffPeak().MarkWrites())
 		p.tagJob = p.duty.wrap(jobNameTagFill, c.Scheduler.RegisterJob(jobNameTagFill,
-			"Re-parses quality tags for untagged NZBs and recategorizes default-category releases"))
+			"Re-parses quality tags for untagged NZBs and recategorizes default-category releases").MarkWrites())
 		p.pruneJob = p.duty.wrap(jobNamePrune, c.Scheduler.RegisterJob(jobNamePrune,
-			"Sweeps stale staging + junk; deletes old NZBs only when nzb_retention_days is set"))
+			"Sweeps stale staging + junk; deletes old NZBs only when nzb_retention_days is set").MarkWrites())
 		p.healthJob = p.duty.wrap(jobNameHealth, c.Scheduler.RegisterJob(jobNameHealth,
-			"STATs stored NZBs to find releases whose articles have expired").MarkOffPeak())
+			"STATs stored NZBs to find releases whose articles have expired").MarkOffPeak().MarkWrites())
 		p.crawlJob.SetTrigger(func() { go p.runCrawl(p.ctx) })
 		p.backfillJob.SetTrigger(func() { go p.runBackfill(p.ctx) })
 		p.buildJob.SetTrigger(func() { go p.runBuild(p.ctx) })
