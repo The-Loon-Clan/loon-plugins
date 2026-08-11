@@ -273,13 +273,22 @@ func (p *Plugin) Provision(c *core.Core) error {
 		// Every job handle is wrapped for duty accounting (duty.go): busy
 		// windows record themselves at the SetRunning/SetIdle boundary the
 		// jobs already drive, and telemetry publishes a trailing duty%.
-		// Every job in this pipeline WRITES, so all six carry MarkWrites and hold
-		// back while the site is read-only: crawl and backfill fill staging, build
-		// assembles NZB rows, tag fill recategorises, prune DELETES, health rewrites
-		// verdicts. This is the pipeline read-only exists to stop — during a
-		// migration that copies from a live database, a crawler still writing is the
-		// failure that leaves no trace, because the dump's snapshot is taken at its
-		// start and everything committed afterwards vanishes at cutover unlogged.
+		// Every job in this pipeline WRITES, so all six carry MarkWrites: crawl and
+		// backfill fill staging, build assembles NZB rows, tag fill recategorises,
+		// prune DELETES, health rewrites verdicts. This is the pipeline read-only
+		// exists to stop — during a migration that copies from a live database, a
+		// crawler still writing is the failure that leaves no trace, because the
+		// dump's snapshot is taken at its start and everything committed afterwards
+		// vanishes at cutover unlogged.
+		//
+		// MarkWrites ALONE DOES NOT STOP THEM, and this comment used to claim it
+		// did. schedule.WriteGate is consulted only in ServiceLoop and TriggerJob,
+		// and the automatic dispatch here reaches neither — so on 2026-08-11, with
+		// read-only engaged and every HTTP write path correctly refusing, this
+		// pipeline wrote 4 rows to nzbs in 45 seconds. MarkWrites earns the
+		// /admin/jobs badge and gates the manual trigger; the actual hold-back is
+		// p.mayWrite at the top of each pass (writegate.go), enforced by
+		// TestEveryPassAsksTheWriteGate.
 		p.crawlJob = p.duty.wrap(jobNameCrawl, c.Scheduler.RegisterJob(jobNameCrawl,
 			"Fetches recent article overviews from active newsgroups").MarkOffPeak().MarkWrites())
 		p.backfillJob = p.duty.wrap(jobNameBackfill, c.Scheduler.RegisterJob(jobNameBackfill,
@@ -383,6 +392,12 @@ func (p *Plugin) Start(ctx context.Context) error {
 // covers new rows; this catches rows from before a parser change).
 func (p *Plugin) runTagFill(ctx context.Context) {
 	if ctx == nil {
+		return
+	}
+	// The read-only write gate (writegate.go). Every pass asks, because this
+	// pipeline has four different ways to be started and only one of them ever
+	// reached schedule.WriteGate.
+	if !p.mayWrite(ctx, p.tagJob) {
 		return
 	}
 	// TryLock prologue: see runPrune — the job lease is reentrant in-process
@@ -519,6 +534,12 @@ func (p *Plugin) effective(ctx context.Context) Config {
 // runPrune deletes NZBs past the retention window + stale staged articles.
 func (p *Plugin) runPrune(ctx context.Context) {
 	if ctx == nil {
+		return
+	}
+	// The read-only write gate (writegate.go). Every pass asks, because this
+	// pipeline has four different ways to be started and only one of them ever
+	// reached schedule.WriteGate.
+	if !p.mayWrite(ctx, p.pruneJob) {
 		return
 	}
 	// Same TryLock prologue as the other jobs: the cluster-wide lease does NOT

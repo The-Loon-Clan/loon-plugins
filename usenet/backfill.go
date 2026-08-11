@@ -23,6 +23,12 @@ func (p *Plugin) runBackfill(ctx context.Context) {
 	if ctx == nil {
 		return
 	}
+	// The read-only write gate (writegate.go). Every pass asks, because this
+	// pipeline has four different ways to be started and only one of them ever
+	// reached schedule.WriteGate.
+	if !p.mayWrite(ctx, p.backfillJob) {
+		return
+	}
 	if !p.backfillMu.TryLock() {
 		p.backfillJob.Log("backfill already running — skipping overlap")
 		return

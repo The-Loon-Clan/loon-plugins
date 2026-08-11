@@ -83,6 +83,12 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	if ctx == nil {
 		return
 	}
+	// The read-only write gate (writegate.go). Every pass asks, because this
+	// pipeline has four different ways to be started and only one of them ever
+	// reached schedule.WriteGate.
+	if !p.mayWrite(ctx, p.crawlJob) {
+		return
+	}
 	if !p.crawlMu.TryLock() {
 		p.crawlJob.Log("crawl already running — skipping overlap")
 		return
@@ -501,6 +507,12 @@ func (p *Plugin) crawlBackbone(ctx context.Context, runs []providerRun, cfg Conf
 // exhausted, even on a pass that just fetched tens of thousands of articles.)
 func (p *Plugin) idleHealthCheck(ctx context.Context) {
 	if ctx == nil || ctx.Err() != nil {
+		return
+	}
+	// The read-only write gate (writegate.go). Every pass asks, because this
+	// pipeline has four different ways to be started and only one of them ever
+	// reached schedule.WriteGate.
+	if !p.mayWrite(ctx, p.healthJob) {
 		return
 	}
 	pending, err := p.st.anyBackfillPending(ctx)
