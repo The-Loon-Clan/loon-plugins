@@ -1,6 +1,9 @@
 package forum
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // isAllowedReactionEmoji is the server-side allowlist that guards the
 // forum_post_reactions.emoji column against arbitrary unicode/HTML
@@ -50,6 +53,19 @@ func TestAllowedReactionEmojisCount(t *testing.T) {
 	for emoji, ok := range allowedReactionEmojis {
 		if !ok {
 			t.Errorf("allowlist entry %q maps to false — every listed emoji must be true", emoji)
+		}
+	}
+}
+
+func TestThreadPickerContainsEveryAllowedReaction(t *testing.T) {
+	b, err := pageFS.ReadFile("templates/community_thread.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	markup := string(b)
+	for emoji := range allowedReactionEmojis {
+		if !strings.Contains(markup, `data-emoji="`+emoji+`"`) {
+			t.Errorf("thread picker is missing allowed reaction %q", emoji)
 		}
 	}
 }

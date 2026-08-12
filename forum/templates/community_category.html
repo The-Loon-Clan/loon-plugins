@@ -1,183 +1,163 @@
 {{define "community_category.html"}}
-    <style>
-        .forum-page { margin: 0 auto; padding: 2rem 1rem 4rem; }
-        .forum-page-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-            gap: 1rem;
-            margin-bottom: 2rem;
-            flex-wrap: wrap;
-        }
-        .forum-page-header .eyebrow {
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--text-muted);
-            font-weight: 600;
-            margin-bottom: 0.35rem;
-        }
-        .forum-page-header h1 {
-            font-size: 1.65rem;
-            font-weight: 800;
-            margin: 0;
-            color: var(--text-primary);
-            letter-spacing: -0.01em;
-        }
+<main class="container page-wide forum-category-page">
+    <section class="forum-category-hero" aria-labelledby="forum-category-title">
+        <div class="forum-category-hero-copy">
+            <nav class="forum-category-breadcrumb" aria-label="Breadcrumb">
+                <a href="/community/forums">Forums</a>
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span>{{.Category.Name}}</span>
+            </nav>
 
-        .thread-grid { display: flex; flex-direction: column; gap: 1rem; }
-
-        .thread-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.2rem 1.4rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            text-decoration: none;
-            transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
-        }
-        /* Alternating row tint — every other thread row picks up a slightly
-           lighter surface so long lists are easier to scan. */
-        .thread-grid > .thread-card:nth-child(even) {
-            background: var(--bg-elevated);
-        }
-        .thread-card:hover {
-            border-color: var(--blue);
-            background: var(--bg-elevated);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-        }
-        .thread-card:hover .thread-title { color: var(--blue); }
-
-        .thread-title-wrap { flex: 1; min-width: 0; }
-        .thread-title {
-            font-size: 1.05rem;
-            font-weight: 700;
-            line-height: 1.4;
-            color: var(--text-primary);
-            transition: color 0.2s ease;
-        }
-        .thread-meta {
-            font-size: 0.72rem;
-            color: var(--text-muted);
-            margin-top: 0.35rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            font-weight: 600;
-        }
-        .thread-stats {
-            text-align: right;
-            min-width: 130px;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            line-height: 1.5;
-            flex-shrink: 0;
-        }
-        .thread-stats strong { color: var(--text-primary); }
-
-        .badge-pinned, .badge-locked {
-            font-size: 0.62rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            padding: 2px 8px;
-            border-radius: 999px;
-            font-weight: 600;
-            vertical-align: middle;
-            margin-right: 6px;
-        }
-        .badge-pinned { background: rgba(91,138,245,0.18); color: var(--blue); }
-        .badge-locked { background: rgba(107,116,133,0.22); color: var(--text-muted); }
-    </style>
-    <div class="container page forum-page">
-        <nav aria-label="breadcrumb" style="font-size:0.78rem;" class="mb-3">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a href="/community/forums">Forums</a></li>
-                <li class="breadcrumb-item active">{{.Category.Name}}</li>
-            </ol>
-        </nav>
-
-        <div class="forum-page-header">
-            <div>
-                <div class="eyebrow">Forum Category</div>
-                <h1>{{.Category.Name}}</h1>
+            <div class="forum-category-heading">
+                <span class="forum-category-hero-icon forum-cat-icon-{{or .Category.Color "blue"}}">
+                    <i class="bi bi-{{or .Category.Icon "chat-square-text"}}" aria-hidden="true"></i>
+                </span>
+                <div>
+                    <h1 id="forum-category-title">{{.Category.Name}}</h1>
+                    {{if .Category.Description}}<p>{{.Category.Description}}</p>{{end}}
+                </div>
             </div>
-            {{if not .AccessDenied}}<a href="/community/forums/new?category={{.Category.ID}}" class="btn btn-sm btn-primary">New Thread</a>{{end}}
+
+            <div class="forum-category-totals" aria-label="Category totals">
+                <span><i class="bi bi-chat-square-text" aria-hidden="true"></i><strong>{{.Category.ThreadCount}}</strong> threads</span>
+                <span><i class="bi bi-card-text" aria-hidden="true"></i><strong>{{.Category.PostCount}}</strong> posts</span>
+            </div>
         </div>
 
-        {{/* Read gate: the viewer may know this category exists (See passed)
-             but not open it. The handler sends an empty thread list with
-             AccessDenied set. */}}
-        {{if .AccessDenied}}
-        <div class="alert alert-warning py-2">This forum is restricted — your account doesn't meet its access requirements yet.</div>
-        {{end}}
-
-        <div class="thread-grid">
-        {{range .Threads}}
-        <a href="/community/forums/thread/{{.ID}}" class="thread-card" style="display:flex;gap:0.85rem;align-items:center;">
-            {{/* OP avatar — 40px square, falls back to first-letter
-                 chip when the user has no uploaded avatar. */}}
-            {{if .AvatarPath}}
-            <img class="forum-avatar forum-avatar-lg" src="{{.AvatarPath}}" alt="" loading="lazy">
-            {{else}}
-            <span class="forum-avatar-fallback forum-avatar-lg">{{initial .Username}}</span>
-            {{end}}
-            <div class="thread-title-wrap" style="flex:1;min-width:0;">
-                <div class="thread-title">
-                    {{if .Pinned}}<span class="badge-pinned">Pinned</span>{{end}}
-                    {{if .Locked}}<span class="badge-locked">Locked</span>{{end}}
-                    {{.Title}}
-                </div>
-                <div class="thread-meta">
-                    <span class="role-name role-name-{{or .Role "user"}}">{{.Username}}</span>
-                    &middot; {{relativeTime .CreatedAt}}
-                </div>
-            </div>
-            {{/* Fixed-width right cluster so the avatar lands in the
-                 same horizontal slot on every row regardless of
-                 username/reply-count text length. Three columns:
-                    1. reply count (90px, right-aligned)
-                    2. avatar (40px, fixed)
-                    3. last-reply name+time (110px, left-aligned —
-                       longer names truncate; alignment to the avatar
-                       stays consistent).
-                 Empty-state (no last reply) renders only column 1
-                 with the same width so reply-count alignment also
-                 stays consistent across rows. */}}
-            <div class="thread-stats" style="display:flex;gap:0.75rem;align-items:center;flex-shrink:0;">
-                <div style="width:90px;text-align:right;">
-                    <div><strong>{{.ReplyCount}}</strong> replies</div>
-                    <div style="color:var(--text-muted);font-size:0.75rem;">{{relativeTime .LastPostAt}}</div>
-                </div>
-                {{if .LastPostUsername}}
-                {{$lpName := derefStr .LastPostUsername}}
-                {{$lpAvatar := derefStr .LastPostAvatarPath}}
-                {{$lpRole := derefStr .LastPostRole}}
-                {{if $lpAvatar}}
-                <img class="forum-avatar forum-avatar-lg" src="{{$lpAvatar}}" alt="" loading="lazy" title="Last reply by {{$lpName}}">
-                {{else}}
-                <span class="forum-avatar-fallback forum-avatar-lg" title="Last reply by {{$lpName}}">{{initial $lpName}}</span>
-                {{end}}
-                <div style="width:110px;font-size:0.72rem;line-height:1.25;">
-                    <div class="role-name role-name-{{or $lpRole "user"}} text-truncate">{{$lpName}}</div>
-                    <div style="color:var(--text-muted);" class="text-truncate">{{relativeTime .LastPostAt}}</div>
-                </div>
-                {{else}}
-                {{/* Reserve the avatar+name slot so rows without a last
-                     reply stay aligned with rows that have one. */}}
-                <div style="width:calc(40px + 0.75rem + 110px);"></div>
-                {{end}}
-            </div>
+        {{if not .AccessDenied}}
+        <a href="/community/forums/new?category={{.Category.ID}}" class="btn btn-primary forum-category-new-thread">
+            <i class="bi bi-plus-lg" aria-hidden="true"></i>
+            New Thread
         </a>
-        {{else}}
-        <div class="thread-card" style="justify-content:center;cursor:default;color:var(--text-muted);">
-            No threads yet. Be the first to post!
-        </div>
         {{end}}
-        </div>
+    </section>
 
-        {{.PaginationHTML}}
+    {{/* Read gate: the viewer may know this category exists (See passed)
+         but not open it. The handler sends an empty thread list with
+         AccessDenied set. */}}
+    {{if .AccessDenied}}
+    <div class="alert alert-warning forum-category-access-note">
+        <i class="bi bi-lock" aria-hidden="true"></i>
+        <span>This forum is restricted. Your account does not meet its access requirements yet.</span>
     </div>
+    {{end}}
+
+    <div class="forum-category-layout">
+        <section class="forum-panel forum-thread-panel" aria-labelledby="forum-thread-list-title">
+            <div class="forum-thread-panel-header">
+                <div class="forum-thread-tabs" role="presentation">
+                    <h2 id="forum-thread-list-title">All Threads</h2>
+                </div>
+                {{if not .AccessDenied}}
+                <span class="forum-thread-total">{{.Total}} total</span>
+                {{end}}
+            </div>
+
+            {{if not .AccessDenied}}
+            {{if .Threads}}
+            <div class="forum-thread-columns" aria-hidden="true">
+                <span>Thread</span>
+                <span>Replies</span>
+                <span>Last activity</span>
+            </div>
+
+            <ol class="forum-thread-list">
+                {{range .Threads}}
+                <li>
+                    <a href="/community/forums/thread/{{.ID}}" class="forum-thread-row">
+                        <span class="forum-thread-state {{if .Pinned}}is-pinned{{else if .Locked}}is-locked{{else if eq .ThreadType "recruitment"}}is-recruitment{{else}}is-discussion{{end}}" aria-hidden="true">
+                            {{if .Pinned}}
+                            <i class="bi bi-pin-angle-fill"></i>
+                            {{else if .Locked}}
+                            <i class="bi bi-lock-fill"></i>
+                            {{else if eq .ThreadType "recruitment"}}
+                            <i class="bi bi-person-lock"></i>
+                            {{else}}
+                            <span></span>
+                            {{end}}
+                        </span>
+
+                        <span class="forum-thread-primary">
+                            {{if .AvatarPath}}
+                            <img class="forum-avatar forum-avatar-lg" src="{{.AvatarPath}}" alt="" loading="lazy">
+                            {{else}}
+                            <span class="forum-avatar-fallback forum-avatar-lg">{{initial .Username}}</span>
+                            {{end}}
+
+                            <span class="forum-thread-copy">
+                                <span class="forum-thread-title-line">
+                                    <strong>{{.Title}}</strong>
+                                    {{if .Pinned}}<span class="forum-thread-badge is-pinned">Pinned</span>{{end}}
+                                    {{if .Locked}}<span class="forum-thread-badge is-locked">Locked</span>{{end}}
+                                    {{if eq .ThreadType "recruitment"}}<span class="forum-thread-badge is-recruitment">Private replies</span>{{end}}
+                                </span>
+                                <small>
+                                    <span class="role-name role-name-{{or .Role "user"}}">{{.Username}}</span>
+                                    <span aria-hidden="true"> &middot; </span>
+                                    <span>{{relativeTime .CreatedAt}}</span>
+                                </small>
+                            </span>
+                        </span>
+
+                        <span class="forum-thread-replies">
+                            <strong>{{.ReplyCount}}</strong>
+                            <small>Replies</small>
+                        </span>
+
+                        <span class="forum-thread-last">
+                            {{if .LastPostUsername}}
+                            {{$lpName := derefStr .LastPostUsername}}
+                            {{$lpAvatar := derefStr .LastPostAvatarPath}}
+                            {{$lpRole := derefStr .LastPostRole}}
+                            {{if $lpAvatar}}
+                            <img class="forum-avatar forum-avatar-lg" src="{{$lpAvatar}}" alt="" loading="lazy">
+                            {{else}}
+                            <span class="forum-avatar-fallback forum-avatar-lg">{{initial $lpName}}</span>
+                            {{end}}
+                            <span>
+                                <strong class="role-name role-name-{{or $lpRole "user"}}">{{$lpName}}</strong>
+                                <small>{{relativeTime .LastPostAt}}</small>
+                            </span>
+                            {{else}}
+                            {{if .AvatarPath}}
+                            <img class="forum-avatar forum-avatar-lg" src="{{.AvatarPath}}" alt="" loading="lazy">
+                            {{else}}
+                            <span class="forum-avatar-fallback forum-avatar-lg">{{initial .Username}}</span>
+                            {{end}}
+                            <span>
+                                <strong class="role-name role-name-{{or .Role "user"}}">{{.Username}}</strong>
+                                <small>{{relativeTime .LastPostAt}}</small>
+                            </span>
+                            {{end}}
+                        </span>
+                    </a>
+                </li>
+                {{end}}
+            </ol>
+            {{else}}
+            <div class="forum-thread-empty">
+                <span class="forum-category-hero-icon forum-cat-icon-{{or .Category.Color "blue"}}">
+                    <i class="bi bi-{{or .Category.Icon "chat-square-text"}}" aria-hidden="true"></i>
+                </span>
+                <strong>No threads yet</strong>
+                <p>Be the first person to start a discussion in {{.Category.Name}}.</p>
+                <a href="/community/forums/new?category={{.Category.ID}}" class="btn btn-sm btn-primary">Start a Thread</a>
+            </div>
+            {{end}}
+
+            <footer class="forum-thread-footer">
+                <span>{{.Total}} threads in this forum</span>
+                <div class="forum-thread-pagination">{{.PaginationHTML}}</div>
+            </footer>
+            {{else}}
+            <div class="forum-thread-locked">
+                <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                <strong>Restricted forum</strong>
+                <p>The thread list becomes available when your account meets this forum's access requirements.</p>
+            </div>
+            {{end}}
+        </section>
+
+    </div>
+</main>
 {{end}}

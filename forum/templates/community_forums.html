@@ -1,141 +1,185 @@
 {{define "community_forums.html"}}
-    <div class="container mt-4 site-container-wide">
-
-        <div class="page-header d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h1 style="font-size:1.6rem;font-weight:700;margin-bottom:0.15rem;">Forums</h1>
-                <div class="text-secondary small">Join the discussion with the community</div>
+<main class="container page-wide forum-index">
+    <section class="forum-hero" aria-labelledby="forum-title">
+        <div class="forum-hero-copy">
+            <div class="forum-hero-eyebrow">Community</div>
+            <h1 id="forum-title">Forums</h1>
+            <p>Join the discussion with the community.</p>
+            <div class="forum-hero-totals" aria-label="Forum totals">
+                <span><i class="bi bi-grid" aria-hidden="true"></i><strong>{{len .Categories}}</strong> categories</span>
+                <span><i class="bi bi-chat-square-text" aria-hidden="true"></i><strong>{{.TotalThreads}}</strong> threads</span>
+                <span><i class="bi bi-card-text" aria-hidden="true"></i><strong>{{.TotalPosts}}</strong> posts</span>
             </div>
-            <a href="/community/forums/new" class="btn btn-primary"
-               style="border-radius:999px;padding:0.4rem 1.1rem;font-size:0.85rem;font-weight:500;">New Thread</a>
         </div>
+        <a href="/community/forums/new" class="btn btn-primary forum-new-thread">
+            <i class="bi bi-plus-lg" aria-hidden="true"></i>
+            New Thread
+        </a>
+    </section>
 
-        <div class="row g-4">
-            <!-- ── Categories column ───────────────────────────────── -->
-            <div class="col-lg-8">
-                {{range .Categories}}
-                <a href="/community/forums/category/{{.ID}}" class="card forum-cat-card mb-2 text-decoration-none">
-                    <div class="card-body">
-                        <div class="row align-items-center g-3">
-                            <div class="col-auto">
-                                <span class="forum-cat-icon forum-cat-icon-{{.Color}}">
-                                    <i class="bi bi-{{.Icon}}"></i>
-                                </span>
-                            </div>
-                            <div class="col">
-                                <h3 class="forum-cat-title mb-0">{{.Name}}</h3>
-                                {{if .Description}}<div class="text-secondary small">{{.Description}}</div>{{end}}
-                            </div>
-                            <div class="col-auto text-end d-none d-md-block forum-cat-stats">
-                                <div class="text-secondary small"><strong class="text-body">{{.ThreadCount}}</strong> threads</div>
-                                <div class="text-secondary small"><strong class="text-body">{{.PostCount}}</strong> posts</div>
-                            </div>
-                            <div class="col-auto d-none d-lg-block forum-cat-latest">
-                                {{if .LastThreadTitle}}
-                                <div class="small">
-                                    <div class="text-truncate forum-latest-title">{{with .LastThreadTitle}}{{.}}{{end}}</div>
-                                    <div class="text-muted small text-truncate">
-                                        {{with .LastPostUser}}<span class="forum-latest-user">{{.}}</span>{{end}}
-                                        {{if .LastPostAt}} · <span title="{{.LastPostAt.Format "2006-01-02 15:04:05"}}">{{relativeTime .LastPostAt}}</span>{{end}}
-                                    </div>
-                                </div>
-                                {{else}}
-                                <div class="small text-muted">No posts yet</div>
-                                {{end}}
-                            </div>
-                        </div>
+    <div class="forum-index-grid">
+        <div class="forum-index-main">
+            <section class="forum-panel forum-categories-panel" aria-labelledby="forum-categories-title">
+                <div class="forum-panel-header">
+                    <div>
+                        <h2 id="forum-categories-title">Forum Categories</h2>
+                        <p>Find the right place to start a conversation.</p>
                     </div>
-                </a>
-                {{else}}
-                <div class="card"><div class="card-body text-center text-muted">No forum categories yet.</div></div>
-                {{end}}
-            </div>
-
-            <!-- ── Sidebar column ──────────────────────────────────── -->
-            <div class="col-lg-4">
-                <div class="forum-sidebar">
-
-                    <div class="card forum-side-card mb-2">
-                        <div class="forum-card-stripe stripe-blue"></div>
-                        <div class="forum-side-body">
-                            <div class="d-flex gap-3 align-items-center">
-                                <div class="text-center flex-fill">
-                                    <div class="forum-stat-num">{{.TotalThreads}}</div>
-                                    <div class="forum-stat-label">Threads</div>
-                                </div>
-                                <div class="forum-stat-divider"></div>
-                                <div class="text-center flex-fill">
-                                    <div class="forum-stat-num">{{.TotalPosts}}</div>
-                                    <div class="forum-stat-label">Posts</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card forum-side-card mb-2">
-                        <div class="forum-card-stripe stripe-green"></div>
-                        <div class="forum-side-header">Recent Activity</div>
-                        {{if .Activity}}
-                        <ul class="forum-activity-list">
-                            {{range .Activity}}
-                            <li>
-                                <a href="/community/forums/thread/{{.ThreadID}}#post-{{.PostID}}" style="display:flex;gap:0.6rem;align-items:center;">
-                                    {{if .AvatarPath}}
-                                    <img class="forum-avatar" src="{{.AvatarPath}}" alt="" loading="lazy">
-                                    {{else}}
-                                    <span class="forum-avatar-fallback">{{initial .Username}}</span>
-                                    {{end}}
-                                    <div style="min-width:0;flex:1;">
-                                        <div class="text-truncate forum-activity-title">{{.ThreadTitle}}</div>
-                                        <div class="text-truncate forum-activity-meta">
-                                            <span class="role-name role-name-{{or .Role "user"}}">{{.Username}}</span> ·
-                                            <span title="{{.CreatedAt.Format "2006-01-02 15:04:05"}}">{{relativeTime .CreatedAt}}</span>
-                                        </div>
-                                    </div>
-                                    {{/* Category icon — small tinted square that mirrors
-                                         the icon styling from the category-list cards
-                                         above. Lets a sidebar scanner see "this post is
-                                         in Support" at a glance. Falls back to a chat
-                                         bubble if the category has no icon configured. */}}
-                                    {{if .CategoryIcon}}
-                                    <span class="forum-cat-icon forum-cat-icon-{{or .CategoryColor "blue"}}" style="width:28px;height:28px;border-radius:7px;font-size:0.85rem;flex-shrink:0;">
-                                        <i class="bi bi-{{.CategoryIcon}}"></i>
-                                    </span>
-                                    {{end}}
-                                </a>
-                            </li>
-                            {{end}}
-                        </ul>
-                        {{else}}
-                        <div class="forum-side-empty">No recent posts.</div>
-                        {{end}}
-                    </div>
-
-                    <div class="card forum-side-card mb-2">
-                        <div class="forum-card-stripe stripe-purple"></div>
-                        <div class="forum-side-header">Top Contributors</div>
-                        {{if .Contributors}}
-                        <ol class="forum-contrib-list">
-                            {{range $i, $c := .Contributors}}
-                            <li style="display:flex;gap:0.6rem;align-items:center;">
-                                <span class="forum-contrib-rank">{{add $i 1}}</span>
-                                {{if $c.AvatarPath}}
-                                <img class="forum-avatar" src="{{$c.AvatarPath}}" alt="" loading="lazy">
-                                {{else}}
-                                <span class="forum-avatar-fallback">{{initial $c.Username}}</span>
-                                {{end}}
-                                <a href="/u/{{$c.Username}}" class="forum-contrib-name role-name role-name-{{or $c.Role "user"}}" style="flex:1;min-width:0;">{{$c.Username}}</a>
-                                <span class="forum-contrib-badge">{{$c.PostCount}} posts</span>
-                            </li>
-                            {{end}}
-                        </ol>
-                        {{else}}
-                        <div class="forum-side-empty">No contributors yet.</div>
-                        {{end}}
-                    </div>
-
                 </div>
-            </div>
+
+                <div class="forum-category-list">
+                    {{range .Categories}}
+                    <a href="/community/forums/category/{{.ID}}" class="forum-category-row">
+                        <span class="forum-cat-icon forum-cat-icon-{{or .Color "blue"}}">
+                            <i class="bi bi-{{or .Icon "chat-square-text"}}" aria-hidden="true"></i>
+                        </span>
+
+                        <span class="forum-category-copy">
+                            <strong>{{.Name}}</strong>
+                            {{if .Description}}<small>{{.Description}}</small>{{end}}
+                        </span>
+
+                        <span class="forum-category-counts">
+                            <span><strong>{{.ThreadCount}}</strong> threads</span>
+                            <span><strong>{{.PostCount}}</strong> posts</span>
+                        </span>
+
+                        <span class="forum-category-latest">
+                            {{if .LastThreadTitle}}
+                            {{$latestUser := derefStr .LastPostUser}}
+                            <span class="forum-avatar-fallback" aria-hidden="true">{{initial $latestUser}}</span>
+                            <span class="forum-category-latest-copy">
+                                <strong>{{derefStr .LastThreadTitle}}</strong>
+                                <small>
+                                    {{if $latestUser}}by <span class="forum-latest-user">{{$latestUser}}</span>{{end}}
+                                    {{if .LastPostAt}}<span title="{{.LastPostAt.Format "2006-01-02 15:04:05"}}"> &middot; {{relativeTime .LastPostAt}}</span>{{end}}
+                                </small>
+                            </span>
+                            {{else}}
+                            <span class="forum-category-empty">No posts yet</span>
+                            {{end}}
+                        </span>
+                    </a>
+                    {{else}}
+                    <div class="forum-panel-empty">No forum categories yet.</div>
+                    {{end}}
+                </div>
+            </section>
+
+            <section class="forum-panel forum-recent-panel" aria-labelledby="forum-recent-title">
+                <div class="forum-panel-header forum-recent-header">
+                    <div>
+                        <h2 id="forum-recent-title">Recent Discussions</h2>
+                        <p>The latest conversations across the forum.</p>
+                    </div>
+                </div>
+
+                {{if .Activity}}
+                <div class="forum-recent-columns" aria-hidden="true">
+                    <span>Discussion</span>
+                    <span>Forum</span>
+                    <span>Last post</span>
+                </div>
+                <ol class="forum-recent-list">
+                    {{range .Activity}}
+                    <li>
+                        <a href="/community/forums/thread/{{.ThreadID}}#post-{{.PostID}}" class="forum-recent-row">
+                            <span class="forum-recent-discussion">
+                                {{if .AvatarPath}}
+                                <img class="forum-avatar forum-avatar-lg" src="{{.AvatarPath}}" alt="" loading="lazy">
+                                {{else}}
+                                <span class="forum-avatar-fallback forum-avatar-lg">{{initial .Username}}</span>
+                                {{end}}
+                                <span class="forum-recent-copy">
+                                    <strong>{{.ThreadTitle}}</strong>
+                                    <small>Latest reply by <span class="role-name role-name-{{or .Role "user"}}">{{.Username}}</span></small>
+                                </span>
+                            </span>
+
+                            <span class="forum-recent-category" aria-label="Forum category" title="Forum category">
+                                <span class="forum-cat-icon forum-cat-icon-{{or .CategoryColor "blue"}}">
+                                    <i class="bi bi-{{or .CategoryIcon "chat-square-text"}}" aria-hidden="true"></i>
+                                </span>
+                            </span>
+
+                            <span class="forum-recent-last">
+                                <strong class="role-name role-name-{{or .Role "user"}}">{{.Username}}</strong>
+                                <small title="{{.CreatedAt.Format "2006-01-02 15:04:05"}}">{{relativeTime .CreatedAt}}</small>
+                            </span>
+                        </a>
+                    </li>
+                    {{end}}
+                </ol>
+                {{else}}
+                <div class="forum-panel-empty">No recent discussions yet.</div>
+                {{end}}
+            </section>
         </div>
+
+        <aside class="forum-index-sidebar" aria-label="Forum information">
+            <section class="forum-panel forum-stats-panel" aria-labelledby="forum-stats-title">
+                <div class="forum-panel-header">
+                    <h2 id="forum-stats-title">Forum Stats</h2>
+                </div>
+                <div class="forum-stats-grid">
+                    <div>
+                        <i class="bi bi-chat-square-text" aria-hidden="true"></i>
+                        <strong>{{.TotalThreads}}</strong>
+                        <span>Threads</span>
+                    </div>
+                    <div>
+                        <i class="bi bi-card-text" aria-hidden="true"></i>
+                        <strong>{{.TotalPosts}}</strong>
+                        <span>Posts</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="forum-panel forum-contributors-panel" aria-labelledby="forum-contributors-title">
+                <div class="forum-panel-header">
+                    <h2 id="forum-contributors-title">Top Contributors</h2>
+                </div>
+                {{if .Contributors}}
+                <ol class="forum-contrib-list">
+                    {{range $i, $c := .Contributors}}
+                    <li>
+                        <span class="forum-contrib-rank">{{add $i 1}}</span>
+                        {{if $c.AvatarPath}}
+                        <img class="forum-avatar" src="{{$c.AvatarPath}}" alt="" loading="lazy">
+                        {{else}}
+                        <span class="forum-avatar-fallback">{{initial $c.Username}}</span>
+                        {{end}}
+                        <a href="/u/{{$c.Username}}" class="forum-contrib-name role-name role-name-{{or $c.Role "user"}}">{{$c.Username}}</a>
+                        <span class="forum-contrib-badge">{{$c.PostCount}} posts</span>
+                    </li>
+                    {{end}}
+                </ol>
+                {{else}}
+                <div class="forum-panel-empty">No contributors yet.</div>
+                {{end}}
+            </section>
+
+            <section class="forum-panel forum-guide-panel" aria-labelledby="forum-guide-title">
+                <div class="forum-panel-header">
+                    <h2 id="forum-guide-title">Forum Guide</h2>
+                </div>
+                <ul class="forum-guide-list">
+                    <li><i class="bi bi-pin-angle" aria-hidden="true"></i><span>Pinned threads stay at the top</span></li>
+                    <li><i class="bi bi-lock" aria-hidden="true"></i><span>Restricted forums show a lock</span></li>
+                    <li><i class="bi bi-person-badge" aria-hidden="true"></i><span>Name colors reflect member roles</span></li>
+                    <li><i class="bi bi-grid" aria-hidden="true"></i><span>Icons identify forum categories</span></li>
+                </ul>
+            </section>
+
+            <section class="forum-panel forum-help-panel" aria-labelledby="forum-help-title">
+                <div class="forum-help-icon"><i class="bi bi-life-preserver" aria-hidden="true"></i></div>
+                <div>
+                    <h2 id="forum-help-title">Need Help?</h2>
+                    <p>Visit support for account, download, or site questions.</p>
+                    <a href="/support" class="btn btn-sm btn-outline-primary">Visit Support</a>
+                </div>
+            </section>
+        </aside>
     </div>
+</main>
 {{end}}

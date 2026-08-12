@@ -1,683 +1,328 @@
 {{define "community_thread.html"}}
-    <style>
-        .thread-page { margin: 0 auto; padding: 1.4rem 1rem 2rem; }
-        .thread-page-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 1rem;
-            margin-bottom: 1.2rem;
-            flex-wrap: wrap;
-        }
-        .thread-page-header > div:first-child { flex: 1; min-width: 0; }
-        .thread-page-header .eyebrow {
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--text-muted);
-            font-weight: 600;
-            margin-bottom: 0.35rem;
-        }
-        .thread-page-header h1 {
-            font-size: 1.65rem;
-            font-weight: 800;
-            margin: 0;
-            color: var(--text-primary);
-            letter-spacing: -0.01em;
-            line-height: 1.25;
-        }
-        .thread-page-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; flex-shrink: 0; }
+<main class="container page-wide forum-thread-page">
+    <section class="forum-thread-hero" aria-labelledby="forum-thread-title">
+        <div class="forum-thread-hero-copy">
+            <nav class="forum-thread-breadcrumb" aria-label="Breadcrumb">
+                <a href="/community/forums">Forums</a>
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <a href="/community/forums/category/{{.Thread.CategoryID}}">{{.Thread.CategoryName}}</a>
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span>Thread</span>
+            </nav>
 
-        /* Density tuned 2026-05-19 to match the AnimeZ reference —
-           previous values had ~50% more vertical padding than the
-           comparable forum, making 3-line posts feel half-empty. */
-        .post-list { display: flex; flex-direction: column; gap: 0.7rem; }
-
-        .post-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            overflow: hidden;
-            transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
-            /* Two-column layout — avatar on the left, everything else
-               on the right. Saves vertical space vs the old top-stacked
-               avatar; matches the AnimeZ thread reference layout. */
-            display: flex;
-            align-items: stretch;
-        }
-        .post-avatar-col {
-            flex-shrink: 0;
-            padding: 0.85rem 0 0 1rem;
-            width: 64px;
-        }
-        .post-avatar-col .avatar {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 1px solid var(--border);
-            display: block;
-        }
-        .post-avatar-col .avatar-fallback {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background: #3a7bd5;
-            color: #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.05rem;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
-        .post-body-col {
-            flex: 1;
-            min-width: 0;
-        }
-        @media (max-width: 540px) {
-            /* On narrow viewports the avatar column gets cramped — let
-               the card fall back to the stacked layout so the username
-               row has full width. */
-            .post-card { flex-direction: column; }
-            .post-avatar-col { padding: 0.6rem 0 0 1.2rem; }
-        }
-        /* Alternating tint for posts — every other reply picks up a slightly
-           lighter surface so long threads are easier to scan. */
-        .post-list > .post-card:nth-child(even) {
-            background: var(--bg-elevated);
-        }
-        .post-card:hover { border-color: var(--border); }
-
-        .post-header {
-            padding: 0.85rem 1.2rem 0.4rem 0.8rem;
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            font-size: 0.82rem;
-        }
-        .post-header .username {
-            font-weight: 700;
-            color: var(--text-primary);
-            font-size: 0.92rem;
-        }
-        .post-header .date {
-            color: var(--text-muted);
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            font-weight: 600;
-        }
-        .post-content {
-            padding: 0 1.2rem 0.6rem 0.8rem;
-            word-break: break-word;
-            font-size: 0.92rem;
-            line-height: 1.55;
-            color: var(--text-primary);
-        }
-        .post-content::before {
-            content: "";
-            display: block;
-            height: 1px;
-            background: var(--border);
-            margin: 0 0 0.6rem 0;
-        }
-        /* Combined reactions + actions row. Reactions sit on the left,
-           action links (Quote / Edit / Delete / Report) on the right —
-           single horizontal lane instead of two stacked rows. */
-        .post-footer-row {
-            padding: 0.25rem 1.2rem 0.55rem 0.8rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-        }
-        .post-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            margin-left: auto;
-        }
-
-        .role-badge {
-            font-size: 0.62rem;
-            padding: 2px 8px;
-            border-radius: 999px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-        }
-        .role-admin { background: rgba(var(--bs-danger-rgb), 0.2); color: var(--bs-danger); }
-        .role-contributor { background: rgba(91,138,245,0.2); color: var(--blue); }
-        .role-user { background: var(--bg-elevated); color: var(--text-muted); }
-
-        .badge-pinned-thread, .badge-locked-thread {
-            font-size: 0.62rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            padding: 2px 8px;
-            border-radius: 999px;
-            font-weight: 600;
-            margin-right: 6px;
-            vertical-align: middle;
-        }
-        .badge-pinned-thread { background: rgba(91,138,245,0.18); color: var(--blue); }
-        .badge-locked-thread { background: rgba(107,116,133,0.22); color: var(--text-muted); }
-
-        .reply-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            overflow: hidden;
-            margin-top: 1.5rem;
-        }
-        .reply-card .reply-header {
-            padding: 0.65rem 1.2rem 0.45rem;
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-muted);
-            font-weight: 600;
-        }
-        .reply-card .reply-body { padding: 0 1.2rem 0.85rem; }
-        .reply-form textarea { background: var(--bg-base); color: var(--text-primary); border-color: var(--border); }
-        .reply-form textarea:focus { background: var(--bg-base); color: var(--text-primary); border-color: var(--blue); box-shadow: none; }
-
-        .post-edit-form { padding: 0.2rem 1.4rem 1.2rem 1.4rem; }
-        .post-edit-form textarea { background: var(--bg-base); color: var(--text-primary); border-color: var(--border); }
-        .post-edit-form textarea:focus { background: var(--bg-base); color: var(--text-primary); border-color: var(--blue); box-shadow: none; }
-
-        /* ── Markdown body styling — keep close to plain text but
-              enough that lists/code/blockquotes don't look broken ── */
-        .post-content { white-space: normal; }
-        .post-content p { margin: 0 0 0.7rem; }
-        .post-content p:last-child { margin-bottom: 0; }
-        .post-content ul, .post-content ol { padding-left: 1.4rem; margin: 0 0 0.7rem; }
-        .post-content code {
-            background: var(--bg-base);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 0 4px;
-            font-size: 0.85em;
-        }
-        .post-content pre {
-            background: var(--bg-base);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 0.7rem 0.9rem;
-            overflow-x: auto;
-            font-size: 0.82rem;
-            margin: 0 0 0.7rem;
-        }
-        .post-content pre code { background: none; border: none; padding: 0; }
-        .post-content blockquote {
-            border-left: 3px solid var(--border);
-            padding: 0.3rem 0 0.3rem 0.9rem;
-            margin: 0 0 0.7rem;
-            color: var(--text-muted);
-        }
-        .post-content a { color: var(--blue); }
-        .post-content a:hover { color: var(--blue-hover); }
-
-        /* ── Quoted-reply snippet ── */
-        .post-quote {
-            margin: 0 1.4rem 0.6rem;
-            padding: 0.55rem 0.85rem;
-            background: var(--bg-base);
-            border-left: 3px solid var(--blue);
-            border-radius: 4px;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-        }
-        .post-quote .quote-label {
-            font-size: 0.68rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            font-weight: 600;
-            color: var(--blue);
-            display: block;
-            margin-bottom: 0.2rem;
-        }
-        .post-quote .quote-label a { color: var(--blue); }
-        .post-quote .quote-body {
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        .post-quote .quote-body p { margin: 0; }
-        .post-quote.deleted { border-left-color: var(--text-muted); font-style: italic; }
-
-        /* ── Reaction bar ── No padding of its own; it lives inside
-           .post-footer-row which handles edge padding for the combined
-           reactions + actions strip. */
-        .post-reactions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.35rem;
-            align-items: center;
-        }
-        .reaction-btn {
-            background: var(--bg-base);
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: 2px 9px;
-            font-size: 0.82rem;
-            color: var(--text-muted);
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            transition: background 0.15s, border-color 0.15s, color 0.15s;
-            line-height: 1.4;
-        }
-        .reaction-btn:hover { background: var(--bg-elevated); border-color: var(--blue); color: var(--text-primary); }
-        .reaction-btn.mine { background: rgba(91,138,245,0.14); border-color: var(--blue); color: var(--text-primary); }
-        .reaction-btn .count { font-weight: 600; font-size: 0.78rem; }
-        .reaction-add {
-            background: var(--bg-base);
-            border: 1px dashed var(--border);
-            border-radius: 999px;
-            padding: 2px 9px;
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            cursor: pointer;
-            opacity: 0.55;
-            transition: opacity 0.15s, border-color 0.15s;
-        }
-        .post-card:hover .reaction-add { opacity: 1; }
-        .reaction-add:hover { border-color: var(--blue); color: var(--blue); }
-        .reaction-picker {
-            display: none;
-            gap: 2px;
-            background: var(--bg-base);
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: 2px 5px;
-            margin-left: 0.25rem;
-        }
-        .reaction-picker.open { display: inline-flex; }
-        .reaction-picker button {
-            background: none;
-            border: none;
-            padding: 1px 5px;
-            font-size: 1rem;
-            cursor: pointer;
-            border-radius: 999px;
-            line-height: 1.4;
-        }
-        .reaction-picker button:hover { background: var(--bg-elevated); }
-
-        .post-permalink {
-            color: var(--text-muted);
-            font-size: 0.7rem;
-            text-decoration: none;
-            font-family: monospace;
-            opacity: 0.5;
-        }
-        .post-permalink:hover { color: var(--blue); opacity: 1; }
-
-        .quote-trigger {
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            font-weight: 600;
-            padding: 0;
-            cursor: pointer;
-        }
-        .quote-trigger:hover { color: var(--blue); }
-
-        .reply-quote-preview {
-            background: var(--bg-base);
-            border-left: 3px solid var(--blue);
-            border-radius: 4px;
-            padding: 0.5rem 0.85rem;
-            margin-bottom: 0.6rem;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            display: none;
-        }
-        .reply-quote-preview.active { display: block; }
-        .reply-quote-preview .clear {
-            float: right;
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            padding: 0;
-            font-size: 0.85rem;
-            line-height: 1;
-        }
-
-        .post-card:target { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
-
-        .reply-help {
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            margin-bottom: 0.4rem;
-        }
-        .reply-help code {
-            background: var(--bg-base);
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            padding: 0 3px;
-            font-size: 0.78rem;
-        }
-    </style>
-    <div class="container page thread-page">
-        <nav aria-label="breadcrumb" style="font-size:0.78rem;" class="mb-3">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a href="/community/forums">Forums</a></li>
-                <li class="breadcrumb-item"><a href="/community/forums/category/{{.Thread.CategoryID}}">{{.Thread.CategoryName}}</a></li>
-                <li class="breadcrumb-item active">Thread</li>
-            </ol>
-        </nav>
-
-        <div class="thread-page-header">
-            <div>
-                <div class="eyebrow">
-                    {{.Thread.CategoryName}}
-                    {{if .Thread.Pinned}}<span class="badge-pinned-thread ms-2">Pinned</span>{{end}}
-                    {{if .Thread.Locked}}<span class="badge-locked-thread">Locked</span>{{end}}
-                    {{if .IsRecruitment}}<span class="ms-2" style="display:inline-block;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;padding:1px 8px;border-radius:999px;background:rgba(168,85,247,0.18);color:#a855f7;border:1px solid rgba(168,85,247,0.40);">Recruitment</span>{{end}}
+            <div class="forum-thread-heading">
+                <span class="forum-thread-hero-icon" aria-hidden="true"><i class="bi bi-chat-square-text"></i></span>
+                <div>
+                    <div class="forum-thread-labels">
+                        <a href="/community/forums/category/{{.Thread.CategoryID}}" class="forum-thread-category-label">{{.Thread.CategoryName}}</a>
+                        {{if .Thread.Pinned}}<span class="forum-thread-badge is-pinned">Pinned</span>{{end}}
+                        {{if .Thread.Locked}}<span class="forum-thread-badge is-locked">Locked</span>{{end}}
+                        {{if .IsRecruitment}}<span class="forum-thread-badge is-recruitment">Recruitment</span>{{end}}
+                    </div>
+                    <h1 id="forum-thread-title">{{.Thread.Title}}</h1>
+                    <div class="forum-thread-meta">
+                        <span>Started by <a href="/u/{{.Thread.Username}}" class="role-name role-name-{{or .Thread.Role "user"}}">{{.Thread.Username}}</a></span>
+                        <span aria-hidden="true">&middot;</span>
+                        <span title="{{.Thread.CreatedAt.Format "2006-01-02 15:04:05"}}">{{relativeTime .Thread.CreatedAt}}</span>
+                        {{if or (not .IsRecruitment) .CanSeeAllReplies}}
+                        <span aria-hidden="true">&middot;</span>
+                        <span>{{.Thread.ReplyCount}} replies</span>
+                        {{end}}
+                    </div>
                 </div>
-                <h1>{{.Thread.Title}}</h1>
-            </div>
-            <div class="thread-page-actions">
-                {{if or .IsAdmin (eq .Thread.UserID .CurrentUserID)}}
-                {{if .IsAdmin}}
-                <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/pin">
-                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                    <button class="btn btn-sm btn-outline-secondary">{{if .Thread.Pinned}}Unpin{{else}}Pin{{end}}</button>
-                </form>
-                <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/lock">
-                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                    <button class="btn btn-sm btn-outline-secondary">{{if .Thread.Locked}}Unlock{{else}}Lock{{end}}</button>
-                </form>
-                {{end}}
-                <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/delete" onsubmit="return confirm('Delete this thread and all its posts?')">
-                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                    <button class="btn btn-sm btn-outline-danger">Delete Thread</button>
-                </form>
-                {{end}}
-                {{/* Report-thread button visible to every signed-in
-                     non-author. Targets the thread itself, separate
-                     from per-post reports below. */}}
-                {{if and .CurrentUserID (ne .Thread.UserID .CurrentUserID)}}
-                <button type="button" class="btn btn-sm btn-outline-secondary report-content"
-                        data-target-type="forum_thread" data-target-id="{{.Thread.ID}}">Report Thread</button>
-                {{end}}
             </div>
         </div>
 
-        {{/* Recruitment-thread visibility notice. Different wording
-             depending on whether the viewer can see everyone's
-             replies (recruiter / admin) or only their own. Discussion
-             threads skip the banner entirely. */}}
-        {{if .IsRecruitment}}
-        <div style="margin: 0 0 1rem; padding: 0.7rem 1rem; border-radius: 10px; background: rgba(168,85,247,0.10); border: 1px solid rgba(168,85,247,0.35); font-size: 0.82rem; color: var(--text-primary);">
+        <div class="forum-thread-hero-actions">
+            {{if not .Thread.Locked}}
+            <a href="#reply-form" class="btn btn-primary forum-thread-reply-cta">
+                <i class="bi bi-reply-fill" aria-hidden="true"></i>
+                Reply
+            </a>
+            {{end}}
+
+            {{if .IsAdmin}}
+            <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/pin">
+                <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                <button class="btn btn-outline-secondary"><i class="bi bi-pin-angle" aria-hidden="true"></i> {{if .Thread.Pinned}}Unpin{{else}}Pin{{end}}</button>
+            </form>
+            <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/lock">
+                <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                <button class="btn btn-outline-secondary"><i class="bi bi-lock" aria-hidden="true"></i> {{if .Thread.Locked}}Unlock{{else}}Lock{{end}}</button>
+            </form>
+            {{end}}
+
+            {{if or .IsAdmin (eq .Thread.UserID .CurrentUserID)}}
+            <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/delete" onsubmit="return confirm('Delete this thread and all its posts?')">
+                <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                <button class="btn btn-outline-danger" title="Delete thread"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete thread</span></button>
+            </form>
+            {{end}}
+
+            {{if and .CurrentUserID (ne .Thread.UserID .CurrentUserID)}}
+            <button type="button" class="btn btn-outline-secondary report-content"
+                    data-target-type="forum_thread" data-target-id="{{.Thread.ID}}" title="Report thread">
+                <i class="bi bi-flag" aria-hidden="true"></i><span class="visually-hidden">Report thread</span>
+            </button>
+            {{end}}
+        </div>
+    </section>
+
+    {{if .IsRecruitment}}
+    <div class="forum-thread-privacy-note">
+        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div>
+            <strong>Recruitment thread</strong>
             {{if .CanSeeAllReplies}}
-                <strong>Recruitment thread.</strong>
-                Replies are private — only you and admins see the list below. Applicants only see their own reply.
+            <span>Replies are private. Only you and administrators see the full list; applicants see only their own reply.</span>
             {{else}}
-                <strong>Recruitment thread.</strong>
-                The original post is public, but replies are private. Only the recruiter and admins see your reply; other applicants won't.
+            <span>The original post is public, but replies are private. Only the recruiter and administrators can see your reply.</span>
             {{end}}
         </div>
-        {{end}}
-
-        <div class="post-list">
-        {{range .Posts}}
-        <div class="post-card" id="post-{{.ID}}" data-post-id="{{.ID}}" data-username="{{.Username}}" data-my-reactions="{{range $i, $e := .MyReactions}}{{if $i}},{{end}}{{$e}}{{end}}">
-            {{/* Left column — avatar only. Clickable link to the
-                 author's public profile so a header-row click still
-                 navigates the same way as before. */}}
-            <div class="post-avatar-col">
-                <a href="/u/{{.Username}}">
-                    {{if .AvatarPath}}
-                    <img class="avatar" src="{{.AvatarPath}}" alt="" loading="lazy">
-                    {{else}}
-                    <div class="avatar-fallback">{{initial .Username}}</div>
-                    {{end}}
-                </a>
-            </div>
-            <div class="post-body-col">
-            <div class="post-header">
-                <a class="username role-name role-name-{{or .UserRole "user"}}" href="/u/{{.Username}}" style="text-decoration:none;">{{.Username}}</a>
-                {{if eq .UserRole "admin"}}<span class="role-badge role-admin">Admin</span>
-                {{else if eq .UserRole "contributor"}}<span class="role-badge role-contributor">Contributor</span>
-                {{else}}<span class="role-badge role-user">Member</span>{{end}}
-                {{with repBadge .ReputationTier}}{{if .Name}}<span class="badge bg-{{.Color}}" style="font-size:0.6rem;vertical-align:middle;" title="Earned reputation tier">{{.Name}}</span>{{end}}{{end}}
-                <span class="date ms-auto">
-                    <a class="post-permalink" href="#post-{{.ID}}" title="Permalink">#{{.ID}}</a>
-                    &nbsp;{{.CreatedAt.Format "Jan 02, 2006 15:04"}}{{if .EditedAt}} &middot; edited{{end}}
-                </span>
-            </div>
-
-            {{if .QuotedPostID}}
-                {{if .QuotedUsername}}
-                <div class="post-quote">
-                    <span class="quote-label">
-                        <a href="#post-{{deref64 .QuotedPostID}}">In reply to {{derefStr .QuotedUsername}}</a>
-                    </span>
-                    <div class="quote-body">{{.QuotedHTML}}</div>
-                </div>
-                {{else}}
-                <div class="post-quote deleted">
-                    <span class="quote-label">In reply to a deleted post</span>
-                </div>
-                {{end}}
-            {{end}}
-
-            <div class="post-content" id="post-body-{{.ID}}">{{.BodyHTML}}</div>
-            <div class="post-edit-form" id="post-edit-{{.ID}}" style="display:none;">
-                <form method="POST" action="/community/forums/post/{{.ID}}/edit">
-                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                    <input type="hidden" name="thread_id" value="{{$.Thread.ID}}">
-                    {{.EditorHTML}}
-                    <div class="d-flex gap-1 justify-content-end">
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cancelEdit({{.ID}})">Cancel</button>
-                        <button type="submit" class="btn btn-sm btn-primary">Save</button>
-                    </div>
-                </form>
-            </div>
-
-            <div class="post-footer-row">
-                <div class="post-reactions" data-post-id="{{.ID}}">
-                    {{range .Reactions}}
-                    <button type="button" class="reaction-btn" data-emoji="{{.Emoji}}">
-                        <span class="emoji">{{.Emoji}}</span><span class="count">{{.Count}}</span>
-                    </button>
-                    {{end}}
-                    {{if $.CurrentUserID}}
-                    <button type="button" class="reaction-add" title="Add reaction">+</button>
-                    <span class="reaction-picker" role="menu">
-                        <button type="button" data-emoji="👍" title="Like">👍</button>
-                        <button type="button" data-emoji="❤️" title="Love">❤️</button>
-                        <button type="button" data-emoji="😂" title="Haha">😂</button>
-                        <button type="button" data-emoji="😮" title="Wow">😮</button>
-                        <button type="button" data-emoji="😢" title="Sad">😢</button>
-                        <button type="button" data-emoji="🎉" title="Party">🎉</button>
-                    </span>
-                    {{end}}
-                </div>
-
-                <div class="post-actions">
-                {{if and $.CurrentUserID (not $.Thread.Locked)}}
-                <button type="button" class="quote-trigger"
-                        data-post-id="{{.ID}}"
-                        data-username="{{.Username}}"
-                        data-excerpt="{{.Body}}">Quote</button>
-                {{end}}
-                {{if eq .UserID $.CurrentUserID}}
-                <button class="btn btn-sm btn-link p-0" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;font-weight:600;" onclick="startEdit({{.ID}})">Edit</button>
-                {{end}}
-                {{if or (eq .UserID $.CurrentUserID) $.IsAdmin}}
-                <form method="POST" action="/community/forums/post/{{.ID}}/delete" class="d-inline"
-                      onsubmit="return confirm('Delete this post?')">
-                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                    <input type="hidden" name="thread_id" value="{{$.Thread.ID}}">
-                    <button class="btn btn-sm btn-link text-danger p-0" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;font-weight:600;">Delete</button>
-                </form>
-                {{end}}
-                {{/* Report button — any signed-in non-author. Opens the
-                     shared report-modal partial; 5 distinct reports
-                     auto-hide the post pending community review. */}}
-                {{if and $.CurrentUserID (ne .UserID $.CurrentUserID)}}
-                <button type="button" class="btn btn-sm btn-link p-0 report-content"
-                        data-target-type="forum_post" data-target-id="{{.ID}}"
-                        style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;font-weight:600;color:var(--text-muted);">Report</button>
-                {{end}}
-                </div>{{/* /.post-actions */}}
-            </div>{{/* /.post-footer-row */}}
-            </div>{{/* /.post-body-col */}}
-        </div>
-        {{end}}
-        </div>
-
-        {{.PaginationHTML}}
-
-        {{if not .Thread.Locked}}
-        <div class="reply-card reply-form" id="reply-form">
-            <div class="reply-header">Reply</div>
-            <div class="reply-body">
-                <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/reply">
-                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                    <input type="hidden" name="quoted_post_id" id="reply-quoted-id" value="">
-                    <div class="reply-quote-preview" id="reply-quote-preview">
-                        <button type="button" class="clear" onclick="clearQuote()" title="Remove quote">&times;</button>
-                        Replying to <strong id="reply-quote-user"></strong>: <span id="reply-quote-text"></span>
-                    </div>
-                    {{.ReplyEditorHTML}}
-                    <div class="text-end mt-2">
-                        <button type="submit" class="btn btn-sm btn-primary">Post Reply</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-        {{else}}
-        <div class="text-center mt-4" style="color:var(--text-muted);font-size:0.85rem;text-transform:uppercase;letter-spacing:0.06em;font-weight:600;">This thread is locked</div>
-        {{end}}
     </div>
-    <script>
-    function startEdit(id){
-        document.getElementById('post-body-'+id).style.display='none';
-        document.getElementById('post-edit-'+id).style.display='block';
-    }
-    function cancelEdit(id){
-        document.getElementById('post-body-'+id).style.display='';
-        document.getElementById('post-edit-'+id).style.display='none';
-    }
+    {{end}}
 
-    // ── Quote-reply ──────────────────────────────────────────────
-    function clearQuote(){
-        document.getElementById('reply-quoted-id').value = '';
-        document.getElementById('reply-quote-preview').classList.remove('active');
-    }
-    document.querySelectorAll('.quote-trigger').forEach(function(btn){
-        btn.addEventListener('click', function(){
-            var id = this.dataset.postId;
-            var user = this.dataset.username;
-            var excerpt = (this.dataset.excerpt || '').trim();
-            // Cap the inline preview at ~140 chars; the full quote
-            // reference is the hidden id field, the preview is just
-            // a hint so the user remembers what they're replying to.
-            if (excerpt.length > 140) excerpt = excerpt.slice(0, 140) + '…';
-            document.getElementById('reply-quoted-id').value = id;
-            document.getElementById('reply-quote-user').textContent = user;
-            document.getElementById('reply-quote-text').textContent = excerpt;
-            document.getElementById('reply-quote-preview').classList.add('active');
-            // Don't inject a markdown blockquote into the textarea —
-            // the server stores quoted_post_id and renders the
-            // structured snippet above the body, so a textarea
-            // injection would show the quote twice.
-            var ta = document.getElementById('reply-textarea');
-            ta.focus();
-            document.getElementById('reply-form').scrollIntoView({behavior: 'smooth', block: 'center'});
-        });
-    });
+    <div class="forum-post-layout">
+        <div class="forum-post-main">
+            <div class="forum-post-toolbar">
+                <span>{{.Total}} posts in this conversation</span>
+                <div class="forum-post-pagination">{{.PaginationHTML}}</div>
+            </div>
 
-    // ── Reactions ────────────────────────────────────────────────
-    // Apply 'mine' class on initial render based on data-my-reactions.
-    document.querySelectorAll('.post-card').forEach(function(card){
-        var mine = (card.dataset.myReactions || '').split(',').filter(Boolean);
-        if (!mine.length) return;
-        card.querySelectorAll('.reaction-btn').forEach(function(btn){
-            if (mine.indexOf(btn.dataset.emoji) !== -1) btn.classList.add('mine');
-        });
-    });
+            <div class="post-list forum-post-list">
+            {{range .Posts}}
+            <article class="post-card forum-post-card" id="post-{{.ID}}" data-post-id="{{.ID}}" data-username="{{.Username}}" data-my-reactions="{{range $i, $e := .MyReactions}}{{if $i}},{{end}}{{$e}}{{end}}">
+                <aside class="forum-post-author">
+                    <span class="forum-post-presence" aria-hidden="true"></span>
+                    <a href="/u/{{.Username}}" class="forum-post-author-avatar">
+                        {{if .AvatarPath}}
+                        <img src="{{.AvatarPath}}" alt="" loading="lazy">
+                        {{else}}
+                        <span>{{initial .Username}}</span>
+                        {{end}}
+                    </a>
+                    <a class="forum-post-author-name role-name role-name-{{or .UserRole "user"}}" href="/u/{{.Username}}">{{.Username}}</a>
+                    {{if eq .UserID $.Thread.UserID}}<span class="forum-post-op-badge">Original poster</span>{{end}}
+                    {{if eq .UserRole "admin"}}<span class="role-badge role-admin">Admin</span>
+                    {{else if eq .UserRole "contributor"}}<span class="role-badge role-contributor">Contributor</span>
+                    {{else}}<span class="role-badge role-user">Member</span>{{end}}
+                    {{with repBadge .ReputationTier}}{{if .Name}}<span class="forum-post-reputation bg-{{.Color}}" title="Earned reputation tier">{{.Name}}</span>{{end}}{{end}}
+                </aside>
 
-    // Open/close the picker.
-    document.querySelectorAll('.reaction-add').forEach(function(btn){
-        btn.addEventListener('click', function(e){
-            e.stopPropagation();
-            var picker = this.nextElementSibling;
-            // Close any other open pickers first.
-            document.querySelectorAll('.reaction-picker.open').forEach(function(p){
-                if (p !== picker) p.classList.remove('open');
-            });
-            picker.classList.toggle('open');
-        });
-    });
-    document.addEventListener('click', function(){
-        document.querySelectorAll('.reaction-picker.open').forEach(function(p){ p.classList.remove('open'); });
-    });
+                <div class="forum-post-body">
+                    <header class="forum-post-header">
+                        <span title="{{.CreatedAt.Format "2006-01-02 15:04:05"}}">{{relativeTime .CreatedAt}} <span class="forum-post-date-full">({{.CreatedAt.Format "Jan 02, 2006"}})</span>{{if .EditedAt}} &middot; edited{{end}}</span>
+                        <a class="post-permalink" href="#post-{{.ID}}" title="Permalink to this post">#{{.ID}}</a>
+                    </header>
 
-    // POST a reaction toggle and refresh the bar in place.
-    function postReaction(postId, emoji){
-        var fd = new FormData();
-        fd.append('emoji', emoji);
-        var csrf = document.querySelector('input[name="_csrf"]');
-        if (csrf) fd.append('_csrf', csrf.value);
-        return fetch('/community/forums/post/' + postId + '/react', {method:'POST', body:fd, credentials:'same-origin'})
-            .then(function(r){ return r.json(); });
-    }
-    function rebuildReactionBar(card, counts, addedEmoji, wasAdded){
-        var bar = card.querySelector('.post-reactions');
-        // Remove existing buttons (keep the + add button + picker).
-        bar.querySelectorAll('.reaction-btn').forEach(function(b){ b.remove(); });
-        var add = bar.querySelector('.reaction-add');
-        // Track which emojis are now mine. Start from current dataset
-        // and apply the toggle that just happened.
-        var mine = (card.dataset.myReactions || '').split(',').filter(Boolean);
-        if (wasAdded && mine.indexOf(addedEmoji) === -1) mine.push(addedEmoji);
-        if (!wasAdded) mine = mine.filter(function(e){ return e !== addedEmoji; });
-        card.dataset.myReactions = mine.join(',');
-        (counts || []).forEach(function(c){
-            var b = document.createElement('button');
-            b.type = 'button';
-            b.className = 'reaction-btn' + (mine.indexOf(c.Emoji) !== -1 ? ' mine' : '');
-            b.dataset.emoji = c.Emoji;
-            b.innerHTML = '<span class="emoji">' + c.Emoji + '</span><span class="count">' + c.Count + '</span>';
-            b.addEventListener('click', reactionClickHandler);
-            bar.insertBefore(b, add);
+                    {{if .QuotedPostID}}
+                        {{if .QuotedUsername}}
+                        <div class="post-quote">
+                            <span class="quote-label">
+                                <a href="#post-{{deref64 .QuotedPostID}}">In reply to {{derefStr .QuotedUsername}}</a>
+                            </span>
+                            <div class="quote-body">{{.QuotedHTML}}</div>
+                        </div>
+                        {{else}}
+                        <div class="post-quote deleted">
+                            <span class="quote-label">In reply to a deleted post</span>
+                        </div>
+                        {{end}}
+                    {{end}}
+
+                    <div class="post-content" id="post-body-{{.ID}}">{{.BodyHTML}}</div>
+
+                    <div class="post-edit-form" id="post-edit-{{.ID}}" style="display:none;">
+                        <form method="POST" action="/community/forums/post/{{.ID}}/edit">
+                            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                            <input type="hidden" name="thread_id" value="{{$.Thread.ID}}">
+                            {{.EditorHTML}}
+                            <div class="forum-post-edit-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cancelEdit({{.ID}})">Cancel</button>
+                                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <footer class="post-footer-row forum-post-footer">
+                        <div class="post-reactions" data-post-id="{{.ID}}">
+                            {{range .Reactions}}
+                            <button type="button" class="reaction-btn" data-emoji="{{.Emoji}}">
+                                <span class="emoji">{{.Emoji}}</span><span class="count">{{.Count}}</span>
+                            </button>
+                            {{end}}
+                            {{if $.CurrentUserID}}
+                            <button type="button" class="reaction-add" title="Add reaction"><i class="bi bi-emoji-smile" aria-hidden="true"></i><span class="visually-hidden">Add reaction</span></button>
+                            <span class="reaction-picker" role="menu">
+                                <button type="button" data-emoji="👍" title="Like">👍</button>
+                                <button type="button" data-emoji="❤️" title="Love">❤️</button>
+                                <button type="button" data-emoji="😂" title="Haha">😂</button>
+                                <button type="button" data-emoji="😮" title="Wow">😮</button>
+                                <button type="button" data-emoji="😢" title="Sad">😢</button>
+                                <button type="button" data-emoji="🎉" title="Party">🎉</button>
+                            </span>
+                            {{end}}
+                        </div>
+
+                        <div class="post-actions forum-post-actions">
+                            {{if and $.CurrentUserID (not $.Thread.Locked)}}
+                            <button type="button" class="quote-trigger"
+                                    data-post-id="{{.ID}}" data-username="{{.Username}}" data-excerpt="{{.Body}}">
+                                <i class="bi bi-reply" aria-hidden="true"></i> Quote
+                            </button>
+                            {{end}}
+                            {{if eq .UserID $.CurrentUserID}}
+                            <button type="button" class="forum-post-action" onclick="startEdit({{.ID}})"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button>
+                            {{end}}
+                            {{if or (eq .UserID $.CurrentUserID) $.IsAdmin}}
+                            <form method="POST" action="/community/forums/post/{{.ID}}/delete" class="d-inline"
+                                  onsubmit="return confirm('Delete this post?')">
+                                <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                                <input type="hidden" name="thread_id" value="{{$.Thread.ID}}">
+                                <button class="forum-post-action is-danger"><i class="bi bi-trash" aria-hidden="true"></i> Delete</button>
+                            </form>
+                            {{end}}
+                            {{if and $.CurrentUserID (ne .UserID $.CurrentUserID)}}
+                            <button type="button" class="forum-post-action report-content"
+                                    data-target-type="forum_post" data-target-id="{{.ID}}">
+                                <i class="bi bi-flag" aria-hidden="true"></i> Report
+                            </button>
+                            {{end}}
+                        </div>
+                    </footer>
+                </div>
+            </article>
+            {{else}}
+            <div class="forum-thread-no-posts">No visible posts in this thread.</div>
+            {{end}}
+            </div>
+
+            {{if not .Thread.Locked}}
+            <section class="reply-card reply-form forum-reply-card" id="reply-form" aria-labelledby="forum-reply-title">
+                <div class="reply-header" id="forum-reply-title">Post a Reply</div>
+                <div class="reply-body">
+                    <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/reply">
+                        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                        <input type="hidden" name="quoted_post_id" id="reply-quoted-id" value="">
+                        <div class="reply-quote-preview" id="reply-quote-preview">
+                            <button type="button" class="clear" onclick="clearQuote()" title="Remove quote">&times;</button>
+                            Replying to <strong id="reply-quote-user"></strong>: <span id="reply-quote-text"></span>
+                        </div>
+                        {{.ReplyEditorHTML}}
+                        <div class="forum-reply-actions">
+                            <span>Keep replies helpful and on topic.</span>
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-send" aria-hidden="true"></i> Post Reply</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+            {{else}}
+            <div class="forum-thread-locked-note"><i class="bi bi-lock-fill" aria-hidden="true"></i> This thread is locked</div>
+            {{end}}
+        </div>
+
+    </div>
+</main>
+
+<script>
+function startEdit(id){
+    document.getElementById('post-body-'+id).style.display='none';
+    document.getElementById('post-edit-'+id).style.display='block';
+}
+function cancelEdit(id){
+    document.getElementById('post-body-'+id).style.display='';
+    document.getElementById('post-edit-'+id).style.display='none';
+}
+
+function clearQuote(){
+    document.getElementById('reply-quoted-id').value = '';
+    document.getElementById('reply-quote-preview').classList.remove('active');
+}
+document.querySelectorAll('.quote-trigger').forEach(function(btn){
+    btn.addEventListener('click', function(){
+        var id = this.dataset.postId;
+        var user = this.dataset.username;
+        var excerpt = (this.dataset.excerpt || '').trim();
+        if (excerpt.length > 140) excerpt = excerpt.slice(0, 140) + '…';
+        document.getElementById('reply-quoted-id').value = id;
+        document.getElementById('reply-quote-user').textContent = user;
+        document.getElementById('reply-quote-text').textContent = excerpt;
+        document.getElementById('reply-quote-preview').classList.add('active');
+        var ta = document.getElementById('reply-textarea');
+        ta.focus();
+        document.getElementById('reply-form').scrollIntoView({behavior: 'smooth', block: 'center'});
+    });
+});
+
+document.querySelectorAll('.post-card').forEach(function(card){
+    var mine = (card.dataset.myReactions || '').split(',').filter(Boolean);
+    if (!mine.length) return;
+    card.querySelectorAll('.reaction-btn').forEach(function(btn){
+        if (mine.indexOf(btn.dataset.emoji) !== -1) btn.classList.add('mine');
+    });
+});
+
+document.querySelectorAll('.reaction-add').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        var picker = this.nextElementSibling;
+        document.querySelectorAll('.reaction-picker.open').forEach(function(p){
+            if (p !== picker) p.classList.remove('open');
         });
-    }
-    function reactionClickHandler(){
+        picker.classList.toggle('open');
+    });
+});
+document.addEventListener('click', function(){
+    document.querySelectorAll('.reaction-picker.open').forEach(function(p){ p.classList.remove('open'); });
+});
+
+function postReaction(postId, emoji){
+    var fd = new FormData();
+    fd.append('emoji', emoji);
+    var csrf = document.querySelector('input[name="_csrf"]');
+    if (csrf) fd.append('_csrf', csrf.value);
+    return fetch('/community/forums/post/' + postId + '/react', {method:'POST', body:fd, credentials:'same-origin'})
+        .then(function(r){ return r.json(); });
+}
+function rebuildReactionBar(card, counts, addedEmoji, wasAdded){
+    var bar = card.querySelector('.post-reactions');
+    bar.querySelectorAll('.reaction-btn').forEach(function(b){ b.remove(); });
+    var add = bar.querySelector('.reaction-add');
+    var mine = (card.dataset.myReactions || '').split(',').filter(Boolean);
+    if (wasAdded && mine.indexOf(addedEmoji) === -1) mine.push(addedEmoji);
+    if (!wasAdded) mine = mine.filter(function(e){ return e !== addedEmoji; });
+    card.dataset.myReactions = mine.join(',');
+    (counts || []).forEach(function(c){
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'reaction-btn' + (mine.indexOf(c.Emoji) !== -1 ? ' mine' : '');
+        b.dataset.emoji = c.Emoji;
+        b.innerHTML = '<span class="emoji">' + c.Emoji + '</span><span class="count">' + c.Count + '</span>';
+        b.addEventListener('click', reactionClickHandler);
+        bar.insertBefore(b, add);
+    });
+}
+function reactionClickHandler(){
+    var card = this.closest('.post-card');
+    var postId = card.dataset.postId;
+    var emoji = this.dataset.emoji;
+    postReaction(postId, emoji).then(function(res){
+        if (res && res.ok) rebuildReactionBar(card, res.counts, emoji, res.added);
+    });
+}
+document.querySelectorAll('.reaction-btn').forEach(function(b){ b.addEventListener('click', reactionClickHandler); });
+document.querySelectorAll('.reaction-picker button').forEach(function(b){
+    b.addEventListener('click', function(e){
+        e.stopPropagation();
         var card = this.closest('.post-card');
         var postId = card.dataset.postId;
         var emoji = this.dataset.emoji;
+        this.closest('.reaction-picker').classList.remove('open');
         postReaction(postId, emoji).then(function(res){
             if (res && res.ok) rebuildReactionBar(card, res.counts, emoji, res.added);
         });
-    }
-    document.querySelectorAll('.reaction-btn').forEach(function(b){ b.addEventListener('click', reactionClickHandler); });
-    document.querySelectorAll('.reaction-picker button').forEach(function(b){
-        b.addEventListener('click', function(e){
-            e.stopPropagation();
-            var card = this.closest('.post-card');
-            var postId = card.dataset.postId;
-            var emoji = this.dataset.emoji;
-            this.closest('.reaction-picker').classList.remove('open');
-            postReaction(postId, emoji).then(function(res){
-                if (res && res.ok) rebuildReactionBar(card, res.counts, emoji, res.added);
-            });
-        });
     });
-    </script>
-    {{.ReportModalHTML}}
+});
+</script>
+{{.ReportModalHTML}}
 {{end}}

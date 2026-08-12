@@ -31,6 +31,9 @@ func render1(t *testing.T, name string, data map[string]any) string {
 			t.Errorf("%s carries host chrome it should not: %q", name, unwanted)
 		}
 	}
+	if strings.Contains(s, "bootstrap.bundle.min.js") {
+		t.Errorf("%s owns the Bootstrap runtime; the host page wrapper must load it exactly once", name)
+	}
 	return s
 }
 
@@ -69,8 +72,9 @@ func TestWikiIndexRendersWithItsIcons(t *testing.T) {
 		"Topics": topics, "RecentPosts": []*RecentPost{sampleRecent()},
 		"PopularPosts": []*RecentPost{sampleRecent()},
 		"PostsByTopic": byTopic,
+		"WikiStats":    wikiLandingStats{Topics: 1, Articles: 1, Contributors: 1, Views: 3},
 	})
-	for _, want := range []string{"Getting Started", "First Steps", "<svg"} {
+	for _, want := range []string{"Getting Started", "First Steps", "Recent Updates", "Wiki Stats", "<svg"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("wiki index missing %q", want)
 		}
@@ -82,6 +86,7 @@ func TestWikiRecentOnlyView(t *testing.T) {
 	topics, _, byTopic := topicsAndPosts()
 	render1(t, "wiki.html", map[string]any{
 		"Topics": topics, "RecentPosts": []*RecentPost{sampleRecent()}, "PostsByTopic": byTopic,
+		"WikiStats":      wikiLandingStats{Topics: 1, Articles: 1},
 		"RecentOnlyView": true, "ActiveNav": "wiki",
 	})
 }
@@ -127,7 +132,7 @@ func TestWikiAdminPagesRender(t *testing.T) {
 func TestWikiPagesRenderEmpty(t *testing.T) {
 	render1(t, "wiki.html", map[string]any{
 		"Topics": []*Topic{}, "RecentPosts": []*RecentPost{}, "PopularPosts": []*RecentPost{},
-		"PostsByTopic": map[int][]*Post{}})
+		"PostsByTopic": map[int][]*Post{}, "WikiStats": wikiLandingStats{}})
 	render1(t, "admin_wiki.html", map[string]any{
 		"Topics": []*Topic{}, "PostsByTopic": map[int][]*Post{}})
 }

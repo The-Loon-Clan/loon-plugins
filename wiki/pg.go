@@ -88,7 +88,8 @@ func (s *PGStore) AllPosts(ctx context.Context) ([]*Post, error) {
 	var posts []*Post
 	err := s.db.SelectContext(ctx, &posts,
 		`SELECT id, topic_id, title, slug, '' AS content,
-		        created_by, created_at, updated_at
+		        created_by, created_at, updated_at,
+		        COALESCE(view_count, 0) AS view_count
 		   FROM wiki_posts
 		  ORDER BY topic_id ASC, created_at ASC`)
 	return posts, err

@@ -88,6 +88,40 @@ func (h *Handlers) postsByTopicMap(c *gin.Context) map[int][]*Post {
 	return out
 }
 
+// wikiLandingStats is the compact, live summary shown in the landing page's
+// right rail. It is derived from the same lightweight AllPosts projection used
+// by the explorer, so rendering the layout does not add another database query.
+type wikiLandingStats struct {
+	Topics       int
+	Articles     int
+	Contributors int
+	Views        int64
+}
+
+func buildWikiLandingStats(topics []*Topic, postsByTopic map[int][]*Post) wikiLandingStats {
+	stats := wikiLandingStats{Topics: len(topics)}
+	contributors := make(map[int]struct{})
+	for _, posts := range postsByTopic {
+		stats.Articles += len(posts)
+		for _, post := range posts {
+			stats.Views += post.ViewCount
+			if post.CreatedBy > 0 {
+				contributors[post.CreatedBy] = struct{}{}
+			}
+		}
+	}
+	stats.Contributors = len(contributors)
+
+	// AllPosts is best-effort on this page. If that projection fails, retain a
+	// truthful article total from the per-topic COUNT returned by Topics.
+	if stats.Articles == 0 {
+		for _, topic := range topics {
+			stats.Articles += topic.PostCount
+		}
+	}
+	return stats
+}
+
 func (h *Handlers) Index(c *gin.Context) {
 	ctx := c.Request.Context()
 	topics, err := h.store.Topics(ctx)
@@ -100,11 +134,13 @@ func (h *Handlers) Index(c *gin.Context) {
 	// extras. Empty slices render an empty panel naturally.
 	recentPosts, _ := h.store.RecentPosts(ctx, 10)
 	popularPosts, _ := h.store.PopularPosts(ctx, 5)
+	postsByTopic := h.postsByTopicMap(c)
 	render(c, http.StatusOK, "Wiki", "wiki.html", gin.H{
 		"Topics":       topics,
 		"RecentPosts":  recentPosts,
 		"PopularPosts": popularPosts,
-		"PostsByTopic": h.postsByTopicMap(c),
+		"PostsByTopic": postsByTopic,
+		"WikiStats":    buildWikiLandingStats(topics, postsByTopic),
 	})
 }
 
@@ -117,10 +153,12 @@ func (h *Handlers) RecentChanges(c *gin.Context) {
 	// 50 caps the page at one screenful and matches the in-flight
 	// edit feed conventions elsewhere on the site.
 	recentPosts, _ := h.store.RecentPosts(ctx, 50)
+	postsByTopic := h.postsByTopicMap(c)
 	render(c, http.StatusOK, "Wiki", "wiki.html", gin.H{
 		"Topics":         topics,
 		"RecentPosts":    recentPosts,
-		"PostsByTopic":   h.postsByTopicMap(c),
+		"PostsByTopic":   postsByTopic,
+		"WikiStats":      buildWikiLandingStats(topics, postsByTopic),
 		"RecentOnlyView": true,
 		"ActiveNav":      "recent",
 	})

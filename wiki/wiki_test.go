@@ -63,3 +63,27 @@ func TestPostsByTopicMap_EmptyStore(t *testing.T) {
 		t.Errorf("want empty map, got %d keys", len(got))
 	}
 }
+
+func TestBuildWikiLandingStats(t *testing.T) {
+	topics := []*Topic{{ID: 1}, {ID: 2}}
+	posts := map[int][]*Post{
+		1: {
+			{ID: 1, CreatedBy: 7, ViewCount: 12},
+			{ID: 2, CreatedBy: 9, ViewCount: 5},
+		},
+		2: {{ID: 3, CreatedBy: 7, ViewCount: 3}},
+	}
+
+	got := buildWikiLandingStats(topics, posts)
+	if got.Topics != 2 || got.Articles != 3 || got.Contributors != 2 || got.Views != 20 {
+		t.Fatalf("unexpected stats: %+v", got)
+	}
+}
+
+func TestBuildWikiLandingStatsFallsBackToTopicCounts(t *testing.T) {
+	topics := []*Topic{{ID: 1, PostCount: 4}, {ID: 2, PostCount: 3}}
+	got := buildWikiLandingStats(topics, map[int][]*Post{})
+	if got.Articles != 7 {
+		t.Fatalf("articles: want 7, got %d", got.Articles)
+	}
+}

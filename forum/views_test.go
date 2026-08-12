@@ -42,6 +42,9 @@ func render1(t *testing.T, name string, data map[string]any) string {
 			t.Errorf("%s carries host chrome it should not: %q", name, unwanted)
 		}
 	}
+	if strings.Contains(s, "bootstrap.bundle.min.js") {
+		t.Errorf("%s owns the Bootstrap runtime; the host page wrapper must load it exactly once", name)
+	}
 	return s
 }
 
@@ -95,6 +98,20 @@ func TestThreadPlacesEveryHostRenderedWidget(t *testing.T) {
 			t.Errorf("the thread page is missing %s (%q)", what, marker)
 		}
 	}
+	for _, want := range []string{
+		`class="forum-thread-hero"`,
+		`class="forum-post-layout"`,
+		`class="post-card forum-post-card"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the thread page is missing layout landmark %s", want)
+		}
+	}
+	for _, unwanted := range []string{`class="forum-thread-sidebar"`, "Thread Details", "Conversation Guide"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("the thread page still renders non-index right rail %q", unwanted)
+		}
+	}
 }
 
 // IsAdmin and CurrentUserID gate the moderation and ownership controls. They
@@ -142,6 +159,17 @@ func TestForumListPagesRender(t *testing.T) {
 	if !strings.Contains(forums, "General") {
 		t.Error("the forum index did not list its category")
 	}
+	for _, want := range []string{
+		`class="forum-hero"`,
+		`class="forum-index-grid"`,
+		`class="forum-panel forum-categories-panel"`,
+		`class="forum-panel forum-recent-panel"`,
+		`class="forum-index-sidebar"`,
+	} {
+		if !strings.Contains(forums, want) {
+			t.Errorf("the forum index is missing layout landmark %s", want)
+		}
+	}
 
 	cat := render1(t, "community_category.html", map[string]any{
 		"Category": sampleCategory(), "Threads": []*ForumThread{sampleThread()},
@@ -151,6 +179,20 @@ func TestForumListPagesRender(t *testing.T) {
 	})
 	if !strings.Contains(cat, `<nav id="pg">`) {
 		t.Error("the category page did not place the host-rendered pager")
+	}
+	for _, want := range []string{
+		`class="forum-category-hero"`,
+		`class="forum-category-layout"`,
+		`class="forum-panel forum-thread-panel"`,
+	} {
+		if !strings.Contains(cat, want) {
+			t.Errorf("the category page is missing layout landmark %s", want)
+		}
+	}
+	for _, unwanted := range []string{`class="forum-category-sidebar"`, "About This Forum", "Top Contributors", "Forum Legend"} {
+		if strings.Contains(cat, unwanted) {
+			t.Errorf("the category page still renders non-index right rail %q", unwanted)
+		}
 	}
 
 	// The locked shell is a real branch: seeable but not readable, and it
@@ -193,6 +235,12 @@ func TestForumPagesRenderEmpty(t *testing.T) {
 	render1(t, "community_forums.html", map[string]any{
 		"Categories": []*ForumCategory{}, "Activity": []*ForumActivityItem{},
 		"Contributors": []*ForumContributor{}, "TotalThreads": 0, "TotalPosts": 0,
+		"CurrentUserID": 0, "IsAdmin": false, "CSRFToken": "",
+	})
+	render1(t, "community_category.html", map[string]any{
+		"Category": sampleCategory(), "Threads": []*ForumThread{},
+		"Total": 0,
+		"Page":  1, "TotalPages": 1, "PaginationHTML": template.HTML(""),
 		"CurrentUserID": 0, "IsAdmin": false, "CSRFToken": "",
 	})
 	render1(t, "admin_forum_categories.html", map[string]any{
