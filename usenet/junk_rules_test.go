@@ -17,7 +17,7 @@ func TestEmbeddedJunkRulesParse(t *testing.T) {
 	wantOrder := []string{
 		"long_alnum_run", "multi_seg_random", "uuid", "software_warez",
 		"template_token", "dot_sep_obfuscated", "rot13_archive",
-		"repeated_short_tok", "alnum_blob_ext", "short_alnum_token",
+		"repeated_short_tok", "repeated_token_chaotic", "alnum_blob_ext", "short_alnum_token",
 		"mid_alnum_token", "js_template_leak", "single_token_20",
 		// token_size_tail is local, not prod's (the second such rule, after
 		// garbled_no_space). Added 2026-08-08: obfuscated posts whose subjects
@@ -41,7 +41,7 @@ func TestEmbeddedJunkRulesParse(t *testing.T) {
 		"short_random_token", "under_1mib", "under_5mib",
 	}
 	if len(specs) != len(wantOrder) {
-		t.Fatalf("got %d rules, want %d (prod's set plus garbled_no_space and token_size_tail)", len(specs), len(wantOrder))
+		t.Fatalf("got %d rules, want %d (prod's set plus garbled_no_space, token_size_tail and repeated_token_chaotic)", len(specs), len(wantOrder))
 	}
 	for i, s := range specs {
 		if s.Name != wantOrder[i] {

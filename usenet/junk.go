@@ -196,14 +196,17 @@ var junkHeuristics = map[string]bool{
 	"multi_segment_chaos": true, // 2+ chaotic segments (prod: multi_seg_random)
 	"bare_alnum_token":    true, // bare alnum run, length-banded, optional digit gate
 	"repeated_short_tok":  true, // "rtNJ rtNJ" — same short token twice
-	"high_special_chars":  true, // 15%+ garbled punctuation
-	"random_words":        true, // 70%+ of non-punct chars from random-looking words
-	"token_size_tail":     true, // bare junk token wearing the poster's size annotation
-	"tiny_no_space":       true, // sized: no whitespace at all under the size cap
-	"long_no_space":       true, // sized: 60+ chars, no whitespace, 5+ garbled
-	"garbled_no_space":    true, // ANY size: 60+ chars, no whitespace, min_garbled+
-	"chaotic_specials":    true, // sized: 30+ chars, HAS whitespace, 3+ garbled
-	"size_catchall":       true, // sized: everything in a size band is junk
+	// Sibling of the above for the shapes it cannot reach: a repeated token
+	// with no digit, and a repeat hidden behind a suffix.
+	"repeated_token_chaotic": true,
+	"high_special_chars":     true, // 15%+ garbled punctuation
+	"random_words":           true, // 70%+ of non-punct chars from random-looking words
+	"token_size_tail":        true, // bare junk token wearing the poster's size annotation
+	"tiny_no_space":          true, // sized: no whitespace at all under the size cap
+	"long_no_space":          true, // sized: 60+ chars, no whitespace, 5+ garbled
+	"garbled_no_space":       true, // ANY size: 60+ chars, no whitespace, min_garbled+
+	"chaotic_specials":       true, // sized: 30+ chars, HAS whitespace, 3+ garbled
+	"size_catchall":          true, // sized: everything in a size band is junk
 }
 
 // newJunkMatcher compiles specs. Disabled rules are dropped here so the hot path
@@ -369,6 +372,8 @@ func runJunkHeuristic(id, t string, p junkParams) bool {
 		return bareAlnumToken(t, p)
 	case "repeated_short_tok":
 		return isRepeatedShortTokenJunk(t)
+	case "repeated_token_chaotic":
+		return isRepeatedChaoticTokenJunk(t, p)
 	case "high_special_chars":
 		return highSpecialChars(t, p)
 	case "random_words":
@@ -620,6 +625,83 @@ func isRepeatedShortTokenJunk(title string) bool {
 		}
 	}
 	return hasDigit && hasLetter
+}
+
+// isRepeatedChaoticTokenJunk: the title OPENS with the same non-word token
+// twice, whatever follows it.
+//
+// Sibling of isRepeatedShortTokenJunk, added 2026-08-12 for two obfuscated
+// shapes it let through, both seen on the live index:
+//
+//	OIZBRZTgbdfrtZUHTR OIZBRZTgbdfrtZUHTR              198.75 GB
+//	qZX3XMK0BMLX3cWd qZX3XMK0BMLX3cWd_jf5iwgyw.part10.Z
+//
+// The first is an exact repeat, but the token carries no DIGIT, and the older
+// rule demands digit+letter above five characters — a gate that exists to spare
+// "New York New York" and which a pure-letter random token slips through. The
+// second never reaches the comparison at all: the trailing "_jf5iwgyw.part10.Z"
+// splits into further chunks, so the "exactly two chunks" guard rejects it.
+//
+// Neither is fixable by loosening the old rule without endangering what it
+// protects, so this is a separate, stricter rule:
+//
+//   - only the FIRST TWO tokens are compared, so a suffix cannot hide the
+//     repeat, but "Tokyo Tokyo Godfathers" is not judged on tokens 2 and 3;
+//   - the token must be 8+ characters, which is where "Tokyo Tokyo" and every
+//     other repeated short word lands outside it;
+//   - and it must not be WORD-SHAPED. That is the gate doing the real work,
+//     because it needs no digit: a word is Capitalised, alllower, or ALLCAPS,
+//     while OIZBRZTgbdfrtZUHTR runs upper-lower-upper, which no word does.
+//
+// RE2 has no backreferences, which is why this is code and not a pattern.
+func isRepeatedChaoticTokenJunk(title string, p junkParams) bool {
+	minLen := p.MinLen
+	if minLen <= 0 {
+		minLen = 8
+	}
+	chunks := strings.FieldsFunc(title, func(r rune) bool { return !isAlnum(r) })
+	if len(chunks) < 2 || chunks[0] != chunks[1] {
+		return false
+	}
+	tok := chunks[0]
+	if len(tok) < minLen {
+		return false
+	}
+	return !isWordShaped(tok)
+}
+
+// isWordShaped reports whether a token looks like a written word rather than a
+// random string: "Godfathers", "yofukashi", "NHK". Anything mixing cases in a
+// way words do not — or carrying digits — is not word-shaped.
+//
+// Deliberately permissive about what counts as a word, because this decides
+// whether a release is DELETED. The cost of calling a random token word-shaped
+// is one junk row that other rules may still catch; the cost of the reverse is
+// a real release removed from the index.
+func isWordShaped(tok string) bool {
+	if tok == "" {
+		return false
+	}
+	var upper, lower, digit int
+	for _, r := range tok {
+		switch {
+		case r >= '0' && r <= '9':
+			digit++
+		case r >= 'A' && r <= 'Z':
+			upper++
+		case r >= 'a' && r <= 'z':
+			lower++
+		}
+	}
+	if digit > 0 {
+		return false // words do not carry digits
+	}
+	if upper == 0 || lower == 0 {
+		return true // alllower or ALLCAPS — both ordinary
+	}
+	// Mixed case is a word only in the Capitalised shape: one leading capital,
+	// everything after it lowercase.
+	return upper == 1 && tok[0] >= 'A' && tok[0] <= 'Z'
 }
 
 // highSpecialChars: 15%+ of the title is "garbled" punctuation. Release-style
