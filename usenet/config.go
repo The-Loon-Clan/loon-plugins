@@ -37,13 +37,30 @@ type Config struct {
 	// not something a default should ever do quietly.
 	NZBRetentionDays int `json:"nzb_retention_days"` // default 0 = never delete
 
-	CrawlIntervalMin    int `json:"crawl_interval_min"`     // crawl cadence (default 15)
-	TagFillIntervalMin  int `json:"tagfill_interval_min"`   // tag-fill + recategorize cadence (default 360)
-	PruneIntervalMin    int `json:"prune_interval_min"`     // prune cadence (default 1440)
-	BuildDrainPerPass   int `json:"build_drain_per_pass"`   // completed sets assembled per build pass (default 500)
-	Batch               int `json:"batch"`                  // article-number span per OVER request (default 3000)
-	MaxGroups           int `json:"max_groups"`             // cap active groups crawled per run (default 20; 0 = all, no cap)
-	CrawlMaxBatches     int `json:"crawl_max_batches"`      // forward-pass batch budget (default 20000) — the catch-up loop rolls the remainder into the next round
+	CrawlIntervalMin   int `json:"crawl_interval_min"`   // crawl cadence (default 15)
+	TagFillIntervalMin int `json:"tagfill_interval_min"` // tag-fill + recategorize cadence (default 360)
+	PruneIntervalMin   int `json:"prune_interval_min"`   // prune cadence (default 1440)
+	BuildDrainPerPass  int `json:"build_drain_per_pass"` // completed sets assembled per build pass (default 500)
+	Batch              int `json:"batch"`                // article-number span per OVER request (default 3000)
+	MaxGroups          int `json:"max_groups"`           // cap active groups crawled per run (default 20; 0 = all, no cap)
+	CrawlMaxBatches    int `json:"crawl_max_batches"`    // forward-pass batch budget (default 20000) — the catch-up loop rolls the remainder into the next round
+	// CrawlHeadroom is how many articles below the server's reported high water
+	// mark the forward crawl stops, leaving the newest articles for the next
+	// pass. 0 disables it.
+	//
+	// Articles do not appear atomically. An article number can exist while its
+	// overview line is still being written or still propagating between peers,
+	// so a batch that runs right up to the high water mark comes back short —
+	// and crawl.go then records the whole requested range as fetched coverage
+	// anyway. Walk-past eviction reasons FROM that coverage, treating "covered
+	// and still short" as proof the missing articles are never coming, so a
+	// frontier fetched too eagerly produces false dead verdicts and salvaged
+	// BROKEN releases out of content that was merely still arriving.
+	//
+	// Nothing is lost by waiting: the next pass picks the articles up, and the
+	// catch-up loop means "the next pass" is usually seconds away. NNTmux
+	// leaves a comparable window for the same reason.
+	CrawlHeadroom       int `json:"crawl_headroom"`         // articles left below the high water mark (default 2 batches)
 	MaxArticlesPerGroup int `json:"max_articles_per_group"` // cap the first-pass volume so a busy group can't pull millions (default 20000)
 
 	// Connections is the NNTP pool size — how many articles can be fetched in
@@ -245,6 +262,14 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MaxGroups <= 0 {
 		c.MaxGroups = 20
+	}
+	if c.CrawlHeadroom < 0 {
+		c.CrawlHeadroom = 0
+	} else if c.CrawlHeadroom == 0 {
+		// Two batch windows. Enough to cover a propagation lag measured in
+		// tens of thousands of articles on a busy group, small enough that the
+		// frontier never falls meaningfully behind.
+		c.CrawlHeadroom = 2 * c.Batch
 	}
 	if c.CrawlMaxBatches <= 0 {
 		c.CrawlMaxBatches = 20000

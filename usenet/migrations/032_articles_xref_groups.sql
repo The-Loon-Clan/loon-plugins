@@ -1,0 +1,20 @@
+-- xref_groups: every newsgroup the SERVER said an article was filed into.
+--
+-- RFC 5536 s3.2.14 defines the Xref header as the server's own record of which
+-- groups it filed the article into, and states that user agents use it "to
+-- avoid multiple processing of crossposted articles" — the exact problem this
+-- indexer had. A crosspost is ONE article filed under several groups
+-- (RFC 5536 s1.5); crawling those groups separately yields it once per group
+-- with nothing to say they are the same posting, which is how one release came
+-- to hold 57 rows for 12 real releases.
+--
+-- It arrives free in overview data (RFC 3977 s8.4; INN requires Xref:full and
+-- will not start without it), so recording it costs one column and no extra
+-- fetch. Carrying it to assembly is what lets a built NZB name every group the
+-- posting lives in rather than only the one we happened to crawl.
+--
+-- Nullable with no default: NULL means "the server sent no Xref", which is a
+-- different statement from "this article is in no groups" and the assembly path
+-- distinguishes them (it falls back to the crawled group). The ADD COLUMN is
+-- metadata-only and instant; staging is a short-lived table in any case.
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS xref_groups TEXT[];

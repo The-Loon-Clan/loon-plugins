@@ -372,9 +372,11 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 		_, posted := summarize(arts)
 		rel := pluginapi.AssembledRelease{
 			Title: title, BaseSubject: k.Base, Group: k.Group,
-			Poster:      firstPoster(arts),
-			ContentHash: contentHashArticles(arts),
-			SizeBytes:   totals.Bytes, PostedAt: posted,
+			Poster:        firstPoster(arts),
+			Groups:        fileGroups(arts),
+			ContentHash:   contentHashArticles(arts),
+			ContentSketch: totals.Sketch,
+			SizeBytes:     totals.Bytes, PostedAt: posted,
 			NZBGz: gz, Segments: totals.Segments, CategoryHint: cat,
 		}
 		_, created, err := sink.store(ctx, rel)
@@ -384,6 +386,29 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			// Storage failed — leave the set staged so a later pass retries.
 			// A transient sink outage must never lose a release.
 			p.reportErr(ctx, "usenet/build-store", fmt.Errorf("%s: %w", title, err))
+
+			// Retrying forever is not free, and giving up silently is worse.
+			//
+			// Without a count there are two indistinguishable failure modes and
+			// neither is visible. A release the sink can NEVER accept (a host
+			// constraint it always violates) is re-drawn, its articles re-loaded
+			// and its document rebuilt on every pass for the whole TTL — a full
+			// article load and gzip per pass, for nothing. Then it expires, and
+			// nothing anywhere records that a COMPLETE release was assembled and
+			// then lost.
+			//
+			// The count lives on the set's meta, so it survives across passes
+			// and is scoped to the set rather than the process. At the limit the
+			// set is dropped deliberately, with a log line naming the release —
+			// the difference between losing it and knowing we lost it.
+			attempts := p.staging.noteStoreAttempt(ctx, k.Group, k.Base)
+			if attempts >= storeAttemptLimit {
+				p.outcomes.note(outcomeStoreGaveUp, k.Base)
+				p.crawlJob.Log("giving up on %q after %d failed store attempts — dropping from staging", title, attempts)
+				if derr := p.staging.deleteStaged(ctx, k.Group, k.Base); derr != nil {
+					p.reportErr(ctx, "usenet/build-delete-staged", derr)
+				}
+			}
 			continue
 		}
 		// In redis mode this delete is the ONLY way an entry leaves nzb:ready —
@@ -625,9 +650,11 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 		_, posted := summarize(arts)
 		id, created, err := sink.store(ctx, pluginapi.AssembledRelease{
 			Title: title, BaseSubject: k.Base, Group: k.Group,
-			Poster:      firstPoster(arts),
-			ContentHash: contentHashArticles(arts),
-			SizeBytes:   totals.Bytes, PostedAt: posted,
+			Poster:        firstPoster(arts),
+			Groups:        fileGroups(arts),
+			ContentHash:   contentHashArticles(arts),
+			ContentSketch: totals.Sketch,
+			SizeBytes:     totals.Bytes, PostedAt: posted,
 			NZBGz: gz, Segments: totals.Segments, CategoryHint: cat,
 		})
 		if err != nil {
@@ -901,6 +928,9 @@ func isComplete(arts []stagedArticle) bool {
 type nzbTotals struct {
 	Bytes    int64
 	Segments int
+	// Sketch is the content sketch, computed from the DOCUMENT rather than
+	// from the staged articles it was built from. See contentSketchDoc.
+	Sketch string
 }
 
 func buildNZB(arts []stagedArticle) ([]byte, nzbTotals, error) {
@@ -935,6 +965,7 @@ func buildNZB(arts []stagedArticle) ([]byte, nzbTotals, error) {
 			totals.Segments++
 		}
 	}
+	totals.Sketch = contentSketchDoc(doc)
 	out, err := xml.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return nil, nzbTotals{}, err
@@ -945,24 +976,153 @@ func buildNZB(arts []stagedArticle) ([]byte, nzbTotals, error) {
 // makeFile builds one <file> from the articles of a single file, segments
 // ordered as loaded and de-duped by part number.
 func makeFile(arts []stagedArticle) nzbFile {
+	// The file's poster/date/subject come from its LOWEST-numbered part, not
+	// from whichever article iteration reached first. Redis staging returns
+	// HGetAll's map and Go randomises map range order, so "first" was a random
+	// segment: two builds of the identical staged set produced different bytes,
+	// and the <file subject> could read "(37/120)" instead of "(1/120)" with a
+	// date attribute from any segment. Part 1 is the one whose subject and date
+	// actually describe the file.
 	first := arts[0]
+	for _, a := range arts {
+		if a.PartNum < first.PartNum || (a.PartNum == first.PartNum && betterArticle(a, first)) {
+			first = a
+		}
+	}
 	f := nzbFile{
 		Poster:  strings.ToValidUTF8(first.Poster, "\uFFFD"),
 		Date:    first.Posted.Unix(),
 		Subject: strings.ToValidUTF8(first.Subject, "\uFFFD"),
-		Groups:  nzbGroups{Group: []string{first.Group}},
+		// Every group the posting lives in, not just the one we crawled.
+		//
+		// A crosspost is ONE article filed under several newsgroups, and the
+		// server names them in the Xref overview field. Listing them all is what
+		// <groups> is for: retrieval is by Message-ID and newsgroup-independent,
+		// so this is inert for SABnzbd and for default-configured NZBGet, but
+		// NZBGet with JoinGroup=yes tries each listed group in turn and stops at
+		// the first success — more groups means more chances to hit one the
+		// member's provider carries. No client penalises extra groups.
+		//
+		// fileGroups always includes the crawled group, so a server that sends
+		// no Xref produces exactly the previous single-group output.
+		Groups: nzbGroups{Group: fileGroups(arts)},
 	}
-	seen := make(map[int]bool, len(arts))
+	// One segment per part number, choosing the BEST candidate rather than the
+	// first one iteration happened to reach. betterArticle states the rule; the
+	// reason it is not "first wins" is that a truncated or corrupt re-post of a
+	// single segment would otherwise be able to displace the good article purely
+	// by arriving first, and nothing downstream would notice — the health job
+	// STATs the message-id, finds it present, and marks the release healthy.
+	//
+	// This is the read-side half of the rule. The redis staging path applies the
+	// same comparison at WRITE time (stageArticles), because there the loser is
+	// destroyed before assembly ever sees it. Both call betterArticle so the two
+	// halves cannot drift.
+	best := make(map[int]stagedArticle, len(arts))
+	order := make([]int, 0, len(arts))
 	for _, a := range arts {
-		if seen[a.PartNum] {
+		cur, seen := best[a.PartNum]
+		if !seen {
+			order = append(order, a.PartNum)
+			best[a.PartNum] = a
 			continue
 		}
-		seen[a.PartNum] = true
+		if betterArticle(a, cur) {
+			best[a.PartNum] = a
+		}
+	}
+	sort.Ints(order)
+	for _, pn := range order {
+		a := best[pn]
 		f.Segments.Segment = append(f.Segments.Segment, nzbSegment{
-			Bytes: a.Bytes, Number: a.PartNum, Value: strings.Trim(a.MessageID, "<>"),
+			Bytes: clampSegmentBytes(a.Bytes), Number: a.PartNum,
+			Value: strings.Trim(a.MessageID, "<>"),
 		})
 	}
 	return f
+}
+
+// segByteCeiling is SABnzbd's validity limit for a <segment bytes="..."> value.
+//
+// SABnzbd treats the attribute as a gate, not as metadata: a segment with
+// bytes <= 0 or bytes >= 2^23 (8 MiB) is SILENTLY skipped and counted as a bad
+// article. Nothing on our side would show it — the release looks complete in
+// the index and simply fails to assemble on the member's machine.
+//
+// The value comes off the wire as OVER's :bytes field, which RFC 3977 s8.1.1
+// explicitly says implementations "MUST NOT rely on being accurate" and lists
+// four ways servers get wrong. Sampling 117,929 segments across 50 production
+// releases found no violation — but the largest observed was 8,239,932 bytes,
+// 98% of the ceiling, so there is no headroom and nothing was guarding it.
+const segByteCeiling = 8 << 20
+
+// clampSegmentBytes keeps an emitted segment inside the range downloaders
+// accept.
+//
+// A clamped value is wrong by a few percent; an unclamped one makes the segment
+// disappear from the download entirely. The attribute is advisory for
+// everything except that gate — clients read the real length from the article
+// itself — so the trade is heavily one-sided.
+func clampSegmentBytes(b int64) int64 {
+	if b <= 0 {
+		// Unknown or unreported. 1 is the smallest value that passes the gate;
+		// claiming 0 would drop the article.
+		return 1
+	}
+	if b >= segByteCeiling {
+		return segByteCeiling - 1
+	}
+	return b
+}
+
+// fileGroups is the union of every newsgroup the file's articles were filed
+// into, sorted so the document stays a deterministic function of its input.
+// The crawled group is always included, so an absent or unparseable Xref
+// degrades to exactly the previous behaviour.
+func fileGroups(arts []stagedArticle) []string {
+	seen := make(map[string]struct{}, 4)
+	var out []string
+	add := func(g string) {
+		if g == "" {
+			return
+		}
+		if _, dup := seen[g]; dup {
+			return
+		}
+		seen[g] = struct{}{}
+		out = append(out, g)
+	}
+	for _, a := range arts {
+		add(a.Group)
+		for _, g := range a.XrefGroups {
+			add(g)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// betterArticle reports whether a should displace b as the segment for their
+// shared (file, part).
+//
+// The order is NNTmux's, which is the only published prior art for this
+// decision: a usable message-id first, then the larger byte count, then a
+// deterministic tiebreak. NNTmux breaks the final tie on the lower article
+// number; we use the lexicographically smaller message-id instead, because the
+// staged record does not carry an article number and adding one would grow
+// every staged article in Redis to serve a tiebreak that almost never fires.
+// What matters is only that it IS deterministic — two workers assembling the
+// same set must reach the same document, or the content sketch differs and the
+// copies stop deduping against each other.
+func betterArticle(a, b stagedArticle) bool {
+	am, bm := a.MessageID != "", b.MessageID != ""
+	if am != bm {
+		return am
+	}
+	if a.Bytes != b.Bytes {
+		return a.Bytes > b.Bytes
+	}
+	return a.MessageID < b.MessageID
 }
 
 type nzbDoc struct {
@@ -1061,6 +1221,137 @@ func contentHashArticles(arts []stagedArticle) string {
 	return hex.EncodeToString(h.Sum(nil)[:16])
 }
 
+// sketchK is how many message-ids the content sketch keeps. It is the
+// tolerance dial, and the exact shape of that tolerance matters more than it
+// first appears.
+//
+// Two views of one posting agree unless a differing article lands among the K
+// smallest digests. For N articles with D of them differing, the sketch
+// SURVIVES with probability (1 - D/N)^K — not the 1 - K*D/N that a first
+// reading suggests. The two agree only while D/N is tiny:
+//
+//	D/N      survival at K=16
+//	1/79082  99.98%   one article of the release that motivated this
+//	0.19%    97.0%    148 articles, the worst real copy of it
+//	1%       85.1%
+//	5%       44.0%
+//	10%      18.5%
+//
+// So this key is built for PARTIAL VIEWS OF ONE CRAWL PAIR — a handful of
+// articles seen by one pass and not the other — and it is deliberately not a
+// general "same content" matcher. A copy missing 10% of its articles is a
+// materially worse artefact and being told it is a different row is the honest
+// answer; upgrading a partial row when a better copy arrives is handled
+// separately, by completeness comparison at the sink, not by widening this.
+//
+// Raising K narrows the tolerance; lowering it raises the chance two unrelated
+// releases collide and one is wrongly suppressed. 16 hashes is 128 bits of
+// agreement, so an accidental collision is not a practical concern.
+const sketchK = 16
+
+// contentSketchArticles is content identity that survives a PARTIAL VIEW of the
+// same posting — the property contentHashArticles was assumed to have and does
+// not.
+//
+// contentHashArticles hashes every observed message-id, so it answers "did we
+// see exactly these articles?". The crawler's answer to that varies per crawl:
+// a crosspost is ONE posting that appears in several groups with identical
+// message-ids, but retention, propagation lag and crawl timing mean each group
+// yields a slightly different subset. Measured on prod, "Call Of The Night
+// (2022) S02 ... AVC-iVy" was seen as 79,081 articles in alt.binaries.teevee
+// and 79,082 in alt.binaries.mom — the same posting, 100% of message-ids
+// shared, one article apart. One article is enough to change a sha256 over all
+// of them, so the two hashed differently and both were indexed. Across that
+// release's 12 files the index held 57 rows with 57 distinct content_hashes.
+//
+// The fix is a bottom-K sketch (a MinHash): hash each message-id, keep the K
+// smallest digests, and hash those. Because "the K smallest" is a property of
+// the set rather than of its size, two views of one posting agree unless the
+// difference lands inside the K smallest — see sketchK.
+//
+// Properties this relies on:
+//
+//   - Identical article sets always produce identical sketches, so the sketch
+//     subsumes contentHashArticles as a dedup key rather than competing with it.
+//   - A re-post with FRESH message-ids sketches differently and is still
+//     indexed. That is deliberate: those are separate postings, and collapsing
+//     them needs content identity, not article identity.
+//   - Below K articles the sketch degenerates to the whole sorted set, i.e.
+//     exactly today's behaviour. Small posts are no better off and no worse.
+//
+// sha256 rather than a fast non-cryptographic hash: the sketch decides whether
+// a release is suppressed as a duplicate, and message-ids are attacker-chosen
+// text. Engineering 16 colliding digests to bury someone else's release must be
+// infeasible, and the cost is irrelevant next to fetching the articles.
+// storeAttemptLimit is how many times a complete set may fail to store before
+// it is dropped from staging.
+//
+// Three, matching NNTmux's nzb_creation_attempts. High enough that a sink
+// restart or a brief host outage never costs a release (the build pass retries
+// on its own cadence, so three attempts span multiple passes); low enough that a
+// release the sink structurally cannot accept stops consuming a full article
+// load and gzip every pass for the rest of its TTL.
+const storeAttemptLimit = 3
+
+// contentSketchDoc computes the sketch from the ASSEMBLED DOCUMENT, not from
+// the staged articles it was built from. That distinction is load-bearing and
+// an earlier version got it wrong.
+//
+// A host can only ever recompute this sketch from the stored NZB — that is the
+// only artefact that survives staging — so the document must be the definition.
+// Hashing `arts` instead diverges from it in two ways that both silently defeat
+// the dedup:
+//
+//   - makeFile deduplicates by PART NUMBER, keeping the first article seen for
+//     each (file, part). When a staged set holds two articles for one part with
+//     different message-ids — a re-post of a single segment, or the same part
+//     picked up twice across a batch seam — only one id reaches the document.
+//     Hashing `arts` would include the dropped id and could land it in the K
+//     smallest, giving the ingest path and the backfill different answers for
+//     the same release. The file already made exactly this argument for
+//     nzbTotals ("derived from doc rather than recomputed from arts on purpose:
+//     a second implementation of makeFile's dedup rule is a divergence waiting
+//     to happen") and the sketch belongs on the same side of it.
+//   - Angle brackets. Staged ids arrive with or without them depending on the
+//     wire path; the document always stores the trimmed form (makeFile applies
+//     strings.Trim(MessageID, "<>")). Reading the document takes that
+//     normalisation for free rather than re-deriving it.
+//
+// The algorithm: sha256 each distinct message-id and keep the first 8 bytes as
+// hex, sort, keep the sketchK smallest, sha256 that concatenation and keep the
+// first 16 bytes. Message-ids are deduplicated before hashing so a repeated id
+// cannot occupy two of the K slots — a view that saw an article once and a view
+// that saw it twice must agree.
+func contentSketchDoc(doc nzbDoc) string {
+	digests := make([]string, 0, 256)
+	seen := make(map[string]struct{}, 256)
+	for _, f := range doc.Files {
+		for _, s := range f.Segments.Segment {
+			if s.Value == "" {
+				continue
+			}
+			if _, dup := seen[s.Value]; dup {
+				continue
+			}
+			seen[s.Value] = struct{}{}
+			sum := sha256.Sum256([]byte(s.Value))
+			digests = append(digests, hex.EncodeToString(sum[:8]))
+		}
+	}
+	if len(digests) == 0 {
+		return ""
+	}
+	sort.Strings(digests)
+	if len(digests) > sketchK {
+		digests = digests[:sketchK]
+	}
+	h := sha256.New()
+	for _, d := range digests {
+		h.Write([]byte(d))
+	}
+	return hex.EncodeToString(h.Sum(nil)[:16])
+}
+
 func safeFilename(s string) string {
 	s = strings.Map(func(r rune) rune {
 		switch r {
@@ -1138,24 +1429,26 @@ func (s *PGStore) candidateGroups(ctx context.Context, limit int) ([]groupKey, c
 
 func (s *PGStore) groupArticles(ctx context.Context, group, base string) ([]stagedArticle, error) {
 	type row struct {
-		MessageID  string       `db:"message_id"`
-		Subject    string       `db:"subject"`
-		Poster     string       `db:"poster"`
-		Bytes      int64        `db:"bytes"`
-		Posted     sql.NullTime `db:"posted"`
-		Group      string       `db:"group_name"`
-		PartNum    int          `db:"part_num"`
-		TotalParts int          `db:"total_parts"`
-		SegTotal   int          `db:"seg_total"`
-		FileNum    int          `db:"file_num"`
-		TotalFiles int          `db:"total_files"`
-		FileParts  bool         `db:"file_parts"`
+		MessageID  string         `db:"message_id"`
+		Subject    string         `db:"subject"`
+		Poster     string         `db:"poster"`
+		Bytes      int64          `db:"bytes"`
+		Posted     sql.NullTime   `db:"posted"`
+		Group      string         `db:"group_name"`
+		PartNum    int            `db:"part_num"`
+		TotalParts int            `db:"total_parts"`
+		SegTotal   int            `db:"seg_total"`
+		FileNum    int            `db:"file_num"`
+		TotalFiles int            `db:"total_files"`
+		FileParts  bool           `db:"file_parts"`
+		XrefGroups pq.StringArray `db:"xref_groups"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.SelectContext(ctx, &rows,
 			`SELECT message_id, subject, poster, bytes, posted, group_name, part_num,
-			        total_parts, seg_total, file_num, total_files, file_parts
+			        total_parts, seg_total, file_num, total_files, file_parts,
+			        COALESCE(xref_groups, '{}') AS xref_groups
 			 FROM articles WHERE group_name = $1 AND base_subject = $2
 			 ORDER BY file_num, part_num`, group, base)
 	})
@@ -1169,6 +1462,7 @@ func (s *PGStore) groupArticles(ctx context.Context, group, base string) ([]stag
 			Bytes: r.Bytes, Group: r.Group, PartNum: r.PartNum,
 			TotalParts: r.TotalParts, SegTotal: r.SegTotal,
 			FileNum: r.FileNum, TotalFiles: r.TotalFiles, FileParts: r.FileParts,
+			XrefGroups: r.XrefGroups,
 		}
 		if r.Posted.Valid {
 			out[i].Posted = r.Posted.Time
@@ -1178,15 +1472,26 @@ func (s *PGStore) groupArticles(ctx context.Context, group, base string) ([]stag
 }
 
 type nzbRow struct {
-	Title       string
-	Filename    string
-	Size        int64
-	Group       string
-	ContentHash string
-	Posted      time.Time
-	Data        []byte
-	Tags        Tags
-	CategoryID  int
+	Title         string
+	Filename      string
+	Size          int64
+	Group         string
+	ContentHash   string
+	ContentSketch string
+	Posted        time.Time
+	Data          []byte
+	Tags          Tags
+	CategoryID    int
+}
+
+// nullIfEmpty sends SQL NULL for an empty string. The content_sketch unique
+// index excludes NULL and ”, but storing NULL keeps "no sketch" distinct from
+// "sketched to the empty string" for anything that later reads the column.
+func nullIfEmpty(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func (s *PGStore) insertNzb(ctx context.Context, n nzbRow) (int64, bool, error) {
@@ -1197,16 +1502,33 @@ func (s *PGStore) insertNzb(ctx context.Context, n nzbRow) (int64, bool, error) 
 		if !n.Posted.IsZero() {
 			posted = sql.NullTime{Time: n.Posted, Valid: true}
 		}
+		// The sketch is checked BEFORE the insert rather than as a second
+		// ON CONFLICT target, because a statement can only infer one. It
+		// subsumes content_hash (identical article sets sketch identically), so
+		// this catches every duplicate the ON CONFLICT below would have, plus
+		// the partial-view crossposts it never could. The ON CONFLICT stays as
+		// the race backstop and for rows written before the sketch existed.
+		if n.ContentSketch != "" {
+			serr := tx.QueryRowContext(ctx,
+				`SELECT id FROM nzbs WHERE content_sketch = $1`, n.ContentSketch).Scan(&id)
+			if serr == nil {
+				return nil // duplicate: id is the existing row, inserted stays false
+			}
+			if serr != sql.ErrNoRows {
+				return serr
+			}
+		}
 		// RETURNING id emits no row on a conflict, so ErrNoRows IS the
 		// duplicate signal — the salvage path needs the id to hand the health
 		// backend its verdict.
 		err := tx.QueryRowContext(ctx,
-			`INSERT INTO nzbs (title, filename, size, status, group_name, content_hash, posted_at,
+			`INSERT INTO nzbs (title, filename, size, status, group_name, content_hash, content_sketch, posted_at,
 			                   nzb_data, nzb_data_bytes, resolution, source, video_codec, audio, language, category_id)
-			 VALUES ($1,$2,$3,'completed',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+			 VALUES ($1,$2,$3,'completed',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 			 ON CONFLICT (content_hash) DO NOTHING
 			 RETURNING id`,
-			n.Title, n.Filename, n.Size, n.Group, n.ContentHash, posted, n.Data, len(n.Data),
+			n.Title, n.Filename, n.Size, n.Group, n.ContentHash, nullIfEmpty(n.ContentSketch), posted,
+			n.Data, len(n.Data),
 			n.Tags.Resolution, n.Tags.Source, n.Tags.Codec, n.Tags.Audio, n.Tags.Language, n.CategoryID).Scan(&id)
 		if err == sql.ErrNoRows {
 			// Duplicate: resolve the EXISTING row's id, so a salvage retry
@@ -1435,7 +1757,8 @@ func (s internalSink) store(ctx context.Context, rel pluginapi.AssembledRelease)
 	return s.p.st.insertNzb(ctx, nzbRow{
 		Title: rel.Title, Filename: safeFilename(rel.Title) + ".nzb",
 		Size: rel.SizeBytes, Group: rel.Group, ContentHash: rel.ContentHash,
-		Posted: rel.PostedAt, Data: rel.NZBGz, Tags: parseTags(rel.Title),
+		ContentSketch: rel.ContentSketch,
+		Posted:        rel.PostedAt, Data: rel.NZBGz, Tags: parseTags(rel.Title),
 		CategoryID: s.p.categoryFor(rel.Group, rel.Title),
 	})
 }

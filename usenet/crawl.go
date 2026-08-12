@@ -35,12 +35,18 @@ type stagedArticle struct {
 	Bytes       int64
 	Posted      time.Time
 	Group       string
-	PartNum     int
-	TotalParts  int
-	SegTotal    int
-	FileNum     int
-	TotalFiles  int
-	FileParts   bool
+	// XrefGroups is every newsgroup the SERVER says this article was filed
+	// into (RFC 5536 s3.2.14), when overview carries Xref. Empty otherwise, in
+	// which case the crawled Group is all we know. Carrying it through staging
+	// is what lets an assembled release name every group it lives in without
+	// crawling each of them.
+	XrefGroups []string
+	PartNum    int
+	TotalParts int
+	SegTotal   int
+	FileNum    int
+	TotalFiles int
+	FileParts  bool
 }
 
 // batchJob is one OVER range to fetch. Jobs from EVERY group go into a single
@@ -55,6 +61,11 @@ type batchJob struct {
 	// settings and a batch is the unit that actually applies them.
 	cutoff   time.Time
 	throttle time.Duration
+	// forward marks a batch on the crawl FRONTIER (planGroup, above the high
+	// watermark) as opposed to a backfill batch walking historical gaps. Only
+	// used to tally fetch gaps separately: holes in expired history are normal
+	// and expected, holes at the frontier are not.
+	forward bool
 }
 
 type batchResult struct {
@@ -62,16 +73,28 @@ type batchResult struct {
 	lo, hi           int
 	minDate, maxDate time.Time
 	staged           int
-	articles         int   // overview lines returned
-	wire             int64 // bytes pulled off the wire, for throughput
-	ok               bool  // fetched AND staged; only then may the watermark pass this range
+	articles         int // overview lines returned
+	// missing is the article numbers in [lo,hi] a SUCCESSFUL fetch did not
+	// return. Carried out to where coverage is recorded, because that is the
+	// only scope holding the backbone — and article numbers mean nothing
+	// without it (RFC 3977 s6). Forward batches only; see fetchBatch.
+	missing []int64
+	wire    int64 // bytes pulled off the wire, for throughput
+	ok      bool  // fetched AND staged; only then may the watermark pass this range
 }
 
 // crawlPlan is one group's resolved forward window for this pass.
 type crawlPlan struct {
 	group     string
-	low, high int // server's current article-number bounds
+	low, high int // server's current article-number bounds, as reported
 	start     int // first article we intend to fetch
+	// fetchHigh is the last article this pass will actually request — high
+	// minus Config.CrawlHeadroom. It is deliberately SEPARATE from high:
+	// updateGroupStateForBackbone persists high as the server's real bound, and
+	// that figure drives the coverage bar and the backlog estimate. Recording
+	// the ceiling there instead would quietly understate how far behind we are
+	// by exactly the headroom, on every group, forever.
+	fetchHigh int
 	hasWork   bool
 }
 
@@ -396,19 +419,20 @@ func (p *Plugin) crawlBackbone(ctx context.Context, runs []providerRun, cfg Conf
 			continue
 		}
 		before := len(jobs)
-		for i := plan.start; i <= plan.high; i += cfg.Batch {
+		for i := plan.start; i <= plan.fetchHigh; i += cfg.Batch {
 			if len(jobs) >= cfg.CrawlMaxBatches {
 				budgetHit = true
 				break
 			}
 			end := i + cfg.Batch - 1
-			if end > plan.high {
-				end = plan.high
+			if end > plan.fetchHigh {
+				end = plan.fetchHigh
 			}
 			jobs = append(jobs, batchJob{
 				group: plan.group, lo: i, hi: end,
 				cutoff:   g.cutoff(cfg),
 				throttle: time.Duration(g.ThrottleMs) * time.Millisecond,
+				forward:  true,
 			})
 		}
 		p.tel.crawl.notePlanned(plan.group, len(jobs)-before)
@@ -566,9 +590,19 @@ func (p *Plugin) planGroup(ctx context.Context, pool *nntp.Pool, g groupRow, cfg
 	if start < low {
 		start = low
 	}
+	// Stop short of the server's high water mark. See Config.CrawlHeadroom: the
+	// newest articles may exist by number while their overview lines are still
+	// arriving, and fetching them early records permanent coverage over a range
+	// that came back short.
+	ceiling := high
+	if cfg.CrawlHeadroom > 0 {
+		if h := high - cfg.CrawlHeadroom; h > low {
+			ceiling = h
+		}
+	}
 	return &crawlPlan{
 		group: g.Name, low: low, high: high,
-		start: start, hasWork: start <= high,
+		start: start, fetchHigh: ceiling, hasWork: start <= ceiling,
 	}, nil
 }
 
@@ -863,6 +897,57 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, provID int, j 
 	res.maxDate = newestDate(ovs)
 	res.minDate = oldestDate(ovs)
 
+	// MEASURE the difference between what we asked for and what came back,
+	// before recordFetchedRangeFor marks the whole requested range as covered.
+	//
+	// That recording is unconditional on a successful batch, and walk-past
+	// eviction reasons FROM coverage: "the span is fully covered and the set is
+	// still short" is taken as proof the missing articles are never coming, and
+	// the release is judged dead or salvaged as broken. So an article the server
+	// simply omitted from an otherwise-successful OVER is indistinguishable, to
+	// everything downstream, from an article that does not exist.
+	//
+	// A gap is NOT automatically a fault. RFC 3977 §6 makes article numbers
+	// sparse by design — removal, expiry and cancellation leave permanent holes,
+	// and OVER returning fewer lines than numbers requested is normal. That is
+	// exactly why this counts rather than repairs: a backfill range walking
+	// expired history is mostly holes and always will be, while a FORWARD batch
+	// at the frontier should be nearly solid, so the two are tallied separately
+	// and it is the forward number that means something is wrong.
+	//
+	// Read them on the Filters tab. If forward_gap stays near zero, the repair
+	// queue (BACKLOG) is not worth building; if it does not, this is the
+	// evidence for it — and the size of the risk walk-past eviction is carrying.
+	if requested := int64(j.hi) - int64(j.lo) + 1; requested > 0 {
+		if gap := requested - int64(len(ovs)); gap > 0 {
+			kind := "backfill_gap"
+			if j.forward {
+				kind = "forward_gap"
+			}
+			p.hits.noteN("fetch_gap", kind, gap, j.group)
+		}
+		// Record the specific numbers, not just the count, so they can be
+		// re-requested. Building the returned-set costs one map over the batch;
+		// the difference is written in one statement.
+		//
+		// Only for FORWARD batches. A backfill range walking expired history is
+		// mostly legitimate holes and always will be, so recording those would
+		// accumulate millions of rows describing articles that are correctly
+		// gone. The frontier is where a gap plausibly means "not yet", and it is
+		// also where walk-past eviction does its damage.
+		if j.forward {
+			got := make(map[int]struct{}, len(ovs))
+			for _, ov := range ovs {
+				got[ov.MessageNumber] = struct{}{}
+			}
+			for n := j.lo; n <= j.hi; n++ {
+				if _, ok := got[n]; !ok {
+					res.missing = append(res.missing, int64(n))
+				}
+			}
+		}
+	}
+
 	arts := parseOverviews(ovs, j.group, j.cutoff, p.hits, p.posterWatch, p.posterHits, p.grouping)
 	if len(arts) > 0 {
 		n, err := p.staging.stageArticles(ctx, arts)
@@ -930,6 +1015,19 @@ func (p *Plugin) advanceOneGroup(ctx context.Context, backbone string, plan *cra
 		if err := p.st.recordFetchedRangeFor(ctx, backbone, plan.group, int64(r.lo), int64(r.hi)); err != nil {
 			p.reportErr(ctx, "usenet/crawl-range-record", err)
 		}
+		// Reconcile the per-article ledger against what this batch actually
+		// returned, in the same place and for the same reason coverage is
+		// recorded: this is the only scope holding the backbone, and an article
+		// number without one is not an identity (RFC 3977 s6).
+		//
+		// The range is recorded as covered either way — walk-past eviction
+		// depends on that and changing it would be a much larger change — so the
+		// ledger is what keeps "covered" from silently meaning "everything here
+		// exists and we have it".
+		if err := p.st.reconcileMissedArticles(ctx, backbone, plan.group,
+			int64(r.lo), int64(r.hi), r.missing); err != nil {
+			p.reportErr(ctx, "usenet/crawl-missed-reconcile", err)
+		}
 	}
 	highest, latest := contiguousEnd(plan.start, rs)
 
@@ -943,6 +1041,18 @@ func (p *Plugin) advanceOneGroup(ctx context.Context, backbone string, plan *cra
 	if err := p.st.updateGroupStateForBackbone(ctx, backbone, plan.group, int64(plan.low), int64(plan.high),
 		watermark, int64(plan.start), latest); err != nil {
 		p.reportErr(ctx, "usenet/crawl-watermark", fmt.Errorf("%s: %w", plan.group, err))
+	}
+	// Say out loud what the ledger is holding. Coverage records this group's
+	// ranges as fetched, and walk-past eviction will treat that as final — so
+	// the number of articles inside those ranges that never actually arrived is
+	// the size of the risk that reasoning is carrying, and it should not have to
+	// be discovered by querying the table.
+	//
+	// Only when non-zero, and only the aggregate: a per-article log on a busy
+	// group would be noise, and the counts are what an operator acts on.
+	if out, off, err := p.st.missedArticleStats(ctx, backbone, plan.group); err == nil && out+off > 0 {
+		p.crawlJob.Log("%s: %d article(s) still missing from fetched ranges, %d written off after %d attempts",
+			plan.group, out, off, missedArticleRetryLimit)
 	}
 	return staged, advanced
 }
@@ -973,6 +1083,9 @@ func contiguousEnd(start int, rs []batchResult) (int, time.Time) {
 // hits and gw may be nil (tests): junk counting and the grouping watch are
 // observability, not behaviour.
 func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, hits *filterHits, watch *posterWatch, ph *posterHits, gw *groupingWatch) []stagedArticle {
+	// One clock read per batch, not per article: a clamp boundary that moved
+	// mid-batch would make the result depend on how long parsing took.
+	now := time.Now()
 	out := make([]stagedArticle, 0, len(ovs))
 	// The junk verdict, memoised on the BASE subject for this batch.
 	//
@@ -992,6 +1105,39 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, 
 	for _, ov := range ovs {
 		if ov.MessageId == "" {
 			continue
+		}
+		// The message-id is the release's identity, the thing a downloader
+		// fetches by, and the input to both dedup keys — and it is arbitrary
+		// poster-supplied text. RFC 5536 s3.1.3 constrains it to at most 250
+		// octets including the angle brackets, printable ASCII only, no
+		// whitespace and no '>' inside; a value outside that is malformed, not
+		// exotic.
+		//
+		// Rejecting it here rather than downstream matters because of where it
+		// otherwise lands. An id carrying invalid UTF-8 or a control byte fails
+		// xml.Marshal for the WHOLE release, so the set is left staged and
+		// re-fails on every build pass until the TTL expires it — a complete
+		// release that silently never appears, with the cost of re-loading all
+		// its articles paid every pass. One byte from one poster does that to
+		// everything sharing its base subject.
+		//
+		// Counted, never silent: this sits beside the four existing parse-drop
+		// reasons on the Filters tab, so a provider or poster emitting them is
+		// visible rather than inferred from a gap.
+		if !validMessageID(ov.MessageId) {
+			hits.noteN("parse_dropped", "bad_message_id", 1, group)
+			continue
+		}
+		// Clamp a future-dated article to now. Posters and injecting agents set
+		// Date themselves and a skewed clock is not rare; nothing downstream
+		// bounds it above. summarize takes the EARLIEST date for posted_at so a
+		// forged future date cannot poison the release row, but the backfill
+		// horizon reads the batch MAXIMUM, and one 2049 header there reads as
+		// "this batch is newer than the retention window" — deferring a group's
+		// horizon on the strength of one bad clock.
+		if !ov.Date.IsZero() && ov.Date.After(now) {
+			hits.noteN("parse_dropped", "future_date_clamped", 1, group)
+			ov.Date = now
 		}
 		// Before anything reads the subject: it is a raw header, and a poster
 		// writing outside ASCII sends it RFC 2047 encoded. Undecoded it is
@@ -1035,7 +1181,8 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, 
 			ArticleNum: ov.MessageNumber,
 			MessageID:  ov.MessageId, Subject: subject, BaseSubject: base,
 			Poster: ov.From, Bytes: int64(ov.Bytes), Posted: ov.Date, Group: group,
-			PartNum: pn, TotalParts: tp, SegTotal: seg, FileNum: fn, TotalFiles: tf, FileParts: fp,
+			XrefGroups: xrefGroups(ov.Xref),
+			PartNum:    pn, TotalParts: tp, SegTotal: seg, FileNum: fn, TotalFiles: tf, FileParts: fp,
 		})
 	}
 	return out
@@ -1127,6 +1274,11 @@ func (s *PGStore) stageArticles(ctx context.Context, arts []stagedArticle) (int,
 			fileNums := make([]int64, len(chunk))
 			totalFiles := make([]int64, len(chunk))
 			fileParts := make([]bool, len(chunk))
+			// Postgres has no unnest of text[][], so the per-article group list
+			// is flattened to one comma-joined string per row and split back by
+			// string_to_array in the INSERT. Group names are RFC-constrained to
+			// dot-separated alphanumerics, so a comma cannot appear in one.
+			xrefs := make([]string, len(chunk))
 			for i, a := range chunk {
 				ids[i], subjects[i], bases[i], posters[i] = a.MessageID, a.Subject, a.BaseSubject, a.Poster
 				bytesArr[i], groupsArr[i] = a.Bytes, a.Group
@@ -1135,15 +1287,27 @@ func (s *PGStore) stageArticles(ctx context.Context, arts []stagedArticle) (int,
 				}
 				partNums[i], totalParts[i], segTotals[i] = int64(a.PartNum), int64(a.TotalParts), int64(a.SegTotal)
 				fileNums[i], totalFiles[i], fileParts[i] = int64(a.FileNum), int64(a.TotalFiles), a.FileParts
+				xrefs[i] = strings.Join(a.XrefGroups, ",")
 			}
 			res, err := tx.ExecContext(ctx,
 				`INSERT INTO articles
 				   (message_id, subject, base_subject, poster, bytes, posted, group_name,
-				    part_num, total_parts, seg_total, file_num, total_files, file_parts)
-				 SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::bigint[],
-				                      $6::timestamptz[], $7::text[], $8::int[], $9::int[], $10::int[],
-				                      $11::int[], $12::int[], $13::boolean[])
-				 ON CONFLICT (message_id) DO NOTHING`,
+				    part_num, total_parts, seg_total, file_num, total_files, file_parts,
+				    xref_groups)
+				 SELECT t.mid, t.subj, t.base, t.poster, t.bytes, t.posted, t.grp,
+				        t.pnum, t.tparts, t.stotal, t.fnum, t.tfiles, t.fparts,
+				        -- Postgres cannot unnest a text[][], so the per-article group
+				        -- list arrives comma-joined and is split back here. Group names
+				        -- are dot-separated alphanumerics, so a comma cannot occur in
+				        -- one. NULL rather than {} for "no Xref", so the column reads as
+				        -- "the server told us nothing" instead of "no groups".
+				        CASE WHEN t.xref = '' THEN NULL ELSE string_to_array(t.xref, ',') END
+				   FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::bigint[],
+				               $6::timestamptz[], $7::text[], $8::int[], $9::int[], $10::int[],
+				               $11::int[], $12::int[], $13::boolean[], $14::text[])
+				     AS t(mid, subj, base, poster, bytes, posted, grp,
+				          pnum, tparts, stotal, fnum, tfiles, fparts, xref)
+				 ON CONFLICT (group_name, message_id) DO NOTHING`,
 				// Subject, base_subject and poster come straight off the wire
 				// and are frequently not valid UTF-8; one bad byte fails the
 				// whole chunked INSERT and loses every article in it. This is
@@ -1155,7 +1319,8 @@ func (s *PGStore) stageArticles(ctx context.Context, arts []stagedArticle) (int,
 				// the two and strand the set.)
 				pgTextArray(ids), pgTextArray(subjects), pgTextArray(bases), pgTextArray(posters), pq.Array(bytesArr),
 				pq.GenericArray{A: posted}, pgTextArray(groupsArr), pq.Array(partNums), pq.Array(totalParts), pq.Array(segTotals),
-				pq.Array(fileNums), pq.Array(totalFiles), pq.Array(fileParts))
+				pq.Array(fileNums), pq.Array(totalFiles), pq.Array(fileParts),
+				pgTextArray(xrefs))
 			if err != nil {
 				return err
 			}

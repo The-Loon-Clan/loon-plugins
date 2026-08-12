@@ -45,6 +45,11 @@ type redisStaging struct {
 	// eviction is silent by design, and "is it failing or filtering?" is a
 	// question the dashboard must be able to answer.
 	onEvict func(n int)
+	// onWideSpan reports a staged set whose article-number span is far too wide
+	// to be one release — the signature of two unrelated postings that collided
+	// on the same base subject. Optional (nil in tests); see the call site for
+	// why this is measured rather than prevented.
+	onWideSpan func(base string)
 
 	// report surfaces operationally significant staging events to the host
 	// error log + the crawlers ring (p.reportErr). Optional — nil in tests.
@@ -89,6 +94,16 @@ type redisStaging struct {
 	walkCursors map[string]uint64
 	walkRotate  int
 }
+
+// mergedSetSpanThreshold is how far apart a staged set's lowest and highest
+// article numbers may be before it is reported as a probable subject collision.
+//
+// Article numbers ascend with posting time, so one release — uploaded in a
+// single run — sits inside a narrow window even when it is tens of thousands of
+// articles long. Ten million is far beyond any real release and comfortably
+// beyond a busy group's daily volume, so it flags collisions without firing on
+// a large legitimate upload.
+const mergedSetSpanThreshold = 10_000_000
 
 func newRedisStaging(rdb redis.UniversalClient, ttlHours func(context.Context) int, onEvict func(int), report func(context.Context, string, error)) *redisStaging {
 	return &redisStaging{rdb: rdb, ttlHours: ttlHours, onEvict: onEvict, report: report}
@@ -298,8 +313,64 @@ end
 return 1
 `)
 
-// ensureScripts loads metaMaxScript into the server's script cache once per
-// process, so the EVALSHA calls pipelined by stageArticles resolve. A load
+// artPutScript writes each (field, article-JSON) pair only if the incoming
+// article BEATS whatever the field already holds.
+//
+// Plain HSet was last-write-wins, which quietly let a truncated or corrupt
+// re-post of one segment displace the good article: the NZB then carried the
+// short article, and the health job — which STATs the message-id, finds it
+// present, and concludes the release is fine — marked it healthy. Wrong bytes,
+// served confidently.
+//
+// The comparison MUST match betterArticle in assemble.go, which is the same
+// rule on the read side: usable message-id first, then larger byte count, then
+// the lexicographically smaller message-id as a deterministic tiebreak. Two
+// stagers racing on the same set (forward crawl + backfill) must converge on
+// the same winner, which is why this is one atomic script rather than a
+// read-compare-write from Go.
+//
+// cjson is part of Redis's Lua environment; the stored value is marshalCompact's
+// JSON, whose keys are 'm' (message-id) and 'b' (bytes). A value that fails to
+// decode is treated as losing, so one corrupt field cannot pin a set forever.
+var artPutScript = redis.NewScript(`
+local n = 0
+for i = 1, #ARGV, 2 do
+  local f, v = ARGV[i], ARGV[i+1]
+  local cur = redis.call('HGET', KEYS[1], f)
+  local write = false
+  if not cur then
+    write = true
+  else
+    local ok_a, a = pcall(cjson.decode, v)
+    local ok_b, b = pcall(cjson.decode, cur)
+    if not ok_a then
+      write = false
+    elseif not ok_b then
+      write = true
+    else
+      local am = (a.m ~= nil and a.m ~= '')
+      local bm = (b.m ~= nil and b.m ~= '')
+      local ab = tonumber(a.b) or 0
+      local bb = tonumber(b.b) or 0
+      if am ~= bm then
+        write = am
+      elseif ab ~= bb then
+        write = ab > bb
+      else
+        write = tostring(a.m or '') < tostring(b.m or '')
+      end
+    end
+  end
+  if write then
+    redis.call('HSET', KEYS[1], f, v)
+    n = n + 1
+  end
+end
+return n
+`)
+
+// ensureScripts loads the staging scripts into the server's script cache once
+// per process, so the EVALSHA calls pipelined by stageArticles resolve. A load
 // failure is left for the pipeline itself to surface (NOSCRIPT → the caller's
 // reload-and-retry path comes back through here with the flag cleared).
 func (r *redisStaging) ensureScripts(ctx context.Context) {
@@ -308,9 +379,13 @@ func (r *redisStaging) ensureScripts(ctx context.Context) {
 	if r.scriptsLoaded {
 		return
 	}
-	if err := metaMaxScript.Load(ctx, r.rdb).Err(); err == nil {
-		r.scriptsLoaded = true
+	if err := metaMaxScript.Load(ctx, r.rdb).Err(); err != nil {
+		return
 	}
+	if err := artPutScript.Load(ctx, r.rdb).Err(); err != nil {
+		return
+	}
+	r.scriptsLoaded = true
 }
 
 // reloadScripts drops the loaded latch and loads again — the NOSCRIPT
@@ -389,6 +464,10 @@ type compactArticle struct {
 	FileNum    int    `json:"fn,omitempty"`
 	TotalFiles int    `json:"tf,omitempty"`
 	FileParts  bool   `json:"fp,omitempty"`
+	// XrefGroups: every group the server said this article was filed into.
+	// omitempty because most servers send no Xref and staging memory is the
+	// pipeline's tightest budget — an absent field costs nothing.
+	XrefGroups []string `json:"xg,omitempty"`
 }
 
 // bufPool reuses byte buffers for marshalCompact to reduce GC pressure on the
@@ -525,10 +604,13 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 				Bytes: a.Bytes, Date: a.Posted.Unix(), PartNum: a.PartNum,
 				TotalParts: a.TotalParts, SegTotal: a.SegTotal, FileNum: a.FileNum,
 				TotalFiles: a.TotalFiles, FileParts: a.FileParts,
+				XrefGroups: a.XrefGroups,
 			}
 			fields = append(fields, formatFieldKey(a.FileNum, a.PartNum), marshalCompact(&ca))
 		}
-		pipe.HSet(ctx, artKey(gu.groupName, gu.hash), fields...)
+		// Not HSet: see artPutScript. A later batch's article for a part it
+		// already holds must win on merit, not on arrival order.
+		artPutScript.Run(ctx, pipe, []string{artKey(gu.groupName, gu.hash)}, fields...)
 	}
 
 	// Cheap HLen + meta per touched group; HKeys (which ships every field name)
@@ -613,6 +695,33 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 		}
 		if lo > 0 {
 			spans = append(spans, spanUpdate{key: gk, lo: lo, hi: hi})
+			// Two unrelated postings that collided on the same base subject,
+			// detected rather than prevented.
+			//
+			// The tempting fix is to put the declared file count into the
+			// staging key, as NNTmux does — two postings with the same cleaned
+			// subject and different totals then become two sets. It is the wrong
+			// trade HERE, because metaMaxScript deliberately folds total_files
+			// UPWARD: a poster whose files disagree about the total (common — a
+			// later batch carrying a smaller claim is exactly what that script
+			// exists to survive) would be split into several sets, none of which
+			// can ever reach the maximum total, and all of which expire unbuilt.
+			// That converts a rare merge into a routine loss.
+			//
+			// The signature is available without changing the key. Article
+			// numbers ascend with posting time on a backbone, so one release —
+			// posted in a single run — occupies a near-contiguous span. A set
+			// spanning millions of numbers is not one release; it is several
+			// posts sharing a subject, and it can never complete because it is
+			// waiting for files that belong to somebody else's upload.
+			//
+			// Counted, not acted on: salvage could otherwise assemble a BROKEN
+			// release out of two postings' segments, and knowing how often that
+			// is even possible is the prerequisite for deciding what to do about
+			// it. Rises here justify revisiting the key; silence closes the item.
+			if span := hi - lo; span > mergedSetSpanThreshold && r.onWideSpan != nil {
+				r.onWideSpan(gu.baseSub)
+			}
 		}
 		// Every numeric total goes through the max-merge script, never plain
 		// HSet: these fields are what the completeness check trusts, and they
@@ -1006,7 +1115,8 @@ func (r *redisStaging) groupArticles(ctx context.Context, group, base string) ([
 		}
 		out = append(out, stagedArticle{
 			MessageID: ca.MessageID, Subject: ca.Subject, BaseSubject: base,
-			Poster: ca.From, Bytes: ca.Bytes, Posted: time.Unix(ca.Date, 0), Group: group,
+			XrefGroups: ca.XrefGroups,
+			Poster:     ca.From, Bytes: ca.Bytes, Posted: time.Unix(ca.Date, 0), Group: group,
 			PartNum: ca.PartNum, TotalParts: ca.TotalParts, SegTotal: ca.SegTotal,
 			FileNum: ca.FileNum, TotalFiles: ca.TotalFiles, FileParts: ca.FileParts,
 		})
@@ -1695,4 +1805,25 @@ func (r *redisStaging) foldSpans(ctx context.Context, spans []spanUpdate) {
 type spanUpdate struct {
 	key    string
 	lo, hi int
+}
+
+// noteStoreAttempt increments the set's failed-store counter on its meta hash
+// and returns the new value.
+//
+// HINCRBY on the grp: key, so the count sits alongside the totals the
+// completeness check already reads and dies with the set when its TTL expires —
+// no separate lifetime to manage, and no way for a stale counter to outlive the
+// thing it counts.
+func (r *redisStaging) noteStoreAttempt(ctx context.Context, group, base string) int {
+	gk := grpKey(group, groupHashKey(group, base))
+	n, err := r.rdb.HIncrBy(ctx, gk, "store_attempts", 1).Result()
+	if err != nil {
+		// Unknown rather than zero would be better, but the contract says 0
+		// means "cannot track", which the caller reads as never-give-up. A
+		// Redis blip must not become a dropped release.
+		return 0
+	}
+	// Keep the counter alive as long as the data it describes.
+	r.rdb.Expire(ctx, gk, r.stagingTTL(ctx))
+	return int(n)
 }

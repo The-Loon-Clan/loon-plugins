@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -215,7 +216,10 @@ func TestMarshalCompactDecodes(t *testing.T) {
 	if err := json.Unmarshal(marshalCompact(&in), &out); err != nil {
 		t.Fatalf("marshalCompact produced invalid JSON: %v", err)
 	}
-	if out != in {
+	// reflect.DeepEqual, not ==: compactArticle now carries XrefGroups
+	// ([]string, the crosspost group list from the Xref overview field), and a
+	// struct containing a slice is not comparable.
+	if !reflect.DeepEqual(out, in) {
 		t.Errorf("round-trip mismatch:\n got %+v\nwant %+v", out, in)
 	}
 }
@@ -237,7 +241,10 @@ func TestCompactArticleRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(blob, &out); err != nil {
 		t.Fatal(err)
 	}
-	if out != in {
+	// reflect.DeepEqual, not ==: compactArticle now carries XrefGroups
+	// ([]string, the crosspost group list from the Xref overview field), and a
+	// struct containing a slice is not comparable.
+	if !reflect.DeepEqual(out, in) {
 		t.Errorf("round-trip mismatch:\n got %+v\nwant %+v", out, in)
 	}
 	if !time.Unix(out.Date, 0).Equal(posted) {

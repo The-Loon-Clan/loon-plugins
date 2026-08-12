@@ -162,6 +162,24 @@ type AssemblerStore interface {
 	pruneSetResolutions(ctx context.Context, keepDays int) (int64, error)
 	groupArticles(ctx context.Context, group, base string) ([]stagedArticle, error)
 	deleteStaged(ctx context.Context, group, base string) error
+
+	// reconcileMissedArticles keeps the per-article ledger in step with one
+	// fetched range: numbers that came back are cleared, numbers that did not
+	// are counted. Scoped per backbone because an article number without one is
+	// not an identity (RFC 3977 s6).
+	//
+	// It exists because recordFetchedRangeFor marks a whole requested range as
+	// covered whether or not every article in it was returned, and walk-past
+	// eviction treats covered-and-still-short as proof the missing articles are
+	// never coming — so without this, an article the server merely omitted is
+	// indistinguishable from one that does not exist.
+	reconcileMissedArticles(ctx context.Context, backbone, group string, lo, hi int64, missing []int64) error
+
+	// missedArticleStats reports how many of a group's articles are still
+	// missing from ranges already recorded as covered, and how many have been
+	// written off after repeated attempts. The first number is the size of the
+	// risk walk-past eviction is carrying for that group.
+	missedArticleStats(ctx context.Context, backbone, group string) (outstanding, writtenOff int64, err error)
 	// insertNzb returns the new row's id (0 on a content_hash duplicate) —
 	// the salvage path hands it to the health backend for its verdict.
 	insertNzb(ctx context.Context, n nzbRow) (int64, bool, error)

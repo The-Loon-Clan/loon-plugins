@@ -3,6 +3,7 @@ package usenet
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/the-loon-clan/loon/core"
@@ -30,6 +31,16 @@ type stagingStore interface {
 	candidateGroups(ctx context.Context, limit int) ([]groupKey, candidateStats, error)
 	groupArticles(ctx context.Context, group, base string) ([]stagedArticle, error)
 	deleteStaged(ctx context.Context, group, base string) error
+
+	// noteStoreAttempt records that storing this set failed, and returns how
+	// many times it has now failed. Kept WITH the set where the backend allows
+	// it, so it survives across build passes; a set the sink can never accept is
+	// otherwise re-drawn, re-loaded and re-failed for its whole TTL and then
+	// expires with nothing recording that a complete release was lost.
+	//
+	// Returns 0 when the backend cannot track it, which the caller reads as
+	// "never give up" — the safe direction, since giving up drops a release.
+	noteStoreAttempt(ctx context.Context, group, base string) int
 	// demoteReady withdraws a set from the ready queue while leaving its
 	// staged articles in place — the builder's move when its verification
 	// refuses a candidate staging queued as complete. Without it a refused
@@ -167,6 +178,11 @@ func (s stagingInfo) EvictionRisk() bool {
 type pgStaging struct {
 	*PGStore
 	limits func(context.Context) (maxRows, pruneHours int)
+	// storeAttempts counts failed sink stores per (group, base). Process-local
+	// — see noteStoreAttempt for why that is acceptable here and why it errs
+	// toward more retries rather than fewer.
+	attemptMu     sync.Mutex
+	storeAttempts map[string]int
 }
 
 func newPGStaging(pg *PGStore, limits func(context.Context) (int, int)) *pgStaging {
@@ -226,7 +242,7 @@ var _ stagingStore = (*pgStaging)(nil)
 // newStaging selects the staging backend by config mode. `redis` fails fast when
 // the host has no Redis (core.Redis nil) rather than silently running pg — a
 // mode/behavior mismatch is worse than a boot error (README.md).
-func newStaging(mode StagingMode, pg *PGStore, redisSvc core.RedisService, limits func(context.Context) (int, int), ttlHours func(context.Context) int, onEvict func(int), report func(context.Context, string, error)) (stagingStore, error) {
+func newStaging(mode StagingMode, pg *PGStore, redisSvc core.RedisService, limits func(context.Context) (int, int), ttlHours func(context.Context) int, onEvict func(int), report func(context.Context, string, error), onWideSpan func(string)) (stagingStore, error) {
 	switch mode {
 	case "", StagingPG:
 		return newPGStaging(pg, limits), nil
@@ -234,7 +250,9 @@ func newStaging(mode StagingMode, pg *PGStore, redisSvc core.RedisService, limit
 		if redisSvc == nil || redisSvc.Client() == nil {
 			return nil, fmt.Errorf("staging mode redis requires Redis, but the host has none configured (core.Redis is nil) — configure the host's Redis or use staging: pg")
 		}
-		return newRedisStaging(redisSvc.Client(), ttlHours, onEvict, report), nil
+		rs := newRedisStaging(redisSvc.Client(), ttlHours, onEvict, report)
+		rs.onWideSpan = onWideSpan
+		return rs, nil
 	default:
 		return nil, fmt.Errorf("unknown staging mode %q (want pg|redis)", mode)
 	}
@@ -269,4 +287,25 @@ func (s *pgStaging) sweepWalkPast(ctx context.Context, cov map[string][]articleR
 // setSpan is unknowable in pg staging: article numbers were never stored.
 func (s *pgStaging) setSpan(ctx context.Context, group, base string) (int64, int64, error) {
 	return 0, 0, nil
+}
+
+// noteStoreAttempt for the Postgres staging backend.
+//
+// pg staging has no per-set meta row — the set is just the articles sharing a
+// (group_name, base_subject) — so the count is held in the process. That is a
+// real limitation and it is the safe direction: a restart resets the counter, so
+// a release gets more retries than intended rather than fewer. Losing a complete
+// release to an over-eager give-up is the failure worth avoiding.
+//
+// pg staging is the OSS/demo default; production runs redis, where the count is
+// persisted with the set.
+func (s *pgStaging) noteStoreAttempt(_ context.Context, group, base string) int {
+	s.attemptMu.Lock()
+	defer s.attemptMu.Unlock()
+	if s.storeAttempts == nil {
+		s.storeAttempts = make(map[string]int)
+	}
+	k := group + "\x00" + base
+	s.storeAttempts[k]++
+	return s.storeAttempts[k]
 }

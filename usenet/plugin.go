@@ -192,7 +192,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return e.StagingMaxRows, e.StagingPruneHours
 	}, func(ctx context.Context) int {
 		return p.effective(ctx).StagingTTLHours
-	}, p.tel.noteEvicted, p.reportErr)
+	}, p.tel.noteEvicted, p.reportErr, func(base string) {
+		// A staged set whose article span is far too wide to be one release —
+		// two postings that collided on the same base subject. Counted on the
+		// Filters tab beside the junk tallies; see the call site in
+		// redis_staging.go for why this is measured rather than prevented.
+		p.hits.noteN("grouping", "wide_article_span", 1, base)
+	})
 	if err != nil {
 		return fmt.Errorf("usenet: staging: %w", err)
 	}

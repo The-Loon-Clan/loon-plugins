@@ -65,6 +65,11 @@ const (
 	outcomeXMLError   buildOutcome = "xml_error"
 	outcomeGzipError  buildOutcome = "gzip_error"
 	outcomeStoreError buildOutcome = "store_error"
+	// outcomeStoreGaveUp is a COMPLETE release dropped after repeated store
+	// failures. Distinct from store_error (which is retryable and expected to
+	// clear) because this one is content loss, and the two must not be read as
+	// the same number on the outcomes page.
+	outcomeStoreGaveUp buildOutcome = "store_gave_up"
 )
 
 // buildOutcomes accumulates one pass's outcomes in memory, flushed once at the

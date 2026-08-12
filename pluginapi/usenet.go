@@ -340,18 +340,41 @@ const UsenetReleaseSinkName = "usenet.releasesink"
 // junk filtering, category hinting — has already run in the plugin, mirroring
 // where prod's assembler runs the same checks.
 type AssembledRelease struct {
-	Title  string // extracted + UTF-8-sanitised release title
+	Title string // extracted + UTF-8-sanitised release title
+	// Group is the newsgroup this copy was CRAWLED from. Groups is every group
+	// the posting was filed into, per the server's Xref header — a superset
+	// that includes Group, and equal to []string{Group} when the server sends
+	// no Xref. A sink storing one newsgroup per release should store Group; one
+	// that can store several should store Groups, which is what lets a merged
+	// crosspost keep naming every group it lives in.
+	Groups []string
 	Group  string
 	Poster string
-	// ContentHash identifies the CONTENT: hex of sha256 over the sorted
-	// segment message-ids (prod's scheme). Two posts of the same title with
-	// different articles hash differently; the same articles always collide.
-	// This is the dedup key — a sink SHOULD store it and use it to reject
-	// duplicates (e.g. ON CONFLICT (content_hash) DO NOTHING).
+	// ContentHash identifies the EXACT observed article set: hex of sha256
+	// over the sorted segment message-ids (prod's scheme). Two posts of the
+	// same title with different articles hash differently.
+	//
+	// It is NOT sufficient as a dedup key, and the claim that "the same
+	// articles always collide" that used to stand here was wrong in the case
+	// that matters. A crosspost is one posting carried in several groups with
+	// identical message-ids, but each group is crawled separately and yields a
+	// slightly different subset of them, so the hashes differ and the release
+	// is indexed once per group. Prefer ContentSketch.
 	ContentHash string
-	SizeBytes   int64
-	PostedAt    time.Time // earliest article date; zero when unknown
-	NZBGz       []byte    // gzipped NZB XML
+	// ContentSketch identifies the CONTENT in a way that survives a partial
+	// view of it: hex of sha256 over the 16 smallest message-id digests (a
+	// bottom-K MinHash). Two crawls of one posting agree even when they saw
+	// different subsets of its articles, while a genuine re-post with fresh
+	// message-ids still sketches differently and is still indexed.
+	//
+	// This is the dedup key a sink SHOULD enforce (e.g. a unique index on it).
+	// It subsumes ContentHash — identical article sets always produce identical
+	// sketches — so enforcing both is redundant but harmless. "" when the
+	// release carried no usable message-ids.
+	ContentSketch string
+	SizeBytes     int64
+	PostedAt      time.Time // earliest article date; zero when unknown
+	NZBGz         []byte    // gzipped NZB XML
 	// CategoryHint is a category label the host maps into its own taxonomy;
 	// "" = no hint. It is an ANIME-DOMAIN hint (scraping is anime-only by
 	// design), drawn from a closed set: "Hentai" (adult terms in the title),
