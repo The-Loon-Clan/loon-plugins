@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -204,6 +205,25 @@ func (h *Handlers) ReplyTicket(c *gin.Context) {
 		return
 	}
 	isAdmin := user.Staff
+	// A MEMBER replying to a closed ticket reopens it. Staff replying does not:
+	// the common staff reply is the one that closes a thread out, and having
+	// that immediately reopen it would make closing impossible.
+	//
+	// This is what makes closing safe to do liberally. Support tickets get
+	// closed on the assumption the member can come back if it is not actually
+	// resolved — but ReplyTicket wrote the reply and left status alone, so
+	// "closed" was a one-way door and a member's follow-up landed in a thread
+	// that no staff view lists. Answering into silence is worse than never
+	// having replied.
+	if !isAdmin {
+		if reopened, rerr := h.store.ReopenTicketOnMemberReply(ctx, id); rerr != nil {
+			// Best-effort: the reply itself is written below regardless. A
+			// failure here costs visibility, not the member's words.
+			log.Printf("tickets: reopen on member reply (ticket %d): %v", id, rerr)
+		} else if reopened {
+			ticket.Status = "open"
+		}
+	}
 	// The error was discarded. Capturing it matters now: emitting after a
 	// swallowed failure would announce a reply that does not exist, and a
 	// subscriber counting staff replies would credit somebody for it.

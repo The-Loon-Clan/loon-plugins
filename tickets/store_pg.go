@@ -75,6 +75,28 @@ func (r *PGStore) UpdateTicketStatus(ctx context.Context, id int64, status, admi
 	return err
 }
 
+// ReopenTicketOnMemberReply flips a closed ticket back to open, and reports
+// whether it actually did.
+//
+// Separate from UpdateTicketStatus because that one also rewrites admin_note,
+// and a member replying must not blank a note staff left for staff. It is also
+// guarded on status='closed' in SQL rather than by the caller reading first:
+// the read-then-write version races two replies arriving together, and the loser
+// reopens a ticket staff closed in between.
+//
+// The bool is the point. The caller only announces a reopen when a row actually
+// changed, so a reply to an already-open ticket says nothing.
+func (r *PGStore) ReopenTicketOnMemberReply(ctx context.Context, id int64) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE support_tickets SET status='open', updated_at=NOW()
+		  WHERE id=$1 AND status='closed'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 func (r *PGStore) DeleteTicket(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx, "DELETE FROM support_tickets WHERE id=$1", id)
 	return err
