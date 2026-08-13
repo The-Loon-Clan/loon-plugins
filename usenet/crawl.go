@@ -1131,6 +1131,24 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, 
 		// writing outside ASCII sends it RFC 2047 encoded. Undecoded it is
 		// unparseable AND reads as punctuation soup to the junk engine.
 		subject := decodeSubject(ov.Subject)
+		// And immediately after, undo ROT18 if the poster used it. This has to
+		// happen HERE, before parseSubject and before the junk engine, because
+		// the rotation covers digits as well as letters:
+		//
+		//	stored  ...CNE7 93 bs 08  7377399 XO (7/0)
+		//	decoded ...PAR2 48 of 53  2822844 KB (2/5)
+		//
+		// Read rotated, that is segment 7 of 0 and file 93 of 8. A total-parts
+		// of zero means isComplete can never be satisfied, so the set stages
+		// forever; the sized junk rules see 7.3 GB where there is 2.8; and the
+		// title is unsearchable gibberish. Repairing the title alone later — in
+		// the cleaner, say — would fix the smallest of those three.
+		//
+		// 299 releases were sitting in the index this way when it was found.
+		if decoded, wasRot := deobfuscateSubject(subject); wasRot {
+			subject = decoded
+			hits.noteN("deobfuscated", "rot18", 1, group)
+		}
 		if !ov.Date.IsZero() && ov.Date.Before(cutoff) {
 			// A watched poster's article dropped for age is worth saying out
 			// loud: "the crawl depth excludes them" looks identical to "the
