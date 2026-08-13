@@ -468,6 +468,10 @@ type compactArticle struct {
 	// omitempty because most servers send no Xref and staging memory is the
 	// pipeline's tightest budget — an absent field costs nothing.
 	XrefGroups []string `json:"xg,omitempty"`
+	// Obfuscated: the subject arrived ROT18-rotated and was decoded at ingest.
+	// omitempty because it is false for all but a handful of posters and staging
+	// memory is the pipeline's tightest budget.
+	Obfuscated bool `json:"o,omitempty"`
 }
 
 // bufPool reuses byte buffers for marshalCompact to reduce GC pressure on the
@@ -517,6 +521,9 @@ func marshalCompact(ca *compactArticle) []byte {
 	}
 	if ca.FileParts {
 		b = append(b, `,"fp":true`...)
+	}
+	if ca.Obfuscated {
+		b = append(b, `,"o":true`...)
 	}
 	b = append(b, '}')
 
@@ -603,6 +610,7 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 				MessageID: a.MessageID, Subject: a.Subject, From: a.Poster,
 				Bytes: a.Bytes, Date: a.Posted.Unix(), PartNum: a.PartNum,
 				TotalParts: a.TotalParts, SegTotal: a.SegTotal, FileNum: a.FileNum,
+				Obfuscated: a.Obfuscated,
 				TotalFiles: a.TotalFiles, FileParts: a.FileParts,
 				XrefGroups: a.XrefGroups,
 			}
@@ -1119,6 +1127,7 @@ func (r *redisStaging) groupArticles(ctx context.Context, group, base string) ([
 			Poster:     ca.From, Bytes: ca.Bytes, Posted: time.Unix(ca.Date, 0), Group: group,
 			PartNum: ca.PartNum, TotalParts: ca.TotalParts, SegTotal: ca.SegTotal,
 			FileNum: ca.FileNum, TotalFiles: ca.TotalFiles, FileParts: ca.FileParts,
+			Obfuscated: ca.Obfuscated,
 		})
 	}
 	return out, nil

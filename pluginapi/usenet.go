@@ -396,9 +396,19 @@ type AssembledRelease struct {
 	// (obfuscated posts), or a lone file with a name too short to mean anything.
 	// An empty key must never match another empty key.
 	ContentFileKey string
-	SizeBytes      int64
-	PostedAt       time.Time // earliest article date; zero when unknown
-	NZBGz          []byte    // gzipped NZB XML
+	// Obfuscated marks a release whose subject arrived ROT18-rotated (ROT13 on
+	// letters, ROT5 on digits) and was decoded at ingest. Title, counters and
+	// sizes are all products of that decode.
+	//
+	// A sink SHOULD record it, because the original subject is recoverable —
+	// rot18 is its own inverse, so rotating the stored title back reproduces
+	// exactly what the poster wrote — but ONLY if you know it should be
+	// rotated. Without the flag the original is unrecoverable in practice,
+	// since rotating an ordinary title produces convincing-looking nonsense.
+	Obfuscated bool
+	SizeBytes  int64
+	PostedAt   time.Time // earliest article date; zero when unknown
+	NZBGz      []byte    // gzipped NZB XML
 	// CategoryHint is a category label the host maps into its own taxonomy;
 	// "" = no hint. It is an ANIME-DOMAIN hint (scraping is anime-only by
 	// design), drawn from a closed set: "Hentai" (adult terms in the title),

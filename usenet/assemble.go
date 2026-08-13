@@ -376,7 +376,8 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			Groups:        fileGroups(arts),
 			ContentHash:   contentHashArticles(arts),
 			ContentSketch: totals.Sketch, ContentFileKey: totals.FileKey,
-			SizeBytes: totals.Bytes, PostedAt: posted,
+			Obfuscated: anyObfuscated(arts),
+			SizeBytes:  totals.Bytes, PostedAt: posted,
 			NZBGz: gz, Segments: totals.Segments, CategoryHint: cat,
 		}
 		_, created, err := sink.store(ctx, rel)
@@ -654,7 +655,8 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			Groups:        fileGroups(arts),
 			ContentHash:   contentHashArticles(arts),
 			ContentSketch: totals.Sketch, ContentFileKey: totals.FileKey,
-			SizeBytes: totals.Bytes, PostedAt: posted,
+			Obfuscated: anyObfuscated(arts),
+			SizeBytes:  totals.Bytes, PostedAt: posted,
 			NZBGz: gz, Segments: totals.Segments, CategoryHint: cat,
 		})
 		if err != nil {
@@ -1442,6 +1444,22 @@ func quotedFilename(subject string) string {
 	return strings.TrimSpace(subject[i+1 : i+1+j])
 }
 
+// anyObfuscated reports whether any article in the set arrived ROT18-rotated.
+//
+// ANY rather than all: a set is assembled from whatever articles were staged for
+// its base subject, and a poster who rotates one subject rotates them all — but
+// a crossposted or salvaged set can mix copies from more than one crawl. If even
+// one article was rotated, the release's indexed title came out of a decode and
+// a reader should be told so.
+func anyObfuscated(arts []stagedArticle) bool {
+	for _, a := range arts {
+		if a.Obfuscated {
+			return true
+		}
+	}
+	return false
+}
+
 func safeFilename(s string) string {
 	s = strings.Map(func(r rune) rune {
 		switch r {
@@ -1531,13 +1549,14 @@ func (s *PGStore) groupArticles(ctx context.Context, group, base string) ([]stag
 		FileNum    int            `db:"file_num"`
 		TotalFiles int            `db:"total_files"`
 		FileParts  bool           `db:"file_parts"`
+		Obfuscated bool           `db:"obfuscated"`
 		XrefGroups pq.StringArray `db:"xref_groups"`
 	}
 	var rows []row
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.SelectContext(ctx, &rows,
 			`SELECT message_id, subject, poster, bytes, posted, group_name, part_num,
-			        total_parts, seg_total, file_num, total_files, file_parts,
+			        total_parts, seg_total, file_num, total_files, file_parts, obfuscated,
 			        COALESCE(xref_groups, '{}') AS xref_groups
 			 FROM articles WHERE group_name = $1 AND base_subject = $2
 			 ORDER BY file_num, part_num`, group, base)
@@ -1552,6 +1571,7 @@ func (s *PGStore) groupArticles(ctx context.Context, group, base string) ([]stag
 			Bytes: r.Bytes, Group: r.Group, PartNum: r.PartNum,
 			TotalParts: r.TotalParts, SegTotal: r.SegTotal,
 			FileNum: r.FileNum, TotalFiles: r.TotalFiles, FileParts: r.FileParts,
+			Obfuscated: r.Obfuscated,
 			XrefGroups: r.XrefGroups,
 		}
 		if r.Posted.Valid {

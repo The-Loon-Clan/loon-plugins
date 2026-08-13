@@ -1,0 +1,17 @@
+-- articles.obfuscated: this article's subject arrived ROT18-rotated.
+--
+-- The flag has to travel with the staged article rather than being worked out
+-- later, and the reason is that rot18 is its own inverse. The detector matches
+-- rotated forms of common tokens, so those markers are symmetric: rotating an
+-- ordinary subject containing ".mkv" yields ".zxi", which is one of the markers.
+-- "Rotate it and see whether it looks rotated" therefore answers yes for almost
+-- every subject in the index. The observation is only trustworthy at the moment
+-- it is made, in parseOverviews, so it is recorded there and carried.
+--
+-- What it is FOR, once assembled: the original subject is recoverable by
+-- rotating the stored one back, but only if you know it should be rotated. With
+-- the flag, a release page can show what the poster actually wrote next to what
+-- we indexed — which is the view other indexers give you when an article looks
+-- wrong, and which we could not offer because decoding at ingest discards the
+-- original.
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS obfuscated BOOLEAN NOT NULL DEFAULT FALSE;

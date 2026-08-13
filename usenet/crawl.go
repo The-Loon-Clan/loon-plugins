@@ -47,6 +47,14 @@ type stagedArticle struct {
 	FileNum    int
 	TotalFiles int
 	FileParts  bool
+	// Obfuscated records that this article's subject arrived ROT18-rotated and
+	// was decoded at ingest. Carried through staging rather than re-derived at
+	// assembly, because rot18 is SELF-INVERSE and the markers are therefore
+	// symmetric: rotating an ordinary subject containing ".mkv" produces ".zxi",
+	// which is one of the markers, so "rotate it and see if it looks rotated"
+	// answers true for almost everything. The fact has to be remembered where it
+	// was observed.
+	Obfuscated bool
 }
 
 // batchJob is one OVER range to fetch. Jobs from EVERY group go into a single
@@ -1145,7 +1153,8 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, 
 		// the cleaner, say — would fix the smallest of those three.
 		//
 		// 299 releases were sitting in the index this way when it was found.
-		if decoded, wasRot := deobfuscateSubject(subject); wasRot {
+		decoded, wasObfuscated := deobfuscateSubject(subject)
+		if wasObfuscated {
 			subject = decoded
 			hits.noteN("deobfuscated", "rot18", 1, group)
 		}
@@ -1189,6 +1198,7 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, 
 			Poster: ov.From, Bytes: int64(ov.Bytes), Posted: ov.Date, Group: group,
 			XrefGroups: xrefGroups(ov.Xref),
 			PartNum:    pn, TotalParts: tp, SegTotal: seg, FileNum: fn, TotalFiles: tf, FileParts: fp,
+			Obfuscated: wasObfuscated,
 		})
 	}
 	return out
@@ -1280,6 +1290,7 @@ func (s *PGStore) stageArticles(ctx context.Context, arts []stagedArticle) (int,
 			fileNums := make([]int64, len(chunk))
 			totalFiles := make([]int64, len(chunk))
 			fileParts := make([]bool, len(chunk))
+			obfuscated := make([]bool, len(chunk))
 			// Postgres has no unnest of text[][], so the per-article group list
 			// is flattened to one comma-joined string per row and split back by
 			// string_to_array in the INSERT. Group names are RFC-constrained to
@@ -1293,15 +1304,16 @@ func (s *PGStore) stageArticles(ctx context.Context, arts []stagedArticle) (int,
 				}
 				partNums[i], totalParts[i], segTotals[i] = int64(a.PartNum), int64(a.TotalParts), int64(a.SegTotal)
 				fileNums[i], totalFiles[i], fileParts[i] = int64(a.FileNum), int64(a.TotalFiles), a.FileParts
+				obfuscated[i] = a.Obfuscated
 				xrefs[i] = strings.Join(a.XrefGroups, ",")
 			}
 			res, err := tx.ExecContext(ctx,
 				`INSERT INTO articles
 				   (message_id, subject, base_subject, poster, bytes, posted, group_name,
 				    part_num, total_parts, seg_total, file_num, total_files, file_parts,
-				    xref_groups)
+				    obfuscated, xref_groups)
 				 SELECT t.mid, t.subj, t.base, t.poster, t.bytes, t.posted, t.grp,
-				        t.pnum, t.tparts, t.stotal, t.fnum, t.tfiles, t.fparts,
+				        t.pnum, t.tparts, t.stotal, t.fnum, t.tfiles, t.fparts, t.obf,
 				        -- Postgres cannot unnest a text[][], so the per-article group
 				        -- list arrives comma-joined and is split back here. Group names
 				        -- are dot-separated alphanumerics, so a comma cannot occur in
@@ -1310,9 +1322,9 @@ func (s *PGStore) stageArticles(ctx context.Context, arts []stagedArticle) (int,
 				        CASE WHEN t.xref = '' THEN NULL ELSE string_to_array(t.xref, ',') END
 				   FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::bigint[],
 				               $6::timestamptz[], $7::text[], $8::int[], $9::int[], $10::int[],
-				               $11::int[], $12::int[], $13::boolean[], $14::text[])
+				               $11::int[], $12::int[], $13::boolean[], $14::boolean[], $15::text[])
 				     AS t(mid, subj, base, poster, bytes, posted, grp,
-				          pnum, tparts, stotal, fnum, tfiles, fparts, xref)
+				          pnum, tparts, stotal, fnum, tfiles, fparts, obf, xref)
 				 ON CONFLICT (group_name, message_id) DO NOTHING`,
 				// Subject, base_subject and poster come straight off the wire
 				// and are frequently not valid UTF-8; one bad byte fails the
@@ -1325,7 +1337,7 @@ func (s *PGStore) stageArticles(ctx context.Context, arts []stagedArticle) (int,
 				// the two and strand the set.)
 				pgTextArray(ids), pgTextArray(subjects), pgTextArray(bases), pgTextArray(posters), pq.Array(bytesArr),
 				pq.GenericArray{A: posted}, pgTextArray(groupsArr), pq.Array(partNums), pq.Array(totalParts), pq.Array(segTotals),
-				pq.Array(fileNums), pq.Array(totalFiles), pq.Array(fileParts),
+				pq.Array(fileNums), pq.Array(totalFiles), pq.Array(fileParts), pq.Array(obfuscated),
 				pgTextArray(xrefs))
 			if err != nil {
 				return err
