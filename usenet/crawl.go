@@ -73,14 +73,9 @@ type batchResult struct {
 	lo, hi           int
 	minDate, maxDate time.Time
 	staged           int
-	articles         int // overview lines returned
-	// missing is the article numbers in [lo,hi] a SUCCESSFUL fetch did not
-	// return. Carried out to where coverage is recorded, because that is the
-	// only scope holding the backbone — and article numbers mean nothing
-	// without it (RFC 3977 s6). Forward batches only; see fetchBatch.
-	missing []int64
-	wire    int64 // bytes pulled off the wire, for throughput
-	ok      bool  // fetched AND staged; only then may the watermark pass this range
+	articles         int   // overview lines returned
+	wire             int64 // bytes pulled off the wire, for throughput
+	ok               bool  // fetched AND staged; only then may the watermark pass this range
 }
 
 // crawlPlan is one group's resolved forward window for this pass.
@@ -926,45 +921,42 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, provID int, j 
 			}
 			p.hits.noteN("fetch_gap", kind, gap, j.group)
 		}
-		// Record the specific numbers, not just the count, so they can be
-		// re-requested. Building the returned-set costs one map over the batch;
-		// the difference is written in one statement.
+		// COUNT the gap; do not enumerate it.
 		//
-		// Only for FORWARD batches. A backfill range walking expired history is
-		// mostly legitimate holes and always will be, so recording those would
-		// accumulate millions of rows describing articles that are correctly
-		// gone. The frontier is where a gap plausibly means "not yet", and it is
-		// also where walk-past eviction does its damage.
+		// This used to write every absent article number into a missed_articles
+		// ledger so each could be re-requested and, after four failed attempts,
+		// written off as genuinely gone. The ledger ran on production for two
+		// hours and answered its own question conclusively:
 		//
-		// Bounded twice, because the naive version is a disk problem. Recording
-		// every gap in every forward batch produced 1,077,472 rows and 207 MB in
-		// the first HOUR on this index — roughly 5 GB/day into a table with no
-		// natural ceiling, on a host whose disk pressure is why any of this is
-		// being looked at.
+		//     attempts=1  2,568,768      attempts=2  133,971
+		//     attempts=3      4,121      attempts>=4      0
 		//
-		// The first bound is the useful one: a batch that came back mostly EMPTY
-		// is not a server omitting lines, it is a sparse or expired region of the
-		// numbering, which RFC 3977 s6 says is normal and permanent. Recording
-		// 3,000 numbers that will never be filled teaches nothing and costs a
-		// row each. Only a batch that arrived largely intact — where a handful of
-		// absentees really is anomalous — is worth remembering.
+		// ~95% of "missing" numbers came back on the very next pass, and nothing
+		// ever reached the write-off threshold. They were not missing at all —
+		// the server had simply not included the line in that response. What
+		// remains is the medium behaving as specified: RFC 3977 s6 makes numbers
+		// within [low,high] sparse, and expiry, cancels and partial propagation
+		// leave holes that are permanent and correct.
+		//
+		// It cost 2.7 million rows and 523 MB in those two hours to learn that,
+		// and it was still growing. Two successive attempts to bound it failed
+		// because both guessed at the shape of the data: the gaps are not at the
+		// frontier where propagation lag would put them, but scattered ~10
+		// million articles back, spread through the large catch-up passes that
+		// CrawlMaxBatches allows.
+		//
+		// And the question it existed to answer — "did we skip a span?" — was
+		// already answered, correctly and completely, by newsgroup_ranges: two
+		// rows per group instead of 2.7 million. Measured across all 82 groups,
+		// zero uncovered articles inside any crawled span.
+		//
+		// So the trend signal survives and the rows do not. A step change here
+		// still says a provider has started omitting lines, which is the only
+		// thing the ledger was ever going to be used for.
 		if j.forward {
 			requested := int64(j.hi) - int64(j.lo) + 1
-			returned := int64(len(ovs))
-			// Half is deliberately generous: the frontier should be near-solid,
-			// so anything under it is not the case this ledger reasons about.
-			if requested > 0 && returned*2 >= requested {
-				got := make(map[int]struct{}, len(ovs))
-				for _, ov := range ovs {
-					got[ov.MessageNumber] = struct{}{}
-				}
-				for n := j.lo; n <= j.hi; n++ {
-					if _, ok := got[n]; !ok {
-						res.missing = append(res.missing, int64(n))
-					}
-				}
-			} else {
-				p.hits.noteN("fetch_gap", "sparse_batch_not_recorded", 1, j.group)
+			if returned := int64(len(ovs)); requested > 0 && returned < requested {
+				p.hits.noteN("fetch_gap", "articles_absent", requested-returned, j.group)
 			}
 		}
 	}
@@ -1036,19 +1028,6 @@ func (p *Plugin) advanceOneGroup(ctx context.Context, backbone string, plan *cra
 		if err := p.st.recordFetchedRangeFor(ctx, backbone, plan.group, int64(r.lo), int64(r.hi)); err != nil {
 			p.reportErr(ctx, "usenet/crawl-range-record", err)
 		}
-		// Reconcile the per-article ledger against what this batch actually
-		// returned, in the same place and for the same reason coverage is
-		// recorded: this is the only scope holding the backbone, and an article
-		// number without one is not an identity (RFC 3977 s6).
-		//
-		// The range is recorded as covered either way — walk-past eviction
-		// depends on that and changing it would be a much larger change — so the
-		// ledger is what keeps "covered" from silently meaning "everything here
-		// exists and we have it".
-		if err := p.st.reconcileMissedArticles(ctx, backbone, plan.group,
-			int64(r.lo), int64(r.hi), r.missing); err != nil {
-			p.reportErr(ctx, "usenet/crawl-missed-reconcile", err)
-		}
 	}
 	highest, latest := contiguousEnd(plan.start, rs)
 
@@ -1062,18 +1041,6 @@ func (p *Plugin) advanceOneGroup(ctx context.Context, backbone string, plan *cra
 	if err := p.st.updateGroupStateForBackbone(ctx, backbone, plan.group, int64(plan.low), int64(plan.high),
 		watermark, int64(plan.start), latest); err != nil {
 		p.reportErr(ctx, "usenet/crawl-watermark", fmt.Errorf("%s: %w", plan.group, err))
-	}
-	// Say out loud what the ledger is holding. Coverage records this group's
-	// ranges as fetched, and walk-past eviction will treat that as final — so
-	// the number of articles inside those ranges that never actually arrived is
-	// the size of the risk that reasoning is carrying, and it should not have to
-	// be discovered by querying the table.
-	//
-	// Only when non-zero, and only the aggregate: a per-article log on a busy
-	// group would be noise, and the counts are what an operator acts on.
-	if out, off, err := p.st.missedArticleStats(ctx, backbone, plan.group); err == nil && out+off > 0 {
-		p.crawlJob.Log("%s: %d article(s) still missing from fetched ranges, %d written off after %d attempts",
-			plan.group, out, off, missedArticleRetryLimit)
 	}
 	return staged, advanced
 }

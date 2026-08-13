@@ -1,0 +1,37 @@
+-- Retire the per-article gap ledger created by 033.
+--
+-- It ran on production for two hours and answered its own question:
+--
+--     attempts=1  2,568,768      attempts=2  133,971
+--     attempts=3      4,121      attempts>=4      0
+--
+-- About 95% of the article numbers it recorded as "missing" came back on the
+-- very next pass, and in two hours not one reached the four-attempt write-off
+-- threshold. They were never missing — the server had simply not included the
+-- line in that response. What is left over is the medium working to spec: RFC
+-- 3977 s6 makes numbers within [low,high] sparse, and expiry, cancels and
+-- partial propagation leave holes that are permanent and correct.
+--
+-- Learning that cost 2,706,860 rows and 523 MB, still growing at roughly
+-- 18M rows/day, on the host whose disk pressure prompted the whole exercise.
+-- Two attempts to bound the intake both failed because both guessed wrong about
+-- the data: the gaps are not clustered at the frontier where propagation lag
+-- would put them, but scattered some ten million articles back, spread through
+-- the large catch-up passes CrawlMaxBatches permits.
+--
+-- And the question it was built to answer — "did we skip a span?" — was already
+-- answered by newsgroup_ranges, correctly and completely, at two rows per group
+-- instead of 2.7 million. Verified across all 82 groups: zero uncovered
+-- articles inside any crawled span.
+--
+-- The signal survives as a counter. fetchBatch now notes
+-- fetch_gap/articles_absent per pass, which still shows a step change if a
+-- provider starts omitting lines — the only thing this table was ever going to
+-- be acted upon for.
+--
+-- Nothing reads it: reconcileMissedArticles, missedArticleStats and
+-- pruneMissedArticles are gone from the store, its interface and the prune
+-- loop. Dropping rather than keeping it empty, because an unused table with an
+-- index is a thing future readers must work out the status of, and 033 plus
+-- this file are a better record than a table nobody writes.
+DROP TABLE IF EXISTS missed_articles;
