@@ -295,7 +295,15 @@ func (d *DiscordBotService) webhookFor(s *discordgo.Session, ch *discordgo.Chann
 	if err != nil {
 		// Usually Missing Permissions (MANAGE_WEBHOOKS). Not fatal and not
 		// worth failing the sync: the host keeps any URL it already had, and
-		// sending in this channel simply reports as unconfigured.
+		// sending falls back to the single configured webhook — which is the
+		// previous behaviour, so this degrades rather than breaks.
+		//
+		// But it is LOGGED, because the fix is a permission only the operator
+		// can grant. Deployed silent, this returned "" for all six public
+		// channels and the log said nothing at all; the sync line reported
+		// success and the feature simply did not appear.
+		log.Printf("discord bot: cannot list webhooks in #%s (%s) — "+
+			"grant MANAGE_WEBHOOKS to send there: %v", ch.Name, ch.ID, err)
 		return ""
 	}
 	var appID string
@@ -313,8 +321,14 @@ func (d *DiscordBotService) webhookFor(s *discordgo.Session, ch *discordgo.Chann
 	}
 	created, err := s.WebhookCreate(ch.ID, "amenzb", "")
 	if err != nil || created == nil {
+		log.Printf("discord bot: cannot create a webhook in #%s (%s) — "+
+			"grant MANAGE_WEBHOOKS to send there: %v", ch.Name, ch.ID, err)
 		return ""
 	}
+	// Worth a line: this happens once per channel, ever, and it is the
+	// difference between "sending works here" and "sending lands in the one
+	// configured channel whatever the member had open".
+	log.Printf("discord bot: created a send webhook for #%s", ch.Name)
 	return webhookURL(created)
 }
 
