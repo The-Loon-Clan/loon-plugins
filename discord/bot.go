@@ -661,7 +661,8 @@ func (d *DiscordBotService) handleMessage(s *discordgo.Session, m *discordgo.Mes
 	if guildID == "" {
 		return // DM or group DM: not the guild's conversation, not mirrored
 	}
-	public := everyoneCanView(s, guildID, m.ChannelID)
+	memberRole := d.settings.GetDiscordMemberRoleID(ctx)
+	public := memberCanView(s, guildID, memberRole, m.ChannelID)
 	channelID, channelName, threadID, threadName := channelDisplay(s, m.ChannelID)
 	if m.Author == nil {
 		return

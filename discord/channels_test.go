@@ -53,7 +53,7 @@ func allowView(roleID string) *discordgo.PermissionOverwrite {
 
 func TestPublicChannelIsVisible(t *testing.T) {
 	st := newState(t, &discordgo.Channel{ID: "c1", GuildID: guildID, Type: discordgo.ChannelTypeGuildText})
-	if !everyoneCanView(st, guildID, "c1") {
+	if !memberCanView(st, guildID, "", "c1") {
 		t.Error("a channel with no overwrites was judged private — @everyone has " +
 			"VIEW_CHANNEL by default, so this hides the entire guild")
 	}
@@ -64,7 +64,7 @@ func TestStaffChannelIsHidden(t *testing.T) {
 		ID: "c2", GuildID: guildID, Type: discordgo.ChannelTypeGuildText,
 		PermissionOverwrites: []*discordgo.PermissionOverwrite{denyView(guildID)},
 	})
-	if everyoneCanView(st, guildID, "c2") {
+	if memberCanView(st, guildID, "", "c2") {
 		t.Error("a channel denying @everyone was judged PUBLIC — this is the " +
 			"case that publishes moderator discussion to 3,300 members")
 	}
@@ -80,7 +80,7 @@ func TestChannelInheritsAPrivateCategory(t *testing.T) {
 		},
 		&discordgo.Channel{ID: "c3", GuildID: guildID, ParentID: "cat", Type: discordgo.ChannelTypeGuildText},
 	)
-	if everyoneCanView(st, guildID, "c3") {
+	if memberCanView(st, guildID, "", "c3") {
 		t.Error("a channel inside a private category was judged public — this is " +
 			"how a whole staff section leaks at once")
 	}
@@ -98,7 +98,7 @@ func TestChannelOverridesAPrivateCategory(t *testing.T) {
 			PermissionOverwrites: []*discordgo.PermissionOverwrite{allowView(guildID)},
 		},
 	)
-	if !everyoneCanView(st, guildID, "c4") {
+	if !memberCanView(st, guildID, "", "c4") {
 		t.Error("an explicit allow on the channel did not override its category")
 	}
 }
@@ -115,7 +115,7 @@ func TestThreadInheritsItsParent(t *testing.T) {
 		&discordgo.Channel{ID: "t1", GuildID: guildID, ParentID: "priv",
 			Type: discordgo.ChannelTypeGuildPublicThread},
 	)
-	if everyoneCanView(st, guildID, "t1") {
+	if memberCanView(st, guildID, "", "t1") {
 		t.Error("a thread in a PRIVATE channel was judged public — the parent is " +
 			"hidden, so this leaks exactly the conversations nobody would check")
 	}
@@ -127,7 +127,7 @@ func TestThreadInPublicChannelIsVisible(t *testing.T) {
 		&discordgo.Channel{ID: "t2", GuildID: guildID, ParentID: "pub",
 			Type: discordgo.ChannelTypeGuildPublicThread},
 	)
-	if !everyoneCanView(st, guildID, "t2") {
+	if !memberCanView(st, guildID, "", "t2") {
 		t.Error("a thread in a public channel was hidden — help-desk threads are " +
 			"the reason for this whole change")
 	}
@@ -137,10 +137,10 @@ func TestThreadInPublicChannelIsVisible(t *testing.T) {
 func TestUnknownsResolveToPrivate(t *testing.T) {
 	st := newState(t, &discordgo.Channel{ID: "c5", GuildID: guildID, Type: discordgo.ChannelTypeGuildText})
 	cases := map[string]bool{
-		"nil session":     everyoneCanView(nil, guildID, "c5"),
-		"unknown channel": everyoneCanView(st, guildID, "nope"),
-		"empty guild":     everyoneCanView(st, "", "c5"),
-		"empty channel":   everyoneCanView(st, guildID, ""),
+		"nil session":     memberCanView(nil, guildID, "", "c5"),
+		"unknown channel": memberCanView(st, guildID, "", "nope"),
+		"empty guild":     memberCanView(st, "", "", "c5"),
+		"empty channel":   memberCanView(st, guildID, "", ""),
 	}
 	for name, got := range cases {
 		if got {
@@ -160,7 +160,7 @@ func TestCategoryParentIsNotAThread(t *testing.T) {
 			PermissionOverwrites: []*discordgo.PermissionOverwrite{denyView(guildID)},
 		},
 	)
-	if everyoneCanView(st, guildID, "c6") {
+	if memberCanView(st, guildID, "", "c6") {
 		t.Error("a channel's own deny was ignored in favour of its category — " +
 			"per-channel overwrites are being discarded")
 	}
@@ -189,5 +189,72 @@ func TestChannelDisplayLeavesPlainChannelsAlone(t *testing.T) {
 	chID, chName, thID, thName := channelDisplay(st, "pub")
 	if chID != "pub" || chName != "general" || thID != "" || thName != "" {
 		t.Errorf("plain channel reported %s/%s thread=%s/%s", chID, chName, thID, thName)
+	}
+}
+
+// The case that made the original rule useless in practice.
+//
+// Run against the real guild, "can @everyone read it" returned ONE public
+// channel out of nine — #verify — because this is a verification-gated server:
+// @everyone sees only the gate, and a member role grants the rest. #general and
+// #rules both came back private, which would have shipped a sidebar with a
+// single entry.
+//
+// A site member IS a verified Discord member, so the member role's allow is what
+// decides. Discord resolves role overwrites additively, and an ALLOW on a higher
+// role overriding a DENY on @everyone is exactly how such a server is built.
+func TestMemberRoleAllowOverridesEveryoneDeny(t *testing.T) {
+	const memberRole = "222"
+	st := newState(t, &discordgo.Channel{
+		ID: "gated", GuildID: guildID, Type: discordgo.ChannelTypeGuildText,
+		PermissionOverwrites: []*discordgo.PermissionOverwrite{
+			denyView(guildID),     // @everyone cannot see it
+			allowView(memberRole), // verified members can
+		},
+	})
+	if !memberCanView(st, guildID, memberRole, "gated") {
+		t.Error("a channel gated behind the member role was judged private — " +
+			"this is #general on a verification-gated server, and hiding it " +
+			"leaves the sidebar with only #verify")
+	}
+	// And without the member role configured, it degrades to the @everyone rule:
+	// fewer channels, never more.
+	if memberCanView(st, guildID, "", "gated") {
+		t.Error("with no member role configured this must fall back to @everyone, " +
+			"which denies the channel")
+	}
+}
+
+// Staff channels deny BOTH roles and must stay hidden.
+func TestStaffChannelHiddenFromMembersToo(t *testing.T) {
+	const memberRole = "222"
+	st := newState(t, &discordgo.Channel{
+		ID: "staff", GuildID: guildID, Type: discordgo.ChannelTypeGuildText,
+		PermissionOverwrites: []*discordgo.PermissionOverwrite{
+			denyView(guildID), denyView(memberRole),
+		},
+	})
+	if memberCanView(st, guildID, memberRole, "staff") {
+		t.Error("a channel denying the member role was judged visible — that is " +
+			"moderator discussion published to every logged-in member")
+	}
+}
+
+// A channel with no overwrite for the member role must not be decided by it:
+// the caller has to fall through to @everyone and then to the category.
+func TestNoMemberOverwriteFallsThrough(t *testing.T) {
+	const memberRole = "222"
+	st := newState(t,
+		&discordgo.Channel{
+			ID: "cat", GuildID: guildID, Type: discordgo.ChannelTypeGuildCategory,
+			PermissionOverwrites: []*discordgo.PermissionOverwrite{denyView(guildID)},
+		},
+		// Says nothing about either role; the category decides.
+		&discordgo.Channel{ID: "inner", GuildID: guildID, ParentID: "cat",
+			Type: discordgo.ChannelTypeGuildText},
+	)
+	if memberCanView(st, guildID, memberRole, "inner") {
+		t.Error("a channel silent on both roles inside a private category was " +
+			"judged visible — the category's deny was not consulted")
 	}
 }

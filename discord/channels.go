@@ -82,30 +82,36 @@ func resolveChannel(s *discordgo.Session, channelID string) *discordgo.Channel {
 // nothing done when a channel is created — which is the point, because an
 // allowlist is exactly the thing that goes stale and then leaks.
 
-// everyoneCanView reports whether the @everyone role can read a channel.
+// memberCanView reports whether a SITE MEMBER should see a channel.
 //
-// Discord models the default role as a role whose ID equals the GUILD id, so
-// the check is: does this channel deny VIEW_CHANNEL to that role?
+// The rule was "can @everyone read it", which is faithful to Discord and was
+// useless here. Run against the real guild it returned ONE public channel out of
+// nine — #verify — because this is a verification-gated server: @everyone sees
+// only the gate, and a member role grants everything else. #general, #rules and
+// #announcements all came back private.
 //
-// Deny beats allow in Discord's resolution for a single role, and an explicit
-// allow on the same overwrite is how a channel re-opens itself after a
-// category-level deny — so both halves are read, not just the deny.
+// So the mapping is the honest one: a site member corresponds to a VERIFIED
+// Discord member, not to @everyone. A channel is visible if @everyone can read
+// it, OR if the configured member role can — which is exactly the set a logged-in
+// member would see had they joined the Discord.
 //
-// Threads inherit their parent's permissions and carry no overwrites of their
-// own, so a thread is resolved against its parent. Getting that wrong would
-// leak a private channel's threads while correctly hiding the channel itself.
-func everyoneCanView(s *discordgo.Session, guildID, channelID string) bool {
+// memberRoleID may be empty (unconfigured), in which case this degrades to the
+// @everyone rule. That is the safe direction: fewer channels, never more.
+//
+// Discord resolves role overwrites additively, so an ALLOW on the member role
+// overrides a DENY on @everyone. That is precisely how a gated server is built,
+// and reading only the deny is what got this wrong.
+func memberCanView(s *discordgo.Session, guildID, memberRoleID, channelID string) bool {
 	if s == nil || guildID == "" || channelID == "" {
-		// No state means no evidence. Treat as private: a wrong "public" is
-		// published to 3,300 members and cannot be recalled, a wrong "private"
-		// is a message that does not appear.
+		// No evidence. Private: a wrong "public" reaches 3,300 members and
+		// cannot be recalled, a wrong "private" is a message that does not show.
 		return false
 	}
 	ch := resolveChannel(s, channelID)
 	if ch == nil {
 		return false
 	}
-	// A thread has no overwrites of its own; resolve against the parent.
+	// Threads carry no overwrites; resolve against the parent.
 	if ch.ParentID != "" && isThread(ch) {
 		if parent := resolveChannel(s, ch.ParentID); parent != nil {
 			ch = parent
@@ -113,38 +119,54 @@ func everyoneCanView(s *discordgo.Session, guildID, channelID string) bool {
 			return false
 		}
 	}
-	for _, ow := range ch.PermissionOverwrites {
-		if ow.Type != discordgo.PermissionOverwriteTypeRole || ow.ID != guildID {
-			continue
-		}
-		if ow.Deny&discordgo.PermissionViewChannel != 0 {
-			return false
-		}
-		if ow.Allow&discordgo.PermissionViewChannel != 0 {
-			return true
-		}
+	if v, decided := roleCanView(ch, memberRoleID); decided {
+		return v
 	}
-	// No overwrite for @everyone on this channel. Fall through to the category,
-	// which is where a private SECTION is usually configured — one deny on the
-	// category, nothing on the channels inside it. Reading only the channel
-	// would call every one of them public.
+	if v, decided := roleCanView(ch, guildID); decided {
+		return v
+	}
+	// Nothing on the channel decides it. Fall through to the CATEGORY, where a
+	// gated or private section is usually configured with a single overwrite.
 	if ch.ParentID != "" {
 		if parent := resolveChannel(s, ch.ParentID); parent != nil {
-			for _, ow := range parent.PermissionOverwrites {
-				if ow.Type != discordgo.PermissionOverwriteTypeRole || ow.ID != guildID {
-					continue
-				}
-				if ow.Deny&discordgo.PermissionViewChannel != 0 {
-					return false
-				}
+			if v, decided := roleCanView(parent, memberRoleID); decided {
+				return v
+			}
+			if v, decided := roleCanView(parent, guildID); decided {
+				return v
 			}
 		}
 	}
-	// Nothing denies it. The guild-level @everyone role grants VIEW_CHANNEL by
-	// default, and a guild that revoked it wholesale would have no public
-	// channels at all — a configuration this bridge has no business guessing
-	// around.
+	// Nothing denies it anywhere. @everyone holds VIEW_CHANNEL by default.
 	return true
+}
+
+// roleCanView reads one role's overwrite on a channel.
+//
+// decided is false when the role has no overwrite there, which is what lets the
+// caller fall through to the next role and then to the category — a distinction
+// a plain bool cannot carry, and conflating "no opinion" with "denied" is what
+// would hide a channel that merely says nothing about this role.
+//
+// Allow wins over deny WITHIN a single overwrite: an overwrite carrying both is
+// how a gated channel re-opens itself, and it is the shape this whole function
+// exists to read correctly.
+func roleCanView(ch *discordgo.Channel, roleID string) (allowed, decided bool) {
+	if ch == nil || roleID == "" {
+		return false, false
+	}
+	for _, ow := range ch.PermissionOverwrites {
+		if ow.Type != discordgo.PermissionOverwriteTypeRole || ow.ID != roleID {
+			continue
+		}
+		if ow.Allow&discordgo.PermissionViewChannel != 0 {
+			return true, true
+		}
+		if ow.Deny&discordgo.PermissionViewChannel != 0 {
+			return false, true
+		}
+	}
+	return false, false
 }
 
 // isThread reports whether a channel is one of Discord's thread types.
@@ -203,6 +225,7 @@ func channelDisplay(s *discordgo.Session, channelID string) (channelID2, channel
 // for rooms that are transient by nature — a thread earns a place in the sidebar
 // by carrying a message, which the message-derived list already handles.
 func (d *DiscordBotService) syncChannels(ctx context.Context, s *discordgo.Session, guildID string) {
+	memberRole := d.settings.GetDiscordMemberRoleID(ctx)
 	if d.chat == nil || s == nil || guildID == "" {
 		return
 	}
@@ -226,7 +249,7 @@ func (d *DiscordBotService) syncChannels(ctx context.Context, s *discordgo.Sessi
 			ID:       ch.ID,
 			Name:     ch.Name,
 			Position: ch.Position,
-			Public:   everyoneCanView(s, guildID, ch.ID),
+			Public:   memberCanView(s, guildID, memberRole, ch.ID),
 		})
 	}
 	if err := d.chat.SyncChannels(ctx, out); err != nil {
