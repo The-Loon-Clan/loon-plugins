@@ -180,6 +180,12 @@ type AssemblerStore interface {
 	// written off after repeated attempts. The first number is the size of the
 	// risk walk-past eviction is carrying for that group.
 	missedArticleStats(ctx context.Context, backbone, group string) (outstanding, writtenOff int64, err error)
+
+	// pruneMissedArticles bounds the ledger: written-off numbers and ranges
+	// nothing has re-crawled in keepDays. Without it the table has no ceiling —
+	// it reached 1,077,472 rows and 207 MB in its first hour before the intake
+	// guard in fetchBatch landed.
+	pruneMissedArticles(ctx context.Context, keepDays int) (int64, error)
 	// insertNzb returns the new row's id (0 on a content_hash duplicate) —
 	// the salvage path hands it to the health backend for its verdict.
 	insertNzb(ctx context.Context, n nzbRow) (int64, bool, error)

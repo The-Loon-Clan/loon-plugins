@@ -496,3 +496,38 @@ func (s *PGStore) missedArticleStats(ctx context.Context, backbone, group string
 	})
 	return outstanding, writtenOff, err
 }
+
+// pruneMissedArticles bounds the per-article ledger.
+//
+// The second half of keeping this table finite (the first is the intake guard
+// in fetchBatch). Two horizons, for two different kinds of row:
+//
+//   - WRITTEN OFF: attempts has reached the retry limit, so the number has been
+//     re-requested repeatedly and never arrived. It is expired history, the
+//     conclusion is drawn, and keeping the row teaches nothing further.
+//   - STALE: any row untouched for keepDays, whatever its attempt count. A
+//     forward range that stopped being re-crawled is one the watermark has long
+//     passed; its gaps are settled by absence.
+//
+// Deliberately NOT keyed on "the release was built" — nothing links an article
+// number to a release, and inventing that link would be a bigger change than
+// the diagnostic is worth.
+func (s *PGStore) pruneMissedArticles(ctx context.Context, keepDays int) (int64, error) {
+	if keepDays <= 0 {
+		keepDays = 7
+	}
+	var n int64
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx,
+			`DELETE FROM missed_articles
+			  WHERE attempts >= $1
+			     OR last_try < now() - ($2 || ' days')::interval`,
+			missedArticleRetryLimit, keepDays)
+		if err != nil {
+			return err
+		}
+		n, _ = res.RowsAffected()
+		return nil
+	})
+	return n, err
+}

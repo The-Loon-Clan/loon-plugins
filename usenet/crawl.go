@@ -935,15 +935,36 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, provID int, j 
 		// accumulate millions of rows describing articles that are correctly
 		// gone. The frontier is where a gap plausibly means "not yet", and it is
 		// also where walk-past eviction does its damage.
+		//
+		// Bounded twice, because the naive version is a disk problem. Recording
+		// every gap in every forward batch produced 1,077,472 rows and 207 MB in
+		// the first HOUR on this index — roughly 5 GB/day into a table with no
+		// natural ceiling, on a host whose disk pressure is why any of this is
+		// being looked at.
+		//
+		// The first bound is the useful one: a batch that came back mostly EMPTY
+		// is not a server omitting lines, it is a sparse or expired region of the
+		// numbering, which RFC 3977 s6 says is normal and permanent. Recording
+		// 3,000 numbers that will never be filled teaches nothing and costs a
+		// row each. Only a batch that arrived largely intact — where a handful of
+		// absentees really is anomalous — is worth remembering.
 		if j.forward {
-			got := make(map[int]struct{}, len(ovs))
-			for _, ov := range ovs {
-				got[ov.MessageNumber] = struct{}{}
-			}
-			for n := j.lo; n <= j.hi; n++ {
-				if _, ok := got[n]; !ok {
-					res.missing = append(res.missing, int64(n))
+			requested := int64(j.hi) - int64(j.lo) + 1
+			returned := int64(len(ovs))
+			// Half is deliberately generous: the frontier should be near-solid,
+			// so anything under it is not the case this ledger reasons about.
+			if requested > 0 && returned*2 >= requested {
+				got := make(map[int]struct{}, len(ovs))
+				for _, ov := range ovs {
+					got[ov.MessageNumber] = struct{}{}
 				}
+				for n := j.lo; n <= j.hi; n++ {
+					if _, ok := got[n]; !ok {
+						res.missing = append(res.missing, int64(n))
+					}
+				}
+			} else {
+				p.hits.noteN("fetch_gap", "sparse_batch_not_recorded", 1, j.group)
 			}
 		}
 	}
