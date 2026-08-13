@@ -167,12 +167,14 @@
                  nothing needs configuring. Only PUBLIC channels are listed —
                  the query enforces it, because a staff channel's NAME is a leak
                  even with its messages withheld. */}}
-            <a class="chat-channel{{if not $.Active}} active{{end}}" href="/chat">
+            <a class="chat-channel{{if not $.Active}} active{{end}}" href="/chat"
+               data-channel="" data-name="all">
                 <span class="hash">#</span> all
             </a>
             {{range .Channels}}
             <a class="chat-channel{{if eq $.Active .ChannelID}} active{{end}}"
-               href="/chat?channel={{.ChannelID}}" title="{{.Messages}} messages">
+               href="/chat?channel={{.ChannelID}}" title="{{.Messages}} messages"
+               data-channel="{{.ChannelID}}" data-name="{{.ChannelName}}">
                 <span class="hash">#</span> {{.ChannelName}}
             </a>
             {{else}}
@@ -189,7 +191,7 @@
         <div class="chat-center">
             <div class="chat-header" style="display:flex;align-items:center;gap:0.5rem;">
                 <span class="hash">#</span>
-                <span>{{if .Active}}{{range .Channels}}{{if eq $.Active .ChannelID}}{{.ChannelName}}{{end}}{{end}}{{else}}all{{end}}</span>
+                <span id="chat-header-name">{{if .Active}}{{range .Channels}}{{if eq $.Active .ChannelID}}{{.ChannelName}}{{end}}{{end}}{{else}}all{{end}}</span>
                 <span class="desc">Live bridge from Discord</span>
                 {{if .DiscordInviteURL}}
                 <a href="{{.DiscordInviteURL}}" target="_blank" rel="noopener noreferrer"
@@ -410,6 +412,62 @@
                 });
         }
 
+        // Switching channels in place.
+        //
+        // The sidebar entries are ordinary links, so clicking one navigated: the
+        // whole page reloaded, the scroll position went to the top, and the SSE
+        // connection was torn down and rebuilt to receive the same stream it was
+        // already receiving. Reading a busy channel and glancing at another one
+        // meant paying for a full page load each way.
+        //
+        // Everything a switch needs already exists — loadHistory() clears the
+        // stream and refetches for activeChannel — so this is a matter of not
+        // throwing the page away to do it.
+        //
+        // The href stays exactly as it was. Middle-click, ctrl-click and
+        // open-in-new-tab keep working because those never fire a plain click,
+        // and with JS off the link still navigates and still filters server-side.
+        function selectChannel(id, push) {
+            activeChannel = id || '';
+            // The scroll-back cursor belongs to the channel that was open. Left
+            // in place, the first scroll up in the new channel would page from
+            // the old channel's oldest timestamp.
+            oldestAt = null;
+            reachedStart = false;
+            loadingOlder = false;
+
+            var name = 'all';
+            channelLinks.forEach(function(a) {
+                var mine = (a.getAttribute('data-channel') || '') === activeChannel;
+                a.classList.toggle('active', mine);
+                if (mine) name = a.getAttribute('data-name') || 'all';
+            });
+            if (headerName) headerName.textContent = name;
+            if (push) {
+                history.pushState({channel: activeChannel}, '',
+                    activeChannel ? '/chat?channel=' + encodeURIComponent(activeChannel) : '/chat');
+            }
+            loadHistory();
+        }
+
+        var channelLinks = Array.prototype.slice.call(document.querySelectorAll('.chat-channel'));
+        var headerName = document.getElementById('chat-header-name');
+        channelLinks.forEach(function(a) {
+            a.addEventListener('click', function(e) {
+                // Let the browser handle any click that means "somewhere else":
+                // a new tab, a new window, a download.
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                e.preventDefault();
+                selectChannel(a.getAttribute('data-channel') || '', true);
+            });
+        });
+
+        // Back/forward must move between channels, not reload. pushState without
+        // this leaves the buttons pointing at URLs the page no longer reacts to.
+        window.addEventListener('popstate', function() {
+            selectChannel(new URLSearchParams(location.search).get('channel') || '', false);
+        });
+
         function connectStream() {
             var es = new EventSource('/api/chat/stream');
             es.onopen = function() { setStatus('connected', 'live'); };
@@ -417,6 +475,14 @@
             es.onmessage = function(e) {
                 try {
                     var m = JSON.parse(e.data);
+                    // The SSE stream carries EVERY public channel — one
+                    // connection, not one per room. So a live message has to be
+                    // filtered here or it lands in whichever channel is open:
+                    // sitting in #suggestions, a line from #general would append
+                    // as though it had been said there. The loaded history was
+                    // filtered and the live tail was not, so the longer the page
+                    // stayed open the more wrong it got.
+                    if (activeChannel && m.channel_id !== activeChannel) return;
                     var atBottom = (stream.scrollTop + stream.clientHeight + 50) >= stream.scrollHeight;
                     appendMessage(m);
                     if (atBottom) scrollToBottom();
