@@ -93,6 +93,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	fl.GET("", p.handlers.Page)
 	fl.GET("/data", p.handlers.GraphData)
 	fl.GET("/proposals", p.handlers.RecentProposals)
+	fl.POST("/proposals/upload", p.handlers.UploadProposalImage)
 	fl.GET("/proposals/similar", p.handlers.SimilarProposals)
 	fl.GET("/proposals/:id/details", p.handlers.ProposalDetails)
 	fl.POST("/node/:id/tag", p.handlers.SetNodeTag)

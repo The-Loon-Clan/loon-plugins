@@ -144,7 +144,61 @@ var proposalTagAllowlist = map[string]bool{
 	"feature":     true,
 	"performance": true,
 	"other":       true,
+	// Not a tag: the filter value meaning "has no tag". Requests filed
+	// before the category picker existed carry an empty tag, and "" is
+	// already spoken for as "any tag" — so without a distinct word for it
+	// those rows are reachable from no pill at all.
+	"untagged": true,
 }
+
+// statusLabel turns a stored status into what a member reads.
+//
+// The statuses are stored snake_case, and the page used to print them raw
+// with one inline special case for in_progress — so every other chip read
+// as a database value ("declined" in lower case beside "In Progress"). One
+// function means the listing, the sidebar and the filter pills cannot drift
+// from each other.
+func statusLabel(s string) string {
+	switch s {
+	case "in_progress":
+		return "In Progress"
+	case "open":
+		return "Open"
+	case "planned":
+		return "Planned"
+	case "done":
+		return "Done"
+	case "declined":
+		return "Declined"
+	case "":
+		return "Open" // the column's default; a blank chip reads as broken
+	}
+	return s
+}
+
+// tagLabel is the same idea for categories. UI is an initialism and looks
+// wrong title-cased, which is the whole reason this is not strings.Title.
+func tagLabel(s string) string {
+	switch s {
+	case "ui":
+		return "UI"
+	case "bug":
+		return "Bug"
+	case "feature":
+		return "Feature"
+	case "performance":
+		return "Performance"
+	case "other":
+		return "Other"
+	}
+	return s
+}
+
+// sidebarRecentCount is how many requests the "Recent Feature Requests"
+// panel shows beside the form. Short on purpose: it is there to show the
+// page is alive and what a good request looks like, not to be browsed --
+// the full, filterable list is directly below it.
+const sidebarRecentCount = 5
 
 // proposalStatusAllowlist limits the status column to a known set.
 // 'open' is the default for new rows; the rest are mod-managed.
@@ -428,10 +482,21 @@ func (h *Handlers) RecentProposals(c *gin.Context) {
 	}
 	page, _ := strconv.Atoi(c.Query("page"))
 	pageSize := 20
+	// "My Requests". Scoped to the viewer's own id from the session rather
+	// than to a user id in the query string -- ?mine=<someone else> would
+	// otherwise be an author filter for any account, which is not what the
+	// control says it does.
+	mine := 0
+	if c.Query("mine") != "" {
+		if u := h.deps.Viewer(c); u != nil {
+			mine = u.ID
+		}
+	}
 	rows, total, err := h.flow.ListFlowProposals(c.Request.Context(), FlowProposalFilter{
 		Tag:      tag,
 		Status:   status,
 		Sort:     sort,
+		Mine:     mine,
 		Page:     page,
 		PageSize: pageSize,
 	})
@@ -459,6 +524,9 @@ func (h *Handlers) RecentProposals(c *gin.Context) {
 	if sort != "newest" {
 		q.Set("sort", sort)
 	}
+	if mine != 0 {
+		q.Set("mine", "1")
+	}
 	baseURL := "/flow/proposals?"
 	if encoded := q.Encode(); encoded != "" {
 		baseURL = "/flow/proposals?" + encoded + "&"
@@ -468,15 +536,41 @@ func (h *Handlers) RecentProposals(c *gin.Context) {
 	if u := h.deps.Viewer(c); u != nil {
 		currentUserID = u.ID
 	}
+	// Facet counts drive the filter strip. Best-effort: the strip degrades
+	// to pills without counts, which is what it was before, and that is not
+	// worth failing a page over.
+	facets, ferr := h.flow.CountFlowProposalFacets(c.Request.Context())
+	if ferr != nil {
+		facets = &FlowProposalFacets{Tags: map[string]int{}, Statuses: map[string]int{}}
+	}
+	// The sidebar's "Recent Feature Requests" is deliberately unfiltered --
+	// it is orientation for somebody composing a request, showing what the
+	// place looks like, so narrowing it by the filters they happen to have
+	// clicked would defeat the point (and show nothing on an empty filter).
+	recent := rows
+	if tag != "" || status != "" || mine != 0 || sort != "newest" {
+		if r, _, err := h.flow.ListFlowProposals(c.Request.Context(), FlowProposalFilter{
+			Sort: "newest", Page: 1, PageSize: sidebarRecentCount,
+		}); err == nil {
+			recent = r
+		}
+	}
+	if len(recent) > sidebarRecentCount {
+		recent = recent[:sidebarRecentCount]
+	}
 	h.render(c, http.StatusOK, "Feature Requests", "flow_proposals.html", gin.H{
 		"ActiveNav":     "community",
 		"Proposals":     rows,
+		"Recent":        recent,
 		"Pagination":    pagination,
 		"FilterTag":     tag,
 		"FilterStatus":  status,
 		"FilterSort":    sort,
+		"FilterMine":    mine != 0,
+		"Facets":        facets,
 		"TotalCount":    total,
 		"CurrentUserID": currentUserID,
+		"UploadsOn":     deps.Files != nil,
 	})
 }
 

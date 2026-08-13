@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon/blob"
 )
 
 // FlowStore is the flow domain's store — plugin-owned (PGFlowStore over the
@@ -30,6 +32,7 @@ type FlowStore interface {
 	CreateFlowSnapshot(ctx context.Context, payload []byte, nodeCount, edgeCount int, reason string) (*FlowSnapshot, error)
 	PruneFlowSnapshots(ctx context.Context, olderThan time.Time) (int64, error)
 	ListFlowProposals(ctx context.Context, f FlowProposalFilter) ([]*FlowProposal, int, error)
+	CountFlowProposalFacets(ctx context.Context) (*FlowProposalFacets, error)
 	SearchSimilarProposals(ctx context.Context, query string, limit int) ([]*FlowProposal, error)
 	SetFlowNodeTag(ctx context.Context, id int64, tag string) error
 	SetFlowNodeStatus(ctx context.Context, id int64, status string) error
@@ -59,6 +62,13 @@ type Deps struct {
 	// RenderForumMarkdown is the host's markdown+sanitise pipeline for
 	// comment bodies.
 	RenderForumMarkdown func(src string) template.HTML
+	// Files is where images attached to a request are stored, under the
+	// "proposal-uploads/" namespace. OPTIONAL: nil disables attachments
+	// entirely — the upload control is not rendered and the endpoint
+	// refuses. It is optional because it is the only dep that grants
+	// members write access to storage, so a host should have to opt in
+	// rather than inherit it by upgrading.
+	Files blob.Store
 }
 
 func (d *Deps) ok() bool {

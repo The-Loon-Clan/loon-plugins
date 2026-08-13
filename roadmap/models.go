@@ -180,11 +180,38 @@ type FlowProposal struct {
 
 // FlowProposalFilter shapes the /flow/proposals list query.
 type FlowProposalFilter struct {
-	Tag      string
-	Status   string
-	Sort     string
+	Tag    string
+	Status string
+	Sort   string
+	// Mine restricts the listing to one author's requests. Zero means no
+	// restriction; it carries the viewer's own id rather than a bool so the
+	// query binds a value instead of switching SQL on a flag.
+	Mine     int
 	Page     int
 	PageSize int
+}
+
+// FlowProposalFacets counts the live proposals by tag and by status.
+//
+// The filter strip offered fifteen pills — six tags, six statuses, three
+// sorts — with no indication of what was behind any of them. On a page
+// holding a single request that meant almost every click landed on "no
+// requests match the current filters", which reads as a broken page rather
+// than an empty category.
+//
+// Counts turn each pill into information: a member can see there are four
+// bugs and no performance requests without clicking either. The zero ones
+// are then not worth rendering at all, which is what actually shrinks the
+// strip back to the size of the content.
+//
+// Untagged is counted separately because it is not one of the tags. The one
+// real request on the page has no tag, so without it the only request was
+// unreachable from every pill in the Type row.
+type FlowProposalFacets struct {
+	Tags     map[string]int
+	Statuses map[string]int
+	Untagged int
+	Total    int
 }
 
 // Viewer is who is looking at the page; nil for anonymous. Mod is the one

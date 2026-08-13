@@ -41,6 +41,13 @@ func parseTemplates() error {
 		"add":   func(a, b int) int { return a + b },
 		"sub":   func(a, b int64) int64 { return a - b },
 		"list":  func(items ...any) []any { return items },
+		// strs is list's typed sibling. The filter strip ranges over slugs
+		// and looks each one up in a map[string]int; ranging over []any
+		// hands `index` an interface value and the lookup misses, so every
+		// count would render 0 rather than fail loudly.
+		"strs":        func(items ...string) []string { return items },
+		"statusLabel": statusLabel,
+		"tagLabel":    tagLabel,
 		"dict": func(values ...interface{}) map[string]interface{} {
 			if len(values)%2 != 0 {
 				return map[string]interface{}{}

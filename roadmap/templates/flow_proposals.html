@@ -1,18 +1,115 @@
 {{define "flow_proposals.html"}}
     <style>
-        /* Forum-style row + role badge styles, lifted from
-           community_thread.html so the two surfaces look like a set. */
-        .role-badge {
-            font-size: 0.62rem; padding: 2px 8px; border-radius: 999px;
-            font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+        /* ── Page header ─────────────────────────────────────────── */
+        .fr-hero {
+            display: flex; align-items: flex-start; gap: 1rem;
+            padding: 1.1rem 1.25rem; margin-bottom: 1rem;
+            border: 1px solid var(--border); border-radius: 10px;
+            background:
+                radial-gradient(120% 140% at 100% 0%, rgba(91,138,245,0.16) 0%, rgba(91,138,245,0) 60%),
+                var(--surface-2);
         }
-        .role-admin       { background: rgba(var(--bs-danger-rgb), 0.2); color: var(--bs-danger); }
-        .role-contributor { background: rgba(91,138,245,0.2); color: var(--blue); }
-        .role-user        { background: var(--bg-elevated); color: var(--text-muted); }
+        .fr-hero h2 { font-size: 1.45rem; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+        .fr-hero p  { font-size: 0.82rem; color: var(--text-muted); margin: 0.35rem 0 0; max-width: 54ch; }
 
-        /* Tag chips — one colour per category. Kept lowercase so the
-           server's allowlist (ui/bug/feature/performance/other) maps
-           directly to a CSS class without translation. */
+        /* ── Filter strip ────────────────────────────────────────── */
+        .fr-filters { padding: 0.7rem 0.9rem; }
+        .fr-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+        .fr-filter-row + .fr-filter-row { margin-top: 0.4rem; }
+        .fr-filter-label {
+            font-size: 0.66rem; color: var(--text-muted); font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.07em;
+            width: 4.2rem; flex-shrink: 0;
+        }
+        .filter-pill {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            font-size: 0.74rem; padding: 3px 11px; border-radius: 999px;
+            border: 1px solid var(--border); color: var(--text-muted);
+            text-decoration: none; transition: all .12s; white-space: nowrap;
+        }
+        .filter-pill:hover  { border-color: var(--blue); color: var(--text-primary); }
+        .filter-pill.active { border-color: var(--blue); color: var(--blue); background: rgba(91,138,245,0.10); }
+        /* The count rides inside the pill so a member can see there are four
+           bugs without clicking Bug. Muted, because it is the smaller half of
+           the label. */
+        .pill-n { font-size: 0.66rem; opacity: 0.65; font-variant-numeric: tabular-nums; }
+
+        /* ── Two-column body ─────────────────────────────────────── */
+        .fr-cols { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 1rem; align-items: start; }
+        @media (max-width: 991px) {
+            /* The sidebar is guidance and context; on a narrow screen it goes
+               below the form rather than squeezing it. */
+            .fr-cols { grid-template-columns: minmax(0,1fr); }
+        }
+
+        /* ── The request form ────────────────────────────────────── */
+        .fr-step { display: flex; gap: 0.8rem; padding: 0.95rem 0; }
+        .fr-step + .fr-step { border-top: 1px solid var(--border); }
+        .fr-step-n {
+            width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.76rem; font-weight: 700;
+            background: rgba(91,138,245,0.14); color: var(--blue);
+            border: 1px solid rgba(91,138,245,0.35);
+        }
+        .fr-step-body { flex: 1; min-width: 0; }
+        .fr-step-title { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+        .fr-step-hint  { font-size: 0.74rem; color: var(--text-muted); margin: 0.1rem 0 0.55rem; }
+
+        /* Category cards — a bigger target than a dropdown, and each one can
+           carry a line of its own explaining what belongs in it, which is what
+           stops everything arriving tagged "other". */
+        .fr-cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem; }
+        .fr-cat {
+            text-align: left; padding: 0.6rem 0.65rem; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--bg-elevated);
+            cursor: pointer; transition: all .12s; color: var(--text-primary);
+        }
+        .fr-cat:hover { border-color: rgba(91,138,245,0.55); }
+        .fr-cat.selected { border-color: var(--blue); background: rgba(91,138,245,0.10); }
+        .fr-cat-name { font-size: 0.8rem; font-weight: 600; display: block; }
+        .fr-cat-desc { font-size: 0.68rem; color: var(--text-muted); display: block; margin-top: 0.15rem; line-height: 1.35; }
+
+        .fr-counter { font-size: 0.68rem; color: var(--text-muted); text-align: right; margin-top: 0.2rem; font-variant-numeric: tabular-nums; }
+        .fr-counter.over { color: var(--bs-danger); }
+
+        /* Drop zone for screenshots and mockups. */
+        .fr-drop {
+            border: 1px dashed var(--border); border-radius: 8px;
+            padding: 1.1rem; text-align: center; cursor: pointer;
+            transition: all .12s; background: var(--bg-elevated);
+        }
+        .fr-drop:hover, .fr-drop.dragover { border-color: var(--blue); background: rgba(91,138,245,0.06); }
+        .fr-drop-text { font-size: 0.78rem; color: var(--text-muted); }
+        .fr-drop-text b { color: var(--blue); font-weight: 600; }
+        .fr-shots { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.55rem; }
+        .fr-shot { position: relative; }
+        .fr-shot img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+        .fr-shot button {
+            position: absolute; top: -6px; right: -6px; width: 18px; height: 18px;
+            border-radius: 50%; border: 1px solid var(--border); background: var(--surface-2);
+            color: var(--text-muted); font-size: 0.7rem; line-height: 1; cursor: pointer; padding: 0;
+        }
+        .fr-shot button:hover { color: var(--bs-danger); border-color: var(--bs-danger); }
+
+        /* ── Sidebar ─────────────────────────────────────────────── */
+        .fr-tip { display: flex; gap: 0.6rem; padding: 0.5rem 0; }
+        .fr-tip + .fr-tip { border-top: 1px solid var(--border); }
+        .fr-tip-icon {
+            width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(91,138,245,0.12); color: var(--blue);
+        }
+        .fr-tip-name { font-size: 0.78rem; font-weight: 600; }
+        .fr-tip-desc { font-size: 0.7rem; color: var(--text-muted); line-height: 1.4; }
+
+        .fr-recent { display: block; padding: 0.5rem 0; text-decoration: none; }
+        .fr-recent + .fr-recent { border-top: 1px solid var(--border); }
+        .fr-recent:hover .fr-recent-title { color: var(--blue); }
+        .fr-recent-title { font-size: 0.79rem; font-weight: 500; color: var(--text-primary); }
+        .fr-recent-meta { font-size: 0.68rem; color: var(--text-muted); margin-top: 0.2rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+        /* ── Chips: category + lifecycle ─────────────────────────── */
         .prop-tag {
             display: inline-block; font-size: 0.62rem; padding: 2px 8px;
             border-radius: 999px; font-weight: 600;
@@ -23,9 +120,6 @@
         .prop-tag-feature     { background: rgba(74,222,128,0.18);  color: #4ade80; }
         .prop-tag-performance { background: rgba(167,139,250,0.18); color: #c4b5fd; }
         .prop-tag-other       { background: rgba(148,163,184,0.18); color: #94a3b8; }
-
-        /* Status chips — slightly more saturated than tag chips so
-           lifecycle state pops next to the category. */
         .prop-status {
             display: inline-block; font-size: 0.62rem; padding: 2px 8px;
             border-radius: 4px; font-weight: 600;
@@ -37,17 +131,14 @@
         .prop-status-done        { background: rgba(74,222,128,0.22);  color: #4ade80; }
         .prop-status-declined    { background: rgba(248,113,113,0.22); color: #f87171; }
 
-        /* Filter pills. Active pill bumps the border + bg. */
-        .filter-pill {
-            display: inline-block; font-size: 0.75rem;
-            padding: 3px 12px; border-radius: 999px;
-            border: 1px solid var(--border); color: var(--text-muted);
-            text-decoration: none; transition: all .12s;
+        .role-badge {
+            font-size: 0.62rem; padding: 2px 8px; border-radius: 999px;
+            font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
         }
-        .filter-pill:hover  { border-color: var(--blue); color: var(--text-primary); }
-        .filter-pill.active { border-color: var(--blue); color: var(--blue); background: rgba(91,138,245,0.10); }
+        .role-admin       { background: rgba(var(--bs-danger-rgb), 0.2); color: var(--bs-danger); }
+        .role-contributor { background: rgba(91,138,245,0.2); color: var(--blue); }
 
-        /* Forum-style row. Click anywhere outside the buttons to expand. */
+        /* ── The full list ───────────────────────────────────────── */
         .prop-row {
             display: flex; align-items: center; gap: 0.75rem;
             padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--border);
@@ -56,10 +147,7 @@
         .prop-row:hover { background: rgba(255,255,255,0.02); }
         .prop-row.expanded { background: rgba(91,138,245,0.04); }
         .prop-row:last-child { border-bottom: none; }
-        .prop-avatar {
-            width: 36px; height: 36px; border-radius: 50%;
-            object-fit: cover; border: 1px solid var(--border); flex-shrink: 0;
-        }
+        .prop-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
         .prop-avatar-fallback {
             width: 36px; height: 36px; border-radius: 50%; background: #3a7bd5;
             color: #fff; display: flex; align-items: center; justify-content: center;
@@ -68,10 +156,13 @@
         .prop-title { font-size: 0.92rem; font-weight: 500; color: var(--text-primary); }
         .prop-meta  { font-size: 0.72rem; color: var(--text-muted); }
         .prop-stat  { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+        @media (max-width: 575px) {
+            /* Avatar and the comment count are the first things worth losing;
+               the title, the vote and the status are the row. */
+            .prop-avatar, .prop-avatar-fallback, .prop-stat { display: none; }
+            .prop-row { padding: 0.6rem 0.6rem; gap: 0.5rem; }
+        }
 
-        /* Vote button — same affordance as the old listing. Stops
-           click propagation so voting doesn't toggle the expanded
-           card open. */
         .vote-btn {
             display: inline-flex; align-items: center; gap: 4px;
             font-size: 0.78rem; padding: 2px 10px;
@@ -81,28 +172,9 @@
         }
         .vote-btn:hover  { border-color: var(--bs-warning); color: var(--bs-warning); }
         .vote-btn.voted  { border-color: var(--bs-warning); color: var(--bs-warning); background: rgba(251,191,36,0.1); }
-        /* Greyed-out self-vote — same shape, but reads as disabled. */
-        .vote-btn.disabled {
-            opacity: 0.45; cursor: not-allowed;
-            color: var(--text-muted); border-color: var(--border);
-        }
+        .vote-btn.disabled { opacity: 0.45; cursor: not-allowed; color: var(--text-muted); border-color: var(--border); }
         .vote-btn.disabled:hover { color: var(--text-muted); border-color: var(--border); }
 
-        /* Collapsed new-request card. The <details> summary acts as a
-           click target shaped like the page's other cards so the form
-           looks at-rest, not always-open. */
-        details.new-request > summary {
-            cursor: pointer; list-style: none;
-            padding: 0.55rem 0.85rem; font-size: 0.85rem;
-            color: var(--blue); user-select: none;
-        }
-        details.new-request > summary::-webkit-details-marker { display: none; }
-        details.new-request > summary::before {
-            content: '+ '; font-weight: 600; color: var(--blue);
-        }
-        details.new-request[open] > summary::before { content: '− '; }
-
-        /* Expanded panel. Sits below the row when open; lazy-loaded. */
         .prop-detail {
             padding: 0.9rem 1.1rem; background: var(--surface-2);
             border-bottom: 1px solid var(--border); font-size: 0.88rem;
@@ -110,13 +182,13 @@
         .prop-detail :where(h1,h2,h3) { font-size: 1rem; margin-top: 0.5rem; }
         .prop-detail p { margin-bottom: 0.5rem; }
         .prop-detail pre { font-size: 0.78rem; padding: 0.5rem; background: rgba(0,0,0,0.25); border-radius: 4px; }
+        .prop-detail img { max-width: 100%; height: auto; border-radius: 6px; }
         .prop-comment {
             padding: 0.5rem 0.7rem; border-left: 2px solid var(--border);
             margin-top: 0.4rem; background: rgba(0,0,0,0.10); border-radius: 0 4px 4px 0;
         }
         .prop-comment-meta { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.2rem; }
 
-        /* Duplicate-detection hint under the title input. */
         .dup-hint {
             margin-top: 0.4rem; padding: 0.5rem 0.7rem;
             background: rgba(251,191,36,0.08);
@@ -126,104 +198,282 @@
         .dup-hint a { color: var(--bs-warning); text-decoration: none; }
         .dup-hint a:hover { text-decoration: underline; }
     </style>
-    <div class="container mt-4 site-container">
-        <div class="d-flex align-items-baseline gap-3 mb-3">
-            <div>
-                <p class="mb-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:500;">Community</p>
-                <h2 class="mb-0" style="font-size:1.25rem;font-weight:600;">Feature Requests</h2>
-                <p class="mb-0 mt-1" style="font-size:0.78rem;color:var(--text-muted);">
-                    File requests for the site, vote on others, comment on what you'd like to see. {{if .IsAdmin}}As a mod, you can change status, retag, and promote any of these to canonical (locked) so they become part of the seeded site flow.{{end}}
+
+    <div class="container mt-4 page">
+
+        {{/* ── Header ─────────────────────────────────────────── */}}
+        <div class="fr-hero">
+            <div style="flex:1;min-width:0;">
+                <p class="mb-1" style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);font-weight:600;">Community</p>
+                <h2>Feature Requests</h2>
+                <p>
+                    Have an idea to make amenzb better? Share it here, vote on what
+                    others have asked for, and help shape what gets built next.
+                    {{if .IsAdmin}}<br><span style="color:var(--blue);">As a mod you can set status, retag, and promote a request to the canonical site flow.</span>{{end}}
                 </p>
             </div>
+            {{if .CurrentUserID}}
+            <a href="/flow/proposals?mine=1" class="btn btn-sm {{if .FilterMine}}btn-primary{{else}}btn-outline-primary{{end}}" style="flex-shrink:0;font-size:0.76rem;">
+                My Requests
+            </a>
+            {{end}}
         </div>
 
-        {{/* New-request form. Posts via JS fetch to /flow/node so we
-             reuse the canvas's existing CreateNode endpoint. Tag
-             dropdown injects a structured template into the
-             description box (e.g. "Steps to reproduce" for bugs) so
-             reports come in a useful shape from the start.
-             Duplicate detection runs as the user types the title —
-             the response shows up under the title row, not as a
-             modal, so power users can ignore it without an extra
-             click. */}}
-        <details class="card mb-3 new-request" id="new-request-card">
-            <summary>File a new request</summary>
-            <div class="card-body" style="border-top:1px solid var(--border);">
-                <div class="mb-2">
-                    <label class="form-label" style="font-size:0.78rem;">Title <span class="text-danger">*</span></label>
-                    <input id="new-title" class="form-control form-control-sm" type="text" maxlength="200" placeholder="e.g. Add per-poster RSS feed">
-                    <div id="dup-hint" class="dup-hint" style="display:none;"></div>
-                </div>
-                <div class="row g-2 mb-2">
-                    <div class="col-md-3">
-                        <label class="form-label" style="font-size:0.78rem;">Type</label>
-                        <select id="new-tag" class="form-select form-select-sm">
-                            <option value="">— pick a type —</option>
-                            <option value="ui">UI</option>
-                            <option value="bug">Bug</option>
-                            <option value="feature">Feature</option>
-                            <option value="performance">Performance</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                    <div class="col-md-9">
-                        <label class="form-label" style="font-size:0.78rem;">Description</label>
-                        <textarea id="new-desc" class="form-control form-control-sm" rows="5" maxlength="2000" placeholder="Pick a Type to get a template, or just describe it in your own words. Markdown supported."></textarea>
-                    </div>
-                </div>
-                <div class="d-flex gap-2 align-items-center">
-                    <button id="btn-new" class="btn btn-sm btn-primary" type="button">Submit request</button>
-                    <span id="new-status" style="font-size:0.78rem;color:var(--text-muted);"></span>
-                </div>
-            </div>
-        </details>
-
-        {{/* Filter strip — tag pills + status pills + sort dropdown.
-             Each pill is a plain link with the active filters in the
-             query string, so back/forward + bookmarking + sharing
-             "show me only the bug reports" all work without JS. */}}
+        {{/* ── Filter strip ───────────────────────────────────────
+             Pills carry their counts, and a pill with nothing behind it is
+             not rendered at all — clicking one only ever led to "no requests
+             match", which reads as a broken page rather than an empty
+             category. "All" and whichever pill is active always render, so
+             the strip never loses the way back. */}}
+        {{$tag := .FilterTag}}{{$status := .FilterStatus}}{{$sort := .FilterSort}}
+        {{$f := .Facets}}
+        {{$mineQS := ""}}{{if .FilterMine}}{{$mineQS = "&mine=1"}}{{end}}
         <div class="card mb-3">
-            <div class="card-body py-2">
-                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                    <span style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Type</span>
-                    {{$activeTag := .FilterTag}}
-                    {{$activeStatus := .FilterStatus}}
-                    {{$activeSort := .FilterSort}}
-                    {{$qsBase := ""}}
-                    {{if $activeStatus}}{{$qsBase = print "&status=" $activeStatus}}{{end}}
-                    {{if and $activeSort (ne $activeSort "newest")}}{{$qsBase = print $qsBase "&sort=" $activeSort}}{{end}}
-                    <a class="filter-pill {{if not $activeTag}}active{{end}}" href="/flow/proposals?tag={{$qsBase}}">All</a>
-                    <a class="filter-pill {{if eq $activeTag "ui"}}active{{end}}"          href="/flow/proposals?tag=ui{{$qsBase}}">UI</a>
-                    <a class="filter-pill {{if eq $activeTag "bug"}}active{{end}}"         href="/flow/proposals?tag=bug{{$qsBase}}">Bug</a>
-                    <a class="filter-pill {{if eq $activeTag "feature"}}active{{end}}"     href="/flow/proposals?tag=feature{{$qsBase}}">Feature</a>
-                    <a class="filter-pill {{if eq $activeTag "performance"}}active{{end}}" href="/flow/proposals?tag=performance{{$qsBase}}">Performance</a>
-                    <a class="filter-pill {{if eq $activeTag "other"}}active{{end}}"       href="/flow/proposals?tag=other{{$qsBase}}">Other</a>
+            <div class="fr-filters">
+                {{$qsBase := $mineQS}}
+                {{if $status}}{{$qsBase = print $qsBase "&status=" $status}}{{end}}
+                {{if and $sort (ne $sort "newest")}}{{$qsBase = print $qsBase "&sort=" $sort}}{{end}}
+                <div class="fr-filter-row">
+                    <span class="fr-filter-label">Type</span>
+                    <a class="filter-pill {{if not $tag}}active{{end}}" href="/flow/proposals?tag={{$qsBase}}">All <span class="pill-n">{{$f.Total}}</span></a>
+                    {{range $slug := strs "ui" "bug" "feature" "performance" "other"}}
+                        {{$n := index $f.Tags $slug}}
+                        {{if or $n (eq $tag $slug)}}
+                        <a class="filter-pill {{if eq $tag $slug}}active{{end}}" href="/flow/proposals?tag={{$slug}}{{$qsBase}}">
+                            {{tagLabel $slug}} <span class="pill-n">{{$n}}</span>
+                        </a>
+                        {{end}}
+                    {{end}}
+                    {{/* Requests filed before the type picker existed have no
+                         tag, and there is no pill value meaning "no tag" —
+                         without this they are reachable from nothing. */}}
+                    {{if $f.Untagged}}
+                    <a class="filter-pill {{if eq $tag "untagged"}}active{{end}}" href="/flow/proposals?tag=untagged{{$qsBase}}">
+                        Untagged <span class="pill-n">{{$f.Untagged}}</span>
+                    </a>
+                    {{end}}
                 </div>
-                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                    <span style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Status</span>
-                    {{$qsTagSort := ""}}
-                    {{if $activeTag}}{{$qsTagSort = print "&tag=" $activeTag}}{{end}}
-                    {{if and $activeSort (ne $activeSort "newest")}}{{$qsTagSort = print $qsTagSort "&sort=" $activeSort}}{{end}}
-                    <a class="filter-pill {{if not $activeStatus}}active{{end}}"           href="/flow/proposals?status={{$qsTagSort}}">All</a>
-                    <a class="filter-pill {{if eq $activeStatus "open"}}active{{end}}"        href="/flow/proposals?status=open{{$qsTagSort}}">Open</a>
-                    <a class="filter-pill {{if eq $activeStatus "planned"}}active{{end}}"     href="/flow/proposals?status=planned{{$qsTagSort}}">Planned</a>
-                    <a class="filter-pill {{if eq $activeStatus "in_progress"}}active{{end}}" href="/flow/proposals?status=in_progress{{$qsTagSort}}">In Progress</a>
-                    <a class="filter-pill {{if eq $activeStatus "done"}}active{{end}}"        href="/flow/proposals?status=done{{$qsTagSort}}">Done</a>
-                    <a class="filter-pill {{if eq $activeStatus "declined"}}active{{end}}"    href="/flow/proposals?status=declined{{$qsTagSort}}">Declined</a>
+
+                {{$qsTagSort := $mineQS}}
+                {{if $tag}}{{$qsTagSort = print $qsTagSort "&tag=" $tag}}{{end}}
+                {{if and $sort (ne $sort "newest")}}{{$qsTagSort = print $qsTagSort "&sort=" $sort}}{{end}}
+                <div class="fr-filter-row">
+                    <span class="fr-filter-label">Status</span>
+                    <a class="filter-pill {{if not $status}}active{{end}}" href="/flow/proposals?status={{$qsTagSort}}">All <span class="pill-n">{{$f.Total}}</span></a>
+                    {{range $slug := strs "open" "planned" "in_progress" "done" "declined"}}
+                        {{$n := index $f.Statuses $slug}}
+                        {{if or $n (eq $status $slug)}}
+                        <a class="filter-pill {{if eq $status $slug}}active{{end}}" href="/flow/proposals?status={{$slug}}{{$qsTagSort}}">
+                            {{statusLabel $slug}} <span class="pill-n">{{$n}}</span>
+                        </a>
+                        {{end}}
+                    {{end}}
                 </div>
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Sort</span>
-                    {{$qsTagStatus := ""}}
-                    {{if $activeTag}}{{$qsTagStatus = print "&tag=" $activeTag}}{{end}}
-                    {{if $activeStatus}}{{$qsTagStatus = print $qsTagStatus "&status=" $activeStatus}}{{end}}
-                    <a class="filter-pill {{if or (eq $activeSort "newest") (not $activeSort)}}active{{end}}" href="/flow/proposals?sort=newest{{$qsTagStatus}}">Newest</a>
-                    <a class="filter-pill {{if eq $activeSort "top"}}active{{end}}"    href="/flow/proposals?sort=top{{$qsTagStatus}}">Top</a>
-                    <a class="filter-pill {{if eq $activeSort "active"}}active{{end}}" href="/flow/proposals?sort=active{{$qsTagStatus}}">Active</a>
-                    <span class="ms-auto" style="font-size:0.72rem;color:var(--text-muted);">{{.TotalCount}} request{{if ne .TotalCount 1}}s{{end}}</span>
+
+                {{$qsTagStatus := $mineQS}}
+                {{if $tag}}{{$qsTagStatus = print $qsTagStatus "&tag=" $tag}}{{end}}
+                {{if $status}}{{$qsTagStatus = print $qsTagStatus "&status=" $status}}{{end}}
+                <div class="fr-filter-row">
+                    <span class="fr-filter-label">Sort</span>
+                    <a class="filter-pill {{if or (eq $sort "newest") (not $sort)}}active{{end}}" href="/flow/proposals?sort=newest{{$qsTagStatus}}">Newest</a>
+                    <a class="filter-pill {{if eq $sort "top"}}active{{end}}"    href="/flow/proposals?sort=top{{$qsTagStatus}}">Top</a>
+                    <a class="filter-pill {{if eq $sort "active"}}active{{end}}" href="/flow/proposals?sort=active{{$qsTagStatus}}">Active</a>
+                    <span class="ms-auto" style="font-size:0.7rem;color:var(--text-muted);">
+                        {{.TotalCount}} request{{if ne .TotalCount 1}}s{{end}}{{if .FilterMine}} by you{{end}}
+                    </span>
                 </div>
             </div>
         </div>
 
+        <div class="fr-cols">
+            {{/* ── Left: the form ─────────────────────────────────
+                 Open on the page rather than behind a summary. It was a
+                 collapsed <details>, which hid the single action this page
+                 exists for on a page that had nothing else on it. */}}
+            <div class="card" id="new-request-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <h3 style="font-size:1rem;font-weight:600;margin:0;">Create a new feature request</h3>
+                    </div>
+                    <p style="font-size:0.76rem;color:var(--text-muted);margin:0;">Let us know what you'd like to see.</p>
+
+                    <div class="fr-step">
+                        <div class="fr-step-n">1</div>
+                        <div class="fr-step-body">
+                            <div class="fr-step-title">What's your idea?</div>
+                            <div class="fr-step-hint">A clear, specific title helps others find and vote for it.</div>
+                            <input id="new-title" class="form-control form-control-sm" type="text" maxlength="100"
+                                   placeholder="Summarise your request in one line">
+                            <div class="fr-counter"><span id="title-count">0</span> / 100</div>
+                            <div id="dup-hint" class="dup-hint" style="display:none;"></div>
+                        </div>
+                    </div>
+
+                    <div class="fr-step">
+                        <div class="fr-step-n">2</div>
+                        <div class="fr-step-body">
+                            <div class="fr-step-title">Category</div>
+                            <div class="fr-step-hint">Pick the one that fits best — it decides which template the description starts from.</div>
+                            <div class="fr-cats" id="cat-cards">
+                                <button type="button" class="fr-cat" data-tag="ui">
+                                    <span class="fr-cat-name">UI</span>
+                                    <span class="fr-cat-desc">Improvements to the interface and how it feels to use</span>
+                                </button>
+                                <button type="button" class="fr-cat" data-tag="bug">
+                                    <span class="fr-cat-name">Bug</span>
+                                    <span class="fr-cat-desc">Something is broken or not behaving as documented</span>
+                                </button>
+                                <button type="button" class="fr-cat" data-tag="feature">
+                                    <span class="fr-cat-name">Feature</span>
+                                    <span class="fr-cat-desc">New functionality that does not exist yet</span>
+                                </button>
+                                <button type="button" class="fr-cat" data-tag="performance">
+                                    <span class="fr-cat-name">Performance</span>
+                                    <span class="fr-cat-desc">Speed, stability, or resource use</span>
+                                </button>
+                                <button type="button" class="fr-cat" data-tag="other">
+                                    <span class="fr-cat-name">Other</span>
+                                    <span class="fr-cat-desc">Anything that does not fit the rest</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="fr-step">
+                        <div class="fr-step-n">3</div>
+                        <div class="fr-step-body">
+                            <div class="fr-step-title">Describe your idea</div>
+                            <div class="fr-step-hint">What problem does it solve, and how would it work? The more detail, the better.</div>
+                            {{/* The site's shared markdown editor. Emitting its
+                                 markup is all that is required — the host's
+                                 footer wires every .md-editor on the page, so
+                                 the toolbar and the Preview tab come for free
+                                 and stay identical to the forum and the wiki. */}}
+                            <div class="md-editor" data-md-policy="forum">
+                                <div class="md-toolbar" role="toolbar" aria-label="Formatting">
+                                    <button type="button" class="md-btn" data-md="bold"   title="Bold (Ctrl+B)"><strong>B</strong></button>
+                                    <button type="button" class="md-btn" data-md="italic" title="Italic (Ctrl+I)"><em>I</em></button>
+                                    <button type="button" class="md-btn" data-md="link"   title="Link" aria-label="Link">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                                    </button>
+                                    <button type="button" class="md-btn" data-md="quote"  title="Quote">&gt;</button>
+                                    <button type="button" class="md-btn" data-md="list"   title="Bullet list">&bull;</button>
+                                    <button type="button" class="md-btn" data-md="code"   title="Inline code">&lt;/&gt;</button>
+                                    <span class="md-toolbar-spacer"></span>
+                                    <button type="button" class="md-btn md-tab is-active" data-md-view="edit">Edit</button>
+                                    <button type="button" class="md-btn md-tab"           data-md-view="preview">Preview</button>
+                                </div>
+                                <textarea class="md-textarea" id="new-desc" name="description" rows="8" maxlength="4000"
+                                          placeholder="Explain it in detail. What problem does it solve? How would it work?"></textarea>
+                                <div class="md-preview" hidden></div>
+                                <div class="md-hint">
+                                    Markdown supported — <code>**bold**</code> <code>*italic*</code>
+                                    <code>&gt; quote</code> <code>`code`</code> <code>[link](url)</code>
+                                </div>
+                            </div>
+                            <div class="fr-counter"><span id="desc-count">0</span> / 4000</div>
+                        </div>
+                    </div>
+
+                    {{if .UploadsOn}}
+                    <div class="fr-step">
+                        <div class="fr-step-n">4</div>
+                        <div class="fr-step-body">
+                            <div class="fr-step-title">Screenshots <span style="font-weight:400;color:var(--text-muted);font-size:0.8rem;">(optional)</span></div>
+                            <div class="fr-step-hint">A picture of the problem, or a mockup of the idea. Added to the description as markdown.</div>
+                            <div class="fr-drop" id="drop-zone" tabindex="0" role="button" aria-label="Add a screenshot">
+                                <div class="fr-drop-text">Drag an image here, or <b>choose a file</b><br>
+                                    <span style="font-size:0.68rem;">PNG, JPEG, GIF or WebP &middot; up to 2 MB each</span>
+                                </div>
+                                <input type="file" id="file-input" accept="image/*" multiple hidden>
+                            </div>
+                            <div class="fr-shots" id="shots"></div>
+                        </div>
+                    </div>
+                    {{end}}
+
+                    <div class="d-flex gap-2 align-items-center pt-3" style="border-top:1px solid var(--border);">
+                        <button id="btn-new" class="btn btn-sm btn-primary" type="button">Submit request</button>
+                        <button id="btn-cancel" class="btn btn-sm btn-outline-secondary" type="button">Clear</button>
+                        <span id="new-status" style="font-size:0.78rem;color:var(--text-muted);"></span>
+                    </div>
+                </div>
+            </div>
+
+            {{/* ── Right: guidance + what the place looks like ───── */}}
+            <div>
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h3 style="font-size:0.88rem;font-weight:600;margin:0 0 0.4rem;">Before you submit</h3>
+                        <div class="fr-tip">
+                            <div class="fr-tip-icon">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                            </div>
+                            <div>
+                                <div class="fr-tip-name">Search first</div>
+                                <div class="fr-tip-desc">Start typing a title and we'll show anything similar. Voting on an existing request counts for more than a duplicate.</div>
+                            </div>
+                        </div>
+                        <div class="fr-tip">
+                            <div class="fr-tip-icon">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg>
+                            </div>
+                            <div>
+                                <div class="fr-tip-name">One idea per request</div>
+                                <div class="fr-tip-desc">A list of ten cannot be given a status or voted on. Separate requests each get tracked.</div>
+                            </div>
+                        </div>
+                        <div class="fr-tip">
+                            <div class="fr-tip-icon">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10M6 20v-6M18 20V4"/></svg>
+                            </div>
+                            <div>
+                                <div class="fr-tip-name">Say why, not just what</div>
+                                <div class="fr-tip-desc">What you were trying to do when you wanted it is usually the most useful part.</div>
+                            </div>
+                        </div>
+                        <div class="fr-tip">
+                            <div class="fr-tip-icon">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 4 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 9.7l5.4-.8z"/></svg>
+                            </div>
+                            <div>
+                                <div class="fr-tip-name">Votes set the order</div>
+                                <div class="fr-tip-desc">What gets built next is largely what has the most votes, so vote on anything you'd use.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <h3 style="font-size:0.88rem;font-weight:600;margin:0 0 0.2rem;">Recent requests</h3>
+                        {{if .Recent}}
+                        {{range .Recent}}
+                        <a class="fr-recent" href="#prop-{{.ID}}">
+                            <div class="fr-recent-title">{{.Label}}</div>
+                            <div class="fr-recent-meta">
+                                {{if .Tag}}<span class="prop-tag prop-tag-{{.Tag}}">{{.Tag}}</span>{{end}}
+                                <span class="prop-status prop-status-{{.Status}}">{{statusLabel .Status}}</span>
+                                <span>&#9650; {{.VoteCount}}</span>
+                                <span>{{relativeTime .CreatedAt}}</span>
+                            </div>
+                        </a>
+                        {{end}}
+                        <a href="#all-requests" class="btn btn-sm btn-outline-primary w-100 mt-2" style="font-size:0.74rem;">View all requests</a>
+                        {{else}}
+                        <p style="font-size:0.74rem;color:var(--text-muted);margin:0.4rem 0 0;">
+                            Nothing yet — yours would be the first.
+                        </p>
+                        {{end}}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{/* ── The full, filterable list ──────────────────────── */}}
+        <h3 id="all-requests" style="font-size:0.95rem;font-weight:600;margin:1.4rem 0 0.6rem;">
+            {{if .FilterMine}}Your requests{{else}}All requests{{end}}
+        </h3>
         {{if .Proposals}}
         <div class="card">
             <div id="prop-list">
@@ -240,18 +490,18 @@
                         <div class="prop-title" style="overflow:hidden;text-overflow:ellipsis;">
                             {{.Label}}
                             {{if .Tag}}<span class="prop-tag prop-tag-{{.Tag}} ms-1">{{.Tag}}</span>{{end}}
-                            <span class="prop-status prop-status-{{.Status}} ms-1">{{if eq .Status "in_progress"}}In Progress{{else}}{{.Status}}{{end}}</span>
+                            <span class="prop-status prop-status-{{.Status}} ms-1">{{statusLabel .Status}}</span>
                         </div>
                         <div class="prop-meta">
                             <a href="/u/{{.Username}}" onclick="event.stopPropagation();" style="color:var(--text-muted);text-decoration:none;">{{.Username}}</a>
                             {{if eq .UserRole "admin"}}<span class="role-badge role-admin ms-1">Admin</span>
                             {{else if eq .UserRole "contributor"}}<span class="role-badge role-contributor ms-1">Contributor</span>{{end}}
-                            <span class="ms-2">#{{.ID}} · {{.CreatedAt.Format "Jan 02, 15:04"}}</span>
+                            <span class="ms-2">#{{.ID}} &middot; {{relativeTime .CreatedAt}}</span>
                         </div>
                     </div>
-                    <div class="prop-stat" title="Comments">💬 {{.CommentCount}}</div>
+                    <div class="prop-stat" title="Comments">{{.CommentCount}} comment{{if ne .CommentCount 1}}s{{end}}</div>
                     <button class="vote-btn btn-vote{{if $isOwn}} disabled{{end}}" data-id="{{.ID}}" type="button" title="{{if $isOwn}}You can't vote on your own request{{else}}Vote for this request{{end}}" onclick="event.stopPropagation();">
-                        ▲ <span class="vote-count">{{.VoteCount}}</span>
+                        &#9650; <span class="vote-count">{{.VoteCount}}</span>
                     </button>
                 </div>
                 <div class="prop-detail" id="detail-{{.ID}}" style="display:none;"></div>
@@ -259,23 +509,26 @@
             </div>
         </div>
         {{else}}
-        <div class="alert alert-info py-3" style="font-size:0.88rem;">
-            {{if or .FilterTag .FilterStatus}}
-            No requests match the current filters. <a href="/flow/proposals" style="color:var(--blue);">Clear filters</a>.
-            {{else}}
-            No requests yet. Use the form above to file the first one.
-            {{end}}
+        <div class="card">
+            <div class="card-body text-center py-4">
+                {{if or .FilterTag .FilterStatus .FilterMine}}
+                <p style="font-size:0.88rem;margin:0 0 0.5rem;">
+                    {{if .FilterMine}}You haven't filed a request yet.{{else}}No requests match these filters.{{end}}
+                </p>
+                <a href="/flow/proposals" class="btn btn-sm btn-outline-primary" style="font-size:0.76rem;">Show everything</a>
+                {{else}}
+                <p style="font-size:0.88rem;margin:0 0 0.35rem;">No requests yet.</p>
+                <p style="font-size:0.76rem;color:var(--text-muted);margin:0;">The form above is the whole process — say what you'd like and it lands here.</p>
+                {{end}}
+            </div>
         </div>
         {{end}}
 
         {{.Pagination}}
 
-        {{/* Power-user escape hatch — the canvas-style editor with
-             ports, mockup nodes, side-by-side diffs, history is still
-             at /flow for anyone who wants the full graph view. Linked
-             discreetly so casual users aren't pushed there. */}}
         <p class="mt-3" style="font-size:0.72rem;color:var(--text-muted);">
-            Looking for the visual canvas? <a href="/flow" style="color:var(--blue);">Open it here</a> — same data, graph view with mockups + history.
+            Prefer the visual canvas? <a href="/flow" style="color:var(--blue);">Open it here</a> — same data, graph view with mockups and history.
+            Need help instead? Try the <a href="/help" style="color:var(--blue);">help docs</a> or ask in the <a href="/community" style="color:var(--blue);">forums</a>.
         </p>
     </div>
 
@@ -293,14 +546,16 @@
         // ── New-request form ───────────────────────────────────────
         const $title  = document.getElementById('new-title');
         const $desc   = document.getElementById('new-desc');
-        const $tag    = document.getElementById('new-tag');
         const $btn    = document.getElementById('btn-new');
+        const $cancel = document.getElementById('btn-cancel');
         const $status = document.getElementById('new-status');
         const $dupHint = document.getElementById('dup-hint');
+        const $cats   = document.getElementById('cat-cards');
 
-        // Per-tag templates. Pre-fill structured prompts so bug reports
-        // and feature requests come in with the context mods need to
-        // triage. Empty string for 'other' (and for the unset case).
+        // The category is held here rather than in a <select>, because the
+        // picker is now a set of cards. One place decides what gets posted.
+        let chosenTag = '';
+
         const TAG_TEMPLATES = {
             bug:         "Steps to reproduce:\n1. \n2. \n\nExpected:\n\nActual:\n\nBrowser/OS:",
             feature:     "Why I want this:\n\nHow I'd use it:",
@@ -309,22 +564,41 @@
             other:       "",
             "":          ""
         };
-        // Track whether the user has typed into the description so we
-        // don't clobber their text when they switch tags. Once they've
-        // edited, we leave the box alone.
         let descUserEdited = false;
-        $desc.addEventListener('input', () => { descUserEdited = true; });
-        $tag.addEventListener('change', () => {
-            const t = TAG_TEMPLATES[$tag.value] || '';
-            if (!descUserEdited && t) {
-                $desc.value = t;
-            }
-        });
+        if ($desc) $desc.addEventListener('input', () => { descUserEdited = true; countDesc(); });
 
-        // Duplicate-detection hint. Debounced so we don't fire on
-        // every keystroke; 350ms is comfortable for typing speed.
+        if ($cats) {
+            $cats.addEventListener('click', (e) => {
+                const card = e.target.closest('.fr-cat');
+                if (!card) return;
+                // Clicking the selected card again clears it — the tag is
+                // optional server-side, and a picker you cannot un-pick is
+                // the kind of thing people submit around.
+                const tag = card.dataset.tag || '';
+                chosenTag = (chosenTag === tag) ? '' : tag;
+                $cats.querySelectorAll('.fr-cat').forEach(el => {
+                    el.classList.toggle('selected', el.dataset.tag === chosenTag);
+                });
+                const tpl = TAG_TEMPLATES[chosenTag] || '';
+                if (!descUserEdited && tpl && $desc) { $desc.value = tpl; countDesc(); }
+            });
+        }
+
+        // Character counters. Shown because both fields are capped by
+        // maxlength, and silently stopping at the limit reads as a stuck
+        // keyboard when nothing says what the limit is.
+        function countTitle(){
+            const el = document.getElementById('title-count');
+            if (el && $title) el.textContent = $title.value.length;
+        }
+        function countDesc(){
+            const el = document.getElementById('desc-count');
+            if (el && $desc) el.textContent = $desc.value.length;
+        }
+
         let dupTimer = null;
-        $title.addEventListener('input', () => {
+        if ($title) $title.addEventListener('input', () => {
+            countTitle();
             clearTimeout(dupTimer);
             const q = $title.value.trim();
             if (q.length < 4) { $dupHint.style.display = 'none'; return; }
@@ -337,11 +611,11 @@
                 const body = await r.json();
                 const matches = (body && body.matches) || [];
                 if (!matches.length) { $dupHint.style.display = 'none'; return; }
-                let html = '<strong>Looks similar to:</strong><ul style="margin:0.3rem 0 0 1rem;padding:0;">';
+                let html = '<strong>Already asked?</strong><ul style="margin:0.3rem 0 0 1rem;padding:0;">';
                 for (const m of matches) {
                     html += '<li><a href="/flow/proposals#prop-' + m.id + '">'
                           + escapeHtml(m.label)
-                          + '</a> <span style="color:var(--text-muted);">— ▲'
+                          + '</a> <span style="color:var(--text-muted);">— &#9650;'
                           + (m.vote_count|0) + ' · ' + escapeHtml(m.username)
                           + '</span></li>';
                 }
@@ -351,10 +625,78 @@
             } catch (_) { /* silent — hint is best-effort */ }
         }
 
+        // ── Screenshots ────────────────────────────────────────────
+        // Uploaded immediately and appended to the description as markdown,
+        // so the image rides along in the one field the server already
+        // stores and renders. No second attachment table, and an image is
+        // still there if the member edits the text around it.
+        const $drop  = document.getElementById('drop-zone');
+        const $file  = document.getElementById('file-input');
+        const $shots = document.getElementById('shots');
+
+        async function uploadImage(file) {
+            const fd = new FormData();
+            fd.append('file', file);
+            const r = await fetch('/flow/proposals/upload', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'X-CSRF-Token': CSRF },
+                body: fd,
+            });
+            const body = await r.json().catch(() => null);
+            if (!r.ok || !body || !body.ok) {
+                throw new Error((body && body.error) || ('upload failed (' + r.status + ')'));
+            }
+            return body.url;
+        }
+
+        async function handleFiles(files) {
+            for (const file of files) {
+                if (!file.type.startsWith('image/')) continue;
+                $status.textContent = 'Uploading ' + file.name + '…';
+                $status.style.color = 'var(--text-muted)';
+                try {
+                    const url = await uploadImage(file);
+                    const thumb = document.createElement('div');
+                    thumb.className = 'fr-shot';
+                    thumb.innerHTML = '<img src="' + escapeHtml(url) + '" alt="">'
+                                    + '<button type="button" title="Remove">&times;</button>';
+                    thumb.querySelector('button').addEventListener('click', () => {
+                        // Remove both the thumbnail and the markdown it added,
+                        // or the description keeps an image the member thinks
+                        // they deleted.
+                        const md = '\n![screenshot](' + url + ')\n';
+                        if ($desc) { $desc.value = $desc.value.replace(md, ''); countDesc(); }
+                        thumb.remove();
+                    });
+                    $shots.appendChild(thumb);
+                    if ($desc) { $desc.value += '\n![screenshot](' + url + ')\n'; countDesc(); }
+                    $status.textContent = '';
+                } catch (err) {
+                    $status.textContent = err.message;
+                    $status.style.color = 'var(--bs-danger)';
+                }
+            }
+        }
+
+        if ($drop && $file) {
+            $drop.addEventListener('click', () => $file.click());
+            $drop.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $file.click(); }
+            });
+            $file.addEventListener('change', () => { handleFiles($file.files); $file.value = ''; });
+            ['dragenter','dragover'].forEach(ev =>
+                $drop.addEventListener(ev, (e) => { e.preventDefault(); $drop.classList.add('dragover'); }));
+            ['dragleave','drop'].forEach(ev =>
+                $drop.addEventListener(ev, (e) => { e.preventDefault(); $drop.classList.remove('dragover'); }));
+            $drop.addEventListener('drop', (e) => {
+                if (e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+            });
+        }
+
         async function submitRequest() {
             const title = ($title.value || '').trim();
             if (!title) {
-                $status.textContent = 'Title is required.';
+                $status.textContent = 'A title is required.';
                 $status.style.color = 'var(--bs-danger)';
                 $title.focus();
                 return;
@@ -362,10 +704,9 @@
             $btn.disabled = true;
             $status.textContent = 'Submitting…';
             $status.style.color = 'var(--text-muted)';
-            // Random position in the lower-half of the canvas. The
-            // canonical seeds occupy y ≈ 0–700; new proposals scatter
-            // below so users opening the canvas don't see an overlap
-            // pile on (0, 0).
+            // Random position in the lower half of the canvas. The canonical
+            // seeds occupy y ~ 0-700; new proposals scatter below so opening
+            // the canvas does not show a pile on (0, 0).
             const x = 200 + Math.floor(Math.random() * 1600);
             const y = 800 + Math.floor(Math.random() * 600);
             try {
@@ -376,8 +717,8 @@
                     body: JSON.stringify({
                         kind:        'user-proposal',
                         label:       title,
-                        description: ($desc.value || '').trim(),
-                        tag:         $tag.value || '',
+                        description: ($desc ? $desc.value : '').trim(),
+                        tag:         chosenTag,
                         x: x, y: y,
                     }),
                 });
@@ -387,7 +728,6 @@
                 }
                 $status.textContent = 'Submitted.';
                 $status.style.color = 'var(--bs-success)';
-                // Reload so the new request appears in the list.
                 setTimeout(() => location.reload(), 300);
             } catch (err) {
                 $status.textContent = 'Failed: ' + err.message;
@@ -396,8 +736,17 @@
             }
         }
         if ($btn) $btn.addEventListener('click', submitRequest);
-        // Cmd/Ctrl+Enter inside any field submits.
-        [$title, $desc, $tag].forEach(el => {
+        if ($cancel) $cancel.addEventListener('click', () => {
+            if ($title) $title.value = '';
+            if ($desc)  $desc.value = '';
+            if ($shots) $shots.innerHTML = '';
+            chosenTag = ''; descUserEdited = false;
+            if ($cats) $cats.querySelectorAll('.fr-cat').forEach(el => el.classList.remove('selected'));
+            $dupHint.style.display = 'none';
+            $status.textContent = '';
+            countTitle(); countDesc();
+        });
+        [$title, $desc].forEach(el => {
             if (!el) return;
             el.addEventListener('keydown', (e) => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -411,11 +760,6 @@
         document.addEventListener('click', async (e) => {
             const vbtn = e.target.closest('.btn-vote');
             if (!vbtn) return;
-            // Self-vote shortcut: the row's data-own attribute is the
-            // server's verdict on whether this is the viewer's own
-            // post. The vote handler also rejects these with a 400,
-            // but bailing client-side avoids the round-trip + alert
-            // noise.
             if (vbtn.classList.contains('disabled')) return;
             const id = vbtn.dataset.id;
             vbtn.disabled = true;
@@ -437,13 +781,10 @@
         });
 
         // ── Inline expand: click row → fetch details + comments ─────
-        const detailCache = new Map(); // id → rendered HTML, so a re-expand is instant.
+        const detailCache = new Map();
         document.addEventListener('click', (e) => {
             const row = e.target.closest('.prop-row');
             if (!row) return;
-            // Ignore clicks inside vote buttons or links — the
-            // event.stopPropagation on those still triggers the
-            // delegated handler on some older browsers; double-check.
             if (e.target.closest('.btn-vote, a, button')) return;
             const id = row.dataset.id;
             const detail = document.getElementById('detail-' + id);
@@ -475,6 +816,21 @@
                 });
         });
 
+        // A request linked from the sidebar or a duplicate hint arrives as
+        // #prop-<id>. Open it rather than only scrolling to a collapsed row,
+        // which looks like the link went nowhere.
+        function openFromHash() {
+            const m = (location.hash || '').match(/^#prop-(\d+)$/);
+            if (!m) return;
+            const row = document.getElementById('prop-' + m[1]);
+            if (!row) return;
+            row.scrollIntoView({ block: 'center' });
+            row.click();
+        }
+        window.addEventListener('hashchange', openFromHash);
+
+        countTitle(); countDesc();
+        openFromHash();
         function renderDetail(d) {
             let html = '';
             if (d.description_html) {

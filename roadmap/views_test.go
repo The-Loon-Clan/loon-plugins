@@ -70,12 +70,7 @@ func TestPagesRender(t *testing.T) {
 		t.Error("flow canvas lost its cytoscape script")
 	}
 
-	out = testRender(t, "flow_proposals.html", gin.H{
-		"ActiveNav": "community", "Proposals": []*FlowProposal{sampleProposal()},
-		"Pagination": template.HTML("<nav>pager</nav>"),
-		"FilterTag":  "", "FilterStatus": "", "FilterSort": "newest",
-		"TotalCount": 1, "CurrentUserID": 7,
-	})
+	out = testRender(t, "flow_proposals.html", proposalsData())
 	if !strings.Contains(out, "Better search") {
 		t.Error("proposals page missing the proposal")
 	}
@@ -161,10 +156,125 @@ func TestEveryPostFormCarriesTheCSRFField(t *testing.T) {
 
 func TestPagesRenderEmpty(t *testing.T) {
 	out := testRender(t, "flow_proposals.html", gin.H{
-		"Proposals": []*FlowProposal{}, "Pagination": template.HTML(""),
+		"Proposals": []*FlowProposal{}, "Recent": []*FlowProposal{},
+		"Pagination": template.HTML(""),
 		"FilterSort": "newest", "TotalCount": 0, "CurrentUserID": 0,
+		"Facets": &FlowProposalFacets{Tags: map[string]int{}, Statuses: map[string]int{}},
 	})
 	if out == "" {
 		t.Error("empty proposals page did not render")
+	}
+	// The empty page is the one a member is most likely to be looking at
+	// -- there is one request on it today -- so the form has to be the
+	// thing they find, not a "no requests" notice.
+	if !strings.Contains(out, "Create a new feature request") {
+		t.Error("the empty page does not offer the form, which is the only thing to do on it")
+	}
+}
+
+// proposalsData is one realistic render's worth of view model. Kept in one
+// place because every test below asserts on a different part of the same
+// page, and a field added to the handler has to reach all of them at once.
+func proposalsData() gin.H {
+	return gin.H{
+		"ActiveNav":  "community",
+		"Proposals":  []*FlowProposal{sampleProposal()},
+		"Recent":     []*FlowProposal{sampleProposal()},
+		"Pagination": template.HTML("<nav>pager</nav>"),
+		"FilterTag":  "", "FilterStatus": "", "FilterSort": "newest",
+		"FilterMine": false,
+		"TotalCount": 1, "CurrentUserID": 7,
+		"UploadsOn": true,
+		"Facets": &FlowProposalFacets{
+			Tags:     map[string]int{"bug": 4, "feature": 2},
+			Statuses: map[string]int{"open": 5, "done": 1},
+			Untagged: 1, Total: 6,
+		},
+	}
+}
+
+// Filter pills carry their counts, and pills with nothing behind them are
+// not rendered.
+//
+// The strip was fifteen pills with no counts over a page holding a single
+// request, so nearly every click landed on "no requests match the current
+// filters" -- which reads as a broken page rather than an empty category.
+func TestFilterPillsShowCountsAndHideEmptyOnes(t *testing.T) {
+	out := testRender(t, "flow_proposals.html", proposalsData())
+
+	for _, want := range []string{"Bug", "Feature", "Open", "Done", "Untagged"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("filter strip is missing the %q pill, which has requests behind it", want)
+		}
+	}
+	// Nothing is tagged performance or ui, and nothing is planned or
+	// declined -- those pills would be dead ends.
+	for _, unwanted := range []string{"Performance", "Planned", "Declined"} {
+		if strings.Contains(out, ">"+unwanted+" ") {
+			t.Errorf("rendered a %q pill with no requests behind it -- clicking it "+
+				"can only ever report an empty result", unwanted)
+		}
+	}
+}
+
+// An empty facet count must not take the page down with it.
+//
+// This is the shape that actually broke: the view model gained a field, a
+// caller did not supply it, and `index` on a nil map aborted the render
+// mid-write. html/template streams, so the reader gets a page that stops
+// halfway with no error anywhere on it.
+func TestProposalsSurvivesMissingFacets(t *testing.T) {
+	d := proposalsData()
+	d["Facets"] = &FlowProposalFacets{}
+	out := testRender(t, "flow_proposals.html", d)
+	if !strings.Contains(out, "All") {
+		t.Error("a facet-less render lost the filter strip entirely")
+	}
+	if !strings.Contains(out, "Better search") {
+		t.Error("render stopped before the listing -- a streamed abort, which " +
+			"shows as a page that simply ends")
+	}
+}
+
+// The category picker and the shared markdown editor are the two halves of
+// the form that are wired by markup rather than by an id lookup, so nothing
+// else would notice them going missing.
+func TestFormCarriesItsPickerAndEditor(t *testing.T) {
+	out := testRender(t, "flow_proposals.html", proposalsData())
+
+	for _, tag := range []string{"ui", "bug", "feature", "performance", "other"} {
+		if !strings.Contains(out, `data-tag="`+tag+`"`) {
+			t.Errorf("category card %q missing -- the picker cannot select it", tag)
+		}
+	}
+	// Emitting .md-editor is the entire integration: the host footer wires
+	// every one on the page. Lose the class and the toolbar and preview
+	// silently become a bare textarea.
+	if !strings.Contains(out, `class="md-editor"`) {
+		t.Error("the shared markdown editor markup is gone -- the toolbar and " +
+			"Preview tab are wired by the host from this class alone")
+	}
+	if !strings.Contains(out, `class="md-textarea" id="new-desc"`) {
+		t.Error("the description textarea lost the id the submit path reads it by")
+	}
+}
+
+// Attachments are optional: a host that wired no blob store must not render
+// an upload control that can only fail.
+func TestUploadControlFollowsTheHostCapability(t *testing.T) {
+	// Asserted on the MARKUP, not on the string "drop-zone": the script
+	// looks the element up by that name unconditionally and guards on the
+	// result, so a bare substring match is true either way and the test
+	// would pass whatever the template did.
+	on := testRender(t, "flow_proposals.html", proposalsData())
+	if !strings.Contains(on, `id="drop-zone"`) {
+		t.Error("uploads enabled but no drop zone rendered")
+	}
+	d := proposalsData()
+	d["UploadsOn"] = false
+	off := testRender(t, "flow_proposals.html", d)
+	if strings.Contains(off, `id="drop-zone"`) {
+		t.Error("rendered an upload control on a host with no file store -- " +
+			"every drop would 501")
 	}
 }

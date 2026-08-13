@@ -511,8 +511,9 @@ func (r *PGFlowStore) ListFlowProposals(ctx context.Context, f FlowProposalFilte
 		 WHERE n.deleted_at IS NULL
 		   AND n.locked = FALSE
 		   AND n.created_by IS NOT NULL
-		   AND ($1 = '' OR n.tag = $1)
-		   AND ($2 = '' OR n.status = $2)`, f.Tag, f.Status); err != nil {
+		   AND ($1 = '' OR ($1 = 'untagged' AND COALESCE(n.tag, '') = '') OR n.tag = $1)
+		   AND ($2 = '' OR n.status = $2)
+		   AND ($3 = 0 OR n.created_by = $3)`, f.Tag, f.Status, f.Mine); err != nil {
 		return nil, 0, err
 	}
 
@@ -538,11 +539,55 @@ func (r *PGFlowStore) ListFlowProposals(ctx context.Context, f FlowProposalFilte
 		 WHERE n.deleted_at IS NULL
 		   AND n.locked = FALSE
 		   AND n.created_by IS NOT NULL
-		   AND ($1 = '' OR n.tag = $1)
+		   AND ($1 = '' OR ($1 = 'untagged' AND COALESCE(n.tag, '') = '') OR n.tag = $1)
 		   AND ($2 = '' OR n.status = $2)
+		   AND ($3 = 0 OR n.created_by = $3)
 		 `+orderClause+`
-		 LIMIT $3 OFFSET $4`, f.Tag, f.Status, f.PageSize, offset)
+		 LIMIT $4 OFFSET $5`, f.Tag, f.Status, f.Mine, f.PageSize, offset)
 	return out, total, err
+}
+
+// CountFlowProposalFacets counts live proposals by tag and by status.
+//
+// One pass over the same rows the listing selects from, aggregated in the
+// database rather than by counting a page in Go — a page holds twenty rows
+// and the counts describe every request, so counting what was fetched would
+// silently report the page instead of the total.
+//
+// Untagged is its own bucket rather than a tag named "": the Type row needs
+// something to link to for requests that have no tag, and there is no filter
+// value that means "no tag" (an empty tag reads as "all" everywhere else).
+func (r *PGFlowStore) CountFlowProposalFacets(ctx context.Context) (*FlowProposalFacets, error) {
+	rows := []struct {
+		Tag    string `db:"tag"`
+		Status string `db:"status"`
+		N      int    `db:"n"`
+	}{}
+	if err := r.db.SelectContext(ctx, &rows, `
+		SELECT COALESCE(n.tag, '')        AS tag,
+		       COALESCE(n.status, 'open') AS status,
+		       COUNT(*)::int              AS n
+		  FROM flow_nodes n
+		 WHERE n.deleted_at IS NULL
+		   AND n.locked = FALSE
+		   AND n.created_by IS NOT NULL
+		 GROUP BY 1, 2`); err != nil {
+		return nil, err
+	}
+	f := &FlowProposalFacets{
+		Tags:     map[string]int{},
+		Statuses: map[string]int{},
+	}
+	for _, row := range rows {
+		if row.Tag == "" {
+			f.Untagged += row.N
+		} else {
+			f.Tags[row.Tag] += row.N
+		}
+		f.Statuses[row.Status] += row.N
+		f.Total += row.N
+	}
+	return f, nil
 }
 
 // SearchSimilarProposals powers the "did you mean…" hint on the new
