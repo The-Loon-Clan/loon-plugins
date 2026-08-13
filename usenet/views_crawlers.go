@@ -385,6 +385,36 @@ func (j crawlerJobVM) DutyLabel() string {
 // jobLogTail bounds how many log lines each job publishes cross-process.
 const jobLogTail = 25
 
+// pendingForward reports how many articles genuinely await the next forward
+// pass, which is NOT ServerHigh - HighWatermark.
+//
+// planGroup stops the forward crawl at ServerHigh - CrawlHeadroom deliberately:
+// an article number can exist before its overview line has finished arriving,
+// and fetching that frontier early records permanent coverage over a range that
+// came back short. A group that is COMPLETELY caught up therefore sits exactly
+// CrawlHeadroom below ServerHigh.
+//
+// The raw subtraction reported that gap as work, so every newsgroup on the
+// status page showed the same "+6,000 new" forever — 6,000 being the default
+// headroom, 2 x Batch. The identical number on every row is what gave it away.
+// The real cost was not the wrong figure but the lost distinction: an idle group
+// and a group 6,000 articles behind rendered the same, so the column could not
+// answer the only question it exists for.
+//
+// Subtracting the headroom makes an empty cell mean caught up and any number
+// mean genuine backlog.
+func pendingForward(serverHigh, highWatermark, headroom int64) int64 {
+	// A group that has never been crawled forward has no meaningful frontier —
+	// its whole range is backfill, which RemainingFmt reports separately.
+	if highWatermark <= 0 {
+		return 0
+	}
+	if n := serverHigh - highWatermark - headroom; n > 0 {
+		return n
+	}
+	return 0
+}
+
 func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (template.HTML, error) {
 	stats, err := p.st.stats(ctx)
 	if err != nil {
@@ -426,6 +456,11 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 		hostCounts = cs.PerGroup
 	}
 
+	// The forward crawl deliberately stops CrawlHeadroom short of the server's
+	// high water mark, so that distance is NOT backlog and must come out of the
+	// "+N new" figure below.
+	headroom := int64(p.effective(ctx).CrawlHeadroom)
+
 	var backbones []backboneVM
 	byBackbone := map[string]int{}
 	for _, g := range stats.Groups {
@@ -435,10 +470,8 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 			FwdAt:        fmtDateTime(g.HighWatermarkDate), BackAt: fmtDateTime(g.BackWatermarkDate),
 			LastCrawl: fmtTime(g.LastCrawl),
 		}
-		// "+N new" — what the server holds past our forward watermark; the
-		// number the operator watches to see the next pass's workload.
-		if g.HighWatermark > 0 && g.ServerHigh > g.HighWatermark {
-			vm.NewFmt = fmtComma(g.ServerHigh - g.HighWatermark)
+		if pending := pendingForward(g.ServerHigh, g.HighWatermark, headroom); pending > 0 {
+			vm.NewFmt = fmtComma(pending)
 		}
 		if !g.BackfillDone && g.BackWatermark > g.ServerLow {
 			vm.RemainingFmt = fmtComma(g.BackWatermark - g.ServerLow)

@@ -197,7 +197,12 @@
              Read it as: history reached back to ↩ (✓ = server's oldest),
              forward crawled to ↑, and +N articles await the next pass. Pure
              data — the enable/order/reset controls live on the Newsgroups
-             config tab. */}}
+             config tab.
+
+             +N excludes CrawlHeadroom, so NO number means caught up. It used
+             to print ServerHigh - HighWatermark raw, which meant a caught-up
+             group showed the headroom as backlog — every row reading the same
+             "+6,000 new" forever. See renderCrawlers. */}}
         <table class="table table-dark table-sm align-middle">
             <thead><tr>
                 <th>Group</th><th style="min-width:240px">Coverage</th>
