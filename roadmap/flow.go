@@ -571,6 +571,11 @@ func (h *Handlers) RecentProposals(c *gin.Context) {
 		"TotalCount":    total,
 		"CurrentUserID": currentUserID,
 		"UploadsOn":     deps.Files != nil,
+		// ?new=1 opens straight on the form. What makes this worth a
+		// parameter rather than a fragment: the link we hand people ("file
+		// it at /flow/proposals") should land on the thing we asked them to
+		// do, and a fragment would need JS to have run first.
+		"OpenNew": c.Query("new") != "",
 	})
 }
 

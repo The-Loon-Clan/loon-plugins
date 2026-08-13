@@ -193,6 +193,67 @@ func proposalsData() gin.H {
 	}
 }
 
+// Browsing and filing are separate tabs, and Requests is the one that opens.
+//
+// Both on one page put four steps of empty form above the requests on every
+// load, so reading what other people had asked for meant scrolling past a
+// blank form each time. Filing is the rarer act.
+func TestRequestsTabOpensFirst(t *testing.T) {
+	out := testRender(t, "flow_proposals.html", proposalsData())
+
+	for _, want := range []string{`id="pane-requests"`, `id="pane-new"`, `id="tab-requests"`, `id="tab-new"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("tab scaffolding missing %s", want)
+		}
+	}
+	// The Requests pane is the one carrying `show active`. Asserted by
+	// position rather than presence, because both panes contain the word.
+	reqAt := strings.Index(out, `id="pane-requests"`)
+	newAt := strings.Index(out, `id="pane-new"`)
+	reqActive := strings.Contains(out[max0(reqAt-120):reqAt], "show active")
+	newActive := strings.Contains(out[max0(newAt-120):newAt], "show active")
+	if !reqActive {
+		t.Error("the Requests pane is not the one that opens -- a member landing " +
+			"here sees an empty form instead of what has been asked for")
+	}
+	if newActive {
+		t.Error("both panes opened active, which renders the form and the list at once")
+	}
+}
+
+// ...except when there is nothing to read, where the form IS the page.
+func TestEmptyPageOpensOnTheForm(t *testing.T) {
+	d := proposalsData()
+	d["Proposals"] = []*FlowProposal{}
+	d["TotalCount"] = 0
+	out := testRender(t, "flow_proposals.html", d)
+	newAt := strings.Index(out, `id="pane-new"`)
+	if !strings.Contains(out[max0(newAt-120):newAt], "show active") {
+		t.Error("with no requests to browse the page still opened on the empty " +
+			"list, which is the one view with nothing on it")
+	}
+}
+
+// ?new=1 opens on the form. This is the link handed to members who are being
+// asked to file something, so it has to land on the form rather than on a
+// list they then have to find their way out of.
+func TestNewParamOpensTheForm(t *testing.T) {
+	d := proposalsData()
+	d["OpenNew"] = true
+	out := testRender(t, "flow_proposals.html", d)
+	newAt := strings.Index(out, `id="pane-new"`)
+	if !strings.Contains(out[max0(newAt-120):newAt], "show active") {
+		t.Error("?new=1 did not open the form tab")
+	}
+}
+
+func max0(n int) int {
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
 // Filter pills carry their counts, and pills with nothing behind them are
 // not rendered.
 //

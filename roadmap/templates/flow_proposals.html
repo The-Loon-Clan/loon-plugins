@@ -219,312 +219,355 @@
             {{end}}
         </div>
 
-        {{/* ── Filter strip ───────────────────────────────────────
-             Pills carry their counts, and a pill with nothing behind it is
-             not rendered at all — clicking one only ever led to "no requests
-             match", which reads as a broken page rather than an empty
-             category. "All" and whichever pill is active always render, so
-             the strip never loses the way back. */}}
-        {{$tag := .FilterTag}}{{$status := .FilterStatus}}{{$sort := .FilterSort}}
-        {{$f := .Facets}}
-        {{$mineQS := ""}}{{if .FilterMine}}{{$mineQS = "&mine=1"}}{{end}}
-        <div class="card mb-3">
-            <div class="fr-filters">
-                {{$qsBase := $mineQS}}
-                {{if $status}}{{$qsBase = print $qsBase "&status=" $status}}{{end}}
-                {{if and $sort (ne $sort "newest")}}{{$qsBase = print $qsBase "&sort=" $sort}}{{end}}
-                <div class="fr-filter-row">
-                    <span class="fr-filter-label">Type</span>
-                    <a class="filter-pill {{if not $tag}}active{{end}}" href="/flow/proposals?tag={{$qsBase}}">All <span class="pill-n">{{$f.Total}}</span></a>
-                    {{range $slug := strs "ui" "bug" "feature" "performance" "other"}}
-                        {{$n := index $f.Tags $slug}}
-                        {{if or $n (eq $tag $slug)}}
-                        <a class="filter-pill {{if eq $tag $slug}}active{{end}}" href="/flow/proposals?tag={{$slug}}{{$qsBase}}">
-                            {{tagLabel $slug}} <span class="pill-n">{{$n}}</span>
+
+        {{/* ── Tabs ────────────────────────────────────────────
+             Browsing and filing are different visits. Showing both at once
+             put the form -- four steps of it -- above the requests on every
+             load, so reading what other people had asked for meant scrolling
+             past a blank form every time.
+
+             The site's tab convention (ul.nav.tabs + Bootstrap's tab JS,
+             counts in .tab-count) rather than something bespoke, so this
+             behaves like the tabs everywhere else.
+
+             Requests is the default. Filing is the rarer act, and a page
+             that opens on an empty form tells a reader nothing about the
+             place they have just arrived at -- except when there is nothing
+             to read, where the form IS the page. */}}
+        {{$openNew := or .OpenNew (not .Proposals)}}
+        <ul class="nav tabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link{{if not $openNew}} active{{end}}" id="tab-requests"
+                        data-bs-toggle="tab" data-bs-target="#pane-requests"
+                        type="button" role="tab" aria-controls="pane-requests"
+                        aria-selected="{{if not $openNew}}true{{else}}false{{end}}">
+                    Requests <span class="tab-count">{{.TotalCount}}</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link{{if $openNew}} active{{end}}" id="tab-new"
+                        data-bs-toggle="tab" data-bs-target="#pane-new"
+                        type="button" role="tab" aria-controls="pane-new"
+                        aria-selected="{{if $openNew}}true{{else}}false{{end}}">
+                    New request
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content pt-3">
+            <div class="tab-pane fade{{if not $openNew}} show active{{end}}" id="pane-requests" role="tabpanel" aria-labelledby="tab-requests">
+
+            {{/* ── Filter strip ───────────────────────────────────────
+                 Pills carry their counts, and a pill with nothing behind it is
+                 not rendered at all — clicking one only ever led to "no requests
+                 match", which reads as a broken page rather than an empty
+                 category. "All" and whichever pill is active always render, so
+                 the strip never loses the way back. */}}
+            {{$tag := .FilterTag}}{{$status := .FilterStatus}}{{$sort := .FilterSort}}
+            {{$f := .Facets}}
+            {{$mineQS := ""}}{{if .FilterMine}}{{$mineQS = "&mine=1"}}{{end}}
+            <div class="card mb-3">
+                <div class="fr-filters">
+                    {{$qsBase := $mineQS}}
+                    {{if $status}}{{$qsBase = print $qsBase "&status=" $status}}{{end}}
+                    {{if and $sort (ne $sort "newest")}}{{$qsBase = print $qsBase "&sort=" $sort}}{{end}}
+                    <div class="fr-filter-row">
+                        <span class="fr-filter-label">Type</span>
+                        <a class="filter-pill {{if not $tag}}active{{end}}" href="/flow/proposals?tag={{$qsBase}}">All <span class="pill-n">{{$f.Total}}</span></a>
+                        {{range $slug := strs "ui" "bug" "feature" "performance" "other"}}
+                            {{$n := index $f.Tags $slug}}
+                            {{if or $n (eq $tag $slug)}}
+                            <a class="filter-pill {{if eq $tag $slug}}active{{end}}" href="/flow/proposals?tag={{$slug}}{{$qsBase}}">
+                                {{tagLabel $slug}} <span class="pill-n">{{$n}}</span>
+                            </a>
+                            {{end}}
+                        {{end}}
+                        {{/* Requests filed before the type picker existed have no
+                             tag, and there is no pill value meaning "no tag" —
+                             without this they are reachable from nothing. */}}
+                        {{if $f.Untagged}}
+                        <a class="filter-pill {{if eq $tag "untagged"}}active{{end}}" href="/flow/proposals?tag=untagged{{$qsBase}}">
+                            Untagged <span class="pill-n">{{$f.Untagged}}</span>
                         </a>
                         {{end}}
-                    {{end}}
-                    {{/* Requests filed before the type picker existed have no
-                         tag, and there is no pill value meaning "no tag" —
-                         without this they are reachable from nothing. */}}
-                    {{if $f.Untagged}}
-                    <a class="filter-pill {{if eq $tag "untagged"}}active{{end}}" href="/flow/proposals?tag=untagged{{$qsBase}}">
-                        Untagged <span class="pill-n">{{$f.Untagged}}</span>
-                    </a>
-                    {{end}}
-                </div>
+                    </div>
 
-                {{$qsTagSort := $mineQS}}
-                {{if $tag}}{{$qsTagSort = print $qsTagSort "&tag=" $tag}}{{end}}
-                {{if and $sort (ne $sort "newest")}}{{$qsTagSort = print $qsTagSort "&sort=" $sort}}{{end}}
-                <div class="fr-filter-row">
-                    <span class="fr-filter-label">Status</span>
-                    <a class="filter-pill {{if not $status}}active{{end}}" href="/flow/proposals?status={{$qsTagSort}}">All <span class="pill-n">{{$f.Total}}</span></a>
-                    {{range $slug := strs "open" "planned" "in_progress" "done" "declined"}}
-                        {{$n := index $f.Statuses $slug}}
-                        {{if or $n (eq $status $slug)}}
-                        <a class="filter-pill {{if eq $status $slug}}active{{end}}" href="/flow/proposals?status={{$slug}}{{$qsTagSort}}">
-                            {{statusLabel $slug}} <span class="pill-n">{{$n}}</span>
-                        </a>
+                    {{$qsTagSort := $mineQS}}
+                    {{if $tag}}{{$qsTagSort = print $qsTagSort "&tag=" $tag}}{{end}}
+                    {{if and $sort (ne $sort "newest")}}{{$qsTagSort = print $qsTagSort "&sort=" $sort}}{{end}}
+                    <div class="fr-filter-row">
+                        <span class="fr-filter-label">Status</span>
+                        <a class="filter-pill {{if not $status}}active{{end}}" href="/flow/proposals?status={{$qsTagSort}}">All <span class="pill-n">{{$f.Total}}</span></a>
+                        {{range $slug := strs "open" "planned" "in_progress" "done" "declined"}}
+                            {{$n := index $f.Statuses $slug}}
+                            {{if or $n (eq $status $slug)}}
+                            <a class="filter-pill {{if eq $status $slug}}active{{end}}" href="/flow/proposals?status={{$slug}}{{$qsTagSort}}">
+                                {{statusLabel $slug}} <span class="pill-n">{{$n}}</span>
+                            </a>
+                            {{end}}
                         {{end}}
-                    {{end}}
-                </div>
-
-                {{$qsTagStatus := $mineQS}}
-                {{if $tag}}{{$qsTagStatus = print $qsTagStatus "&tag=" $tag}}{{end}}
-                {{if $status}}{{$qsTagStatus = print $qsTagStatus "&status=" $status}}{{end}}
-                <div class="fr-filter-row">
-                    <span class="fr-filter-label">Sort</span>
-                    <a class="filter-pill {{if or (eq $sort "newest") (not $sort)}}active{{end}}" href="/flow/proposals?sort=newest{{$qsTagStatus}}">Newest</a>
-                    <a class="filter-pill {{if eq $sort "top"}}active{{end}}"    href="/flow/proposals?sort=top{{$qsTagStatus}}">Top</a>
-                    <a class="filter-pill {{if eq $sort "active"}}active{{end}}" href="/flow/proposals?sort=active{{$qsTagStatus}}">Active</a>
-                    <span class="ms-auto" style="font-size:0.7rem;color:var(--text-muted);">
-                        {{.TotalCount}} request{{if ne .TotalCount 1}}s{{end}}{{if .FilterMine}} by you{{end}}
-                    </span>
-                </div>
-            </div>
-        </div>
-
-        <div class="fr-cols">
-            {{/* ── Left: the form ─────────────────────────────────
-                 Open on the page rather than behind a summary. It was a
-                 collapsed <details>, which hid the single action this page
-                 exists for on a page that had nothing else on it. */}}
-            <div class="card" id="new-request-card">
-                <div class="card-body">
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <h3 style="font-size:1rem;font-weight:600;margin:0;">Create a new feature request</h3>
-                    </div>
-                    <p style="font-size:0.76rem;color:var(--text-muted);margin:0;">Let us know what you'd like to see.</p>
-
-                    <div class="fr-step">
-                        <div class="fr-step-n">1</div>
-                        <div class="fr-step-body">
-                            <div class="fr-step-title">What's your idea?</div>
-                            <div class="fr-step-hint">A clear, specific title helps others find and vote for it.</div>
-                            <input id="new-title" class="form-control form-control-sm" type="text" maxlength="100"
-                                   placeholder="Summarise your request in one line">
-                            <div class="fr-counter"><span id="title-count">0</span> / 100</div>
-                            <div id="dup-hint" class="dup-hint" style="display:none;"></div>
-                        </div>
                     </div>
 
-                    <div class="fr-step">
-                        <div class="fr-step-n">2</div>
-                        <div class="fr-step-body">
-                            <div class="fr-step-title">Category</div>
-                            <div class="fr-step-hint">Pick the one that fits best — it decides which template the description starts from.</div>
-                            <div class="fr-cats" id="cat-cards">
-                                <button type="button" class="fr-cat" data-tag="ui">
-                                    <span class="fr-cat-name">UI</span>
-                                    <span class="fr-cat-desc">Improvements to the interface and how it feels to use</span>
-                                </button>
-                                <button type="button" class="fr-cat" data-tag="bug">
-                                    <span class="fr-cat-name">Bug</span>
-                                    <span class="fr-cat-desc">Something is broken or not behaving as documented</span>
-                                </button>
-                                <button type="button" class="fr-cat" data-tag="feature">
-                                    <span class="fr-cat-name">Feature</span>
-                                    <span class="fr-cat-desc">New functionality that does not exist yet</span>
-                                </button>
-                                <button type="button" class="fr-cat" data-tag="performance">
-                                    <span class="fr-cat-name">Performance</span>
-                                    <span class="fr-cat-desc">Speed, stability, or resource use</span>
-                                </button>
-                                <button type="button" class="fr-cat" data-tag="other">
-                                    <span class="fr-cat-name">Other</span>
-                                    <span class="fr-cat-desc">Anything that does not fit the rest</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="fr-step">
-                        <div class="fr-step-n">3</div>
-                        <div class="fr-step-body">
-                            <div class="fr-step-title">Describe your idea</div>
-                            <div class="fr-step-hint">What problem does it solve, and how would it work? The more detail, the better.</div>
-                            {{/* The site's shared markdown editor. Emitting its
-                                 markup is all that is required — the host's
-                                 footer wires every .md-editor on the page, so
-                                 the toolbar and the Preview tab come for free
-                                 and stay identical to the forum and the wiki. */}}
-                            <div class="md-editor" data-md-policy="forum">
-                                <div class="md-toolbar" role="toolbar" aria-label="Formatting">
-                                    <button type="button" class="md-btn" data-md="bold"   title="Bold (Ctrl+B)"><strong>B</strong></button>
-                                    <button type="button" class="md-btn" data-md="italic" title="Italic (Ctrl+I)"><em>I</em></button>
-                                    <button type="button" class="md-btn" data-md="link"   title="Link" aria-label="Link">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                                    </button>
-                                    <button type="button" class="md-btn" data-md="quote"  title="Quote">&gt;</button>
-                                    <button type="button" class="md-btn" data-md="list"   title="Bullet list">&bull;</button>
-                                    <button type="button" class="md-btn" data-md="code"   title="Inline code">&lt;/&gt;</button>
-                                    <span class="md-toolbar-spacer"></span>
-                                    <button type="button" class="md-btn md-tab is-active" data-md-view="edit">Edit</button>
-                                    <button type="button" class="md-btn md-tab"           data-md-view="preview">Preview</button>
-                                </div>
-                                <textarea class="md-textarea" id="new-desc" name="description" rows="8" maxlength="4000"
-                                          placeholder="Explain it in detail. What problem does it solve? How would it work?"></textarea>
-                                <div class="md-preview" hidden></div>
-                                <div class="md-hint">
-                                    Markdown supported — <code>**bold**</code> <code>*italic*</code>
-                                    <code>&gt; quote</code> <code>`code`</code> <code>[link](url)</code>
-                                </div>
-                            </div>
-                            <div class="fr-counter"><span id="desc-count">0</span> / 4000</div>
-                        </div>
-                    </div>
-
-                    {{if .UploadsOn}}
-                    <div class="fr-step">
-                        <div class="fr-step-n">4</div>
-                        <div class="fr-step-body">
-                            <div class="fr-step-title">Screenshots <span style="font-weight:400;color:var(--text-muted);font-size:0.8rem;">(optional)</span></div>
-                            <div class="fr-step-hint">A picture of the problem, or a mockup of the idea. Added to the description as markdown.</div>
-                            <div class="fr-drop" id="drop-zone" tabindex="0" role="button" aria-label="Add a screenshot">
-                                <div class="fr-drop-text">Drag an image here, or <b>choose a file</b><br>
-                                    <span style="font-size:0.68rem;">PNG, JPEG, GIF or WebP &middot; up to 2 MB each</span>
-                                </div>
-                                <input type="file" id="file-input" accept="image/*" multiple hidden>
-                            </div>
-                            <div class="fr-shots" id="shots"></div>
-                        </div>
-                    </div>
-                    {{end}}
-
-                    <div class="d-flex gap-2 align-items-center pt-3" style="border-top:1px solid var(--border);">
-                        <button id="btn-new" class="btn btn-sm btn-primary" type="button">Submit request</button>
-                        <button id="btn-cancel" class="btn btn-sm btn-outline-secondary" type="button">Clear</button>
-                        <span id="new-status" style="font-size:0.78rem;color:var(--text-muted);"></span>
+                    {{$qsTagStatus := $mineQS}}
+                    {{if $tag}}{{$qsTagStatus = print $qsTagStatus "&tag=" $tag}}{{end}}
+                    {{if $status}}{{$qsTagStatus = print $qsTagStatus "&status=" $status}}{{end}}
+                    <div class="fr-filter-row">
+                        <span class="fr-filter-label">Sort</span>
+                        <a class="filter-pill {{if or (eq $sort "newest") (not $sort)}}active{{end}}" href="/flow/proposals?sort=newest{{$qsTagStatus}}">Newest</a>
+                        <a class="filter-pill {{if eq $sort "top"}}active{{end}}"    href="/flow/proposals?sort=top{{$qsTagStatus}}">Top</a>
+                        <a class="filter-pill {{if eq $sort "active"}}active{{end}}" href="/flow/proposals?sort=active{{$qsTagStatus}}">Active</a>
+                        <span class="ms-auto" style="font-size:0.7rem;color:var(--text-muted);">
+                            {{.TotalCount}} request{{if ne .TotalCount 1}}s{{end}}{{if .FilterMine}} by you{{end}}
+                        </span>
                     </div>
                 </div>
             </div>
-
-            {{/* ── Right: guidance + what the place looks like ───── */}}
-            <div>
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <h3 style="font-size:0.88rem;font-weight:600;margin:0 0 0.4rem;">Before you submit</h3>
-                        <div class="fr-tip">
-                            <div class="fr-tip-icon">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-                            </div>
-                            <div>
-                                <div class="fr-tip-name">Search first</div>
-                                <div class="fr-tip-desc">Start typing a title and we'll show anything similar. Voting on an existing request counts for more than a duplicate.</div>
-                            </div>
-                        </div>
-                        <div class="fr-tip">
-                            <div class="fr-tip-icon">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg>
-                            </div>
-                            <div>
-                                <div class="fr-tip-name">One idea per request</div>
-                                <div class="fr-tip-desc">A list of ten cannot be given a status or voted on. Separate requests each get tracked.</div>
-                            </div>
-                        </div>
-                        <div class="fr-tip">
-                            <div class="fr-tip-icon">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10M6 20v-6M18 20V4"/></svg>
-                            </div>
-                            <div>
-                                <div class="fr-tip-name">Say why, not just what</div>
-                                <div class="fr-tip-desc">What you were trying to do when you wanted it is usually the most useful part.</div>
-                            </div>
-                        </div>
-                        <div class="fr-tip">
-                            <div class="fr-tip-icon">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 4 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 9.7l5.4-.8z"/></svg>
-                            </div>
-                            <div>
-                                <div class="fr-tip-name">Votes set the order</div>
-                                <div class="fr-tip-desc">What gets built next is largely what has the most votes, so vote on anything you'd use.</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-body">
-                        <h3 style="font-size:0.88rem;font-weight:600;margin:0 0 0.2rem;">Recent requests</h3>
-                        {{if .Recent}}
-                        {{range .Recent}}
-                        <a class="fr-recent" href="#prop-{{.ID}}">
-                            <div class="fr-recent-title">{{.Label}}</div>
-                            <div class="fr-recent-meta">
-                                {{if .Tag}}<span class="prop-tag prop-tag-{{.Tag}}">{{.Tag}}</span>{{end}}
-                                <span class="prop-status prop-status-{{.Status}}">{{statusLabel .Status}}</span>
-                                <span>&#9650; {{.VoteCount}}</span>
-                                <span>{{relativeTime .CreatedAt}}</span>
-                            </div>
-                        </a>
-                        {{end}}
-                        <a href="#all-requests" class="btn btn-sm btn-outline-primary w-100 mt-2" style="font-size:0.74rem;">View all requests</a>
+            {{/* ── The full, filterable list ──────────────────────── */}}
+            <h3 id="all-requests" style="font-size:0.95rem;font-weight:600;margin:1.4rem 0 0.6rem;">
+                {{if .FilterMine}}Your requests{{else}}All requests{{end}}
+            </h3>
+            {{if .Proposals}}
+            <div class="card">
+                <div id="prop-list">
+                    {{$cuid := $.CurrentUserID}}
+                    {{range .Proposals}}
+                    {{$isOwn := and .CreatedBy (eq (deref .CreatedBy) $cuid)}}
+                    <div class="prop-row" data-id="{{.ID}}" id="prop-{{.ID}}" data-own="{{if $isOwn}}1{{else}}0{{end}}">
+                        {{if .AvatarPath}}
+                        <a href="/u/{{.Username}}" onclick="event.stopPropagation();"><img class="prop-avatar" src="{{.AvatarPath}}" alt=""></a>
                         {{else}}
-                        <p style="font-size:0.74rem;color:var(--text-muted);margin:0.4rem 0 0;">
-                            Nothing yet — yours would be the first.
-                        </p>
+                        <a href="/u/{{.Username}}" onclick="event.stopPropagation();" style="text-decoration:none;"><div class="prop-avatar-fallback">{{initial .Username}}</div></a>
                         {{end}}
+                        <div style="flex:1;min-width:0;">
+                            <div class="prop-title" style="overflow:hidden;text-overflow:ellipsis;">
+                                {{.Label}}
+                                {{if .Tag}}<span class="prop-tag prop-tag-{{.Tag}} ms-1">{{.Tag}}</span>{{end}}
+                                <span class="prop-status prop-status-{{.Status}} ms-1">{{statusLabel .Status}}</span>
+                            </div>
+                            <div class="prop-meta">
+                                <a href="/u/{{.Username}}" onclick="event.stopPropagation();" style="color:var(--text-muted);text-decoration:none;">{{.Username}}</a>
+                                {{if eq .UserRole "admin"}}<span class="role-badge role-admin ms-1">Admin</span>
+                                {{else if eq .UserRole "contributor"}}<span class="role-badge role-contributor ms-1">Contributor</span>{{end}}
+                                <span class="ms-2">#{{.ID}} &middot; {{relativeTime .CreatedAt}}</span>
+                            </div>
+                        </div>
+                        <div class="prop-stat" title="Comments">{{.CommentCount}} comment{{if ne .CommentCount 1}}s{{end}}</div>
+                        <button class="vote-btn btn-vote{{if $isOwn}} disabled{{end}}" data-id="{{.ID}}" type="button" title="{{if $isOwn}}You can't vote on your own request{{else}}Vote for this request{{end}}" onclick="event.stopPropagation();">
+                            &#9650; <span class="vote-count">{{.VoteCount}}</span>
+                        </button>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        {{/* ── The full, filterable list ──────────────────────── */}}
-        <h3 id="all-requests" style="font-size:0.95rem;font-weight:600;margin:1.4rem 0 0.6rem;">
-            {{if .FilterMine}}Your requests{{else}}All requests{{end}}
-        </h3>
-        {{if .Proposals}}
-        <div class="card">
-            <div id="prop-list">
-                {{$cuid := $.CurrentUserID}}
-                {{range .Proposals}}
-                {{$isOwn := and .CreatedBy (eq (deref .CreatedBy) $cuid)}}
-                <div class="prop-row" data-id="{{.ID}}" id="prop-{{.ID}}" data-own="{{if $isOwn}}1{{else}}0{{end}}">
-                    {{if .AvatarPath}}
-                    <a href="/u/{{.Username}}" onclick="event.stopPropagation();"><img class="prop-avatar" src="{{.AvatarPath}}" alt=""></a>
-                    {{else}}
-                    <a href="/u/{{.Username}}" onclick="event.stopPropagation();" style="text-decoration:none;"><div class="prop-avatar-fallback">{{initial .Username}}</div></a>
+                    <div class="prop-detail" id="detail-{{.ID}}" style="display:none;"></div>
                     {{end}}
-                    <div style="flex:1;min-width:0;">
-                        <div class="prop-title" style="overflow:hidden;text-overflow:ellipsis;">
-                            {{.Label}}
-                            {{if .Tag}}<span class="prop-tag prop-tag-{{.Tag}} ms-1">{{.Tag}}</span>{{end}}
-                            <span class="prop-status prop-status-{{.Status}} ms-1">{{statusLabel .Status}}</span>
+                </div>
+            </div>
+            {{else}}
+            <div class="card">
+                <div class="card-body text-center py-4">
+                    {{if or .FilterTag .FilterStatus .FilterMine}}
+                    <p style="font-size:0.88rem;margin:0 0 0.5rem;">
+                        {{if .FilterMine}}You haven't filed a request yet.{{else}}No requests match these filters.{{end}}
+                    </p>
+                    <a href="/flow/proposals" class="btn btn-sm btn-outline-primary" style="font-size:0.76rem;">Show everything</a>
+                    {{else}}
+                    <p style="font-size:0.88rem;margin:0 0 0.35rem;">No requests yet.</p>
+                    <p style="font-size:0.76rem;color:var(--text-muted);margin:0;">The form above is the whole process — say what you'd like and it lands here.</p>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+
+            {{.Pagination}}
+            </div>
+
+            <div class="tab-pane fade{{if $openNew}} show active{{end}}" id="pane-new" role="tabpanel" aria-labelledby="tab-new">
+
+            <div class="fr-cols">
+                {{/* ── Left: the form ─────────────────────────────────
+                     Open on the page rather than behind a summary. It was a
+                     collapsed <details>, which hid the single action this page
+                     exists for on a page that had nothing else on it. */}}
+                <div class="card" id="new-request-card">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <h3 style="font-size:1rem;font-weight:600;margin:0;">Create a new feature request</h3>
                         </div>
-                        <div class="prop-meta">
-                            <a href="/u/{{.Username}}" onclick="event.stopPropagation();" style="color:var(--text-muted);text-decoration:none;">{{.Username}}</a>
-                            {{if eq .UserRole "admin"}}<span class="role-badge role-admin ms-1">Admin</span>
-                            {{else if eq .UserRole "contributor"}}<span class="role-badge role-contributor ms-1">Contributor</span>{{end}}
-                            <span class="ms-2">#{{.ID}} &middot; {{relativeTime .CreatedAt}}</span>
+                        <p style="font-size:0.76rem;color:var(--text-muted);margin:0;">Let us know what you'd like to see.</p>
+
+                        <div class="fr-step">
+                            <div class="fr-step-n">1</div>
+                            <div class="fr-step-body">
+                                <div class="fr-step-title">What's your idea?</div>
+                                <div class="fr-step-hint">A clear, specific title helps others find and vote for it.</div>
+                                <input id="new-title" class="form-control form-control-sm" type="text" maxlength="100"
+                                       placeholder="Summarise your request in one line">
+                                <div class="fr-counter"><span id="title-count">0</span> / 100</div>
+                                <div id="dup-hint" class="dup-hint" style="display:none;"></div>
+                            </div>
+                        </div>
+
+                        <div class="fr-step">
+                            <div class="fr-step-n">2</div>
+                            <div class="fr-step-body">
+                                <div class="fr-step-title">Category</div>
+                                <div class="fr-step-hint">Pick the one that fits best — it decides which template the description starts from.</div>
+                                <div class="fr-cats" id="cat-cards">
+                                    <button type="button" class="fr-cat" data-tag="ui">
+                                        <span class="fr-cat-name">UI</span>
+                                        <span class="fr-cat-desc">Improvements to the interface and how it feels to use</span>
+                                    </button>
+                                    <button type="button" class="fr-cat" data-tag="bug">
+                                        <span class="fr-cat-name">Bug</span>
+                                        <span class="fr-cat-desc">Something is broken or not behaving as documented</span>
+                                    </button>
+                                    <button type="button" class="fr-cat" data-tag="feature">
+                                        <span class="fr-cat-name">Feature</span>
+                                        <span class="fr-cat-desc">New functionality that does not exist yet</span>
+                                    </button>
+                                    <button type="button" class="fr-cat" data-tag="performance">
+                                        <span class="fr-cat-name">Performance</span>
+                                        <span class="fr-cat-desc">Speed, stability, or resource use</span>
+                                    </button>
+                                    <button type="button" class="fr-cat" data-tag="other">
+                                        <span class="fr-cat-name">Other</span>
+                                        <span class="fr-cat-desc">Anything that does not fit the rest</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="fr-step">
+                            <div class="fr-step-n">3</div>
+                            <div class="fr-step-body">
+                                <div class="fr-step-title">Describe your idea</div>
+                                <div class="fr-step-hint">What problem does it solve, and how would it work? The more detail, the better.</div>
+                                {{/* The site's shared markdown editor. Emitting its
+                                     markup is all that is required — the host's
+                                     footer wires every .md-editor on the page, so
+                                     the toolbar and the Preview tab come for free
+                                     and stay identical to the forum and the wiki. */}}
+                                <div class="md-editor" data-md-policy="forum">
+                                    <div class="md-toolbar" role="toolbar" aria-label="Formatting">
+                                        <button type="button" class="md-btn" data-md="bold"   title="Bold (Ctrl+B)"><strong>B</strong></button>
+                                        <button type="button" class="md-btn" data-md="italic" title="Italic (Ctrl+I)"><em>I</em></button>
+                                        <button type="button" class="md-btn" data-md="link"   title="Link" aria-label="Link">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                                        </button>
+                                        <button type="button" class="md-btn" data-md="quote"  title="Quote">&gt;</button>
+                                        <button type="button" class="md-btn" data-md="list"   title="Bullet list">&bull;</button>
+                                        <button type="button" class="md-btn" data-md="code"   title="Inline code">&lt;/&gt;</button>
+                                        <span class="md-toolbar-spacer"></span>
+                                        <button type="button" class="md-btn md-tab is-active" data-md-view="edit">Edit</button>
+                                        <button type="button" class="md-btn md-tab"           data-md-view="preview">Preview</button>
+                                    </div>
+                                    <textarea class="md-textarea" id="new-desc" name="description" rows="8" maxlength="4000"
+                                              placeholder="Explain it in detail. What problem does it solve? How would it work?"></textarea>
+                                    <div class="md-preview" hidden></div>
+                                    <div class="md-hint">
+                                        Markdown supported — <code>**bold**</code> <code>*italic*</code>
+                                        <code>&gt; quote</code> <code>`code`</code> <code>[link](url)</code>
+                                    </div>
+                                </div>
+                                <div class="fr-counter"><span id="desc-count">0</span> / 4000</div>
+                            </div>
+                        </div>
+
+                        {{if .UploadsOn}}
+                        <div class="fr-step">
+                            <div class="fr-step-n">4</div>
+                            <div class="fr-step-body">
+                                <div class="fr-step-title">Screenshots <span style="font-weight:400;color:var(--text-muted);font-size:0.8rem;">(optional)</span></div>
+                                <div class="fr-step-hint">A picture of the problem, or a mockup of the idea. Added to the description as markdown.</div>
+                                <div class="fr-drop" id="drop-zone" tabindex="0" role="button" aria-label="Add a screenshot">
+                                    <div class="fr-drop-text">Drag an image here, or <b>choose a file</b><br>
+                                        <span style="font-size:0.68rem;">PNG, JPEG, GIF or WebP &middot; up to 2 MB each</span>
+                                    </div>
+                                    <input type="file" id="file-input" accept="image/*" multiple hidden>
+                                </div>
+                                <div class="fr-shots" id="shots"></div>
+                            </div>
+                        </div>
+                        {{end}}
+
+                        <div class="d-flex gap-2 align-items-center pt-3" style="border-top:1px solid var(--border);">
+                            <button id="btn-new" class="btn btn-sm btn-primary" type="button">Submit request</button>
+                            <button id="btn-cancel" class="btn btn-sm btn-outline-secondary" type="button">Clear</button>
+                            <span id="new-status" style="font-size:0.78rem;color:var(--text-muted);"></span>
                         </div>
                     </div>
-                    <div class="prop-stat" title="Comments">{{.CommentCount}} comment{{if ne .CommentCount 1}}s{{end}}</div>
-                    <button class="vote-btn btn-vote{{if $isOwn}} disabled{{end}}" data-id="{{.ID}}" type="button" title="{{if $isOwn}}You can't vote on your own request{{else}}Vote for this request{{end}}" onclick="event.stopPropagation();">
-                        &#9650; <span class="vote-count">{{.VoteCount}}</span>
-                    </button>
                 </div>
-                <div class="prop-detail" id="detail-{{.ID}}" style="display:none;"></div>
-                {{end}}
-            </div>
-        </div>
-        {{else}}
-        <div class="card">
-            <div class="card-body text-center py-4">
-                {{if or .FilterTag .FilterStatus .FilterMine}}
-                <p style="font-size:0.88rem;margin:0 0 0.5rem;">
-                    {{if .FilterMine}}You haven't filed a request yet.{{else}}No requests match these filters.{{end}}
-                </p>
-                <a href="/flow/proposals" class="btn btn-sm btn-outline-primary" style="font-size:0.76rem;">Show everything</a>
-                {{else}}
-                <p style="font-size:0.88rem;margin:0 0 0.35rem;">No requests yet.</p>
-                <p style="font-size:0.76rem;color:var(--text-muted);margin:0;">The form above is the whole process — say what you'd like and it lands here.</p>
-                {{end}}
-            </div>
-        </div>
-        {{end}}
 
-        {{.Pagination}}
+                {{/* ── Right: guidance + what the place looks like ───── */}}
+                <div>
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h3 style="font-size:0.88rem;font-weight:600;margin:0 0 0.4rem;">Before you submit</h3>
+                            <div class="fr-tip">
+                                <div class="fr-tip-icon">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                                </div>
+                                <div>
+                                    <div class="fr-tip-name">Search first</div>
+                                    <div class="fr-tip-desc">Start typing a title and we'll show anything similar. Voting on an existing request counts for more than a duplicate.</div>
+                                </div>
+                            </div>
+                            <div class="fr-tip">
+                                <div class="fr-tip-icon">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg>
+                                </div>
+                                <div>
+                                    <div class="fr-tip-name">One idea per request</div>
+                                    <div class="fr-tip-desc">A list of ten cannot be given a status or voted on. Separate requests each get tracked.</div>
+                                </div>
+                            </div>
+                            <div class="fr-tip">
+                                <div class="fr-tip-icon">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10M6 20v-6M18 20V4"/></svg>
+                                </div>
+                                <div>
+                                    <div class="fr-tip-name">Say why, not just what</div>
+                                    <div class="fr-tip-desc">What you were trying to do when you wanted it is usually the most useful part.</div>
+                                </div>
+                            </div>
+                            <div class="fr-tip">
+                                <div class="fr-tip-icon">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 4 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 9.7l5.4-.8z"/></svg>
+                                </div>
+                                <div>
+                                    <div class="fr-tip-name">Votes set the order</div>
+                                    <div class="fr-tip-desc">What gets built next is largely what has the most votes, so vote on anything you'd use.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body">
+                            <h3 style="font-size:0.88rem;font-weight:600;margin:0 0 0.2rem;">Recent requests</h3>
+                            {{if .Recent}}
+                            {{range .Recent}}
+                            <a class="fr-recent" href="#prop-{{.ID}}">
+                                <div class="fr-recent-title">{{.Label}}</div>
+                                <div class="fr-recent-meta">
+                                    {{if .Tag}}<span class="prop-tag prop-tag-{{.Tag}}">{{.Tag}}</span>{{end}}
+                                    <span class="prop-status prop-status-{{.Status}}">{{statusLabel .Status}}</span>
+                                    <span>&#9650; {{.VoteCount}}</span>
+                                    <span>{{relativeTime .CreatedAt}}</span>
+                                </div>
+                            </a>
+                            {{end}}
+                            <button type="button" class="btn btn-sm btn-outline-primary w-100 mt-2 js-show-requests" style="font-size:0.74rem;">View all requests</button>
+                            {{else}}
+                            <p style="font-size:0.74rem;color:var(--text-muted);margin:0.4rem 0 0;">
+                                Nothing yet — yours would be the first.
+                            </p>
+                            {{end}}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+
 
         <p class="mt-3" style="font-size:0.72rem;color:var(--text-muted);">
             Prefer the visual canvas? <a href="/flow" style="color:var(--blue);">Open it here</a> — same data, graph view with mockups and history.
@@ -816,6 +859,33 @@
                 });
         });
 
+        // Moving between the two tabs from inside them.
+        //
+        // Both the sidebar's "View all requests" and every #prop-<id> link
+        // live on the New request tab but point at a row on the Requests
+        // tab. Without switching first the target is inside a hidden pane,
+        // so the click appears to do nothing at all.
+        function showRequestsTab() {
+            const btn = document.getElementById('tab-requests');
+            if (!btn) return false;
+            if (btn.classList.contains('active')) return true;
+            // Use Bootstrap's own API where it exists so the tab state stays
+            // consistent with every other tab strip on the site; fall back to
+            // a plain click, which its delegated handler also honours.
+            if (window.bootstrap && window.bootstrap.Tab) {
+                window.bootstrap.Tab.getOrCreateInstance(btn).show();
+            } else {
+                btn.click();
+            }
+            return true;
+        }
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.js-show-requests')) {
+                e.preventDefault();
+                showRequestsTab();
+            }
+        });
+
         // A request linked from the sidebar or a duplicate hint arrives as
         // #prop-<id>. Open it rather than only scrolling to a collapsed row,
         // which looks like the link went nowhere.
@@ -824,8 +894,13 @@
             if (!m) return;
             const row = document.getElementById('prop-' + m[1]);
             if (!row) return;
-            row.scrollIntoView({ block: 'center' });
-            row.click();
+            showRequestsTab();
+            // After the pane is shown: a row inside a hidden pane has no
+            // layout, so scrolling to it before the switch lands nowhere.
+            requestAnimationFrame(() => {
+                row.scrollIntoView({ block: 'center' });
+                row.click();
+            });
         }
         window.addEventListener('hashchange', openFromHash);
 
