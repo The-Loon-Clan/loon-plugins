@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -25,7 +26,7 @@ type fakeHub struct{}
 
 func (fakeHub) Start()                                               {}
 func (fakeHub) Publish(context.Context, pluginapi.ChatMessage) error { return nil }
-func (fakeHub) Recent(context.Context, int) ([]pluginapi.ChatMessage, error) {
+func (fakeHub) Recent(context.Context, int, string, time.Time) ([]pluginapi.ChatMessage, error) {
 	return nil, nil
 }
 func (fakeHub) Subscribe(string) chan pluginapi.ChatMessage {

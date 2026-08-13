@@ -66,7 +66,13 @@ type ChatMessage struct {
 type ChatHub interface {
 	Start()
 	Publish(ctx context.Context, m ChatMessage) error
-	Recent(ctx context.Context, n int) ([]ChatMessage, error)
+	// Recent returns history. channelID "" is every channel; before is a
+	// scroll-back cursor (zero = newest page).
+	//
+	// The bots call this with ("", zero) — backfillChatHistory once used it to
+	// decide whether the ring was warm. The extra parameters exist for the
+	// page, which pages per channel.
+	Recent(ctx context.Context, n int, channelID string, before time.Time) ([]ChatMessage, error)
 	Subscribe(username string) chan ChatMessage
 	Unsubscribe(ch chan ChatMessage)
 
@@ -103,4 +109,11 @@ type ChatChannel struct {
 	// member-facing list filters on this, because a staff channel's name is a
 	// leak even with its messages withheld.
 	Public bool
+	// WebhookURL lets the site post into this channel as the member who typed.
+	// Empty when the bridge could not resolve one; the host keeps whatever it
+	// already had rather than treating that as a deletion.
+	//
+	// A CREDENTIAL — the token is in the URL. It travels worker to host and is
+	// never returned to a browser.
+	WebhookURL string
 }

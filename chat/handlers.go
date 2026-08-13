@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -59,10 +60,36 @@ func (h *Handlers) Send(c *gin.Context) {
 	h.rateMap[user.ID] = time.Now()
 	h.rateMu.Unlock()
 
-	webhookURL := deps.WebhookURL(c.Request.Context())
+	// Route to the channel the member is actually looking at.
+	//
+	// A Discord webhook is bound to ONE channel, so the single configured hook
+	// put every message into that channel whatever the member had open. The
+	// bridge now creates a webhook per channel, and this picks the right one.
+	//
+	// Falls back to the configured hook when the channel has none, so a guild
+	// where the bot lacks MANAGE_WEBHOOKS keeps working exactly as it did.
+	channelID := c.PostForm("channel")
+	if channelID == "" {
+		channelID = c.Query("channel")
+	}
+	webhookURL := ""
+	if channelID != "" && deps.ChannelWebhook != nil {
+		webhookURL = deps.ChannelWebhook(c.Request.Context(), channelID)
+	}
+	if webhookURL == "" {
+		webhookURL = deps.WebhookURL(c.Request.Context())
+	}
 	if webhookURL == "" {
 		deps.JSONError(c, http.StatusServiceUnavailable, "chat sending not configured")
 		return
+	}
+
+	// Thread replies are the SAME webhook plus a thread_id — the parent
+	// channel's hook addresses the thread, which is why chat_messages stores
+	// both ids as a pair. Discord takes it as a query parameter, not in the body.
+	sendURL := webhookURL + "?wait=true"
+	if threadID := c.PostForm("thread"); threadID != "" {
+		sendURL += "&thread_id=" + url.QueryEscape(threadID)
 	}
 
 	// Build the avatar URL for the webhook override.
@@ -86,7 +113,7 @@ func (h *Handlers) Send(c *gin.Context) {
 	// Discord webhooks are always discord.com — whitelist + SSRF-block so an
 	// admin-configured webhook URL can't be pointed at internal/metadata IPs.
 	client := httpclient.NewWhitelisted(10*time.Second, "discord.com", "discordapp.com")
-	resp, err := client.Post(webhookURL+"?wait=true", "application/json", bytes.NewReader(payload))
+	resp, err := client.Post(sendURL, "application/json", bytes.NewReader(payload))
 	if err != nil {
 		deps.JSONError(c, http.StatusBadGateway, "failed to send to Discord")
 		return
@@ -104,7 +131,18 @@ func (h *Handlers) Send(c *gin.Context) {
 // Recent returns the last N messages as JSON. Used by the chat page on
 // initial load before the SSE stream takes over for live updates.
 func (h *Handlers) Recent(c *gin.Context) {
-	msgs, err := deps.Recent(c.Request.Context(), 100)
+	// channel filters the stream; before pages backwards through it.
+	//
+	// The sidebar already linked ?channel=, and the page already changed its
+	// header to match — but the messages never filtered, so selecting a channel
+	// renamed the room and showed the same combined stream. That is worse than
+	// having no filter, because it looks like it worked.
+	//
+	// Both are passed through as opaque strings and parsed at the storage
+	// boundary. The channel id reaches a query parameter from a member, so the
+	// one place that builds SQL should not be the place that trusts it.
+	msgs, err := deps.Recent(c.Request.Context(), 100,
+		c.Query("channel"), c.Query("before"))
 	if err != nil {
 		deps.JSONError(c, http.StatusInternalServerError, "failed to load history")
 		return

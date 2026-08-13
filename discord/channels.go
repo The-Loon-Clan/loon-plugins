@@ -245,11 +245,19 @@ func (d *DiscordBotService) syncChannels(ctx context.Context, s *discordgo.Sessi
 		if ch.Type != discordgo.ChannelTypeGuildText && ch.Type != discordgo.ChannelTypeGuildNews {
 			continue
 		}
+		public := memberCanView(s, guildID, memberRole, ch.ID)
+		// Webhooks only for channels members can see. Creating one in a staff
+		// channel would be a send path into a room the site never shows.
+		hook := ""
+		if public {
+			hook = d.webhookFor(s, ch)
+		}
 		out = append(out, pluginapi.ChatChannel{
-			ID:       ch.ID,
-			Name:     ch.Name,
-			Position: ch.Position,
-			Public:   memberCanView(s, guildID, memberRole, ch.ID),
+			ID:         ch.ID,
+			Name:       ch.Name,
+			Position:   ch.Position,
+			Public:     public,
+			WebhookURL: hook,
 		})
 	}
 	if err := d.chat.SyncChannels(ctx, out); err != nil {
@@ -263,4 +271,59 @@ func (d *DiscordBotService) syncChannels(ctx context.Context, s *discordgo.Sessi
 		}
 	}
 	log.Printf("discord bot: synced %d text channel(s), %d public", len(out), public)
+}
+
+// webhookFor returns a send URL for a channel, creating one if needed.
+//
+// Sending used to go through a single configured webhook, which is bound to one
+// channel — so a member's message landed there no matter which channel they were
+// reading, and every new channel would have needed an operator to make another
+// one by hand. That is the hardcoding this change set exists to remove.
+//
+// Reuse before create, keyed on the bot's own application id: a guild often has
+// webhooks from other integrations, and adding one per sync would litter the
+// channel with duplicates named after us.
+//
+// A webhook rather than ChannelMessageSend because only a webhook carries a
+// per-message username and avatar override — which is what makes a site member's
+// message appear in Discord as that member rather than as the bot.
+func (d *DiscordBotService) webhookFor(s *discordgo.Session, ch *discordgo.Channel) string {
+	if s == nil || ch == nil {
+		return ""
+	}
+	hooks, err := s.ChannelWebhooks(ch.ID)
+	if err != nil {
+		// Usually Missing Permissions (MANAGE_WEBHOOKS). Not fatal and not
+		// worth failing the sync: the host keeps any URL it already had, and
+		// sending in this channel simply reports as unconfigured.
+		return ""
+	}
+	var appID string
+	if s.State != nil && s.State.User != nil {
+		appID = s.State.User.ID
+	}
+	for _, h := range hooks {
+		if h == nil || h.Token == "" {
+			continue
+		}
+		// Ours: created by this bot. h.User is the creator.
+		if appID != "" && h.User != nil && h.User.ID == appID {
+			return webhookURL(h)
+		}
+	}
+	created, err := s.WebhookCreate(ch.ID, "amenzb", "")
+	if err != nil || created == nil {
+		return ""
+	}
+	return webhookURL(created)
+}
+
+// webhookURL builds the execute URL. discordgo returns the id and token but no
+// assembled URL, and the token is what makes it usable — so this value is a
+// credential from here on.
+func webhookURL(h *discordgo.Webhook) string {
+	if h == nil || h.ID == "" || h.Token == "" {
+		return ""
+	}
+	return "https://discord.com/api/webhooks/" + h.ID + "/" + h.Token
 }

@@ -38,7 +38,10 @@ type Deps struct {
 
 	// Recent is the backlog the page loads before the stream takes over.
 	// Typed `any` because it is handed to the JSON encoder untouched.
-	Recent func(ctx context.Context, n int) (any, error)
+	// Recent is the backlog the page loads before the stream takes over.
+	// channelID "" is every channel; before is the scroll-back cursor, RFC3339
+	// or empty for the newest page.
+	Recent func(ctx context.Context, n int, channelID, before string) (any, error)
 
 	// Subscribe opens a live feed of already-encoded messages and returns a
 	// cancel. The cancel MUST be called or the host leaks a subscriber; the
@@ -56,9 +59,19 @@ type Deps struct {
 	OnlineCount func() int
 	OnlineUsers func() []string
 
-	// WebhookURL is the Discord channel webhook messages are posted to.
-	// Empty means sending is not configured and the endpoint says so.
+	// WebhookURL is the FALLBACK webhook: the single operator-configured one,
+	// used when the requested channel has none of its own. Empty means sending
+	// is not configured and the endpoint says so.
 	WebhookURL func(ctx context.Context) string
+
+	// ChannelWebhook returns the send URL for one channel, created by the
+	// bridge rather than by an operator. Empty when that channel has none —
+	// the caller falls back to WebhookURL so a guild that never got per-channel
+	// hooks keeps working exactly as before.
+	//
+	// A CREDENTIAL: the token is in the URL. It is read server-side and never
+	// returned to a browser.
+	ChannelWebhook func(ctx context.Context, channelID string) string
 	// InviteURL is the "join our Discord" link on the page. May be empty.
 	InviteURL func(ctx context.Context) string
 	// BaseURL is the site's public origin, for absolute avatar URLs — a

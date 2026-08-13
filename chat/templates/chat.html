@@ -275,8 +275,11 @@
             });
         }
 
-        function appendMessage(m) {
-            if (seenIDs[m.id]) return;
+        // Split from appendMessage so scroll-back can PREPEND the identical
+        // element. Two builders would drift, and the older half of the stream
+        // would slowly stop looking like the newer half.
+        function renderMessage(m) {
+            if (seenIDs[m.id]) return null;
             seenIDs[m.id] = true;
 
             var div = document.createElement('div');
@@ -324,15 +327,72 @@
                     '<div class="chat-body">' + escapeHTML(m.body || '') + '</div>' +
                 '</div>';
 
-            stream.appendChild(div);
+            return div;
+        }
+
+        function appendMessage(m) {
+            var el = renderMessage(m);
+            if (el) stream.appendChild(el);
         }
 
         function scrollToBottom() {
             stream.scrollTop = stream.scrollHeight;
         }
 
+        // Scroll-back. History only grew to matter once the bridge started
+        // backfilling every channel: one page of 100 was the whole archive
+        // before, and is now a fraction of it.
+        //
+        // Prepends and then RESTORES the scroll offset — appending older
+        // messages above the viewport otherwise yanks the reader upward by the
+        // height of everything just inserted.
+        function loadOlder() {
+            if (loadingOlder || reachedStart || !oldestAt) return;
+            loadingOlder = true;
+            var heightBefore = stream.scrollHeight;
+            fetch(chatURL('/api/chat/recent', {before: oldestAt}))
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    var msgs = (d && d.messages) || [];
+                    if (!msgs.length) { reachedStart = true; return; }
+                    oldestAt = msgs[0].at;
+                    // Insert oldest-first ABOVE what is already there.
+                    for (var i = msgs.length - 1; i >= 0; i--) {
+                        var el = renderMessage(msgs[i]);
+                        if (el) stream.insertBefore(el, stream.firstChild);
+                    }
+                    stream.scrollTop = stream.scrollHeight - heightBefore;
+                })
+                .catch(function() { /* transient: the next scroll retries */ })
+                .finally(function() { loadingOlder = false; });
+        }
+
+        stream.addEventListener('scroll', function() {
+            if (stream.scrollTop < 80) loadOlder();
+        });
+
+        // The channel currently being viewed, from the URL. Every request carries
+        // it: history, scroll-back and send. Without this the sidebar changed
+        // the page title and nothing else — the stream stayed combined, which
+        // looks like the filter worked and did not.
+        var activeChannel = new URLSearchParams(location.search).get('channel') || '';
+        // created_at of the oldest message on screen, used as the scroll-back
+        // cursor. A timestamp rather than an offset because messages arrive
+        // while you read: an offset would re-show or skip rows as the head moves.
+        var oldestAt = null;
+        var loadingOlder = false;
+        var reachedStart = false;
+
+        function chatURL(path, extra) {
+            var q = new URLSearchParams();
+            if (activeChannel) q.set('channel', activeChannel);
+            if (extra) Object.keys(extra).forEach(function(k) { q.set(k, extra[k]); });
+            var qs = q.toString();
+            return qs ? path + '?' + qs : path;
+        }
+
         function loadHistory() {
-            fetch('/api/chat/recent')
+            fetch(chatURL('/api/chat/recent'))
                 .then(function(r) { return r.json(); })
                 .then(function(d) {
                     stream.innerHTML = '';
@@ -342,6 +402,7 @@
                         return;
                     }
                     d.messages.forEach(appendMessage);
+                    if (d.messages.length) oldestAt = d.messages[0].at;
                     scrollToBottom();
                 })
                 .catch(function(e) {
@@ -389,6 +450,10 @@
             var formData = new FormData();
             formData.append('message', msg);
             formData.append('_csrf', csrf);
+            // Route to the channel being read. A Discord webhook is bound to one
+            // channel, so without this a reply typed in #suggestions arrived in
+            // whichever channel the single configured hook pointed at.
+            if (activeChannel) formData.append('channel', activeChannel);
 
             fetch('/api/chat/send', { method: 'POST', body: formData })
                 .then(function(r) { return r.json().then(function(d) { return {status: r.status, data: d}; }); })
