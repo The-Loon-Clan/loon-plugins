@@ -219,3 +219,5 @@ func TestSentCache_SuppressesEchoesAndStaysBounded(t *testing.T) {
 // Not exercised here — present so fakeHub satisfies pluginapi.ChatHub after
 // the bridge gained channel enumeration.
 func (fakeHub) SyncChannels(context.Context, []pluginapi.ChatChannel) error { return nil }
+
+func (fakeHub) PublishHistory(context.Context, pluginapi.ChatMessage) error { return nil }

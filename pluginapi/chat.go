@@ -81,6 +81,14 @@ type ChatHub interface {
 	// The bot runs on the worker and the page renders on web, so this crosses
 	// processes through the host rather than through the bot's own memory.
 	SyncChannels(ctx context.Context, chans []ChatChannel) error
+
+	// PublishHistory stores an OLD message without ringing it or fanning it out.
+	//
+	// Publish does three things — ring, broadcast, persist — and a backfill wants
+	// only the third. Ringing history would push live chat out of a fixed-size
+	// buffer and replace it with messages from months ago; broadcasting it would
+	// arrive at every open browser as if it had just been said.
+	PublishHistory(ctx context.Context, m ChatMessage) error
 }
 
 // ChatChannel is one channel the bridge can see.

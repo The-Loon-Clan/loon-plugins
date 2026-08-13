@@ -228,88 +228,111 @@ func (d *DiscordBotService) connect() {
 
 	// Backfill recent chat history from Discord so site users see messages
 	// from before the bot connected.
-	if chatChannel != "" && d.chat != nil {
-		go d.backfillChatHistory(session, chatChannel)
+	if d.chat != nil {
+		if gid := d.settings.GetDiscordGuildID(context.Background()); gid != "" {
+			go d.backfillChatHistory(session, gid)
+		}
 	}
 }
 
-// backfillChatHistory fetches recent messages from the Discord channel and
-// publishes them into the Redis ring buffer so site users see history from
-// before the bot connected. Runs once on connect, in a goroutine.
-func (d *DiscordBotService) backfillChatHistory(s *discordgo.Session, channelID string) {
+// backfillChatHistory walks every visible channel and fills in history.
+//
+// The original fetched 50 messages from ONE configured channel and gave up if
+// the Redis ring already held anything — it existed to seed the ring on a cold
+// start, not to build history. Now that the bridge mirrors every channel and
+// keeps a durable copy in Postgres, the ring is the wrong thing to check: it is
+// emptied by any Redis restart and holds only the most recent chatRingSize
+// messages regardless.
+//
+// It also carried its OWN copy of the message conversion, which by this point
+// had drifted: it set neither ChannelID nor Public, so every message it wrote
+// would have been stored with public=false and been invisible on the page. That
+// copy is gone — both paths now go through buildChatMessage, which is the only
+// way they stay honest about each other.
+//
+// Stops per channel at the first message already stored. Discord returns newest
+// first, so walking backwards means the first hit is the boundary of what we
+// have; everything older was fetched on a previous run.
+func (d *DiscordBotService) backfillChatHistory(s *discordgo.Session, guildID string) {
 	ctx := context.Background()
-
-	// Skip if the ring buffer already has messages (bot reconnect, not cold start).
-	existing, _ := d.chat.Recent(ctx, 1)
-	if len(existing) > 0 {
-		d.job.Log("Chat history: ring buffer already has messages, skipping backfill")
+	if d.chat == nil || guildID == "" {
 		return
 	}
-
-	d.job.Log("Chat history: fetching last 50 messages from Discord channel %s", channelID)
-	msgs, err := s.ChannelMessages(channelID, 50, "", "", "")
+	chans, err := s.GuildChannels(guildID)
 	if err != nil {
-		d.job.Log("Chat history backfill failed: %v", err)
+		d.job.Log("Chat history: cannot list channels: %v", err)
 		return
 	}
-	d.job.Log("Chat history: got %d messages from Discord API", len(msgs))
+	memberRole := d.settings.GetDiscordMemberRoleID(ctx)
 
-	// Discord returns newest first — reverse so we insert oldest first.
-	inserted := 0
-	for i := len(msgs) - 1; i >= 0; i-- {
-		m := msgs[i]
-		if m.Author == nil || strings.TrimSpace(m.Content) == "" {
+	total, skipped := 0, 0
+	for _, ch := range chans {
+		if ch == nil {
 			continue
 		}
-		// Skip our own bot messages (release notifications, slash command replies).
-		if s.State.User != nil && m.Author.ID == s.State.User.ID {
+		if ch.Type != discordgo.ChannelTypeGuildText && ch.Type != discordgo.ChannelTypeGuildNews {
 			continue
 		}
-		displayName := m.Author.GlobalName
-		if displayName == "" {
-			displayName = m.Author.Username
+		// Only channels a member could see. Backfilling a staff channel would
+		// write history nobody may read — and the whole point of storing it is
+		// that somebody can.
+		if !memberCanView(s, guildID, memberRole, ch.ID) {
+			skipped++
+			continue
 		}
-		source := "discord"
-		if m.WebhookID != "" {
-			source = "site"
-			displayName = m.Author.Username
-		}
-		avatarURL := m.Author.AvatarURL("64")
-		role, rankName, rankColor := "", "", ""
-		if link, err := d.discordLinks.GetDiscordLinkByDiscordID(ctx, m.Author.ID); err == nil && link != nil {
-			if siteUser, err := d.users.GetUserByID(ctx, link.UserID); err == nil && siteUser != nil {
-				role = siteUser.Role
-				if siteUser.AvatarPath != "" {
-					avatarURL = d.baseURL + siteUser.AvatarPath
-				}
-				displayName = siteUser.Username
-				// One call for the label and the tint, where this was an
-				// active-subscription lookup followed by a rank fetch. The head
-				// of the slice is the most prominent badge, which is what
-				// `ORDER BY sort_order DESC LIMIT 1` returned.
-				if badges := d.badgesFor(ctx, siteUser.ID); len(badges) > 0 {
-					rankName = badges[0].Name
-					rankColor = badges[0].TitleColor
-				}
-			}
-		}
-		cm := pluginapi.ChatMessage{
-			ID:        m.ID,
-			Author:    displayName,
-			AvatarURL: avatarURL,
-			Body:      strings.TrimSpace(m.Content),
-			At:        m.Timestamp,
-			Source:    source,
-			Role:      role,
-			RankName:  rankName,
-			RankColor: rankColor,
-		}
-		if err := d.chat.Publish(ctx, cm); err != nil {
-			d.job.Log("Chat history: publish failed for msg %s: %v", m.ID, err)
-		}
-		inserted++
+		n := d.backfillChannel(ctx, s, guildID, ch)
+		total += n
 	}
-	d.job.Log("Chat history: backfilled %d messages", inserted)
+	d.job.Log("Chat history: backfilled %d message(s) across %d channel(s), %d skipped as not member-visible",
+		total, len(chans)-skipped, skipped)
+}
+
+// backfillChannelPages bounds one channel's walk.
+//
+// 100 is Discord's per-request maximum, so 20 pages is 2,000 messages per
+// channel per run. A cap rather than "until the beginning of time" because this
+// runs on connect: an unbounded first run against a busy channel would spend
+// thousands of API calls before the bridge did anything else, and the next run
+// resumes from where this one stopped anyway.
+const (
+	backfillChannelPages = 20
+	backfillPageSize     = 100
+)
+
+func (d *DiscordBotService) backfillChannel(ctx context.Context, s *discordgo.Session,
+	guildID string, ch *discordgo.Channel) int {
+	inserted := 0
+	before := ""
+	for page := 0; page < backfillChannelPages; page++ {
+		msgs, err := s.ChannelMessages(ch.ID, backfillPageSize, before, "", "")
+		if err != nil {
+			// Missing Access on a channel the permission check thought was
+			// visible is not fatal to the whole sweep — log and move on.
+			d.job.Log("Chat history: %s: %v", ch.Name, err)
+			return inserted
+		}
+		if len(msgs) == 0 {
+			return inserted
+		}
+		// Newest first from Discord; walk oldest-first so the durable copy is
+		// written in the order it was said.
+		for i := len(msgs) - 1; i >= 0; i-- {
+			cm, ok := d.buildChatMessage(ctx, s, msgs[i], guildID)
+			if !ok {
+				continue
+			}
+			// PublishHistory, not Publish: these are old messages. Ringing them
+			// would push live chat out of the buffer and fan them out to every
+			// open SSE stream as if they had just been said.
+			if err := d.chat.PublishHistory(ctx, cm); err != nil {
+				d.job.Log("Chat history: store failed for %s: %v", cm.ID, err)
+				continue
+			}
+			inserted++
+		}
+		before = msgs[len(msgs)-1].ID
+	}
+	return inserted
 }
 
 // reconnect disconnects (if connected) and reconnects. Used by the admin
@@ -661,75 +684,9 @@ func (d *DiscordBotService) handleMessage(s *discordgo.Session, m *discordgo.Mes
 	if guildID == "" {
 		return // DM or group DM: not the guild's conversation, not mirrored
 	}
-	memberRole := d.settings.GetDiscordMemberRoleID(ctx)
-	public := memberCanView(s, guildID, memberRole, m.ChannelID)
-	channelID, channelName, threadID, threadName := channelDisplay(s, m.ChannelID)
-	if m.Author == nil {
+	cm, ok := d.buildChatMessage(ctx, s, m.Message, guildID)
+	if !ok {
 		return
-	}
-	// Skip the bot's own posts (slash command replies, release notifs).
-	// Webhook messages still come through because they have a different
-	// author ID, which is what we want for Phase 2. Identity comes from the
-	// EVENT's session parameter, not d.session: the field read raced Stop
-	// nil-ing it between the check and the deref, and s is the right session
-	// even mid-reconnect.
-	if s.State.User != nil && m.Author.ID == s.State.User.ID {
-		return
-	}
-	// Trim empty messages (attachment-only Discord posts).
-	body := strings.TrimSpace(m.Content)
-	if body == "" {
-		return
-	}
-
-	displayName := m.Author.GlobalName
-	if displayName == "" {
-		displayName = m.Author.Username
-	}
-	source := "discord"
-	if m.WebhookID != "" {
-		source = "site"
-		displayName = m.Author.Username
-	}
-
-	avatarURL := m.Author.AvatarURL("64")
-	role, rankName, rankColor := "", "", ""
-
-	// Enrich with site user data if this Discord account is linked.
-	if link, err := d.discordLinks.GetDiscordLinkByDiscordID(ctx, m.Author.ID); err == nil && link != nil {
-		if siteUser, err := d.users.GetUserByID(ctx, link.UserID); err == nil && siteUser != nil {
-			role = siteUser.Role
-			if siteUser.AvatarPath != "" {
-				avatarURL = d.baseURL + siteUser.AvatarPath
-			}
-			displayName = siteUser.Username
-			// The user's most prominent badge — label and title colour.
-			if badges := d.badgesFor(ctx, siteUser.ID); len(badges) > 0 {
-				rankName = badges[0].Name
-				rankColor = badges[0].TitleColor
-			}
-		}
-	}
-
-	cm := pluginapi.ChatMessage{
-		ID:        m.ID,
-		Author:    displayName,
-		AvatarURL: avatarURL,
-		Body:      body,
-		At:        m.Timestamp,
-		Source:    source,
-		Role:      role,
-		RankName:  rankName,
-		RankColor: rankColor,
-		// Where it was said, and whether members may see it. A private channel
-		// is still CAPTURED — staff reading the site's own record of a
-		// conversation is legitimate, and dropping it would lose the history
-		// permanently — but Public gates every member-facing read.
-		ChannelID:   channelID,
-		ChannelName: channelName,
-		ThreadID:    threadID,
-		ThreadName:  threadName,
-		Public:      public,
 	}
 	if err := d.chat.Publish(ctx, cm); err != nil {
 		log.Printf("discord bot: chat publish failed: %v", err)
@@ -1090,3 +1047,77 @@ func (d *DiscordBotService) reconcileAxis(s *discordgo.Session, guildID, discord
 // here so a signature drift fails the build in the package that owns the
 // implementation, not at a Lookup in the host.
 var _ pluginapi.ReleaseNotifier = (*DiscordBotService)(nil)
+
+// buildChatMessage converts a Discord message into the site's envelope.
+//
+// ONE conversion, shared by the live handler and the history backfill. They each
+// had their own copy, and the copies had already drifted: the backfill's set
+// neither ChannelID nor Public, so with the visibility gate in place every
+// message it wrote would have been stored private and never shown. Two copies of
+// "what a message means" is the shape of that bug, so there is now one.
+//
+// ok is false for messages that must not be mirrored at all: the bot's own
+// posts, and empty bodies — an attachment-only post carries no text to display.
+func (d *DiscordBotService) buildChatMessage(ctx context.Context, s *discordgo.Session,
+	m *discordgo.Message, guildID string) (pluginapi.ChatMessage, bool) {
+	if m == nil || m.Author == nil {
+		return pluginapi.ChatMessage{}, false
+	}
+	// The bot's own posts: release notifications and slash-command replies.
+	// Webhook messages DO come through, deliberately — those are the site's own
+	// messages echoing back, and they carry a different author id.
+	if s.State != nil && s.State.User != nil && m.Author.ID == s.State.User.ID {
+		return pluginapi.ChatMessage{}, false
+	}
+	body := strings.TrimSpace(m.Content)
+	if body == "" {
+		return pluginapi.ChatMessage{}, false
+	}
+
+	memberRole := d.settings.GetDiscordMemberRoleID(ctx)
+	public := memberCanView(s, guildID, memberRole, m.ChannelID)
+	channelID, channelName, threadID, threadName := channelDisplay(s, m.ChannelID)
+
+	displayName := m.Author.GlobalName
+	if displayName == "" {
+		displayName = m.Author.Username
+	}
+	source := "discord"
+	if m.WebhookID != "" {
+		source = "site"
+		displayName = m.Author.Username
+	}
+
+	avatarURL := m.Author.AvatarURL("64")
+	role, rankName, rankColor := "", "", ""
+	if link, err := d.discordLinks.GetDiscordLinkByDiscordID(ctx, m.Author.ID); err == nil && link != nil {
+		if siteUser, err := d.users.GetUserByID(ctx, link.UserID); err == nil && siteUser != nil {
+			role = siteUser.Role
+			if siteUser.AvatarPath != "" {
+				avatarURL = d.baseURL + siteUser.AvatarPath
+			}
+			displayName = siteUser.Username
+			if badges := d.badgesFor(ctx, siteUser.ID); len(badges) > 0 {
+				rankName = badges[0].Name
+				rankColor = badges[0].TitleColor
+			}
+		}
+	}
+
+	return pluginapi.ChatMessage{
+		ID:          m.ID,
+		Author:      displayName,
+		AvatarURL:   avatarURL,
+		Body:        body,
+		At:          m.Timestamp,
+		Source:      source,
+		Role:        role,
+		RankName:    rankName,
+		RankColor:   rankColor,
+		ChannelID:   channelID,
+		ChannelName: channelName,
+		ThreadID:    threadID,
+		ThreadName:  threadName,
+		Public:      public,
+	}, true
+}
