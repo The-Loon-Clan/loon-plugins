@@ -215,3 +215,7 @@ func TestSentCache_SuppressesEchoesAndStaysBounded(t *testing.T) {
 		t.Errorf("sentCache grew to %d, cap is %d", len(b.sentCache), ircSentCacheSize)
 	}
 }
+
+// Not exercised here — present so fakeHub satisfies pluginapi.ChatHub after
+// the bridge gained channel enumeration.
+func (fakeHub) SyncChannels(context.Context, []pluginapi.ChatChannel) error { return nil }

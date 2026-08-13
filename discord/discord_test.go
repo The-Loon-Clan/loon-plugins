@@ -375,3 +375,7 @@ func TestErrNoInvites_IsAMatchableSentinel(t *testing.T) {
 		t.Error("ErrNoInvites should survive wrapping — the host adapter may wrap it")
 	}
 }
+
+// Not exercised here — present so fakeHub satisfies pluginapi.ChatHub after
+// the bridge gained channel enumeration.
+func (fakeHub) SyncChannels(context.Context, []pluginapi.ChatChannel) error { return nil }

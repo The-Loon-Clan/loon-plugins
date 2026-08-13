@@ -157,6 +157,16 @@ func (d *DiscordBotService) connect() {
 		return
 	}
 
+	// Enumerate channels once the gateway is up. On connect rather than on a
+	// timer: the list changes when an operator adds a channel, which is rare,
+	// and a reconnect is exactly when the bridge should re-check what it can
+	// see.
+	go func() {
+		if gid := d.settings.GetDiscordGuildID(context.Background()); gid != "" {
+			d.syncChannels(context.Background(), session, gid)
+		}
+	}()
+
 	d.mu.Lock()
 	d.session = session
 	d.running = true

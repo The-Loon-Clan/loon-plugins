@@ -69,4 +69,30 @@ type ChatHub interface {
 	Recent(ctx context.Context, n int) ([]ChatMessage, error)
 	Subscribe(username string) chan ChatMessage
 	Unsubscribe(ch chan ChatMessage)
+
+	// SyncChannels records the channels the bridge can see, so the site can
+	// list them.
+	//
+	// Needed because the sidebar was derived from captured MESSAGES, which
+	// means a channel appears only after somebody speaks in it — a guild's
+	// quiet channels were invisible, and a freshly deployed bridge showed an
+	// empty list until the first message arrived.
+	//
+	// The bot runs on the worker and the page renders on web, so this crosses
+	// processes through the host rather than through the bot's own memory.
+	SyncChannels(ctx context.Context, chans []ChatChannel) error
+}
+
+// ChatChannel is one channel the bridge can see.
+type ChatChannel struct {
+	ID   string
+	Name string
+	// Position is Discord's own ordering, so the sidebar can match the order a
+	// member sees in Discord rather than inventing one.
+	Position int
+	// Public: @everyone can read it. A private channel is still SYNCED — the
+	// site needs to know it exists to avoid re-adding it as unknown — but the
+	// member-facing list filters on this, because a staff channel's name is a
+	// leak even with its messages withheld.
+	Public bool
 }

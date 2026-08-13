@@ -1,9 +1,13 @@
 package discord
 
 import (
+	"context"
+	"log"
 	"sync/atomic"
 
 	"github.com/bwmarrin/discordgo"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // channelLookupMisses counts channels neither the State cache nor the REST API
@@ -180,4 +184,60 @@ func channelDisplay(s *discordgo.Session, channelID string) (channelID2, channel
 		return ch.ParentID, "", threadID, threadName
 	}
 	return ch.ID, ch.Name, "", ""
+}
+
+// syncChannels tells the host which channels exist.
+//
+// The sidebar was derived from captured MESSAGES, so a channel appeared only
+// after somebody spoke in it. Most channels are quiet at any given moment, and a
+// freshly deployed bridge therefore showed an empty list — which is exactly what
+// it did show, because the guild had been quiet since the columns landed.
+//
+// Enumerating instead means a channel appears because it EXISTS. Private ones
+// are sent too, with Public false: the host needs to know they exist rather than
+// meeting them as unknown on every sync, and its member-facing query filters
+// them out.
+//
+// Threads are deliberately not enumerated. GuildChannels does not return them,
+// and fetching every thread of every channel on connect is a lot of API calls
+// for rooms that are transient by nature — a thread earns a place in the sidebar
+// by carrying a message, which the message-derived list already handles.
+func (d *DiscordBotService) syncChannels(ctx context.Context, s *discordgo.Session, guildID string) {
+	if d.chat == nil || s == nil || guildID == "" {
+		return
+	}
+	chans, err := s.GuildChannels(guildID)
+	if err != nil {
+		log.Printf("discord bot: channel sync failed: %v", err)
+		return
+	}
+	out := make([]pluginapi.ChatChannel, 0, len(chans))
+	for _, ch := range chans {
+		if ch == nil {
+			continue
+		}
+		// Text channels only. Voice, categories and stages carry no messages
+		// the bridge could mirror, so listing them would be a sidebar of rooms
+		// that can never have content.
+		if ch.Type != discordgo.ChannelTypeGuildText && ch.Type != discordgo.ChannelTypeGuildNews {
+			continue
+		}
+		out = append(out, pluginapi.ChatChannel{
+			ID:       ch.ID,
+			Name:     ch.Name,
+			Position: ch.Position,
+			Public:   everyoneCanView(s, guildID, ch.ID),
+		})
+	}
+	if err := d.chat.SyncChannels(ctx, out); err != nil {
+		log.Printf("discord bot: channel sync store failed: %v", err)
+		return
+	}
+	var public int
+	for _, ch := range out {
+		if ch.Public {
+			public++
+		}
+	}
+	log.Printf("discord bot: synced %d text channel(s), %d public", len(out), public)
 }
