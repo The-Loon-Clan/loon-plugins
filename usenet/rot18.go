@@ -49,13 +49,41 @@ func rot18(s string) string {
 // Matching a fixed token that cannot occur by accident costs a substring scan
 // and cannot produce a false positive on real text.
 //
-//	SHYY  = FULL   (the poster's own tag, always bracketed)
-//	RSArg = EFNet  (the network in the attribution block)
-//	lRap  = yEnc   (present when the encoding marker is rotated too)
+// The obvious cheap general test does NOT work here, and it is worth recording
+// why so nobody re-derives it. "Real binary subjects contain yEnc; a rotated one
+// will not; so rotate anything lacking yEnc and see if yEnc appears" is one
+// substring scan on the common path and beautifully general — except the poster
+// family this was found on emits no yEnc marker in EITHER form. The sample that
+// started this decodes to "...PAR2 48 of 53  2822844 KB (2/5)": no yEnc before,
+// none after. A detector built on it would have missed all 299 rows.
 //
-// Each is checked in its surrounding punctuation so a chance occurrence inside a
-// word cannot trigger it.
-var rot18Markers = []string{"[SHYY]", "@RSArg", " lRap", "lRap "}
+// So the list is instead a set of rotated forms of tokens that occur in almost
+// every release subject. Each is long enough that it cannot appear by chance in
+// English or in a real title, and the whole check is N substring scans of a
+// ~100-character string.
+//
+//	[SHYY]  = [FULL]    the poster tag
+//	@RSArg  = @EFNet    the attribution block
+//	lRap    = yEnc      when the encoding marker is rotated too
+//	CNE7    = PAR2      recovery volumes; on nearly every large post
+//	OyhEnl  = BluRay
+//	ERZHK   = REMUX
+//	.zxi    = .mkv
+//	k719    = x264
+//	k710    = x265
+//	UQGI    = HDTV
+//	JRO-QY  = WEB-DL
+//	QIQEvc  = DVDRip
+//
+// Deliberately omitted: short rotations like "iby" (vol) and ".ene" (.rar),
+// which are three or four characters and could plausibly fall inside a real
+// title. The cost of a miss here is one release staying obfuscated; the cost of
+// a false positive is a correct title rotated into gibberish, so the list only
+// takes tokens where that trade is obviously safe.
+var rot18Markers = []string{
+	"[SHYY]", "@RSArg", " lRap", "lRap ",
+	"CNE7", "OyhEnl", "ERZHK", ".zxi", "k719", "k710", "UQGI", "JRO-QY", "QIQEvc",
+}
 
 // isRot18Subject reports whether a subject is ROT18-obfuscated.
 func isRot18Subject(subject string) bool {
