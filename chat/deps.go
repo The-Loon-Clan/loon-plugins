@@ -45,6 +45,14 @@ type Deps struct {
 	// SSE handler defers it. Calling it twice is safe.
 	Subscribe func(username string) (msgs <-chan []byte, cancel func())
 
+	// Channels lists the public channels that carry messages, most recently
+	// active first, for the sidebar. Typed `any` for the same reason Recent is:
+	// the plugin forwards it to the template and reads no field.
+	//
+	// Nil is allowed and means "one stream" — the page then renders as it did
+	// before there were channels, rather than an empty sidebar.
+	Channels func(ctx context.Context) (any, error)
+
 	OnlineCount func() int
 	OnlineUsers func() []string
 

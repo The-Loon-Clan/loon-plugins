@@ -1,8 +1,64 @@
 package discord
 
 import (
+	"sync/atomic"
+
 	"github.com/bwmarrin/discordgo"
 )
+
+// channelLookupMisses counts channels neither the State cache nor the REST API
+// could resolve. Every one of those is a message stored PRIVATE and therefore
+// invisible on the site — so a rising number here is the signal that the bridge
+// is quietly swallowing conversations rather than mirroring them.
+var channelLookupMisses atomic.Int64
+
+// ChannelLookupMisses reports that counter for the admin surface.
+func ChannelLookupMisses() int64 { return channelLookupMisses.Load() }
+
+// resolveChannel finds a channel, falling back from the State cache to REST.
+//
+// State.Channel is a plain map lookup, and the map is populated by GUILD_CREATE
+// and THREAD_CREATE. A thread the bot has not seen created — an older one, or
+// one started while the bot was disconnected — is simply absent, and the lookup
+// fails.
+//
+// That mattered because a failed lookup resolves to "private", which is the
+// correct default for an unknown channel but the WRONG answer for a thread that
+// is perfectly public. The bridge was added to capture help-desk threads; a
+// State miss would have stored them and hidden them, with nothing reporting it.
+//
+// REST is the fallback rather than the primary because it is a network call per
+// message. Misses should be rare and self-limiting: discordgo caches nothing
+// from REST, but a live thread produces a THREAD_CREATE or arrives in
+// GUILD_CREATE, so the steady state is a cache hit.
+func resolveChannel(s *discordgo.Session, channelID string) *discordgo.Channel {
+	if s == nil || channelID == "" {
+		return nil
+	}
+	if s.State != nil {
+		if ch, err := s.State.Channel(channelID); err == nil && ch != nil {
+			return ch
+		}
+	}
+	// REST needs a fully constructed session. discordgo.New sets up the rate
+	// limiter; a zero-value Session has none, and Session.Channel dereferences
+	// it — so calling REST on one panics.
+	//
+	// This is not only a test concern. resolveChannel runs inside the message
+	// handler, and a panic there takes the whole bot down with it. Guarding
+	// costs a nil check and turns "the bridge died" into "one message was
+	// treated as private and counted".
+	if s.Ratelimiter == nil {
+		channelLookupMisses.Add(1)
+		return nil
+	}
+	ch, err := s.Channel(channelID)
+	if err != nil || ch == nil {
+		channelLookupMisses.Add(1)
+		return nil
+	}
+	return ch
+}
 
 // Which channels the bridge mirrors, and which of them members may see.
 //
@@ -34,20 +90,20 @@ import (
 // Threads inherit their parent's permissions and carry no overwrites of their
 // own, so a thread is resolved against its parent. Getting that wrong would
 // leak a private channel's threads while correctly hiding the channel itself.
-func everyoneCanView(state *discordgo.State, guildID, channelID string) bool {
-	if state == nil || guildID == "" || channelID == "" {
+func everyoneCanView(s *discordgo.Session, guildID, channelID string) bool {
+	if s == nil || guildID == "" || channelID == "" {
 		// No state means no evidence. Treat as private: a wrong "public" is
 		// published to 3,300 members and cannot be recalled, a wrong "private"
 		// is a message that does not appear.
 		return false
 	}
-	ch, err := state.Channel(channelID)
-	if err != nil || ch == nil {
+	ch := resolveChannel(s, channelID)
+	if ch == nil {
 		return false
 	}
 	// A thread has no overwrites of its own; resolve against the parent.
 	if ch.ParentID != "" && isThread(ch) {
-		if parent, perr := state.Channel(ch.ParentID); perr == nil && parent != nil {
+		if parent := resolveChannel(s, ch.ParentID); parent != nil {
 			ch = parent
 		} else {
 			return false
@@ -69,7 +125,7 @@ func everyoneCanView(state *discordgo.State, guildID, channelID string) bool {
 	// category, nothing on the channels inside it. Reading only the channel
 	// would call every one of them public.
 	if ch.ParentID != "" {
-		if parent, perr := state.Channel(ch.ParentID); perr == nil && parent != nil {
+		if parent := resolveChannel(s, ch.ParentID); parent != nil {
 			for _, ow := range parent.PermissionOverwrites {
 				if ow.Type != discordgo.PermissionOverwriteTypeRole || ow.ID != guildID {
 					continue
@@ -108,17 +164,17 @@ func isThread(ch *discordgo.Channel) bool {
 // For a thread it reports the PARENT as the channel and the thread separately,
 // so the site can group a conversation under the channel it belongs to instead
 // of showing every thread as its own top-level room.
-func channelDisplay(state *discordgo.State, channelID string) (channelID2, channelName, threadID, threadName string) {
-	if state == nil || channelID == "" {
+func channelDisplay(s *discordgo.Session, channelID string) (channelID2, channelName, threadID, threadName string) {
+	if s == nil || channelID == "" {
 		return channelID, "", "", ""
 	}
-	ch, err := state.Channel(channelID)
-	if err != nil || ch == nil {
+	ch := resolveChannel(s, channelID)
+	if ch == nil {
 		return channelID, "", "", ""
 	}
 	if isThread(ch) {
 		threadID, threadName = ch.ID, ch.Name
-		if parent, perr := state.Channel(ch.ParentID); perr == nil && parent != nil {
+		if parent := resolveChannel(s, ch.ParentID); parent != nil {
 			return parent.ID, parent.Name, threadID, threadName
 		}
 		return ch.ParentID, "", threadID, threadName

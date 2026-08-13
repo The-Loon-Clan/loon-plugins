@@ -157,17 +157,39 @@
         {{/* ── Left sidebar: channels ── */}}
         <div class="chat-sidebar">
             <h6>Text Channels</h6>
-            <a class="chat-channel active" href="/chat">
-                <span class="hash">#</span> general
+            {{/* Rendered from the channels that actually carry messages, not a
+                 hardcoded list. This was one literal "# general" and a comment
+                 reading "Future: more channels here", which meant a bridge
+                 mirroring every channel still showed exactly one.
+
+                 The list comes from the messages themselves, so a new Discord
+                 channel appears here the first time somebody speaks in it and
+                 nothing needs configuring. Only PUBLIC channels are listed —
+                 the query enforces it, because a staff channel's NAME is a leak
+                 even with its messages withheld. */}}
+            <a class="chat-channel{{if not $.Active}} active{{end}}" href="/chat">
+                <span class="hash">#</span> all
             </a>
-            {{/* Future: more channels here */}}
+            {{range .Channels}}
+            <a class="chat-channel{{if eq $.Active .ChannelID}} active{{end}}"
+               href="/chat?channel={{.ChannelID}}" title="{{.Messages}} messages">
+                <span class="hash">#</span> {{.ChannelName}}
+            </a>
+            {{else}}
+            {{/* No channels yet: the bridge has not seen a public message since
+                 the channel columns were added. Say so rather than showing an
+                 empty column that reads as broken. */}}
+            <div style="color:var(--text-muted);font-size:0.75rem;padding:0.35rem 0.5rem;">
+                No channels seen yet.
+            </div>
+            {{end}}
         </div>
 
         {{/* ── Center: messages ── */}}
         <div class="chat-center">
             <div class="chat-header" style="display:flex;align-items:center;gap:0.5rem;">
                 <span class="hash">#</span>
-                <span>general</span>
+                <span>{{if .Active}}{{range .Channels}}{{if eq $.Active .ChannelID}}{{.ChannelName}}{{end}}{{end}}{{else}}all{{end}}</span>
                 <span class="desc">Live bridge from Discord</span>
                 {{if .DiscordInviteURL}}
                 <a href="{{.DiscordInviteURL}}" target="_blank" rel="noopener noreferrer"

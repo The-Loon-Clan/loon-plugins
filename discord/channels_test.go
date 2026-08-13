@@ -16,7 +16,11 @@ import (
 
 const guildID = "111" // @everyone's role id IS the guild id, in Discord's model
 
-func newState(t *testing.T, chans ...*discordgo.Channel) *discordgo.State {
+// Returns a Session wrapping the State, because the resolver now falls back
+// from State to REST and therefore takes the session. Session.Token is left
+// empty so any REST attempt fails fast rather than reaching Discord from a
+// unit test — which is what we want: these tests are about the State path.
+func newState(t *testing.T, chans ...*discordgo.Channel) *discordgo.Session {
 	t.Helper()
 	st := discordgo.NewState()
 	// The guild must exist before its channels: State keeps channels under
@@ -30,7 +34,7 @@ func newState(t *testing.T, chans ...*discordgo.Channel) *discordgo.State {
 			t.Fatalf("ChannelAdd(%s): %v", ch.ID, err)
 		}
 	}
-	return st
+	return &discordgo.Session{State: st}
 }
 
 func denyView(roleID string) *discordgo.PermissionOverwrite {
@@ -133,7 +137,7 @@ func TestThreadInPublicChannelIsVisible(t *testing.T) {
 func TestUnknownsResolveToPrivate(t *testing.T) {
 	st := newState(t, &discordgo.Channel{ID: "c5", GuildID: guildID, Type: discordgo.ChannelTypeGuildText})
 	cases := map[string]bool{
-		"nil state":       everyoneCanView(nil, guildID, "c5"),
+		"nil session":     everyoneCanView(nil, guildID, "c5"),
 		"unknown channel": everyoneCanView(st, guildID, "nope"),
 		"empty guild":     everyoneCanView(st, "", "c5"),
 		"empty channel":   everyoneCanView(st, guildID, ""),
