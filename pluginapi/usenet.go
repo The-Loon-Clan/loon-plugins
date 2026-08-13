@@ -367,14 +367,38 @@ type AssembledRelease struct {
 	// different subsets of its articles, while a genuine re-post with fresh
 	// message-ids still sketches differently and is still indexed.
 	//
-	// This is the dedup key a sink SHOULD enforce (e.g. a unique index on it).
 	// It subsumes ContentHash — identical article sets always produce identical
 	// sketches — so enforcing both is redundant but harmless. "" when the
 	// release carried no usable message-ids.
+	//
+	// It does NOT subsume ContentFileKey, and the sentence that used to stand
+	// here calling it "the dedup key a sink SHOULD enforce" was too strong: it
+	// identifies the same ARTICLES, which is a different question from the same
+	// CONTENT. See ContentFileKey.
 	ContentSketch string
-	SizeBytes     int64
-	PostedAt      time.Time // earliest article date; zero when unknown
-	NZBGz         []byte    // gzipped NZB XML
+	// ContentFileKey identifies the same content posted MORE THAN ONCE: hex of
+	// sha256 over the release's sorted, distinct filenames, taken from the
+	// quoted span of each file's subject.
+	//
+	// A repost is not a crosspost. A crosspost is one article filed into several
+	// groups and keeps its Message-ID (RFC 5536), which is why ContentSketch
+	// matches across groups. A repost is a fresh upload of the same files, and
+	// every article in it gets a new id — so the sketches are unrelated and
+	// nothing message-id-based can ever connect them.
+	//
+	// Measured on five rows the site displayed as separate releases (the same
+	// season pack, five uploads): 0 message-ids shared between any pair, and
+	// 731 of 731 filenames shared by all five. Names are a property of the
+	// content; ids and byte counts are properties of the posting and of what we
+	// happened to crawl.
+	//
+	// "" when the key would be untrustworthy — any file without a quoted name
+	// (obfuscated posts), or a lone file with a name too short to mean anything.
+	// An empty key must never match another empty key.
+	ContentFileKey string
+	SizeBytes      int64
+	PostedAt       time.Time // earliest article date; zero when unknown
+	NZBGz          []byte    // gzipped NZB XML
 	// CategoryHint is a category label the host maps into its own taxonomy;
 	// "" = no hint. It is an ANIME-DOMAIN hint (scraping is anime-only by
 	// design), drawn from a closed set: "Hentai" (adult terms in the title),

@@ -375,8 +375,8 @@ func (p *Plugin) buildLocked(ctx context.Context) (built, drained int) {
 			Poster:        firstPoster(arts),
 			Groups:        fileGroups(arts),
 			ContentHash:   contentHashArticles(arts),
-			ContentSketch: totals.Sketch,
-			SizeBytes:     totals.Bytes, PostedAt: posted,
+			ContentSketch: totals.Sketch, ContentFileKey: totals.FileKey,
+			SizeBytes: totals.Bytes, PostedAt: posted,
 			NZBGz: gz, Segments: totals.Segments, CategoryHint: cat,
 		}
 		_, created, err := sink.store(ctx, rel)
@@ -653,8 +653,8 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			Poster:        firstPoster(arts),
 			Groups:        fileGroups(arts),
 			ContentHash:   contentHashArticles(arts),
-			ContentSketch: totals.Sketch,
-			SizeBytes:     totals.Bytes, PostedAt: posted,
+			ContentSketch: totals.Sketch, ContentFileKey: totals.FileKey,
+			SizeBytes: totals.Bytes, PostedAt: posted,
 			NZBGz: gz, Segments: totals.Segments, CategoryHint: cat,
 		})
 		if err != nil {
@@ -931,6 +931,9 @@ type nzbTotals struct {
 	// Sketch is the content sketch, computed from the DOCUMENT rather than
 	// from the staged articles it was built from. See contentSketchDoc.
 	Sketch string
+	// FileKey identifies the same content posted more than once, which the
+	// message-id sketch cannot see. See contentFileKeyDoc.
+	FileKey string
 }
 
 func buildNZB(arts []stagedArticle) ([]byte, nzbTotals, error) {
@@ -966,6 +969,7 @@ func buildNZB(arts []stagedArticle) ([]byte, nzbTotals, error) {
 		}
 	}
 	totals.Sketch = contentSketchDoc(doc)
+	totals.FileKey = contentFileKeyDoc(doc)
 	out, err := xml.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return nil, nzbTotals{}, err
@@ -1352,6 +1356,92 @@ func contentSketchDoc(doc nzbDoc) string {
 	return hex.EncodeToString(h.Sum(nil)[:16])
 }
 
+// contentFileKeyDoc identifies a release by the FILES IT CONTAINS, so that the
+// same content posted more than once collapses to one row.
+//
+// WHY THE MESSAGE-ID SKETCH IS NOT ENOUGH. contentSketchDoc hashes message-ids,
+// which identifies the same ARTICLES. That is exactly right for a crosspost —
+// one article filed into several groups keeps one Message-ID (RFC 5536), so the
+// sketch matches — and it is useless for a REPOST, where the uploader sends the
+// same content again and every article gets a fresh id.
+//
+// Measured on the five "Call Of The Night (2022) S02 ... AVC-iVy" rows the site
+// was showing as separate releases:
+//
+//	Message-IDs shared between any pair : 0 of ~79,082
+//	Filenames shared between any pair   : 731 of 731
+//
+// Same 731 files, same names, same 13-file/7,367-segment PAR2 layout, ~85.62 GB
+// each — five independent uploads. The sketch cannot group them and never will.
+// The filename set can, exactly.
+//
+// WHY NOT SIZES. Per-file byte totals look like a natural addition and would
+// break it: they are OUR capture, not the posting. Those same five copies hold
+// 79,082 / 79,082 / 79,081 / 79,082 / 79,033 segments and thus five different
+// byte totals, because each was crawled independently. Anything derived from
+// what we happened to fetch varies per copy; only the names are a property of
+// the content.
+//
+// COLLISIONS. Two releases collide only by listing an identical set of
+// filenames. For anything with real names that means identical content. The
+// exposure is degenerate cases — a lone file called "1.rar" — so a single-file
+// release must have a name long enough to be meaningful, and a file with no
+// quoted name at all voids the key rather than guessing. An empty key never
+// matches anything, which is the safe direction: it costs a duplicate row, not
+// a wrongly merged release.
+func contentFileKeyDoc(doc nzbDoc) string {
+	names := make([]string, 0, len(doc.Files))
+	seen := make(map[string]struct{}, len(doc.Files))
+	for _, f := range doc.Files {
+		n := quotedFilename(f.Subject)
+		if n == "" {
+			// One unnamed file makes the set unidentifiable. Obfuscated posts
+			// land here by design — we genuinely cannot tell those apart, and
+			// hashing whatever is left would invent an identity.
+			return ""
+		}
+		if _, dup := seen[n]; dup {
+			continue
+		}
+		seen[n] = struct{}{}
+		names = append(names, n)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	if len(names) == 1 && len(names[0]) < 20 {
+		return ""
+	}
+	sort.Strings(names)
+	h := sha256.New()
+	for _, n := range names {
+		h.Write([]byte(n))
+		h.Write([]byte{0}) // separator: "ab"+"c" must not hash as "a"+"bc"
+	}
+	return hex.EncodeToString(h.Sum(nil)[:16])
+}
+
+// quotedFilename pulls the filename out of a usenet subject.
+//
+//	[002/732] - "Show.Name.S02.part001.rar" yEnc (62/100) 104857600
+//	             ^------------------------^
+//
+// The quoted span only. Everything outside it varies between copies of the same
+// posting — note the yEnc segment counter above, which is whichever segment
+// happened to be chosen as the file's representative article and differed on
+// every one of the five copies measured.
+func quotedFilename(subject string) string {
+	i := strings.IndexByte(subject, '"')
+	if i < 0 {
+		return ""
+	}
+	j := strings.IndexByte(subject[i+1:], '"')
+	if j <= 0 {
+		return ""
+	}
+	return strings.TrimSpace(subject[i+1 : i+1+j])
+}
+
 func safeFilename(s string) string {
 	s = strings.Map(func(r rune) rune {
 		switch r {
@@ -1472,16 +1562,17 @@ func (s *PGStore) groupArticles(ctx context.Context, group, base string) ([]stag
 }
 
 type nzbRow struct {
-	Title         string
-	Filename      string
-	Size          int64
-	Group         string
-	ContentHash   string
-	ContentSketch string
-	Posted        time.Time
-	Data          []byte
-	Tags          Tags
-	CategoryID    int
+	Title          string
+	Filename       string
+	Size           int64
+	Group          string
+	ContentHash    string
+	ContentSketch  string
+	ContentFileKey string
+	Posted         time.Time
+	Data           []byte
+	Tags           Tags
+	CategoryID     int
 }
 
 // nullIfEmpty sends SQL NULL for an empty string. The content_sketch unique
@@ -1518,16 +1609,38 @@ func (s *PGStore) insertNzb(ctx context.Context, n nzbRow) (int64, bool, error) 
 				return serr
 			}
 		}
+		// The repost key, checked after the sketch because it answers a
+		// different question: the sketch asks "the same articles?", this asks
+		// "the same files?". A crosspost is caught above; a second upload of the
+		// same content reaches here with a sketch that matches nothing, because
+		// every one of its articles carries a fresh message-id.
+		//
+		// A lookup rather than a constraint — migration 035 declines to make
+		// this column unique, since a filename collision implies the same
+		// content without proving it the way a sketch collision does.
+		if n.ContentFileKey != "" {
+			ferr := tx.QueryRowContext(ctx,
+				`SELECT id FROM nzbs WHERE content_file_key = $1 ORDER BY id LIMIT 1`,
+				n.ContentFileKey).Scan(&id)
+			if ferr == nil {
+				return nil
+			}
+			if ferr != sql.ErrNoRows {
+				return ferr
+			}
+		}
 		// RETURNING id emits no row on a conflict, so ErrNoRows IS the
 		// duplicate signal — the salvage path needs the id to hand the health
 		// backend its verdict.
 		err := tx.QueryRowContext(ctx,
-			`INSERT INTO nzbs (title, filename, size, status, group_name, content_hash, content_sketch, posted_at,
+			`INSERT INTO nzbs (title, filename, size, status, group_name, content_hash, content_sketch,
+			                   content_file_key, posted_at,
 			                   nzb_data, nzb_data_bytes, resolution, source, video_codec, audio, language, category_id)
-			 VALUES ($1,$2,$3,'completed',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+			 VALUES ($1,$2,$3,'completed',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 			 ON CONFLICT (content_hash) DO NOTHING
 			 RETURNING id`,
-			n.Title, n.Filename, n.Size, n.Group, n.ContentHash, nullIfEmpty(n.ContentSketch), posted,
+			n.Title, n.Filename, n.Size, n.Group, n.ContentHash, nullIfEmpty(n.ContentSketch),
+			nullIfEmpty(n.ContentFileKey), posted,
 			n.Data, len(n.Data),
 			n.Tags.Resolution, n.Tags.Source, n.Tags.Codec, n.Tags.Audio, n.Tags.Language, n.CategoryID).Scan(&id)
 		if err == sql.ErrNoRows {
