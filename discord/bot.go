@@ -637,10 +637,22 @@ func (d *DiscordBotService) handleMessage(s *discordgo.Session, m *discordgo.Mes
 		return
 	}
 	ctx := context.Background()
-	chatChannel := d.settings.GetDiscordChatChannelID(ctx)
-	if chatChannel == "" || m.ChannelID != chatChannel {
-		return
+	// EVERY channel the bot can see, not one configured id.
+	//
+	// This used to be `m.ChannelID != chatChannel { return }`, which dropped
+	// everything said in the guild except one room — including help-desk threads
+	// members were waiting in, which never reached the site or the database and
+	// so were invisible to anything counting who needed a reply.
+	//
+	// Visibility comes from Discord instead of from configuration: @everyone can
+	// read it there, members can read it here. See channels.go for why that is
+	// the rule and not an allowlist.
+	guildID := m.GuildID
+	if guildID == "" {
+		return // DM or group DM: not the guild's conversation, not mirrored
 	}
+	public := everyoneCanView(s.State, guildID, m.ChannelID)
+	channelID, channelName, threadID, threadName := channelDisplay(s.State, m.ChannelID)
 	if m.Author == nil {
 		return
 	}
@@ -698,6 +710,15 @@ func (d *DiscordBotService) handleMessage(s *discordgo.Session, m *discordgo.Mes
 		Role:      role,
 		RankName:  rankName,
 		RankColor: rankColor,
+		// Where it was said, and whether members may see it. A private channel
+		// is still CAPTURED — staff reading the site's own record of a
+		// conversation is legitimate, and dropping it would lose the history
+		// permanently — but Public gates every member-facing read.
+		ChannelID:   channelID,
+		ChannelName: channelName,
+		ThreadID:    threadID,
+		ThreadName:  threadName,
+		Public:      public,
 	}
 	if err := d.chat.Publish(ctx, cm); err != nil {
 		log.Printf("discord bot: chat publish failed: %v", err)

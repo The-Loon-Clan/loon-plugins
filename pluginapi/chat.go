@@ -26,6 +26,32 @@ type ChatMessage struct {
 	Role      string    `json:"role,omitempty"`       // site role: "admin", "mod", "contributor", "user"
 	RankName  string    `json:"rank_name,omitempty"`  // e.g. "Kirisame"
 	RankColor string    `json:"rank_color,omitempty"` // hex color for username display
+
+	// ChannelID / ChannelName identify where the message was said. Empty on
+	// site-originated messages, which have no upstream channel.
+	//
+	// Present because the bridge stopped being one channel. It used to mirror a
+	// single configured id, so everything else said in the guild — including
+	// help-desk threads members were waiting in — was dropped at the handler and
+	// invisible to the site entirely.
+	ChannelID   string `json:"channel_id,omitempty"`
+	ChannelName string `json:"channel_name,omitempty"`
+	// ThreadID is set when the message was posted in a thread, with ChannelID
+	// naming the thread's PARENT. That pair is what a reply needs: Discord
+	// addresses a thread by its own id, while permissions and display grouping
+	// belong to the parent.
+	ThreadID   string `json:"thread_id,omitempty"`
+	ThreadName string `json:"thread_name,omitempty"`
+	// Public records that @everyone could read this channel in Discord at the
+	// time the message arrived.
+	//
+	// The site's /chat page is PolicyMembers — every logged-in member — so
+	// mirroring a staff-only channel would publish moderator discussion to 3,300
+	// people. Rather than a hand-maintained allowlist, the bridge asks Discord:
+	// if @everyone can read it there, members can read it here. A channel whose
+	// permissions change is followed automatically, and nothing needs
+	// configuring when a channel is added.
+	Public bool `json:"public"`
 }
 
 // ChatHub is the narrow surface of the host-owned chat hub that bridge bots
