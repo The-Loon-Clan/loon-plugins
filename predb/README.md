@@ -17,15 +17,18 @@ how you end up with an importer that cannot import.
 
 | job | source | why |
 |---|---|---|
-| **Look up one release** | predb.ovh `GET /?q=` | searches ~7.7M records we would otherwise have to hold |
-| **Record what is releasing now** | predb.ovh `GET /ws`, or IRC `#PreNNTmux` | same data, different transport |
-| **Mirror the whole database** | *neither* | see below |
+| **Look up one release** | `api.predb.net/?q=` | searches 14.2M records we would otherwise have to hold |
+| **Record what is releasing now** | `api.predb.net/?limit=` polled, or IRC `#PreNNTmux` | newest-first; the IRC channel is the parity path |
+| **Mirror the whole database** | *nothing* | see below |
 
-**A full local mirror is not on offer.** predb.ovh is "hard limited at 1000"
-rows by its Sphinx backend, so offset paging cannot walk 7.7M records — and a
-caller that believes it received everything is the failure that matters. What
-we keep locally is what we saw live plus what we asked about; the rest stays
-remote and is queried when a specific release needs a name.
+**A full local mirror is not worth taking.** predb.net pages fine, but 14.2M
+records at 100 a page is 142,000 requests against a free service — the limit
+is manners, not the API. predb.ovh cannot do it at all: it is hard limited to
+1000 rows by its Sphinx backend, so offset paging silently stops and a caller
+that believes it received everything is the failure that matters.
+
+What we keep locally is what we saw live plus what we asked about; the rest
+stays remote and is queried when a specific release needs a name.
 
 ## Sources assessed
 
@@ -51,14 +54,42 @@ NEW: [DT: 2026-08-14 05:12:33] [TT: Some.Release-GROUP] [SC: PRE] \
 still de-obfuscates, so a nuke is recorded as an attribute rather than a
 deletion, and `UNNUKED` clears the flag rather than dropping the row.
 
-**predb.net** — assessed 2026-08-14 and **not used**. It is a client-routed
-SPA: every path, including `/api` and `/api/docs`, returns the same HTML shell,
-and no API documentation exists on it. Scraping the UI would be fragile and
-impolite while a documented API exists elsewhere.
+**api.predb.net** — the PRIMARY source, and the best of the three.
+
+Not discoverable the obvious way: `predb.net/api-documentation` renders
+client-side, so a fetcher sees only the page title, and `/api`, `/api/v1`,
+`/api/docs` all return the same SPA shell. The real host is in the page's own
+HTML. It serves plain JSON, needs no key, and holds **14,242,239** records
+against predb.ovh's 7,751,280.
+
+Parameters established by probing, since the documentation is unreadable to a
+machine:
+
+| param | effect |
+|---|---|
+| `q=` | searches release names |
+| `limit=` | page size |
+| `page=` | 1-based pagination |
+| `offset=`, `count=` | **ignored** |
+
+`offset` being accepted and ignored is worth the warning in the code: a caller
+paging with it re-reads page one forever and looks like it is working. A
+filtered response also omits `results_total`, which is how you tell a search
+from a listing.
+
+Rows carry `id, pretime, release, section, files, size, status, reason, group,
+genre, url` — `section` (MP3-WEB, APPS-0DAY, TV-HD…) and the `status`/`reason`
+nuke pair are both things predb.ovh does not give as cleanly. There is also an
+RSS feed at `api.predb.net/feed/`.
+
+No published rate limit, which is a reason for MORE restraint rather than less:
+an unstated limit is enforced by whoever is annoyed. The client spaces calls 2s
+apart, same as the .ovh one.
 
 ## Status
 
-Built and tested: the IRC announce parser and the predb.ovh client.
+Built and tested: the IRC announce parser, the api.predb.net client (primary)
+and the predb.ovh client (secondary).
 
 Not built: storage, the ingest job, and the lookup capability the usenet plugin
 would consume. The transport for live ingest — WebSocket or IRC — is still an
