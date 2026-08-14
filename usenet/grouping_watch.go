@@ -204,8 +204,18 @@ func (s *PGStore) insertSubjectCorpus(ctx context.Context, rows []corpusRow) err
 	}
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		_, err := tx.ExecContext(ctx,
+			// nullif at the BIND. A kept subject carries no rule and no
+			// article, and Go's zero value for both is "" -- which Postgres
+			// stores as an empty string, not as NULL. Every reader of this
+			// table asks "IS NOT NULL" to mean "was dropped", so without this
+			// the keeps answer yes and the probe spends provider bytes reading
+			// the bodies of releases we indexed perfectly well. Caught in
+			// production 17 minutes after the first deploy: 1,137 of 5,102
+			// sampled rows were keeps wearing a drop's clothes.
 			`INSERT INTO subject_corpus (group_name, subject, residue, junk_rule, message_id)
-			 SELECT * FROM unnest($1::text[], $2::text[], $3::boolean[], $4::text[], $5::text[])`,
+			 SELECT g, s, r, nullif(jr,''), nullif(mid,'')
+			   FROM unnest($1::text[], $2::text[], $3::boolean[], $4::text[], $5::text[])
+			        AS t(g, s, r, jr, mid)`,
 			pq.Array(groups), pq.Array(subjects), pq.Array(residues),
 			pgTextArray(rules), pgTextArray(msgids))
 		return err
