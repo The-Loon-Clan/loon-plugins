@@ -170,6 +170,7 @@ func (p *Plugin) renderSettings(ctx context.Context, q settingsQuery) (template.
 	filtersTab := tab("filters", func() (template.HTML, error) {
 		return p.renderFilters(ctx, "", "", q.DiagKind, q.DiagPage)
 	})
+	nfoTab := tab("nfo", func() (template.HTML, error) { return p.renderNFO(ctx) })
 	return p.frag("settings.html", map[string]any{
 		"Servers": servers, "DefaultConns": p.effective(ctx).Connections,
 		"Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,
@@ -180,7 +181,8 @@ func (p *Plugin) renderSettings(ctx context.Context, q settingsQuery) (template.
 		"Groups":                 groups, "GroupQuery": gq, "Tiers": AllTiers,
 		"GroupTotal": total, "Shown": len(groups),
 		"CrawlersTab": crawlersTab, "JobsTab": jobsTab, "FiltersTab": filtersTab,
-		"Msg": msg, "Err": errMsg,
+		"NFOTab": nfoTab,
+		"Msg":    msg, "Err": errMsg,
 	})
 }
 

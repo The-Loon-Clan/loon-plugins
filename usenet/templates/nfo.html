@@ -1,0 +1,98 @@
+{{define "nfo.html"}}
+<div class="card mt-3">
+  <div class="card-body">
+    <h6 class="mb-1">NFO extraction</h6>
+    <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.75rem;">
+      Reads the <code>.nfo</code> article of releases whose document walk found one, and
+      stores the text on the release. It borrows the crawler's connection pool and steps
+      aside the moment the crawler wants it back, so it only makes progress on passes
+      that indexed nothing — progress here is meant to be unhurried.
+    </p>
+
+    {{if .NoStore}}
+    <div class="alert alert-secondary" style="font-size:0.82rem;">
+      This host has not registered an NFO store, so there is nowhere for the text to go.
+      The job will report the same and do nothing.
+    </div>
+    {{else}}
+
+    {{if not .Enabled}}
+    <div class="alert alert-warning py-2" style="font-size:0.82rem;">
+      <strong>Off.</strong> Set <code>nfo_enabled</code> in this plugin's config to start reading.
+      It is off by default because it is the one job here that spends provider bytes —
+      everything else is bookkeeping over data already paid for.
+    </div>
+    {{end}}
+
+    <div class="row g-2 mb-3">
+      <div class="col-4">
+        <div class="p-2" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;">
+          <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Stored</div>
+          <div style="font-size:1.3rem;font-weight:600;">{{.Stored}}</div>
+        </div>
+      </div>
+      <div class="col-4">
+        <div class="p-2" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;">
+          <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Waiting</div>
+          <div style="font-size:1.3rem;font-weight:600;">{{.Pending}}</div>
+          <div style="font-size:0.66rem;color:var(--text-muted);">article known, unread</div>
+        </div>
+      </div>
+      <div class="col-4">
+        <div class="p-2" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;">
+          <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Written off</div>
+          <div style="font-size:1.3rem;font-weight:600;">{{.Unavailable}}</div>
+          <div style="font-size:0.66rem;color:var(--text-muted);">gone, or not text</div>
+        </div>
+      </div>
+    </div>
+
+    <p style="font-size:0.72rem;color:var(--text-muted);">
+      Reading up to <strong>{{.BatchSize}}</strong> releases a pass, capped at
+      <strong>{{.BudgetMB}} MB</strong> of article data per pass.
+    </p>
+
+    {{if .Rows}}
+    <div class="table-responsive">
+      <table class="table table-sm mb-0" style="font-size:0.8rem;">
+        <thead>
+          <tr>
+            <th style="width:6rem;">Release</th>
+            <th>Title</th>
+            <th style="width:9rem;">Newsgroup</th>
+            <th style="width:4.5rem;" class="text-end">Lines</th>
+            <th style="width:5rem;" class="text-end">Bytes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Rows}}
+          <tr>
+            <td><a href="/release/{{.ID}}" style="color:var(--blue);text-decoration:none;">#{{.ID}}</a></td>
+            <td style="max-width:0;">
+              <a href="/release/{{.ID}}" title="{{.Preview}}"
+                 style="color:var(--text-primary);text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.Title}}</a>
+            </td>
+            <td style="color:var(--text-muted);">{{.Group}}</td>
+            <td class="text-end" style="font-variant-numeric:tabular-nums;">{{.Lines}}</td>
+            <td class="text-end" style="font-variant-numeric:tabular-nums;">{{.Bytes}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p style="font-size:0.82rem;color:var(--text-muted);margin:0;">
+      {{if .Pending}}
+      Nothing read yet. {{.Pending}} release(s) are waiting — the job is either off, or
+      has not met a crawl pass quiet enough to spend connections on.
+      {{else}}
+      Nothing read, and nothing waiting. Release documents are still being scanned for
+      which file is the <code>.nfo</code>, so candidates appear as that walk progresses.
+      {{end}}
+    </p>
+    {{end}}
+
+    {{end}}
+  </div>
+</div>
+{{end}}

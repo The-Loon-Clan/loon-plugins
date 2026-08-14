@@ -745,3 +745,97 @@ func TestCrawlersRendersPerGroupCountsInHostMode(t *testing.T) {
 		t.Error("internal-mode counts are live; they must not claim an hourly cache")
 	}
 }
+
+// The NFO tab renders, and the settings page carries it.
+//
+// Two failures this catches, both silent. A tab pane whose data key is never
+// supplied renders as an empty div — the tab appears in the strip and clicking
+// it shows nothing, which reads as a broken page rather than a missing wire.
+// And the counters are the tab's whole purpose: "waiting" is what distinguishes
+// a job that is not running from a job with nothing to do.
+func TestNFOTabRenders(t *testing.T) {
+	tmpl := parseViewTemplates(t)
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "nfo.html", nfoTabVM{
+		Enabled: true, BudgetMB: 64, BatchSize: 100,
+		Stored: 12, Pending: 906, Unavailable: 3,
+		Rows: []nfoRowVM{{ID: 99, Title: "Some.Release-GROUP",
+			Group: "alt.binaries.anime", Bytes: 2048, Lines: 40, Preview: "scene notes"}},
+	}); err != nil {
+		t.Fatalf("render nfo.html: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"906", "Some.Release-GROUP", "alt.binaries.anime", "/release/99"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("NFO tab missing %q", want)
+		}
+	}
+	// Enabled, so no "off" warning.
+	if strings.Contains(out, "nfo_enabled") {
+		t.Error("an enabled job still showed the 'switch me on' notice")
+	}
+}
+
+// Off is the default, and the tab has to say so — otherwise zero stored reads
+// as a broken job rather than one nobody has turned on.
+func TestNFOTabSaysWhenItIsOff(t *testing.T) {
+	tmpl := parseViewTemplates(t)
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "nfo.html", nfoTabVM{BudgetMB: 64, BatchSize: 100}); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(buf.String(), "nfo_enabled") {
+		t.Error("a disabled job did not say how to enable it")
+	}
+}
+
+// A host with no NFO store gets an explanation, not an empty table implying
+// the job ran and found nothing.
+func TestNFOTabSaysWhenTheHostHasNoStore(t *testing.T) {
+	tmpl := parseViewTemplates(t)
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "nfo.html", nfoTabVM{NoStore: true}); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(buf.String(), "not registered an NFO store") {
+		t.Error("a host with no NFO store got no explanation")
+	}
+}
+
+// The settings page must actually place the fragment, or the tab is a dead
+// link to an empty pane.
+func TestSettingsPageCarriesTheNFOTab(t *testing.T) {
+	tmpl := parseViewTemplates(t)
+	var buf bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buf, "settings.html", map[string]any{
+		// Seeded rather than nil: settings.html applies len to these, and
+		// len of a nil interface is a render error rather than zero.
+		"Servers": []provider{}, "Knobs": nil, "Groups": []pluginapi.GroupInfo{},
+		"Tiers":       AllTiers,
+		"CrawlersTab": template.HTML(""), "JobsTab": template.HTML(""),
+		"FiltersTab": template.HTML(""),
+		"NFOTab":     template.HTML("<div>nfo-frag</div>"),
+	})
+	if err != nil {
+		t.Fatalf("render settings: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `href="#nfo"`) {
+		t.Error("no NFO entry in the tab strip")
+	}
+	if !strings.Contains(out, "nfo-frag") {
+		t.Error("the NFO pane did not receive its fragment — the tab would open " +
+			"on an empty pane, which reads as a broken page")
+	}
+}
+
+// parseViewTemplates is the shared parse for the tab render tests below.
+func parseViewTemplates(t *testing.T) *template.Template {
+	t.Helper()
+	tmpl, err := template.ParseFS(viewFS, "templates/*.html")
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	return tmpl
+}

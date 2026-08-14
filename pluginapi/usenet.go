@@ -678,6 +678,38 @@ type ReleaseNFOStore interface {
 	// article is re-fetched every pass, forever, and a handful of them can
 	// occupy the whole batch.
 	MarkNFOUnavailable(ctx context.Context, id int64, reason string) error
+
+	// RecentNFOs returns the most recently read NFOs, newest first, for the
+	// plugin's admin tab. Optional in spirit — a host may return nothing —
+	// but the tab is the only evidence the job is working, since everything
+	// it produces lands in the host's catalogue where the plugin cannot see
+	// it.
+	RecentNFOs(ctx context.Context, limit int) ([]NFOExtract, error)
+	// NFOProgress counts what has been read, what is waiting, and what has
+	// been written off.
+	//
+	// Waiting and written-off matter as much as stored: a job that reads
+	// nothing and a job with nothing to read produce the same empty list, and
+	// telling those apart is the whole question when it has just been
+	// switched on.
+	NFOProgress(ctx context.Context) (NFOProgress, error)
+}
+
+// NFOExtract is one release whose NFO has been read.
+type NFOExtract struct {
+	ID      int64
+	Title   string
+	Group   string
+	Bytes   int
+	Lines   int
+	Preview string
+}
+
+// NFOProgress is the counter row above the list.
+type NFOProgress struct {
+	Stored      int
+	Pending     int
+	Unavailable int
 }
 
 // LookupReleaseNFOStore resolves the host-registered NFO store, if any.
