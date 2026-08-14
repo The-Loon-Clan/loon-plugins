@@ -25,7 +25,7 @@ func TestPendingForwardExcludesCrawlHeadroom(t *testing.T) {
 			// THE BUG. A fully caught-up group sits exactly one headroom below
 			// the server's high mark, because that is where the crawl stops on
 			// purpose. This reported 6,000 on every group, forever.
-			name: "caught up reports nothing",
+			name:       "caught up reports nothing",
 			serverHigh: 1_000_000, highWatermark: 994_000, want: 0,
 		},
 		{
@@ -33,29 +33,29 @@ func TestPendingForwardExcludesCrawlHeadroom(t *testing.T) {
 			// destroyed: this group is genuinely 500 behind, and before the fix
 			// it rendered "6,500" — indistinguishable at a glance from the idle
 			// group above it.
-			name: "genuine backlog reports only the backlog",
+			name:       "genuine backlog reports only the backlog",
 			serverHigh: 1_000_000, highWatermark: 993_500, want: 500,
 		},
 		{
-			name: "large backlog",
+			name:       "large backlog",
 			serverHigh: 1_000_000, highWatermark: 500_000, want: 494_000,
 		},
 		{
 			// Mid-pass the watermark can sit above ServerHigh - headroom, since
 			// ServerHigh is a snapshot from the last plan. Must not go negative
 			// and must not render.
-			name: "watermark inside the headroom clamps to zero",
+			name:       "watermark inside the headroom clamps to zero",
 			serverHigh: 1_000_000, highWatermark: 999_999, want: 0,
 		},
 		{
-			name: "watermark past ServerHigh clamps to zero",
+			name:       "watermark past ServerHigh clamps to zero",
 			serverHigh: 1_000_000, highWatermark: 1_000_500, want: 0,
 		},
 		{
 			// Never crawled forward: the whole range is backfill, which the
 			// Remaining column reports. Reporting it twice would double-count
 			// a first-pass group's work.
-			name: "never crawled reports nothing",
+			name:       "never crawled reports nothing",
 			serverHigh: 1_000_000, highWatermark: 0, want: 0,
 		},
 	}

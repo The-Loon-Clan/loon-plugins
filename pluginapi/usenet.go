@@ -628,3 +628,64 @@ func LookupJunkSweepStats(c *core.Core) (JunkSweepStatsProvider, bool) {
 	s, ok := v.(JunkSweepStatsProvider)
 	return s, ok
 }
+
+// ── NFO store (the body-fetch job's first feature) ───────────────────
+
+// UsenetNFOStoreName is an OPTIONAL capability a host registers so the
+// plugin's NFO job writes into the HOST'S catalogue.
+//
+// Optional, unlike the health store: a host that does not register it simply
+// gets no NFO extraction, which is a missing feature rather than a broken
+// one. The health store is mandatory in host mode because without it nothing
+// health-checks the catalogue at all.
+const UsenetNFOStoreName = "usenet.nfostore"
+
+// NFOCandidate is one release whose .nfo article is known but unread.
+//
+// MessageID is the FIRST segment of the .nfo file, recorded when the document
+// was walked for other reasons. An NFO is nearly always a single small
+// article, so one fetch answers it — which is what makes this the cheapest of
+// the body-fetch features and the right one to build first.
+type NFOCandidate struct {
+	ID        int64
+	MessageID string
+	// Group is a newsgroup the release was posted to, for servers that
+	// require a group to be selected before an article can be fetched by
+	// message-id. Empty is allowed; most providers do not need it.
+	Group string
+}
+
+// ReleaseNFOStore is the host's side of NFO extraction.
+type ReleaseNFOStore interface {
+	// NFOCandidates returns up to limit releases that have a recorded .nfo
+	// message-id and no stored NFO text yet.
+	//
+	// The host decides the order. It SHOULD put newest releases first: an NFO
+	// is read by somebody deciding whether to grab, so it is worth most on
+	// what people are looking at now.
+	NFOCandidates(ctx context.Context, limit int) ([]NFOCandidate, error)
+
+	// SetReleaseNFO stores the decoded NFO text.
+	SetReleaseNFO(ctx context.Context, id int64, nfo string) error
+
+	// MarkNFOUnavailable records that this release's NFO cannot be read, so
+	// it stops being offered as a candidate.
+	//
+	// Separate from storing empty text because the two are different facts
+	// and only one of them is worth retrying: an article the server no longer
+	// holds is gone for good, whereas a release that genuinely has no NFO was
+	// never a candidate in the first place. Without this the same dead
+	// article is re-fetched every pass, forever, and a handful of them can
+	// occupy the whole batch.
+	MarkNFOUnavailable(ctx context.Context, id int64, reason string) error
+}
+
+// LookupReleaseNFOStore resolves the host-registered NFO store, if any.
+func LookupReleaseNFOStore(c *core.Core) (ReleaseNFOStore, bool) {
+	v, ok := c.Lookup(UsenetNFOStoreName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(ReleaseNFOStore)
+	return s, ok
+}

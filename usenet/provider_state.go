@@ -418,4 +418,3 @@ func (s *PGStore) criticalBackfillPending(ctx context.Context, backbone string) 
 	})
 	return out, err
 }
-

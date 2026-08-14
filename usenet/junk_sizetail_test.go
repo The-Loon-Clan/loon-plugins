@@ -14,12 +14,12 @@ import "testing"
 // measurement, not synthetic.
 func TestTokenSizeTail_Catches(t *testing.T) {
 	for _, title := range []string{
-		"rP8nmcYiqE2eAjw7 - 49,37 GB",  // the largest single post: 39,875 articles
-		"3hehrnk86mlv - 8,82 GB",       // the two-counter family's poster
-		"Cj74i3x3MQvdsK1 - 7.70 GB",    // dot decimal, not comma
-		"fwltl6Rms2x6TFE - 831.38 MB",  // MB tail
-		"4oV1g1RSsz - 5.39 GB",         // 10-char head
-		"QYZNRMFJKEGLCHSUTBPA - 10,78 GB", // the catalogue leak: 20+ head, no digit needed
+		"rP8nmcYiqE2eAjw7 - 49,37 GB",               // the largest single post: 39,875 articles
+		"3hehrnk86mlv - 8,82 GB",                    // the two-counter family's poster
+		"Cj74i3x3MQvdsK1 - 7.70 GB",                 // dot decimal, not comma
+		"fwltl6Rms2x6TFE - 831.38 MB",               // MB tail
+		"4oV1g1RSsz - 5.39 GB",                      // 10-char head
+		"QYZNRMFJKEGLCHSUTBPA - 10,78 GB",           // the catalogue leak: 20+ head, no digit needed
 		"Wzc1sGrt4kbNaVuGU0It.vol175+190 - 3,70 GB", // par2 volume splinter of the same post
 		"Mxg3z1WiCLSNTMWsMn39.vol112+112 - 9,77 GB",
 	} {

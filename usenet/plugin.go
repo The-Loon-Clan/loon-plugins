@@ -42,6 +42,7 @@ const (
 	jobNameTagFill  = "Usenet Tag Fill"
 	jobNamePrune    = "Usenet Prune"
 	jobNameHealth   = "Usenet Health Check"
+	jobNameNFO      = "Usenet NFO Fetch"
 )
 
 func init() {
@@ -68,6 +69,7 @@ type Plugin struct {
 	tagJob      core.Job
 	pruneJob    core.Job
 	healthJob   core.Job
+	nfoJob      core.Job
 
 	// per-job locks: a manual trigger (admin button / /admin/jobs) must not
 	// overlap a scheduled run of the same job — they share one NNTP connection
@@ -80,6 +82,7 @@ type Plugin struct {
 	backfillMu sync.Mutex
 	buildMu    sync.Mutex
 	healthMu   sync.Mutex
+	nfoMu      sync.Mutex
 	pruneMu    sync.Mutex
 	tagMu      sync.Mutex
 
@@ -307,12 +310,15 @@ func (p *Plugin) Provision(c *core.Core) error {
 			"Sweeps stale staging + junk; deletes old NZBs only when nzb_retention_days is set").MarkWrites())
 		p.healthJob = p.duty.wrap(jobNameHealth, c.Scheduler.RegisterJob(jobNameHealth,
 			"STATs stored NZBs to find releases whose articles have expired").MarkOffPeak().MarkWrites())
+		p.nfoJob = p.duty.wrap(jobNameNFO, c.Scheduler.RegisterJob(jobNameNFO,
+			"Reads .nfo articles and stores their text (off by default; spends provider bytes)").MarkOffPeak().MarkWrites())
 		p.crawlJob.SetTrigger(func() { go p.runCrawl(p.ctx) })
 		p.backfillJob.SetTrigger(func() { go p.runBackfill(p.ctx) })
 		p.buildJob.SetTrigger(func() { go p.runBuild(p.ctx) })
 		p.tagJob.SetTrigger(func() { go p.runTagFill(p.ctx) })
 		p.pruneJob.SetTrigger(func() { go p.runPrune(p.ctx) })
 		p.healthJob.SetTrigger(func() { go p.runHealthCheck(p.ctx) })
+		p.nfoJob.SetTrigger(func() { go p.runNFO(p.ctx) })
 		p.svc.triggerCrawl = func() { go p.runCrawl(p.ctx) }
 		p.svc.triggerBackfill = func() { go p.runBackfill(p.ctx) }
 	}

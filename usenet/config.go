@@ -191,6 +191,25 @@ type Config struct {
 	// nothing for weeks while logging a plausible "pool busy or failing".
 	HealthTransportYield int `json:"health_transport_yield"` // consecutive transport-failed releases before yielding (default 5)
 
+	// NFO extraction (nfo.go). The first feature built on article bodies --
+	// the crawler indexes from OVERVIEW lines and has never read one.
+	//
+	// NFOEnabled defaults FALSE. Every other job here is bookkeeping against
+	// data already paid for; this one spends provider bytes, and a block
+	// account's bytes are finite and metered. An operator should choose to
+	// spend them rather than discover the choice was made for them by an
+	// upgrade.
+	NFOEnabled     bool `json:"nfo_enabled"`      // read .nfo articles at all (default false)
+	NFOIntervalMin int  `json:"nfo_interval_min"` // pass cadence (default 60)
+	NFOBatchSize   int  `json:"nfo_batch_size"`   // releases per pass (default 100)
+	// NFOBudgetMB caps the bytes ONE PASS may read. The genuinely new control
+	// this feature needs: providers meter bytes, so unlike connection pressure
+	// -- which the pool already expresses and TryDo already yields to -- there
+	// is nothing in the existing machinery that notices bytes being consumed.
+	// Checked BEFORE each fetch, since a ceiling that one whole article can
+	// exceed is not a ceiling.
+	NFOBudgetMB int `json:"nfo_budget_mb"` // per-pass byte ceiling (default 64)
+
 	// NNTP transport bounds. Per-provider behavior lives on the servers table;
 	// these are the plugin-wide dial/operation limits every pool is built with.
 	// DialTimeoutSec bounds one connect+greeting attempt. OpTimeoutSec bounds
@@ -333,6 +352,15 @@ func (c *Config) applyDefaults() {
 	}
 	if c.HealthIntervalMin <= 0 {
 		c.HealthIntervalMin = 60
+	}
+	if c.NFOIntervalMin <= 0 {
+		c.NFOIntervalMin = 60
+	}
+	if c.NFOBatchSize <= 0 {
+		c.NFOBatchSize = 100
+	}
+	if c.NFOBudgetMB <= 0 {
+		c.NFOBudgetMB = 64
 	}
 	if c.HealthBatchSize <= 0 {
 		c.HealthBatchSize = 50
