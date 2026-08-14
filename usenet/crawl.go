@@ -304,6 +304,14 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	go p.runBuild(ctx)
 	if totalStaged == 0 {
 		go p.idleHealthCheck(ctx)
+		// NFO reading is bookkeeping on the same terms as health: it earns
+		// connections only on a pass that produced no content. Dispatched
+		// here rather than on a timer for the reason the whole budget rests
+		// on -- the point is to use connections the crawler does not want,
+		// and "the crawler just staged nothing" is the clearest statement of
+		// that there is. runNFO returns immediately when the feature is off,
+		// which is the default.
+		go p.runNFO(ctx)
 	}
 }
 
