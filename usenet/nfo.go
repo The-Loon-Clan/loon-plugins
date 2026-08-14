@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -329,6 +330,7 @@ func decodeNFO(body []byte) (string, bool) {
 		text = decodeCP437(raw)
 	}
 	text = strings.ReplaceAll(text, "\x00", "")
+	text = stripANSI(text)
 	if strings.TrimSpace(text) == "" {
 		return "", false
 	}
@@ -370,4 +372,26 @@ func (p *Plugin) nextNFO(cfg Config) time.Time {
 		m = 60
 	}
 	return time.Now().Add(time.Duration(m) * time.Minute)
+}
+
+// reANSI matches ANSI escape sequences — CSI (colour, cursor moves) and the
+// short two-character escapes.
+var reANSI = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\-_]`)
+
+// stripANSI removes terminal escape sequences from NFO text.
+//
+// NFOs are drawn in CP437 block and box characters, and a minority add ANSI
+// colour on top. We render into a <pre>, which shows an escape sequence as the
+// literal characters it is made of — so an ANSI-coloured NFO arrives as art
+// interrupted every few characters by "[1;36m". Unreadable, and worse than the
+// same art in one colour.
+//
+// Removing them loses the colour, which is a real loss, but the alternative is
+// either shipping an ANSI-to-HTML renderer or showing garbage, and the art
+// itself — which is the part people look at — survives intact either way.
+func stripANSI(s string) string {
+	if !strings.ContainsRune(s, 0x1b) {
+		return s // the common case: no escapes, no allocation
+	}
+	return reANSI.ReplaceAllString(s, "")
 }

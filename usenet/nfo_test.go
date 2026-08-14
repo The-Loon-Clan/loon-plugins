@@ -136,3 +136,33 @@ func (errTestTimeout) Error() string { return "read tcp 10.0.0.1:119: i/o timeou
 type errTestReset struct{}
 
 func (errTestReset) Error() string { return "connection reset by peer" }
+
+// ANSI colour codes are stripped.
+//
+// We render into a <pre>, which shows an escape sequence as the literal
+// characters it is made of — so an ANSI-coloured NFO arrives as art
+// interrupted every few characters by "[1;36m". The colour is a real loss;
+// the art, which is the part people look at, survives either way.
+func TestDecodeNFOStripsANSIColour(t *testing.T) {
+	raw := "\x1b[1;36m╔══╗\x1b[0m\n\x1b[32mhello\x1b[0m\n"
+	got, ok := decodeNFO([]byte(raw))
+	if !ok {
+		t.Fatal("an ANSI-coloured NFO was rejected")
+	}
+	if strings.Contains(got, "\x1b") || strings.Contains(got, "[1;36m") {
+		t.Errorf("escape sequences survived: %q", got)
+	}
+	for _, want := range []string{"╔══╗", "hello"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stripping removed content as well as codes: %q missing from %q", want, got)
+		}
+	}
+}
+
+// The common case allocates nothing: most NFOs carry no escapes at all.
+func TestStripANSILeavesPlainTextIdentical(t *testing.T) {
+	const s = "plain ╔══╗ text\nwith lines\n"
+	if got := stripANSI(s); got != s {
+		t.Errorf("plain text was altered:\n got %q\nwant %q", got, s)
+	}
+}
