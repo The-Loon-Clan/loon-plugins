@@ -735,3 +735,68 @@ func LookupReleaseNFOStore(c *core.Core) (ReleaseNFOStore, bool) {
 	s, ok := v.(ReleaseNFOStore)
 	return s, ok
 }
+
+// UsenetRetitleStoreName is an OPTIONAL capability a host registers so the
+// plugin can repair titles it can PROVE it mis-stored.
+//
+// It exists for exactly one class of damage, and the class matters more than
+// the mechanism. Until 2026-08-12 the crawler read ROT18-rotated subjects
+// literally, so roughly a thousand releases were stored with gibberish titles —
+// and because the rotation covers digits, with rotated counters and sizes too.
+// The ingest path decodes now (see the plugin's rot18.go), but a fix at ingest
+// cannot reach a row that is already stored, and a re-crawl cannot either: the
+// dedup key is a content hash over message-ids, so the corrected re-assembly
+// collides with the damaged row and is discarded. An explicit update is the
+// only path back.
+//
+// THE WALK IS DELIBERATELY UNFILTERED. The host offers "show me your titles,
+// oldest first" and nothing more; which titles are wrong is the plugin's
+// knowledge, and the marker list that decides it lives in one place next to the
+// decoder. A host-side filter would mean a second copy of that list in SQL,
+// which is precisely the shape that let a Go regex and its SQL mirror disagree
+// for a year while the tests stayed green.
+const UsenetRetitleStoreName = "usenet.retitlestore"
+
+// ReleaseTitle is one row of the catalogue walk.
+type ReleaseTitle struct {
+	ID    int64
+	Title string
+	// Obfuscated is the host's current flag. A row that already carries it has
+	// been decoded before and must NOT be rotated again — rot18 is its own
+	// inverse, so a second pass would re-encode a correct title into
+	// convincing-looking nonsense.
+	Obfuscated bool
+	// TotalSegments distinguishes a release that is merely mis-NAMED from one
+	// that is structurally broken. Rotated digits rotated the counters, so a
+	// set could stage with a total-parts of zero and never satisfy
+	// completeness; those rows need more than a title and the job counts them
+	// separately rather than pretending a rename fixed them.
+	TotalSegments int
+}
+
+// ReleaseRetitleStore is the host's side of that repair.
+type ReleaseRetitleStore interface {
+	// ReleaseTitlesAfter returns up to limit rows with ID > afterID, ordered by
+	// ID. Ordered and keyed on the primary key so the walk is resumable and
+	// cannot skip or repeat a row when the catalogue changes underneath it.
+	ReleaseTitlesAfter(ctx context.Context, afterID int64, limit int) ([]ReleaseTitle, error)
+
+	// RetitleRelease replaces a release's title and records that the stored
+	// title was decoded rather than posted.
+	//
+	// The flag is not decoration. It is the ONLY thing that makes the original
+	// subject recoverable — rotating a stored title reproduces exactly what the
+	// poster wrote, but only if you know it should be rotated — and it is what
+	// stops this job from decoding the same row twice.
+	RetitleRelease(ctx context.Context, id int64, title string, obfuscated bool) error
+}
+
+// LookupReleaseRetitleStore resolves the host-registered retitle store, if any.
+func LookupReleaseRetitleStore(c *core.Core) (ReleaseRetitleStore, bool) {
+	v, ok := c.Lookup(UsenetRetitleStoreName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(ReleaseRetitleStore)
+	return s, ok
+}

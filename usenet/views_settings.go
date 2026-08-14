@@ -66,6 +66,8 @@ func knobList(cfg Config) []knob {
 		{"nfo_batch_size", "NFO releases per pass", cfg.NFOBatchSize, "how many releases one pass may read (default 100) — bounded again by the byte budget below, whichever is reached first"},
 		{"nfo_budget_mb", "NFO byte budget per pass (MB)", cfg.NFOBudgetMB, "hard ceiling on article data one pass may pull (default 64). The only control here that meters BYTES rather than connections, which is what a block account is actually sold by"},
 		{"nfo_max_retries", "NFO transport retries", cfg.NFOMaxRetries, "how many provider timeouts one release may cost before its NFO is written off (default 3). A server refusal is permanent and written off at once; 0 here means retry a timing-out article forever"},
+		{"rot18_repair_interval_min", "Title repair interval (min)", cfg.Rot18RepairIntervalMin, "how often to look for ROT18-rotated titles stored before the crawler could decode them (default 60). Once the catalogue has been walked this finds nothing and costs one indexed query per pass"},
+		{"rot18_repair_max_min", "Title repair pass budget (min)", cfg.Rot18RepairMaxMin, "how long ONE pass may run (default 10). The first pass walks the whole catalogue; every pass after it resumes from where that stopped"},
 		{"junk_probe_interval_min", "Junk probe interval (min)", cfg.JunkProbeIntervalMin, "how often to read the bodies of junk-dropped postings (default 360). Diagnostic rather than a feature: it measures how often a scrambled subject hid a real filename"},
 		{"junk_probe_batch_size", "Junk probe drops per pass", cfg.JunkProbeBatchSize, "how many dropped postings one pass may read (default 50). Counted in ARTICLES, not MB, because a probe costs a whole segment of wire however little of it we keep"},
 		{"backfill_pressure_high_pct", "Backfill pause at (% pressure)", cfg.BackfillPressureHighPct, "backfill pauses when staging pressure reaches this percent (default 85), while the builder has a backlog to drain"},
@@ -212,6 +214,7 @@ func boolViewData(cfg Config) map[string]any {
 		"walk_past_no_salvage":      "WalkPastNoSalvage",
 		"nfo_enabled":               "NFOEnabled",
 		"junk_probe_enabled":        "JunkProbeEnabled",
+		"rot18_repair_enabled":      "Rot18RepairEnabled",
 	}
 	out := make(map[string]any)
 	for key, dst := range c.boolFields() {

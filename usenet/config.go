@@ -215,6 +215,19 @@ type Config struct {
 	// discarding real releases on the strength of a scrambled subject? The
 	// batch is expressed in ARTICLES rather than MB because the wire cost of
 	// one probe is a whole segment however few bytes we keep.
+	// The ROT18 title repair (rot18_repair.go). Off by default because it
+	// REWRITES catalogue titles: the decode is safe on rows a literal marker
+	// matches, but "safe" is a property of the marker list, and an operator
+	// should switch that on deliberately rather than find a thousand titles
+	// changed after an upgrade. It spends no provider bytes.
+	Rot18RepairEnabled     bool `json:"rot18_repair_enabled"`      // repair ROT18 titles (default false)
+	Rot18RepairIntervalMin int  `json:"rot18_repair_interval_min"` // pass cadence (default 60)
+	// Rot18RepairMaxMin bounds ONE pass. The walk is the whole catalogue the
+	// first time (~1M rows) and nothing after that, so the budget exists to
+	// keep the first pass from holding the job lease for an unbounded stretch,
+	// not to ration work.
+	Rot18RepairMaxMin int `json:"rot18_repair_max_min"` // minutes one pass may run (default 10)
+
 	JunkProbeEnabled     bool `json:"junk_probe_enabled"`      // read dropped-junk bodies at all (default false)
 	JunkProbeIntervalMin int  `json:"junk_probe_interval_min"` // pass cadence (default 360)
 	JunkProbeBatchSize   int  `json:"junk_probe_batch_size"`   // drops per pass (default 50)
@@ -379,6 +392,12 @@ func (c *Config) applyDefaults() {
 	if c.NFOBudgetMB <= 0 {
 		c.NFOBudgetMB = 64
 	}
+	if c.Rot18RepairIntervalMin <= 0 {
+		c.Rot18RepairIntervalMin = 60
+	}
+	if c.Rot18RepairMaxMin <= 0 {
+		c.Rot18RepairMaxMin = 10
+	}
 	if c.JunkProbeIntervalMin <= 0 {
 		c.JunkProbeIntervalMin = 360
 	}
@@ -474,6 +493,8 @@ func (c *Config) knobFields() map[string]*int {
 		"nfo_budget_mb":                 &c.NFOBudgetMB,
 		"nfo_max_retries":               &c.NFOMaxRetries,
 		"junk_probe_interval_min":       &c.JunkProbeIntervalMin,
+		"rot18_repair_interval_min":     &c.Rot18RepairIntervalMin,
+		"rot18_repair_max_min":          &c.Rot18RepairMaxMin,
 		"junk_probe_batch_size":         &c.JunkProbeBatchSize,
 		"keepalive_min":                 &c.KeepaliveMin,
 		"retention_days":                &c.RetentionDays,
@@ -536,8 +557,9 @@ func (c *Config) boolFields() map[string]*bool {
 		// only in config.yml, or the only way to enable it is a file edit on
 		// the box -- which is the shape of setting this project already
 		// decided against.
-		"nfo_enabled":        &c.NFOEnabled,
-		"junk_probe_enabled": &c.JunkProbeEnabled,
+		"nfo_enabled":          &c.NFOEnabled,
+		"junk_probe_enabled":   &c.JunkProbeEnabled,
+		"rot18_repair_enabled": &c.Rot18RepairEnabled,
 	}
 }
 

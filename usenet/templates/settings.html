@@ -232,6 +232,10 @@
             <input type="hidden" name="has_junk_probe_enabled" value="1">
             <input type="checkbox" name="junk_probe_enabled" {{if .JunkProbeEnabled}}checked{{end}}> Probe junk drops (reads the body of postings the junk rules discarded, to record what the yEnc header says the file is really called — a measurement, not a feature: nothing is indexed from it, and it spends provider bytes)
         </label>
+        <label class="d-block small mb-1">
+            <input type="hidden" name="has_rot18_repair_enabled" value="1">
+            <input type="checkbox" name="rot18_repair_enabled" {{if .Rot18RepairEnabled}}checked{{end}}> Repair ROT18 titles (rewrites catalogue titles stored before the crawler could decode rotated subjects &mdash; only rows matching a literal marker, and never one already decoded. Spends no provider bytes; it walks the catalogue once)
+        </label>
         <div style="margin-top:.5rem">
             <button class="btn btn-primary" type="submit">Save settings</button>
             <span class="text-muted small">applied on each job's next run (intervals take effect next cycle)</span>

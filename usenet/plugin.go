@@ -36,14 +36,15 @@ var migrations embed.FS
 // prefix is deliberate: the host registers its own jobs in the same registry,
 // and a generic name once collided with a host job.
 const (
-	jobNameCrawl     = "Usenet Crawler"
-	jobNameBackfill  = "Usenet Backfill"
-	jobNameBuild     = "Usenet Builder"
-	jobNameTagFill   = "Usenet Tag Fill"
-	jobNamePrune     = "Usenet Prune"
-	jobNameHealth    = "Usenet Health Check"
-	jobNameNFO       = "Usenet NFO Fetch"
-	jobNameJunkProbe = "Usenet Junk Probe"
+	jobNameCrawl       = "Usenet Crawler"
+	jobNameBackfill    = "Usenet Backfill"
+	jobNameBuild       = "Usenet Builder"
+	jobNameTagFill     = "Usenet Tag Fill"
+	jobNamePrune       = "Usenet Prune"
+	jobNameHealth      = "Usenet Health Check"
+	jobNameNFO         = "Usenet NFO Fetch"
+	jobNameJunkProbe   = "Usenet Junk Probe"
+	jobNameRot18Repair = "Usenet Title Repair"
 )
 
 func init() {
@@ -72,6 +73,7 @@ type Plugin struct {
 	healthJob    core.Job
 	nfoJob       core.Job
 	junkProbeJob core.Job
+	rot18Job     core.Job
 
 	// per-job locks: a manual trigger (admin button / /admin/jobs) must not
 	// overlap a scheduled run of the same job — they share one NNTP connection
@@ -86,6 +88,7 @@ type Plugin struct {
 	healthMu    sync.Mutex
 	nfoMu       sync.Mutex
 	junkProbeMu sync.Mutex
+	rot18Mu     sync.Mutex
 	pruneMu     sync.Mutex
 	tagMu       sync.Mutex
 
@@ -317,6 +320,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 			"Reads .nfo articles and stores their text (off by default; spends provider bytes)").MarkOffPeak().MarkWrites())
 		p.junkProbeJob = p.duty.wrap(jobNameJunkProbe, c.Scheduler.RegisterJob(jobNameJunkProbe,
 			"Reads the bodies of junk-dropped postings to see whether the yEnc header names a real file (off by default; spends provider bytes)").MarkOffPeak().MarkWrites())
+		p.rot18Job = p.duty.wrap(jobNameRot18Repair, c.Scheduler.RegisterJob(jobNameRot18Repair,
+			"Rewrites titles stored before the crawler could decode ROT18-rotated subjects (off by default; changes catalogue titles)").MarkOffPeak().MarkWrites())
 		p.crawlJob.SetTrigger(func() { go p.runCrawl(p.ctx) })
 		p.backfillJob.SetTrigger(func() { go p.runBackfill(p.ctx) })
 		p.buildJob.SetTrigger(func() { go p.runBuild(p.ctx) })
@@ -325,6 +330,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		p.healthJob.SetTrigger(func() { go p.runHealthCheck(p.ctx) })
 		p.nfoJob.SetTrigger(func() { go p.runNFO(p.ctx) })
 		p.junkProbeJob.SetTrigger(func() { go p.runJunkProbe(p.ctx) })
+		p.rot18Job.SetTrigger(func() { go p.runRot18Repair(p.ctx) })
 		p.svc.triggerCrawl = func() { go p.runCrawl(p.ctx) }
 		p.svc.triggerBackfill = func() { go p.runBackfill(p.ctx) }
 	}
