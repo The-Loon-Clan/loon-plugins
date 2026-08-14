@@ -343,7 +343,14 @@ func (p *Plugin) fetchArticleBody(ctx context.Context, pool *nntp.Pool, messageI
 		if group != "" {
 			_, _, _, _ = c.Group(group)
 		}
-		r, err := c.Body(messageID)
+		// Stored bare, because that is how an NZB carries a segment id;
+		// BODY wants the angle-bracket form (RFC 3977 §6.2.3). Without this
+		// the server cannot parse the argument as a message-id and answers
+		// 430, which reads exactly like "the article is gone" — so the first
+		// live pass wrote off 96 releases as missing whose articles were
+		// almost certainly there. The health checker already had this,
+		// commented "Stored bare; STAT wants the angle-bracket form".
+		r, err := c.Body(wrapMessageID(messageID))
 		if err != nil {
 			return err
 		}
@@ -474,4 +481,20 @@ func stripANSI(s string) string {
 		return s // the common case: no escapes, no allocation
 	}
 	return reANSI.ReplaceAllString(s, "")
+}
+
+// wrapMessageID puts a bare message-id into the angle-bracket form NNTP
+// commands take. Idempotent, so an id that already carries them is untouched.
+func wrapMessageID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return id
+	}
+	if !strings.HasPrefix(id, "<") {
+		id = "<" + id
+	}
+	if !strings.HasSuffix(id, ">") {
+		id += ">"
+	}
+	return id
 }

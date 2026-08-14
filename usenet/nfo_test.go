@@ -257,3 +257,27 @@ func TestNonNFOSignaturesAreMatchedAsBytes(t *testing.T) {
 		})
 	}
 }
+
+// Message-ids are stored bare and NNTP wants them in angle brackets.
+//
+// An NZB carries a segment id without brackets, which is correct for the
+// format. RFC 3977 §6.2.3 wants BODY <id@host>, and a server given a bare id
+// cannot parse it as a message-id — so it answers 430, which is
+// indistinguishable from "the article is gone". The first live pass therefore
+// wrote off 96 releases as permanently missing when their articles were
+// almost certainly present.
+//
+// The health checker already had this, commented "Stored bare; STAT wants the
+// angle-bracket form". The lesson is not the brackets, it is that a sibling in
+// the same file had solved it.
+func TestMessageIDIsWrappedForNNTP(t *testing.T) {
+	for in, want := range map[string]string{
+		"abc123@JBinUp.local":   "<abc123@JBinUp.local>",
+		"<abc123@JBinUp.local>": "<abc123@JBinUp.local>", // already wrapped: unchanged
+		"  spaced@host  ":       "<spaced@host>",
+	} {
+		if got := wrapMessageID(in); got != want {
+			t.Errorf("wrapMessageID(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
