@@ -228,6 +228,10 @@
             <input type="hidden" name="has_nfo_enabled" value="1">
             <input type="checkbox" name="nfo_enabled" {{if .NFOEnabled}}checked{{end}}> Read NFO articles (fetches the .nfo of releases that have one and stores the text — the only job here that spends provider bytes, so it is off until you choose it; bounded by the NFO budget above)
         </label>
+        <label class="d-block small mb-1">
+            <input type="hidden" name="has_junk_probe_enabled" value="1">
+            <input type="checkbox" name="junk_probe_enabled" {{if .JunkProbeEnabled}}checked{{end}}> Probe junk drops (reads the body of postings the junk rules discarded, to record what the yEnc header says the file is really called — a measurement, not a feature: nothing is indexed from it, and it spends provider bytes)
+        </label>
         <div style="margin-top:.5rem">
             <button class="btn btn-primary" type="submit">Save settings</button>
             <span class="text-muted small">applied on each job's next run (intervals take effect next cycle)</span>

@@ -235,7 +235,7 @@ pass:
 			break pass
 		}
 
-		body, n, err := p.fetchArticleBody(ctx, pool, row.MessageID, row.Group, fetchTimeout)
+		body, n, err := p.fetchArticleBody(ctx, pool, row.MessageID, row.Group, fetchTimeout, nfoMaxBytes)
 		spent += n
 		switch {
 		case err == nil:
@@ -324,7 +324,7 @@ pass:
 //
 // TryDo, never Do: blocking on the pool would queue behind the crawler and
 // hold the slot the moment one frees, which is the opposite of yielding.
-func (p *Plugin) fetchArticleBody(ctx context.Context, pool *nntp.Pool, messageID, group string, opTimeout time.Duration) ([]byte, int64, error) {
+func (p *Plugin) fetchArticleBody(ctx context.Context, pool *nntp.Pool, messageID, group string, opTimeout time.Duration, maxBytes int64) ([]byte, int64, error) {
 	var (
 		out  []byte
 		read int64
@@ -354,7 +354,7 @@ func (p *Plugin) fetchArticleBody(ctx context.Context, pool *nntp.Pool, messageI
 		if err != nil {
 			return err
 		}
-		b, err := io.ReadAll(io.LimitReader(r, nfoMaxBytes))
+		b, err := io.ReadAll(io.LimitReader(r, maxBytes))
 		read = int64(len(b))
 		if err != nil {
 			return err

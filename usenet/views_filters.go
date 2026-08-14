@@ -145,11 +145,20 @@ func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg, diagKindSel str
 		p.reportErr(ctx, "usenet/junk-rule-stats", jerr)
 	}
 
+	// The junk-drop debug list. Degrades to an empty card rather than failing
+	// the tab: it is a diagnostic under the hits table, and the filter editor
+	// above it is the thing an operator came here to use.
+	drops, derr := p.renderJunkDrops(ctx)
+	if derr != nil {
+		p.reportErr(ctx, "usenet/junk-drops", derr)
+	}
+
 	return p.frag("filters.html", map[string]any{
 		"JunkRules": jrows,
 		"Rules":     vms, "Fields": blacklistFields,
 		"Hits": hvms, "TotalHits": total,
 		"Diag":  diag,
+		"Drops": drops,
 		"Sweep": svms, "SweepTotal": sweepTotal,
 		"Watched": watched, "PosterHits": phits,
 		"Msg": msg, "Err": errMsg,

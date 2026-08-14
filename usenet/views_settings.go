@@ -66,6 +66,8 @@ func knobList(cfg Config) []knob {
 		{"nfo_batch_size", "NFO releases per pass", cfg.NFOBatchSize, "how many releases one pass may read (default 100) — bounded again by the byte budget below, whichever is reached first"},
 		{"nfo_budget_mb", "NFO byte budget per pass (MB)", cfg.NFOBudgetMB, "hard ceiling on article data one pass may pull (default 64). The only control here that meters BYTES rather than connections, which is what a block account is actually sold by"},
 		{"nfo_max_retries", "NFO transport retries", cfg.NFOMaxRetries, "how many provider timeouts one release may cost before its NFO is written off (default 3). A server refusal is permanent and written off at once; 0 here means retry a timing-out article forever"},
+		{"junk_probe_interval_min", "Junk probe interval (min)", cfg.JunkProbeIntervalMin, "how often to read the bodies of junk-dropped postings (default 360). Diagnostic rather than a feature: it measures how often a scrambled subject hid a real filename"},
+		{"junk_probe_batch_size", "Junk probe drops per pass", cfg.JunkProbeBatchSize, "how many dropped postings one pass may read (default 50). Counted in ARTICLES, not MB, because a probe costs a whole segment of wire however little of it we keep"},
 		{"backfill_pressure_high_pct", "Backfill pause at (% pressure)", cfg.BackfillPressureHighPct, "backfill pauses when staging pressure reaches this percent (default 85), while the builder has a backlog to drain"},
 		{"backfill_pressure_low_pct", "Backfill resume below (% pressure)", cfg.BackfillPressureLowPct, "paused backfill resumes once pressure drops below this percent (default 70) — must stay below the pause threshold or the gate flaps"},
 		{"backfill_pressure_ceiling_pct", "Eviction ceiling (% pressure)", cfg.BackfillPressureCeilingPct, "the hard stop that applies even with nothing to drain (default 92) — past it Redis EVICTS forming sets to make room; also caps the crawl's effective pause threshold"},
@@ -209,6 +211,7 @@ func boolViewData(cfg Config) map[string]any {
 		"walk_past_no_evict":        "WalkPastNoEvict",
 		"walk_past_no_salvage":      "WalkPastNoSalvage",
 		"nfo_enabled":               "NFOEnabled",
+		"junk_probe_enabled":        "JunkProbeEnabled",
 	}
 	out := make(map[string]any)
 	for key, dst := range c.boolFields() {

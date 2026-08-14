@@ -209,6 +209,15 @@ type Config struct {
 	// Checked BEFORE each fetch, since a ceiling that one whole article can
 	// exceed is not a ceiling.
 	NFOBudgetMB int `json:"nfo_budget_mb"` // per-pass byte ceiling (default 64)
+	// The junk-recovery probe (junk_probe.go). Off by default for the same
+	// reason NFO is -- it spends metered bytes -- and additionally because it
+	// answers a question rather than serving a feature: is the crawler
+	// discarding real releases on the strength of a scrambled subject? The
+	// batch is expressed in ARTICLES rather than MB because the wire cost of
+	// one probe is a whole segment however few bytes we keep.
+	JunkProbeEnabled     bool `json:"junk_probe_enabled"`      // read dropped-junk bodies at all (default false)
+	JunkProbeIntervalMin int  `json:"junk_probe_interval_min"` // pass cadence (default 360)
+	JunkProbeBatchSize   int  `json:"junk_probe_batch_size"`   // drops per pass (default 50)
 	// NFOMaxRetries bounds how many TRANSPORT failures one release may cost
 	// before it is written off. A 430 is permanent and written off at once;
 	// a timeout says nothing about the article, so it is counted instead --
@@ -370,6 +379,12 @@ func (c *Config) applyDefaults() {
 	if c.NFOBudgetMB <= 0 {
 		c.NFOBudgetMB = 64
 	}
+	if c.JunkProbeIntervalMin <= 0 {
+		c.JunkProbeIntervalMin = 360
+	}
+	if c.JunkProbeBatchSize <= 0 {
+		c.JunkProbeBatchSize = 50
+	}
 	if c.NFOMaxRetries < 0 {
 		c.NFOMaxRetries = 0 // explicit opt-out: retry forever
 	} else if c.NFOMaxRetries == 0 {
@@ -458,6 +473,8 @@ func (c *Config) knobFields() map[string]*int {
 		"nfo_batch_size":                &c.NFOBatchSize,
 		"nfo_budget_mb":                 &c.NFOBudgetMB,
 		"nfo_max_retries":               &c.NFOMaxRetries,
+		"junk_probe_interval_min":       &c.JunkProbeIntervalMin,
+		"junk_probe_batch_size":         &c.JunkProbeBatchSize,
 		"keepalive_min":                 &c.KeepaliveMin,
 		"retention_days":                &c.RetentionDays,
 		"nzb_retention_days":            &c.NZBRetentionDays,
@@ -519,7 +536,8 @@ func (c *Config) boolFields() map[string]*bool {
 		// only in config.yml, or the only way to enable it is a file edit on
 		// the box -- which is the shape of setting this project already
 		// decided against.
-		"nfo_enabled": &c.NFOEnabled,
+		"nfo_enabled":        &c.NFOEnabled,
+		"junk_probe_enabled": &c.JunkProbeEnabled,
 	}
 }
 

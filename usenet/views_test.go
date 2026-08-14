@@ -428,6 +428,18 @@ func TestFiltersRenders(t *testing.T) {
 			{Kind: "blacklist", Rule: "(?i)spam", Count: 100, Pct: 10, Sample: "Some.Release", LastSeen: "12:01"},
 		},
 		"TotalHits": 1000, "Msg": "", "Err": "",
+		// The junk-drop debug list. Both interesting verdicts are present,
+		// because the card's whole value is telling them apart: "junk too"
+		// vindicates the drop, "real file" says we discarded a release.
+		"Drops": junkDropsVM{
+			Enabled: true, Sampled: 400, Probed: 2, Real: 1, Junk: 1, Rate: "50%",
+			Rows: []junkDropRowVM{
+				{Group: "a.b.test", Subject: "541279675.bin", Rule: "bare_numeric_token",
+					Recovered: "Some.Real.Release-GROUP.part03.rar", Verdict: "real file", Seen: "12:00"},
+				{Group: "a.b.test", Subject: "xKq9x2.vol01.par2", Rule: "bare_token",
+					Recovered: "", Verdict: "not asked", Seen: "12:01"},
+			},
+		},
 		"Watched": []string{"tsukihime"},
 		"PosterHits": []posterHitRow{
 			{Poster: "tsukihime", Stage: "ingest", Reason: "staged", Count: 4210,

@@ -155,6 +155,9 @@ type AssemblerStore interface {
 	// subjects for differential parser testing, plus its prune.
 	insertSubjectCorpus(ctx context.Context, rows []corpusRow) error
 	pruneSubjectCorpus(ctx context.Context, keepDays int) (int64, error)
+	junkDropsToProbe(ctx context.Context, limit int) ([]junkProbeRow, error)
+	recordJunkProbe(ctx context.Context, id int64, name string) error
+	junkDropsReport(ctx context.Context, limit int) (junkDropReport, error)
 	// Completion-distance instrumentation (resolutions.go): the measured
 	// basis for the position-based staging window.
 	groupWatermarks(ctx context.Context, groups []string) (map[string]groupMarks, error)

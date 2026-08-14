@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -209,6 +210,160 @@ func (s *PGStore) insertSubjectCorpus(ctx context.Context, rows []corpusRow) err
 			pgTextArray(rules), pgTextArray(msgids))
 		return err
 	})
+}
+
+// junkDropsToProbe returns sampled drops whose body has never been read.
+//
+// junk_rule IS NOT NULL is exactly the dropped set (migration 037), so no other
+// filter finds them; newest first, because how a rule behaves on TODAY's feed
+// is the question, not how it behaved on 2023's.
+func (s *PGStore) junkDropsToProbe(ctx context.Context, limit int) ([]junkProbeRow, error) {
+	var out []junkProbeRow
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT id, group_name, subject, junk_rule, message_id
+			  FROM subject_corpus
+			 WHERE junk_rule IS NOT NULL
+			   AND message_id IS NOT NULL AND message_id <> ''
+			   AND probed_at IS NULL
+			 ORDER BY seen_at DESC
+			 LIMIT $1`, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var r junkProbeRow
+			if err := rows.Scan(&r.id, &r.group, &r.subject, &r.junkRule, &r.messageID); err != nil {
+				return err
+			}
+			out = append(out, r)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// recordJunkProbe stores what the body called the file.
+//
+// probed_at is set on EVERY outcome, the empty one included, so an article with
+// no yEnc header is not re-fetched forever. "probed and found nothing" and
+// "not yet probed" are then told apart by probed_at, not by the name.
+func (s *PGStore) recordJunkProbe(ctx context.Context, id int64, name string) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		// Sanitised at the bind: a yEnc filename is wire-derived bytes and one
+		// invalid sequence fails the statement (CLAUDE.md).
+		_, err := tx.ExecContext(ctx,
+			`UPDATE subject_corpus SET recovered_name = $2, probed_at = now() WHERE id = $1`,
+			id, pgSafeText(name))
+		return err
+	})
+}
+
+// junkDropReport is the debug list: what the rules threw away, and what the
+// bodies say those postings actually were.
+type junkDropReport struct {
+	Sampled  int // dropped subjects sampled by the corpus
+	Probed   int // of those, bodies read
+	Real     int // ... whose yEnc name is NOT junk -- a release we discarded
+	Junk     int // ... whose yEnc name is junk too -- the drop was right
+	NoHeader int // ... with no yEnc header, or the article was gone
+	Rows     []junkDropRow
+}
+
+type junkDropRow struct {
+	Group     string
+	Subject   string
+	Rule      string
+	Recovered string
+	Probed    bool
+	Seen      time.Time
+}
+
+// junkDropsReport reads the counts over ALL sampled drops and the newest few
+// rows to show under them.
+//
+// The counts and the rows are deliberately different populations: a list of
+// twenty tells you what the drops look like, and only the totals tell you
+// whether twenty is representative. Showing rows without a denominator is how
+// the grouping card was once misread as a rule list.
+func (s *PGStore) junkDropsReport(ctx context.Context, limit int) (junkDropReport, error) {
+	var rep junkDropReport
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		// recovered_name '' means asked-and-nothing-there; NULL with a
+		// probed_at means the same for a gone article. Both are "no name".
+		if err := tx.QueryRowContext(ctx, `
+			SELECT count(*),
+			       count(*) FILTER (WHERE probed_at IS NOT NULL),
+			       count(*) FILTER (WHERE probed_at IS NOT NULL AND coalesce(recovered_name,'') = '')
+			  FROM subject_corpus
+			 WHERE junk_rule IS NOT NULL`).Scan(&rep.Sampled, &rep.Probed, &rep.NoHeader); err != nil {
+			return err
+		}
+		rows, err := tx.QueryContext(ctx, `
+			SELECT group_name, subject, junk_rule, coalesce(recovered_name,''),
+			       probed_at IS NOT NULL, seen_at
+			  FROM subject_corpus
+			 WHERE junk_rule IS NOT NULL
+			 ORDER BY probed_at IS NULL, seen_at DESC
+			 LIMIT $1`, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var r junkDropRow
+			if err := rows.Scan(&r.Group, &r.Subject, &r.Rule, &r.Recovered, &r.Probed, &r.Seen); err != nil {
+				return err
+			}
+			rep.Rows = append(rep.Rows, r)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return junkDropReport{}, err
+	}
+	// Real-vs-junk is decided by the junk rules in Go rather than in SQL, so
+	// the classification is the SAME code the crawler drops on. A SQL mirror of
+	// those rules is exactly the divergence that starved the title-cleaner
+	// worklist for a year (CLAUDE.md, Postgres has no ).
+	named, err := s.recoveredNames(ctx)
+	if err != nil {
+		return rep, err
+	}
+	for _, n := range named {
+		if whichJunkRule(n) != "" {
+			rep.Junk++
+		} else {
+			rep.Real++
+		}
+	}
+	return rep, nil
+}
+
+// recoveredNames returns every non-empty name a probe recovered. Bounded by the
+// corpus's own retention window (diag_keep_days), which is what keeps this from
+// becoming an unbounded read.
+func (s *PGStore) recoveredNames(ctx context.Context) ([]string, error) {
+	var out []string
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT recovered_name FROM subject_corpus
+			 WHERE junk_rule IS NOT NULL AND coalesce(recovered_name,'') <> ''`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var n string
+			if err := rows.Scan(&n); err != nil {
+				return err
+			}
+			out = append(out, n)
+		}
+		return rows.Err()
+	})
+	return out, err
 }
 
 // pruneSubjectCorpus trims the rolling window.

@@ -307,6 +307,55 @@
 </div>
 {{end}}
 
+{{/* Junk drops. The hits table counts drops by RULE, which answers "which rule
+     is doing the work". This answers what that cannot: for the postings we threw
+     away, what were they? The rules judge a SUBJECT, and an obfuscated post's
+     subject is the part the poster scrambled -- so a drop can be right about the
+     subject and wrong about the posting. Nothing here is indexed. */}}
+<div class="card mt-3">
+  <div class="card-header">Junk drops — what the body says</div>
+  <div class="card-body">
+    <p class="text-muted small mb-2">
+      Postings the junk rules discarded, with the filename from the article's yEnc
+      header where we have asked for it. Obfuscation commonly scrambles the subject
+      and leaves that header intact, so a dropped <code>541279675.bin</code> is often
+      a real release inside. Sampled by the same corpus the grouping card uses -- a small fraction of all
+      subjects, so this is evidence rather than a queue — and reading a body
+      spends provider bytes, which is why it is off until you turn it on.
+    </p>
+    {{if .Drops.Note}}<div class="alert alert-secondary small py-2">{{.Drops.Note}}</div>{{end}}
+    {{if .Drops.Probed}}
+    <p class="small mb-2">
+      <strong>{{.Drops.Rate}}</strong> of the drops we asked about named a real file
+      ({{.Drops.Real}} real, {{.Drops.Junk}} junk again) &mdash;
+      {{.Drops.Probed}} of {{.Drops.Sampled}} sampled drops asked.
+    </p>
+    {{end}}
+    {{if .Drops.Rows}}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr>
+          <th>Subject (dropped)</th><th>Rule</th><th>Body says</th><th>Verdict</th><th>Seen</th>
+        </tr></thead>
+        <tbody>
+        {{range .Drops.Rows}}
+          <tr>
+            <td class="small text-break">{{.Subject}}<div class="text-muted">{{.Group}}</div></td>
+            <td class="small"><code>{{.Rule}}</code></td>
+            <td class="small text-break">{{if .Recovered}}{{.Recovered}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+            <td class="small">{{.Verdict}}</td>
+            <td class="small text-muted">{{.Seen}}</td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <div class="empty">No sampled drops yet.</div>
+    {{end}}
+  </div>
+</div>
+
 {{/* Poster watch. The same drop events as the hits table above, indexed by
      POSTER rather than by rule, plus the successes — because "which rule fires
      most" and "why am I missing this poster" are different questions and only
