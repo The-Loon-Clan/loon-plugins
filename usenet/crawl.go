@@ -1186,7 +1186,12 @@ func parseOverviews(ovs []nntp.MessageOverview, group string, cutoff time.Time, 
 			junkOf[base] = rule
 		}
 		if rule != "" {
-			gw.noteSubject(group, subject, residue, true)
+			// Record WHICH rule dropped it and WHICH article it was, so the
+			// drop can be second-guessed later. A junk subject is not a junk
+			// posting: obfuscation routinely scrambles the subject and leaves
+			// the yEnc header alone, so the body often names the file properly.
+			// Observe-only -- the behaviour below is unchanged.
+			gw.noteSubjectFull(group, subject, rule, ov.MessageId, residue, true)
 			hits.note("junk", rule, base)
 			if p, ok := watch.watched(ov.From); ok {
 				ph.note(p, "ingest", rule, subject)

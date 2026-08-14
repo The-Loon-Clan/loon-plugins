@@ -122,3 +122,61 @@ func TestParseOverviewsFeedsGroupingWatch(t *testing.T) {
 		t.Errorf("residue stems counted %d, want 2 — the unrecognised counter family must register", cohort)
 	}
 }
+
+// A drop records WHY and WHICH ARTICLE, so it can be second-guessed.
+//
+// The crawler discards a junk-titled posting outright. subject_corpus already
+// sampled those subjects for differential parser testing, but carried neither
+// the rule that matched nor a message-id — so the two questions anyone asks
+// about a drop were both unanswerable: what are we throwing away, and was it
+// really junk?
+//
+// The second needs the body. A junk SUBJECT is not a junk POSTING: obfuscation
+// commonly scrambles the subject and leaves the yEnc header alone, so
+// "541279675.bin" on the wire is often a real filename inside `=ybegin name=`.
+// 39,404 of the newest 50,000 releases had that shape when the rules were last
+// audited, so this is most of the feed rather than an edge case.
+func TestNoteSubjectFullRecordsTheDropEvidence(t *testing.T) {
+	g := newGroupingWatch()
+	// Sampling is 1-in-2^corpusSampleShift (8192), and nRaw is incremented
+	// BEFORE the test — so the sampled row is the 8192nd, not the first. Fill
+	// up to the boundary with keeps, then make the sampled one the drop.
+	for i := 0; i < (1<<corpusSampleShift)-1; i++ {
+		g.noteSubject("alt.binaries.test", "filler", false, false)
+	}
+	g.noteSubjectFull("alt.binaries.test", "541279675.bin",
+		"bare_numeric_token", "<abc123@example>", false, true)
+
+	rows, _, _ := g.drain()
+	if len(rows) == 0 {
+		t.Fatal("the first subject was not sampled into the corpus")
+	}
+	r := rows[len(rows)-1]
+	if r.junkRule != "bare_numeric_token" {
+		t.Errorf("junkRule = %q — without it the drop cannot be attributed to a rule", r.junkRule)
+	}
+	if r.messageID != "<abc123@example>" {
+		t.Errorf("messageID = %q — without it the body cannot be asked what the "+
+			"file is really called, which is the whole point", r.messageID)
+	}
+}
+
+// A kept subject records neither, so "junk_rule IS NOT NULL" is exactly the
+// dropped set and the debug list needs no other filter.
+func TestNoteSubjectLeavesEvidenceEmptyForKeeps(t *testing.T) {
+	g := newGroupingWatch()
+	for i := 0; i < (1<<corpusSampleShift)-1; i++ {
+		g.noteSubject("alt.binaries.test", "filler", false, false)
+	}
+	g.noteSubject("alt.binaries.test", "Real.Release-GROUP", false, false)
+	rows, _, _ := g.drain()
+	if len(rows) == 0 {
+		t.Fatal("no corpus row")
+	}
+	last := rows[len(rows)-1]
+	if last.junkRule != "" || last.messageID != "" {
+		t.Errorf("a KEPT subject carried drop evidence (rule=%q id=%q); "+
+			"junk_rule IS NOT NULL must mean dropped and nothing else",
+			last.junkRule, last.messageID)
+	}
+}

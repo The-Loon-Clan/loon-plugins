@@ -47,6 +47,13 @@ type groupingWatch struct {
 type corpusRow struct {
 	group, subject string
 	residue        bool
+	// junkRule is the rule that discarded this subject, "" when it was kept.
+	// messageID is the article the subject came from, so the body can be asked
+	// what the file is really called -- a junk SUBJECT does not mean a junk
+	// POSTING, and usenet obfuscation routinely scrambles one and not the
+	// other. Both observe-only; nothing reads them yet.
+	junkRule  string
+	messageID string
 }
 
 type stemVal struct {
@@ -66,6 +73,12 @@ func newGroupingWatch() *groupingWatch {
 // counter: digit-heavy junk normalises onto giant fake cohorts ("#####" et
 // al) that would drown the real near-misses.
 func (g *groupingWatch) noteSubject(group, subject string, residue, junked bool) {
+	g.noteSubjectFull(group, subject, "", "", residue, junked)
+}
+
+// noteSubjectFull is noteSubject plus the evidence a drop needs to be
+// second-guessed: which rule matched, and the article to read.
+func (g *groupingWatch) noteSubjectFull(group, subject, junkRule, messageID string, residue, junked bool) {
 	if g == nil {
 		return
 	}
@@ -91,7 +104,10 @@ func (g *groupingWatch) noteSubject(group, subject string, residue, junked bool)
 		}
 	}
 	if sampled && len(g.corpus) < 50000 { // hard cap: one runaway pass must not hoard memory
-		g.corpus = append(g.corpus, corpusRow{group: group, subject: subject, residue: residue})
+		g.corpus = append(g.corpus, corpusRow{
+			group: group, subject: subject, residue: residue,
+			junkRule: junkRule, messageID: messageID,
+		})
 	}
 }
 
@@ -170,6 +186,11 @@ func (s *PGStore) insertSubjectCorpus(ctx context.Context, rows []corpusRow) err
 	groups := make([]string, len(rows))
 	subjects := make([]string, len(rows))
 	residues := make([]bool, len(rows))
+	// pgTextArray, not pq.Array: these are wire-derived and a plain []string
+	// bound to a text column fails the WHOLE batch on one invalid byte
+	// (CLAUDE.md, "Wire-derived text needs sanitising at the BIND").
+	rules := make([]string, len(rows))
+	msgids := make([]string, len(rows))
 	for i, r := range rows {
 		// Sanitised here rather than at capture: the corpus exists to hold RAW
 		// subjects for differential parser testing, so the in-memory copy the
@@ -178,12 +199,14 @@ func (s *PGStore) insertSubjectCorpus(ctx context.Context, rows []corpusRow) err
 		// is a sanitised sample or no sample, and a corpus row with a
 		// replacement char still tells you the grammar it came from.
 		groups[i], subjects[i], residues[i] = r.group, pgSafeText(r.subject), r.residue
+		rules[i], msgids[i] = r.junkRule, r.messageID
 	}
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		_, err := tx.ExecContext(ctx,
-			`INSERT INTO subject_corpus (group_name, subject, residue)
-			 SELECT * FROM unnest($1::text[], $2::text[], $3::boolean[])`,
-			pq.Array(groups), pq.Array(subjects), pq.Array(residues))
+			`INSERT INTO subject_corpus (group_name, subject, residue, junk_rule, message_id)
+			 SELECT * FROM unnest($1::text[], $2::text[], $3::boolean[], $4::text[], $5::text[])`,
+			pq.Array(groups), pq.Array(subjects), pq.Array(residues),
+			pgTextArray(rules), pgTextArray(msgids))
 		return err
 	})
 }
