@@ -224,6 +224,10 @@
             <input type="hidden" name="has_walk_past_no_salvage" value="1">
             <input type="checkbox" name="walk_past_no_salvage" {{if .WalkPastNoSalvage}}checked{{end}}> Disable broken-release salvage (walk-past-dead sets holding most of their articles are then destroyed instead of being stored marked broken when their surviving par2 could repair the gaps)
         </label>
+        <label class="d-block small mb-1">
+            <input type="hidden" name="has_nfo_enabled" value="1">
+            <input type="checkbox" name="nfo_enabled" {{if .NFOEnabled}}checked{{end}}> Read NFO articles (fetches the .nfo of releases that have one and stores the text — the only job here that spends provider bytes, so it is off until you choose it; bounded by the NFO budget above)
+        </label>
         <div style="margin-top:.5rem">
             <button class="btn btn-primary" type="submit">Save settings</button>
             <span class="text-muted small">applied on each job's next run (intervals take effect next cycle)</span>

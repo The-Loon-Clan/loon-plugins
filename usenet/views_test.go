@@ -839,3 +839,60 @@ func parseViewTemplates(t *testing.T) *template.Template {
 	}
 	return tmpl
 }
+
+// Every checkbox on the settings form must receive its value.
+//
+// WalkPastNoEvict and WalkPastNoSalvage were declared in boolFields, saved
+// correctly, honoured correctly — and never passed to the template. So both
+// rendered unticked whatever was stored, and an operator who ticked one, saved,
+// and came back saw it clear. The setting was working the whole time; only the
+// form lied, which is worse than a broken setting because it teaches you to
+// distrust the page.
+//
+// knob_validation_test.go already checks that every bool HAS a checkbox. This
+// checks the other half: that the checkbox can ever be checked.
+func TestEveryBoolCheckboxReceivesItsValue(t *testing.T) {
+	tmpl := parseViewTemplates(t)
+
+	// Every bool true, so any field that fails to arrive renders unchecked
+	// and is caught below.
+	cfg := Config{}
+	for _, dst := range cfg.boolFields() {
+		*dst = true
+	}
+	data := map[string]any{
+		"Servers": []provider{}, "Groups": []pluginapi.GroupInfo{}, "Tiers": AllTiers,
+		"Knobs":       knobList(cfg),
+		"CrawlersTab": template.HTML(""), "JobsTab": template.HTML(""),
+		"FiltersTab": template.HTML(""), "NFOTab": template.HTML(""),
+	}
+	// THE POINT: the bools come from the same function the renderer uses, not
+	// from a list written out here. The first version of this test built its
+	// own map and therefore passed with the binding deleted -- it exercised
+	// the template and never the wiring, which is where the bug was.
+	for k, v := range boolViewData(cfg) {
+		data[k] = v
+	}
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "settings.html", data); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := buf.String()
+
+	for key := range cfg.boolFields() {
+		// Find the checkbox and confirm THIS render marked it checked.
+		marker := `name="` + key + `"`
+		i := strings.Index(out, marker)
+		if i < 0 {
+			t.Errorf("no checkbox for %s", key)
+			continue
+		}
+		// The checked attribute follows the name within the same tag.
+		end := strings.Index(out[i:], ">")
+		if end < 0 || !strings.Contains(out[i:i+end], "checked") {
+			t.Errorf("checkbox %s did not render checked with the value set true — "+
+				"its field is not reaching the template, so the form shows the "+
+				"setting as off however it is stored", key)
+		}
+	}
+}

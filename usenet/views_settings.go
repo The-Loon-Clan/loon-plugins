@@ -62,6 +62,10 @@ func knobList(cfg Config) []knob {
 		{"health_stat_chunk", "Health STATs per lease", cfg.HealthStatChunk, "segments checked per borrowed connection; smaller returns connections to the crawler more often (default 200)"},
 		{"health_stat_timeout_sec", "Health STAT timeout", cfg.HealthStatTimeoutSec, "seconds one STAT may take before the socket is treated as dead; the crawler's op timeout is sized for a 3000-article OVER and is far too long for a one-line command (default 10)"},
 		{"health_transport_yield", "Health transport tolerance", cfg.HealthTransportYield, "releases in a row that may fail on a provider timeout before the sweep gives up; a busy pool still yields immediately so the crawler keeps priority (default 5)"},
+		{"nfo_interval_min", "NFO pass interval (min)", cfg.NFOIntervalMin, "how often to look for .nfo articles to read (default 60). The pass only runs after a crawl that staged nothing, so this is a ceiling on frequency rather than a schedule"},
+		{"nfo_batch_size", "NFO releases per pass", cfg.NFOBatchSize, "how many releases one pass may read (default 100) — bounded again by the byte budget below, whichever is reached first"},
+		{"nfo_budget_mb", "NFO byte budget per pass (MB)", cfg.NFOBudgetMB, "hard ceiling on article data one pass may pull (default 64). The only control here that meters BYTES rather than connections, which is what a block account is actually sold by"},
+		{"nfo_max_retries", "NFO transport retries", cfg.NFOMaxRetries, "how many provider timeouts one release may cost before its NFO is written off (default 3). A server refusal is permanent and written off at once; 0 here means retry a timing-out article forever"},
 		{"backfill_pressure_high_pct", "Backfill pause at (% pressure)", cfg.BackfillPressureHighPct, "backfill pauses when staging pressure reaches this percent (default 85), while the builder has a backlog to drain"},
 		{"backfill_pressure_low_pct", "Backfill resume below (% pressure)", cfg.BackfillPressureLowPct, "paused backfill resumes once pressure drops below this percent (default 70) — must stay below the pause threshold or the gate flaps"},
 		{"backfill_pressure_ceiling_pct", "Eviction ceiling (% pressure)", cfg.BackfillPressureCeilingPct, "the hard stop that applies even with nothing to drain (default 92) — past it Redis EVICTS forming sets to make room; also caps the crawl's effective pause threshold"},
@@ -171,7 +175,7 @@ func (p *Plugin) renderSettings(ctx context.Context, q settingsQuery) (template.
 		return p.renderFilters(ctx, "", "", q.DiagKind, q.DiagPage)
 	})
 	nfoTab := tab("nfo", func() (template.HTML, error) { return p.renderNFO(ctx) })
-	return p.frag("settings.html", map[string]any{
+	data := map[string]any{
 		"Servers": servers, "DefaultConns": p.effective(ctx).Connections,
 		"Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,
 		"CrawlNoCatchup":         p.effective(ctx).CrawlNoCatchup,
@@ -183,7 +187,36 @@ func (p *Plugin) renderSettings(ctx context.Context, q settingsQuery) (template.
 		"CrawlersTab": crawlersTab, "JobsTab": jobsTab, "FiltersTab": filtersTab,
 		"NFOTab": nfoTab,
 		"Msg":    msg, "Err": errMsg,
-	})
+	}
+	for k, v := range boolViewData(p.effective(ctx)) {
+		data[k] = v
+	}
+	return p.frag("settings.html", data)
+}
+
+// boolViewData maps each admin-editable boolean to the template key its
+// checkbox reads. Derived FROM boolFields so the two cannot drift: a bool that
+// is settable but absent here is a checkbox that can never show as ticked,
+// which is what happened to walk_past_no_evict and walk_past_no_salvage.
+func boolViewData(cfg Config) map[string]any {
+	c := cfg
+	names := map[string]string{
+		"skip_backfill":             "SkipBackfill",
+		"crawl_no_catchup":          "CrawlNoCatchup",
+		"hold_low_until_backfilled": "HoldLowUntilBackfilled",
+		"backfill_no_catchup":       "BackfillNoCatchup",
+		"build_no_catchup":          "BuildNoCatchup",
+		"walk_past_no_evict":        "WalkPastNoEvict",
+		"walk_past_no_salvage":      "WalkPastNoSalvage",
+		"nfo_enabled":               "NFOEnabled",
+	}
+	out := make(map[string]any)
+	for key, dst := range c.boolFields() {
+		if name, ok := names[key]; ok {
+			out[name] = *dst
+		}
+	}
+	return out
 }
 
 // actionTestProvider dials one provider row's credentials (or the add-row's)

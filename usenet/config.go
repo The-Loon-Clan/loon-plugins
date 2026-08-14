@@ -454,6 +454,10 @@ func (c *Config) normalize() {
 func (c *Config) knobFields() map[string]*int {
 	return map[string]*int{
 		"connections":                   &c.Connections,
+		"nfo_interval_min":              &c.NFOIntervalMin,
+		"nfo_batch_size":                &c.NFOBatchSize,
+		"nfo_budget_mb":                 &c.NFOBudgetMB,
+		"nfo_max_retries":               &c.NFOMaxRetries,
 		"keepalive_min":                 &c.KeepaliveMin,
 		"retention_days":                &c.RetentionDays,
 		"nzb_retention_days":            &c.NZBRetentionDays,
@@ -510,6 +514,12 @@ func (c *Config) boolFields() map[string]*bool {
 		"build_no_catchup":          &c.BuildNoCatchup,
 		"walk_past_no_evict":        &c.WalkPastNoEvict,
 		"walk_past_no_salvage":      &c.WalkPastNoSalvage,
+		// Off by default: the one job here that spends provider bytes, so an
+		// operator turns it on deliberately. It belongs in this map and not
+		// only in config.yml, or the only way to enable it is a file edit on
+		// the box -- which is the shape of setting this project already
+		// decided against.
+		"nfo_enabled": &c.NFOEnabled,
 	}
 }
 
