@@ -679,6 +679,20 @@ type ReleaseNFOStore interface {
 	// occupy the whole batch.
 	MarkNFOUnavailable(ctx context.Context, id int64, reason string) error
 
+	// RecordNFOAttemptFailure counts one failed attempt against a release and
+	// reports how many have now been recorded.
+	//
+	// The distinction this exists for: a 430 is permanent and gets written off
+	// at once, but a transport failure says nothing about the article — so
+	// leaving it unmarked means a persistently unreachable one is retried
+	// forever, and a handful of those occupy the head of the queue on every
+	// pass. Newznab bounds this by decrementing nfostatus toward a floor; this
+	// counts up instead, which is the same idea the other way round.
+	//
+	// The caller decides the ceiling and writes the release off when the count
+	// reaches it, so the policy stays with the job rather than the store.
+	RecordNFOAttemptFailure(ctx context.Context, id int64) (attempts int, err error)
+
 	// RecentNFOs returns the most recently read NFOs, newest first, for the
 	// plugin's admin tab. Optional in spirit — a host may return nothing —
 	// but the tab is the only evidence the job is working, since everything

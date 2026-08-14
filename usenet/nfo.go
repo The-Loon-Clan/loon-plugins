@@ -1,8 +1,10 @@
 package usenet
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -36,6 +38,56 @@ import (
 // memory because of a mislabelled id is the failure this prevents.
 const nfoMaxBytes = 1 << 20 // 1 MB
 
+// Size bounds on what counts as an NFO, matching newznab's NfoService
+// (MIN_NFO_SIZE / MAX_NFO_SIZE).
+//
+// Separate from nfoMaxBytes, which is a memory guard on the READ. These are a
+// judgement about the CONTENT: below the floor there is nothing worth showing,
+// and above the ceiling it is not an NFO — a 900 KB wall of text passes every
+// "is this printable" check and is still not the thing we went looking for.
+const (
+	nfoMinSize = 12
+	nfoMaxSize = 65535
+)
+
+// Formats an NFO is not, lifted from newznab's _nonNfoHeaderRegex.
+//
+// It earns its place: the message-id was chosen because a filename ended
+// ".nfo", so whatever a poster mislabelled can arrive. Several of these — PDF,
+// PNG, GIF, gzip, MZ — are partly printable and would otherwise survive the
+// character test as a blob of mojibake on a release page.
+//
+// SPLIT IN TWO, because a regex cannot do the binary half in Go. `\x89` in a
+// Go regexp means the RUNE U+0089, which is 0xC2 0x89 in UTF-8 — two bytes,
+// neither of them the single 0x89 a PNG actually starts with. Written as one
+// regex this silently matched nothing for exactly the signatures that most
+// needed it. The byte prefixes are therefore compared as bytes.
+var nonNFOBytePrefixes = [][]byte{
+	{0x89, 'P', 'N', 'G'},  // PNG
+	{0x1f, 0x8b, 0x08},     // gzip
+	{'P', 'K', 0x03, 0x04}, // zip / office / jar
+	{'M', 'Z'},             // DOS/Windows executable
+	{'%', 'P', 'D', 'F'},   // PDF
+	{'G', 'I', 'F', '8', '7', 'a'},
+	{'G', 'I', 'F', '8', '9', 'a'},
+	{'R', 'I', 'F', 'F'}, // wav / avi
+	{'I', 'D', '3'},      // mp3 with a tag
+}
+
+// The text-shaped half, where a regex is the right tool.
+var nonNFOHeader = regexp.MustCompile(`(?i)\A(\s*<\?xml|=newz\[NZB\]=|\s*[RP]AR|.{0,10}(JFIF|matroska|ftyp))`)
+
+// looksLikeAnotherFormat reports whether the body starts with a signature that
+// rules out its being an NFO.
+func looksLikeAnotherFormat(raw []byte) bool {
+	for _, sig := range nonNFOBytePrefixes {
+		if bytes.HasPrefix(raw, sig) {
+			return true
+		}
+	}
+	return nonNFOHeader.Match(raw)
+}
+
 // nfoBackend is where candidates come from and where text goes.
 //
 // Same shape as healthBackend: the plugin owns the fetching, the catalogue may
@@ -45,6 +97,7 @@ type nfoBackend interface {
 	candidates(ctx context.Context, limit int) ([]pluginapi.NFOCandidate, error)
 	setNFO(ctx context.Context, id int64, nfo string) error
 	markUnavailable(ctx context.Context, id int64, reason string) error
+	recordFailure(ctx context.Context, id int64) (int, error)
 }
 
 type hostNFO struct{ st pluginapi.ReleaseNFOStore }
@@ -57,6 +110,9 @@ func (b hostNFO) setNFO(ctx context.Context, id int64, nfo string) error {
 }
 func (b hostNFO) markUnavailable(ctx context.Context, id int64, reason string) error {
 	return b.st.MarkNFOUnavailable(ctx, id, reason)
+}
+func (b hostNFO) recordFailure(ctx context.Context, id int64) (int, error) {
+	return b.st.RecordNFOAttemptFailure(ctx, id)
 }
 
 // errNoNFOStore is the "feature not wired" answer, distinct from a failure.
@@ -206,8 +262,23 @@ pass:
 			continue
 
 		default:
-			// Transport trouble. A provider going bad should end the pass
-			// rather than be ground out one timeout at a time.
+			// Transport trouble. Says nothing about the article, so this is
+			// NOT a write-off — but it is counted, because an article that
+			// fails this way every time would otherwise be retried forever and
+			// a few of them sit at the head of the queue on every pass.
+			// Newznab bounds the same thing by decrementing nfostatus toward a
+			// floor; this counts up to a ceiling.
+			if n, rerr := backend.recordFailure(ctx, row.ID); rerr != nil {
+				p.reportErr(ctx, "usenet/nfo-attempt", rerr)
+			} else if cfg.NFOMaxRetries > 0 && n >= cfg.NFOMaxRetries {
+				if merr := backend.markUnavailable(ctx, row.ID,
+					fmt.Sprintf("unreachable after %d attempts", n)); merr != nil {
+					p.reportErr(ctx, "usenet/nfo-mark", merr)
+				}
+				absent++
+			}
+			// A provider going bad should end the pass rather than be ground
+			// out one timeout at a time.
 			//
 			// LABELLED break. A bare one here leaves the SWITCH and carries on
 			// into the decode below with a nil body — which decodeNFO rejects,
@@ -318,6 +389,15 @@ func decodeNFO(body []byte) (string, bool) {
 		raw = decoded
 	}
 	if len(raw) == 0 {
+		return "", false
+	}
+	// Signature check before anything else, on the RAW bytes — several of
+	// these formats are partly printable and would otherwise survive the
+	// character test below as mojibake.
+	if looksLikeAnotherFormat(raw) {
+		return "", false
+	}
+	if len(raw) < nfoMinSize || len(raw) > nfoMaxSize {
 		return "", false
 	}
 	// NFOs are traditionally CP437 for the box-drawing art. Anything that is

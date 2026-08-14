@@ -209,6 +209,14 @@ type Config struct {
 	// Checked BEFORE each fetch, since a ceiling that one whole article can
 	// exceed is not a ceiling.
 	NFOBudgetMB int `json:"nfo_budget_mb"` // per-pass byte ceiling (default 64)
+	// NFOMaxRetries bounds how many TRANSPORT failures one release may cost
+	// before it is written off. A 430 is permanent and written off at once;
+	// a timeout says nothing about the article, so it is counted instead --
+	// but uncounted it would be retried forever, and a few unreachable
+	// articles at the head of the queue consume every pass. Newznab bounds
+	// the same thing by decrementing nfostatus toward a floor. 0 disables the
+	// ceiling and restores retry-forever.
+	NFOMaxRetries int `json:"nfo_max_retries"` // transport failures before write-off (default 3)
 
 	// NNTP transport bounds. Per-provider behavior lives on the servers table;
 	// these are the plugin-wide dial/operation limits every pool is built with.
@@ -361,6 +369,11 @@ func (c *Config) applyDefaults() {
 	}
 	if c.NFOBudgetMB <= 0 {
 		c.NFOBudgetMB = 64
+	}
+	if c.NFOMaxRetries < 0 {
+		c.NFOMaxRetries = 0 // explicit opt-out: retry forever
+	} else if c.NFOMaxRetries == 0 {
+		c.NFOMaxRetries = 3
 	}
 	if c.HealthBatchSize <= 0 {
 		c.HealthBatchSize = 50

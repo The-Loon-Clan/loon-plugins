@@ -31,8 +31,15 @@ func TestDecodeNFOPlainText(t *testing.T) {
 // renders as a wall of question marks.
 func TestDecodeNFOMapsCP437BoxArt(t *testing.T) {
 	// 0xC9 0xCD 0xBB is the top-left, horizontal and top-right of a double
-	// box -- the first line of a great many NFOs.
-	raw := []byte{0xC9, 0xCD, 0xCD, 0xBB, '\n', 'h', 'i', '\n'}
+	// box -- the first line of a great many NFOs. Run out past nfoMinSize,
+	// because a 12-byte floor is part of what counts as an NFO and an
+	// 8-byte fixture was never a realistic one.
+	raw := []byte{0xC9}
+	for i := 0; i < 20; i++ {
+		raw = append(raw, 0xCD)
+	}
+	raw = append(raw, 0xBB, '\n')
+	raw = append(raw, []byte("  Release.Name-GROUP\n")...)
 	got, ok := decodeNFO(raw)
 	if !ok {
 		t.Fatal("CP437 box art was rejected as non-text")
@@ -164,5 +171,89 @@ func TestStripANSILeavesPlainTextIdentical(t *testing.T) {
 	const s = "plain ╔══╗ text\nwith lines\n"
 	if got := stripANSI(s); got != s {
 		t.Errorf("plain text was altered:\n got %q\nwant %q", got, s)
+	}
+}
+
+// Size bounds, lifted from newznab's NfoService (MIN_NFO_SIZE 12,
+// MAX_NFO_SIZE 65535).
+//
+// Distinct from nfoMaxBytes, which is a memory guard on the read. These are a
+// judgement about the content: a 900 KB wall of text passes every "is this
+// printable" check and is still not an NFO.
+func TestDecodeNFOEnforcesNewznabSizeBounds(t *testing.T) {
+	if _, ok := decodeNFO([]byte("tiny")); ok {
+		t.Error("a 4-byte body was accepted; newznab's floor is 12")
+	}
+	if _, ok := decodeNFO([]byte(strings.Repeat("a", nfoMinSize))); !ok {
+		t.Error("a body exactly at the floor was rejected")
+	}
+	big := strings.Repeat("scene notes ", 8000) // ~96 KB
+	if _, ok := decodeNFO([]byte(big)); ok {
+		t.Errorf("a %d-byte body was accepted; newznab's ceiling is %d", len(big), nfoMaxSize)
+	}
+}
+
+// File signatures an NFO is not.
+//
+// The message-id was chosen because a filename ended ".nfo", so whatever a
+// poster mislabelled can arrive. Several of these are partly printable and
+// would otherwise survive the character test as mojibake on a release page.
+func TestDecodeNFORejectsKnownNonNFOFormats(t *testing.T) {
+	pad := strings.Repeat(" ", 64) // clear the size floor
+	for name, head := range map[string]string{
+		"png":  "\x89PNG\r\n\x1a\n",
+		"gif":  "GIF89a",
+		"pdf":  "%PDF-1.4",
+		"zip":  "PK\x03\x04",
+		"gzip": "\x1f\x8b\x08",
+		"exe":  "MZ\x90\x00",
+		"xml":  "<?xml version=\"1.0\"?>",
+		"rar":  "RAR!\x1a\x07\x00",
+		"riff": "RIFF\x00\x00\x00\x00WAVE",
+		"nzb":  "=newz[NZB]=",
+		"id3":  "ID3\x03\x00\x00\x00",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, ok := decodeNFO([]byte(head + pad)); ok {
+				t.Errorf("%s content was accepted as an NFO", name)
+			}
+		})
+	}
+}
+
+// And a real NFO that merely MENTIONS one of those words is still an NFO —
+// the signatures are anchored to the start of the file, not searched for.
+func TestDecodeNFOKeepsTextMentioningFormats(t *testing.T) {
+	const nfo = "  Release notes\n  Encoded to MKV, cover art in PNG, packed with RAR\n  Enjoy\n"
+	if _, ok := decodeNFO([]byte(nfo)); !ok {
+		t.Error("an NFO describing its own formats was rejected — the signature " +
+			"check must be anchored to the start, not a substring search")
+	}
+}
+
+// The signature list must be matched as BYTES.
+//
+// This is the bug the format test caught. Written as one Go regexp, `\x89`
+// means the rune U+0089 — 0xC2 0x89 in UTF-8, two bytes, neither of them the
+// single 0x89 a PNG starts with. So the pattern silently matched nothing for
+// precisely the binary signatures it existed to catch, while the ASCII ones
+// (PDF, zip, GIF) passed and made the whole thing look correct.
+func TestNonNFOSignaturesAreMatchedAsBytes(t *testing.T) {
+	for name, head := range map[string][]byte{
+		"png":  {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'},
+		"gzip": {0x1f, 0x8b, 0x08, 0x00},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !looksLikeAnotherFormat(head) {
+				t.Errorf("%s signature not detected — a rune-escaped regex cannot "+
+					"match a high byte, so this must be a byte comparison", name)
+			}
+			// And the UTF-8 encoding of the same code point must NOT match,
+			// which is what the broken pattern was actually looking for.
+			utf8Form := []byte("\u0089PNG")
+			if name == "png" && looksLikeAnotherFormat(utf8Form) {
+				t.Error("matched the UTF-8 encoding of U+0089 rather than the raw byte")
+			}
+		})
 	}
 }
