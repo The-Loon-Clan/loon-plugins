@@ -103,7 +103,13 @@
                     </a>
                     <a class="forum-post-author-name role-name role-name-{{or .UserRole "user"}}" href="/u/{{.Username}}">{{.Username}}</a>
                     {{if eq .UserID $.Thread.UserID}}<span class="forum-post-op-badge">Original poster</span>{{end}}
+                    {{/* The mod branch was missing, so a moderator fell to the
+                         default and was labelled "Member" -- worse than no badge,
+                         because it presents a staff reply as an ordinary member's.
+                         The username was already coloured for mods (.role-name-mod
+                         has existed all along), so only the badge disagreed. */}}
                     {{if eq .UserRole "admin"}}<span class="role-badge role-admin">Admin</span>
+                    {{else if eq .UserRole "mod"}}<span class="role-badge role-mod">Mod</span>
                     {{else if eq .UserRole "contributor"}}<span class="role-badge role-contributor">Contributor</span>
                     {{else}}<span class="role-badge role-user">Member</span>{{end}}
                     {{with repBadge .ReputationTier}}{{if .Name}}<span class="forum-post-reputation bg-{{.Color}}" title="Earned reputation tier">{{.Name}}</span>{{end}}{{end}}

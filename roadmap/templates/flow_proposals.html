@@ -347,6 +347,7 @@
                             <div class="prop-meta">
                                 <a href="/u/{{.Username}}" onclick="event.stopPropagation();" style="color:var(--text-muted);text-decoration:none;">{{.Username}}</a>
                                 {{if eq .UserRole "admin"}}<span class="role-badge role-admin ms-1">Admin</span>
+                                {{else if eq .UserRole "mod"}}<span class="role-badge role-mod ms-1">Mod</span>
                                 {{else if eq .UserRole "contributor"}}<span class="role-badge role-contributor ms-1">Contributor</span>{{end}}
                                 <span class="ms-2">#{{.ID}} &middot; {{relativeTime .CreatedAt}}</span>
                             </div>
