@@ -150,14 +150,14 @@ func adminDonateFixture() *adminDonateVM {
 func TestPagesRender(t *testing.T) {
 	out := testRenderDonate(t, false, "help_donate.html", donatePageFixture())
 	for _, marker := range []string{
-		"Keep the Rain Falling",   // hero
-		"Dedicated Server",        // cost card from the group items
-		"Server Patron 2026",      // claimable package
-		"Domain Patron",           // funded package row
-		"Profile Effects",         // tip-jar goal
-		"rain-friend",             // recent donor label
-		"bc1qtestaddr",            // receive address
-		"log in",                  // IsAnon tip (anonymous viewer)
+		"Keep the Rain Falling", // hero
+		"Dedicated Server",      // cost card from the group items
+		"Server Patron 2026",    // claimable package
+		"Domain Patron",         // funded package row
+		"Profile Effects",       // tip-jar goal
+		"rain-friend",           // recent donor label
+		"bc1qtestaddr",          // receive address
+		"log in",                // IsAnon tip (anonymous viewer)
 	} {
 		if !strings.Contains(out, marker) {
 			t.Errorf("help_donate missing %q", marker)
@@ -167,10 +167,10 @@ func TestPagesRender(t *testing.T) {
 	out = testRenderDonate(t, true, "admin_donate.html", adminDonateFixture())
 	for _, marker := range []string{
 		"Donate &mdash; admin",
-		"hetzner",             // cost note
-		"Server Patron 2026",  // package table
-		"rain-friend",         // donation log row
-		"tester",              // resolved donor username
+		"hetzner",            // cost note
+		"Server Patron 2026", // package table
+		"rain-friend",        // donation log row
+		"tester",             // resolved donor username
 		"Test BTCPay connection",
 	} {
 		if !strings.Contains(out, marker) {

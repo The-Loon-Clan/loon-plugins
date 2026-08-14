@@ -200,7 +200,7 @@ type show struct {
 		Average float64 `json:"average"`
 	} `json:"rating"`
 	Externals struct {
-		IMDB   string `json:"imdb"`
+		IMDB    string `json:"imdb"`
 		TheTVDB int64  `json:"thetvdb"`
 	} `json:"externals"`
 }
