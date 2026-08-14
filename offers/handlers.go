@@ -270,7 +270,11 @@ func (h *Handlers) ClaimRequest(c *gin.Context) {
 		deps.ReportError(c, "offer-api/claim", err)
 		return
 	}
-	if got && deps.NotifyRequest != nil {
+	// Guarded on the field this actually CALLS, not on NotifyRequest. Deps
+	// permits a host to wire some notifiers and not others, and the call below
+	// is in a bare goroutine -- a nil func there panics with nothing to recover
+	// it and takes the whole web process down. jobs.go:66 has the right shape.
+	if got && deps.NotifyClaimed != nil {
 		// Fire-and-forget: notify the requester their request was
 		// picked up. Background ctx since the HTTP request will
 		// return before this completes.
@@ -314,7 +318,7 @@ func (h *Handlers) DeliverRequest(c *gin.Context) {
 		h.emit(c.Request.Context(), EventRequestDelivered, user.ID,
 			RequestDelivered{RequestID: reqID, NzbID: body.NzbID})
 	}
-	if ok2 && deps.NotifyRequest != nil {
+	if ok2 && deps.NotifyDelivered != nil {
 		go func(rid int, nid int64) {
 			bg := context.Background()
 			requester, _ := deps.RequesterOf(bg, rid)
@@ -355,7 +359,7 @@ func (h *Handlers) FailRequest(c *gin.Context) {
 		deps.JSONError(c, http.StatusNotFound, "not found")
 		return
 	}
-	if deps.NotifyRequest != nil && requester > 0 {
+	if deps.NotifyFailed != nil && requester > 0 {
 		go deps.NotifyFailed(context.Background(), requester, reqID)
 	}
 	deps.JSONOK(c, nil)
