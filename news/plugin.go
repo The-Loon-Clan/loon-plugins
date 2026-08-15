@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -142,8 +143,10 @@ func (h *Handlers) NewsAll(c *gin.Context) {
 		Title     string
 		Slug      string
 		Excerpt   string
+		Age       string
 		CreatedAt interface{}
 	}
+	now := time.Now()
 	safe := make([]safePost, 0, len(news))
 	for _, p := range news {
 		// Sanitize first, then strip. The detail page renders this same body
@@ -151,7 +154,7 @@ func (h *Handlers) NewsAll(c *gin.Context) {
 		// way — and stripping tags off UNSANITISED input would quietly make
 		// this the one path that never called it.
 		safe = append(safe, safePost{p.ID, p.Title, p.Slug,
-			excerpt(deps.Sanitize(p.Body), 280), p.CreatedAt})
+			excerpt(deps.Sanitize(p.Body), 280), humanAge(p.CreatedAt, now), p.CreatedAt})
 	}
 	render(c, "News", "news.html", gin.H{"News": safe})
 }
@@ -180,6 +183,48 @@ func excerpt(htmlBody string, max int) string {
 		cut = cut[:i]
 	}
 	return strings.TrimRight(cut, " ,.;:") + "…"
+}
+
+// humanAge renders how long ago t was, in the one unit that answers the
+// question a reader is actually asking on a news index: is this new?
+//
+// "4 days ago" beats "Aug 11, 2026" here because it needs no arithmetic — the
+// exact date matters once you have decided to read the post, and it is on the
+// <time> element's title for that. This is what the reference tracker does, and
+// what every news index does.
+//
+// now is a parameter rather than a call to time.Now inside, so the whole thing
+// is testable without freezing a clock.
+func humanAge(t, now time.Time) string {
+	d := now.Sub(t)
+	// A future timestamp is a clock skew or an admin post-dating a post, not an
+	// error worth showing. It reads as brand new, which is what post-dating
+	// means anyway.
+	if d < time.Minute {
+		return "just now"
+	}
+	plural := func(n int, unit string) string {
+		if n == 1 {
+			return "1 " + unit + " ago"
+		}
+		return strconv.Itoa(n) + " " + unit + "s ago"
+	}
+	switch {
+	case d < time.Hour:
+		return plural(int(d.Minutes()), "minute")
+	case d < 24*time.Hour:
+		return plural(int(d.Hours()), "hour")
+	case d < 30*24*time.Hour:
+		return plural(int(d.Hours()/24), "day")
+	case d < 365*24*time.Hour:
+		// Calendar months vary; this is 30-day months, deliberately. A reader
+		// reading "3 months ago" is placing the post on a mental timeline, not
+		// counting, and the alternative is date arithmetic that has to decide
+		// what "a month before the 31st" means.
+		return plural(int(d.Hours()/24/30), "month")
+	default:
+		return plural(int(d.Hours()/24/365), "year")
+	}
 }
 
 // blockTags are the elements whose boundary is a word boundary. A <p> ending

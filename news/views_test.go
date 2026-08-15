@@ -42,18 +42,20 @@ type safePostView struct {
 	Title     string
 	Slug      string
 	Excerpt   string
+	Age       string
 	Body      template.HTML
 	CreatedAt interface{}
 }
 
 func sampleSafe() safePostView {
 	return safePostView{1, "Server maintenance", "server-maintenance",
-		"back shortly", template.HTML("<p>back shortly</p>"), time.Now()}
+		"back shortly", "2 days ago", template.HTML("<p>back shortly</p>"), time.Now()}
 }
 
 func TestNewsPagesRender(t *testing.T) {
 	got := render1(t, "news.html", map[string]any{"News": []safePostView{sampleSafe()}})
-	for _, want := range []string{"Server maintenance", "back shortly", `href="/news/server-maintenance"`} {
+	for _, want := range []string{"Server maintenance", "back shortly", "2 days ago",
+		`href="/news/server-maintenance"`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("news index missing %q", want)
 		}
@@ -197,6 +199,57 @@ func TestExcerptDoesNotSplitACharacter(t *testing.T) {
 		// exceed it either.
 		if n := len([]rune(strings.TrimSuffix(got, "…"))); n > max {
 			t.Errorf("max=%d returned %d runes: %q", max, n, got)
+		}
+	}
+}
+
+// humanAge, at every boundary it has.
+//
+// The units are what a reader uses to answer "is this new" — and each boundary
+// is somewhere an off-by-one shows up as a plainly wrong sentence ("0 days ago"
+// on something posted this morning, "24 hours ago" on yesterday).
+func TestHumanAge(t *testing.T) {
+	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		ago  time.Duration
+		want string
+	}{
+		{0, "just now"},
+		{30 * time.Second, "just now"},
+		{time.Minute, "1 minute ago"},
+		{90 * time.Second, "1 minute ago"},
+		{2 * time.Minute, "2 minutes ago"},
+		{59 * time.Minute, "59 minutes ago"},
+		{time.Hour, "1 hour ago"},
+		{23 * time.Hour, "23 hours ago"},
+		{24 * time.Hour, "1 day ago"},
+		{47 * time.Hour, "1 day ago"},
+		{2 * 24 * time.Hour, "2 days ago"},
+		{29 * 24 * time.Hour, "29 days ago"},
+		{30 * 24 * time.Hour, "1 month ago"},
+		{89 * 24 * time.Hour, "2 months ago"},
+		{364 * 24 * time.Hour, "12 months ago"},
+		{365 * 24 * time.Hour, "1 year ago"},
+		{800 * 24 * time.Hour, "2 years ago"},
+		// A post-dated post, or a clock skew between the app and the database.
+		// It must not read "-1 days ago", and it is not an error worth showing.
+		{-time.Hour, "just now"},
+	} {
+		if got := humanAge(now.Add(-tc.ago), now); got != tc.want {
+			t.Errorf("humanAge(now-%s) = %q, want %q", tc.ago, got, tc.want)
+		}
+	}
+}
+
+// Nothing may say "1 minutes ago".
+func TestHumanAgeNeverPluralisesOne(t *testing.T) {
+	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	for _, d := range []time.Duration{
+		time.Minute, time.Hour, 24 * time.Hour, 30 * 24 * time.Hour, 365 * 24 * time.Hour,
+	} {
+		got := humanAge(now.Add(-d), now)
+		if strings.HasPrefix(got, "1 ") && strings.Contains(got, "s ago") {
+			t.Errorf("humanAge(now-%s) = %q", d, got)
 		}
 	}
 }

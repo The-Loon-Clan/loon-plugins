@@ -49,7 +49,7 @@
             background: var(--surface-3, var(--bg-elevated, transparent));
             border: 1px solid var(--border);
             border-radius: 10px;
-            padding: 1rem 1.15rem 1.1rem;
+            padding: 1.35rem 1.45rem 1.25rem;
             transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
         }
         .news-card:hover {
@@ -67,7 +67,7 @@
 
         .news-card__date {
             display: block;
-            margin-bottom: 0.3rem;
+            margin-bottom: 0.7rem;
             font-size: 0.72rem;
             font-variant-numeric: tabular-nums;
             color: var(--text-muted);
@@ -75,7 +75,10 @@
             letter-spacing: 0.05em;
         }
 
-        .news-card__title { margin: 0 0 0.45rem; font-size: 1.08rem; line-height: 1.35; font-weight: 700; }
+        /* The headline carries the card. At 1.08rem it was the same weight as
+           the excerpt under it and the page had no hierarchy to scan; the
+           reference sets its own near 1.5rem. */
+        .news-card__title { margin: 0 0 0.35rem; font-size: 1.3rem; line-height: 1.3; font-weight: 700; }
         .news-card__title a { color: var(--text-primary); text-decoration: none; }
         .news-card:hover .news-card__title a { color: var(--blue); }
         /* The stretched link. inset:0 over a position:relative card, so the
@@ -112,10 +115,13 @@
         {{if .News}}
         {{range .News}}
         <article class="news-card">
-            {{/* datetime carries the machine-readable value, the text the human
-                 one, both off the same field so they cannot disagree. */}}
-            <time class="news-card__date" datetime="{{.CreatedAt.Format "2006-01-02"}}">{{.CreatedAt.Format "Jan 02, 2006"}}</time>
+            {{/* Headline first, date under it — the order the reference uses,
+                 and the order a reader scans: the headline is what they are
+                 choosing between. datetime carries the machine-readable value
+                 and title the exact date, so nothing is lost by showing "4 days
+                 ago"; all three come off one field and cannot disagree. */}}
             <h2 class="news-card__title"><a href="/news/{{.Slug}}">{{.Title}}</a></h2>
+            <time class="news-card__date" datetime="{{.CreatedAt.Format "2006-01-02"}}" title="{{.CreatedAt.Format "Jan 02, 2006"}}">{{.Age}}</time>
             {{/* No {{if}}: excerpt() returns "" for an empty body and an empty
                  <p> collapses to nothing. A headline and a date with no body is
                  a legitimate news item. */}}
