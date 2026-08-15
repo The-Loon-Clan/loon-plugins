@@ -15,6 +15,12 @@ func TestEmbeddedJunkRulesParse(t *testing.T) {
 	// crawl, and order matters because attribution is first-match and the
 	// size-band catchalls must run last.
 	wantOrder := []string{
+		// elys_campaign_tag is the only CAMPAIGN rule in the file and is
+		// deliberately FIRST: it is the most specific pattern here (a fixed
+		// 51-char shape), it can shadow nothing — measured, no other rule
+		// catches it — and short-circuiting it saves the other 30 rules from
+		// running on ~1.6M articles a day.
+		"elys_campaign_tag",
 		"long_alnum_run", "multi_seg_random", "uuid", "software_warez", "cracked_software",
 		"template_token", "dot_sep_obfuscated", "rot13_archive",
 		"repeated_short_tok", "repeated_token_chaotic", "alnum_blob_ext", "short_alnum_token",
@@ -41,7 +47,7 @@ func TestEmbeddedJunkRulesParse(t *testing.T) {
 		"short_random_token", "under_1mib", "under_5mib",
 	}
 	if len(specs) != len(wantOrder) {
-		t.Fatalf("got %d rules, want %d (prod's set plus garbled_no_space, token_size_tail, repeated_token_chaotic and cracked_software)", len(specs), len(wantOrder))
+		t.Fatalf("got %d rules, want %d (prod's set plus garbled_no_space, token_size_tail, repeated_token_chaotic, cracked_software and elys_campaign_tag)", len(specs), len(wantOrder))
 	}
 	for i, s := range specs {
 		if s.Name != wantOrder[i] {

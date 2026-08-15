@@ -43,7 +43,18 @@ func TestSizeCatchallSparesNamedMedia(t *testing.T) {
 		size  int64
 		want  string
 	}{
-		{"elys-1907283e54a1cae9 - [KXPSbTzl] qoS5w5nwO0OvHnwj", halfMB, "under_1mib"},
+		// A nameless token pair, which is what the catchall exists for. This
+		// used to be "elys-1907283e54a1cae9 - [KXPSbTzl] qoS5w5nwO0OvHnwj";
+		// that title is now claimed by the more specific elys_campaign_tag, so
+		// it moved to the case below and a shape-equivalent stand-in keeps
+		// under_1mib itself under test.
+		{"qoS5w5nwO0OvHnwj KXPSbTzl", halfMB, "under_1mib"},
+		// The elys campaign, pinned at its new attribution. Same verdict as
+		// before — junk — but credited to the rule that names the campaign
+		// rather than to the size catchall that happened to sit under it. It
+		// only ever reached under_1mib on the sized build path anyway; the
+		// campaign rule catches it at ingest, where no size is known.
+		{"elys-1907283e54a1cae9 - [KXPSbTzl] qoS5w5nwO0OvHnwj", halfMB, "elys_campaign_tag"},
 		{"4194.13671", 2 << 20, "under_5mib"},
 		{"1Mb.dat", 2 << 20, "under_5mib"},
 		{"Wond37 suc suchanfragen 15 07 26", 2 << 20, "under_5mib"},
