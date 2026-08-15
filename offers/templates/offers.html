@@ -121,39 +121,69 @@
                     <button type="submit" class="btn btn-primary btn-sm">Apply</button>
                 </form>
 
+                {{/* Rendered as a table with a cover thumbnail, mirroring /browse and the
+                     requests page. Offers ARE releases as far as a member is concerned, so
+                     they should scan the same way; the previous card list was a second
+                     visual language for the same kind of row. Classes are the site's own
+                     (.nzb-thumb, .table) and live in theme.css, which plugin pages already
+                     load — so this inherits the site's styling instead of copying it. */}}
                 {{if .Buckets}}
-                    {{range .Buckets}}
-                    <div class="of-card">
-                        <div style="flex:1;min-width:0;">
-                            <div class="of-title">
-                                {{if .Title}}{{.Title}}{{else}}{{.EntityType}} {{if .EntityID}}#{{deref .EntityID}}{{end}}{{end}}
-                                {{if .SeasonNum}}· S{{deref .SeasonNum}}{{end}}{{if .EpisodeNum}}E{{deref .EpisodeNum}}{{end}}
-                                {{if .Resolution}}· {{.Resolution}}{{end}}
-                                {{if .SourceTag}}· {{.SourceTag}}{{end}}
-                            </div>
-                            {{if .Title}}
-                            {{/* The catalogue identity, kept as a hint beneath the name. It is what
-                                 the bucket is actually keyed on, so it stays visible — the title is
-                                 the friendly face of it, not a replacement for it. */}}
-                            <div class="of-hint">{{.EntityType}}{{if .EntityID}} #{{deref .EntityID}}{{end}}</div>
-                            {{end}}
-                            <div class="of-meta">
-                                {{if .HasPrivate}}<span class="of-pill of-pill-priv">private</span>{{end}}
-                                {{if .HasPublic}}<span class="of-pill of-pill-pub">public</span>{{end}}
-                                {{if .HasPersonal}}<span class="of-pill of-pill-per">personal</span>{{end}}
-                                {{.SizeBucket}}
-                                {{if .MinPoints}}· {{.MinPoints}} pts min{{else}}· free{{end}}
-                            </div>
-                        </div>
-                        <div class="of-count">
-                            <strong>{{.ActiveOfferCount}}</strong> active
-                            <div style="color:var(--text-muted);font-size:0.7rem;">{{.OfferCount}} total</div>
-                        </div>
-                        <button type="button"
-                                class="btn btn-outline-primary btn-sm of-request"
-                                data-bucket-id="{{.BucketID}}">Request</button>
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Offers</span>
+                        <span style="color:var(--text-muted);font-size:0.85rem;">{{len .Buckets}} bucket{{if ne (len .Buckets) 1}}s{{end}}</span>
                     </div>
-                    {{end}}
+                    <table class="table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th style="width:130px;">Tags</th>
+                                <th style="width:90px;">Size</th>
+                                <th style="width:80px;">Offers</th>
+                                <th style="width:80px;">Points</th>
+                                <th style="width:100px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {{range .Buckets}}
+                            <tr>
+                                <td>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        {{if .Picture}}
+                                        <span class="nzb-thumb"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
+                                              onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}"></span>
+                                        {{end}}
+                                        <div style="min-width:0;">
+                                            {{if .EntityID}}
+                                            <a href="/{{.EntityType}}/{{deref .EntityID}}" class="nzb-title" style="color:var(--text-primary);">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{deref .EntityID}}{{end}}</a>
+                                            {{else}}
+                                            <span style="color:var(--text-primary);">{{.EntityType}}</span>
+                                            {{end}}
+                                            {{if .SeasonNum}}<span class="badge bg-secondary bg-opacity-50" style="font-size:0.6rem;margin-left:3px;vertical-align:middle;">S{{deref .SeasonNum}}{{if .EpisodeNum}} E{{deref .EpisodeNum}}{{end}}</span>{{end}}
+                                            <div class="of-hint">
+                                                {{.EntityType}}{{if .EntityID}} #{{deref .EntityID}}{{end}}
+                                                {{if .HasPrivate}}<span class="of-pill of-pill-priv">private</span>{{end}}
+                                                {{if .HasPublic}}<span class="of-pill of-pill-pub">public</span>{{end}}
+                                                {{if .HasPersonal}}<span class="of-pill of-pill-per">personal</span>{{end}}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td style="font-size:0.82rem;">
+                                    {{if .Resolution}}<span class="badge" style="background:rgba(var(--bs-primary-rgb),0.2);color:var(--bs-primary);">{{.Resolution}}</span>{{end}}
+                                    {{if .SourceTag}}<span class="badge" style="background:rgba(var(--bs-success-rgb),0.15);color:var(--bs-success);">{{.SourceTag}}</span>{{end}}
+                                </td>
+                                <td style="font-size:0.82rem;color:var(--text-muted);">{{.SizeBucket}}</td>
+                                <td style="font-size:0.82rem;color:var(--text-muted);">
+                                    <strong style="color:var(--text-primary);">{{.ActiveOfferCount}}</strong>{{if ne .ActiveOfferCount .OfferCount}} / {{.OfferCount}}{{end}}
+                                </td>
+                                <td style="font-size:0.82rem;color:var(--text-muted);">{{if .MinPoints}}{{.MinPoints}}{{else}}free{{end}}</td>
+                                <td><button type="button" class="btn btn-primary btn-sm of-request" data-bucket-id="{{.BucketID}}">Request</button></td>
+                            </tr>
+                        {{end}}
+                        </tbody>
+                    </table>
+                </div>
                 {{else}}
                 <div style="color:var(--text-muted);text-align:center;padding:3rem 1rem;border:1px dashed var(--border);border-radius:12px;">
                     No offers yet for this filter. Once offerers register their sources you'll see buckets here.

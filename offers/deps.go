@@ -33,8 +33,12 @@ type Bucket struct {
 	// acquire one. Empty when the entity is unknown, and the template falls
 	// back to the type-and-id form so a missing row still renders something.
 	Title string
-	// Picture is a poster/cover path for the same entity, empty when absent.
+	// Picture is the cover URL for the entity, and PictureFallback the remote
+	// one to swap to when the local file 404s — the same two-step the site's
+	// nzb-thumb partial uses, because a local cover that was never fetched is
+	// common and a broken image is worse than a CDN hit.
 	Picture          string
+	PictureFallback  string
 	SeasonNum        *int
 	EpisodeNum       *int
 	Resolution       string
