@@ -70,7 +70,10 @@
         .news-post__body > :first-child { margin-top: 0; }
         .news-post__body > :last-child { margin-bottom: 0; }
         .news-post__body p { margin: 0 0 0.6rem; }
-        .news-post__more { font-size: 0.82rem; }
+        /* Its own top margin rather than relying on the body's last paragraph
+           to leave room: a sanitised body does not have to end in a <p>, and
+           when it ends in bare text the link lands against it. */
+        .news-post__more { display: inline-block; margin-top: 0.5rem; font-size: 0.82rem; }
     </style>
     <div class="container page-narrow news-page">
 
