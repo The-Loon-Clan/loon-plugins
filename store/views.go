@@ -49,6 +49,13 @@ func renderPage(c *gin.Context, title, name string, data gin.H) {
 	// page, and a handler that forgot would drop the host's tabs on one page
 	// only — the kind of gap you find by clicking, not by reading.
 	data["ExtraTabs"] = extraTabs(c)
+	// Named for the OFF state, and read as {{if not .HideTabs}}, so that a
+	// missing key produces the default rather than the opt-in: html/template
+	// reads an absent field as false, and false here means the strip renders,
+	// which is what a host that never set the seam expects. A positive
+	// ShowTabs would have made a typo in a template look exactly like a host
+	// that asked for the strip to go.
+	data["HideTabs"] = deps.SuppressTabs
 
 	var sb strings.Builder
 	if err := pageTmpl.ExecuteTemplate(&sb, name, data); err != nil {

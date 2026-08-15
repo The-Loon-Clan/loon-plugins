@@ -7,7 +7,13 @@
         </div>
 
         {{/* Page links rather than Bootstrap's JS tabs: History pages
-             server-side, so it can't be a pre-rendered pane. */}}
+             server-side, so it can't be a pre-rendered pane.
+
+             Off when the host sets Deps.SuppressTabs, because a host whose own
+             chrome already reaches these pages would otherwise stack two rows
+             of tabs offering the same places. Read as `not .HideTabs` so an
+             absent key renders the strip — see renderPage. */}}
+        {{if not .HideTabs}}
         <ul class="nav tabs mb-3">
             <li class="nav-item"><a class="nav-link active" href="/store">Store</a></li>
             <li class="nav-item"><a class="nav-link" href="/store/history">History</a></li>
@@ -18,6 +24,7 @@
             <li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Href}}">{{.Label}}</a></li>
             {{end}}
         </ul>
+        {{end}}
 
         {{if .Error}}<div class="alert alert-danger py-1 mb-3" style="font-size:0.82rem;">{{.Error}}</div>{{end}}
         {{if .Ok}}<div class="alert alert-success py-1 mb-3" style="font-size:0.82rem;">Purchased {{.Ok}}. Enjoy!</div>{{end}}

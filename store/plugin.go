@@ -79,6 +79,19 @@ type Deps struct {
 	// running store WITHOUT whatever serves that page would render a tab that
 	// 404s, and store cannot know which those are.
 	ExtraTabs func(c *gin.Context) []Tab
+	// SuppressTabs stops this plugin drawing its own Store | History strip,
+	// for a host whose chrome already navigates the points area.
+	//
+	// The strip exists because a plugin cannot assume the host has navigation:
+	// dropped into a site with none, these pages would be a dead end. That is
+	// the right default, and it stays the default — but a host that carries an
+	// account bar covering /store and /store/history ends up rendering two rows
+	// of tabs, one above the other, offering the same places.
+	//
+	// The host is the only side that can know, so it is the side that says.
+	// Independent of ExtraTabs on purpose: a host that turns the strip back on
+	// must not also have to remember to re-wire its extra tabs.
+	SuppressTabs bool
 }
 
 // Tab is one host-supplied entry on the store's tab strip.

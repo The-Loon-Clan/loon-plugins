@@ -84,3 +84,40 @@ func TestStorePagesRenderEmpty(t *testing.T) {
 		"PaginationHTML": template.HTML("")})
 	render(t, "admin_store.html", map[string]any{"Items": []Item{}})
 }
+
+// The tab strip, and the two ways a host can end up without one.
+//
+// Both pages are checked rather than one, because the strip is duplicated in
+// their markup — the failure this catches is a host suppressing it and still
+// getting a stray row on the page nobody re-read.
+func TestTheTabStripIsOnByDefaultAndOffWhenSuppressed(t *testing.T) {
+	for _, page := range []struct {
+		name string
+		data map[string]any
+	}{
+		{"store.html", map[string]any{"Items": []Item{}, "Balance": 0}},
+		{"store_history.html", map[string]any{
+			"Entries": []core.LedgerEntry{}, "Total": 0, "Balance": 0,
+			"PaginationHTML": template.HTML("")}},
+	} {
+		// A host that never heard of the seam. The key is ABSENT rather than
+		// false on purpose: that is the state every existing caller is in, and
+		// the one a positive ShowTabs would have silently broken.
+		if got := render(t, page.name, page.data); !strings.Contains(got, `class="nav tabs`) {
+			t.Errorf("%s: no tab strip with the seam unset — every host that "+
+				"does not know about SuppressTabs just lost its navigation", page.name)
+		}
+
+		page.data["HideTabs"] = true
+		got := render(t, page.name, page.data)
+		if strings.Contains(got, `class="nav tabs`) {
+			t.Errorf("%s: the strip rendered with HideTabs set, so a host with its "+
+				"own account bar gets two rows of tabs offering the same pages", page.name)
+		}
+		// The page still has to work without it — the strip is navigation, not
+		// content, and suppressing it must not take the page with it.
+		if !strings.Contains(got, "pts") {
+			t.Errorf("%s: lost its body along with the strip", page.name)
+		}
+	}
+}
