@@ -1,5 +1,5 @@
 {{define "news.html"}}
-    {{/* The news feed — a grid of preview CARDS.
+    {{/* The news feed — a single column of preview CARDS.
 
          Shape from UNIT3D's article index (see the reference capture in the
          host's examples/): <article>, a headline that is the link, a <time>, a
@@ -25,16 +25,17 @@
          the title passed to render(), and an eyebrow reading "News" over a
          heading reading "All Posts" said it twice more. */}}
     <style>
-        /* auto-fill/minmax rather than a fixed column count: the same rule is
-           two columns in the host's panel, one on a phone, three on a wide
-           screen, with no breakpoints to keep in sync. 26rem is chosen for the
-           TEXT — it lands the excerpt near 70 characters a line, which is the
-           measure prose wants; a narrower minimum fits more cards and makes
-           every one of them worse to read. */
+        /* One card per row. A grid across put two posts side by side, which
+           reads as a catalogue of equal things — and news is not that: it is
+           ordered, the top one matters most, and a reader goes down it. The
+           reference index is a single column for the same reason.
+
+           The card spans the full width; the TEXT inside it does not — see the
+           measure on the excerpt below. */
         .news-feed {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr));
-            gap: 0.9rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
             padding: 0;
         }
 
@@ -96,19 +97,18 @@
             font-size: 0.9rem;
             line-height: 1.6;
             color: var(--text-primary);
-            /* A backstop, not the truncation: excerpt() already cuts the text
-               server-side. This only keeps one unusually long line-broken
-               excerpt from making its whole grid row taller than the rest. */
-            display: -webkit-box;
-            -webkit-line-clamp: 4;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+            /* The card is as wide as the panel; the line is not. Prose past
+               about 75 characters costs the reader the return sweep — they lose
+               which line they were on — and a full-width card at this width
+               runs to 110. This is the one thing here the reference gets wrong,
+               and it costs nothing to fix. */
+            max-width: 74ch;
         }
 
         /* A span, not a second anchor. The card is already one link; a "Read
            more" that goes to the same place would be read out twice and tabbed
            to twice for no destination a reader does not already have. */
-        .news-card__more { margin-top: auto; padding-top: 0.7rem; font-size: 0.82rem; font-weight: 600; color: var(--blue); }
+        .news-card__more { margin-top: 0.7rem; font-size: 0.82rem; font-weight: 600; color: var(--blue); }
     </style>
     <div class="news-feed">
 
