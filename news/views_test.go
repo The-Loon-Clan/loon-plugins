@@ -34,25 +34,36 @@ func render1(t *testing.T, name string, data map[string]any) string {
 // safePost is declared inside the handlers, so the test mirrors its shape
 // rather than importing it. html/template is duck-typed, and what is being
 // pinned here is the TEMPLATE's contract — which is the thing that drifts.
+// The index and the detail page take DIFFERENT shapes — Excerpt is plain text
+// for the list, Body is sanitised HTML for the page — and this one struct
+// carries both so a single fixture drives both templates.
 type safePostView struct {
 	ID        int64
 	Title     string
 	Slug      string
+	Excerpt   string
 	Body      template.HTML
 	CreatedAt interface{}
 }
 
 func sampleSafe() safePostView {
 	return safePostView{1, "Server maintenance", "server-maintenance",
-		template.HTML("<p>back shortly</p>"), time.Now()}
+		"back shortly", template.HTML("<p>back shortly</p>"), time.Now()}
 }
 
 func TestNewsPagesRender(t *testing.T) {
 	got := render1(t, "news.html", map[string]any{"News": []safePostView{sampleSafe()}})
-	for _, want := range []string{"Server maintenance", "<p>back shortly</p>"} {
+	for _, want := range []string{"Server maintenance", "back shortly", `href="/news/server-maintenance"`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("news index missing %q", want)
 		}
+	}
+	// The index shows an excerpt, so it must NOT be putting markup on the page:
+	// the excerpt is plain text and escaping it is the whole reason a truncated
+	// body cannot leave a tag open.
+	if strings.Contains(got, "<p>back shortly</p>") {
+		t.Error("the index rendered the body as HTML — excerpts are plain text, " +
+			"and one cut at a character count leaves tags open")
 	}
 	detail := render1(t, "news_detail.html", map[string]any{"Post": sampleSafe()})
 	if !strings.Contains(detail, "<p>back shortly</p>") {
@@ -112,6 +123,59 @@ func TestNoTemplateLoadsFromAThirdPartyHost(t *testing.T) {
 					"default-src 'self' CSP blocks it, and the feature it powers "+
 					"fails without saying so", name, line, attr)
 			}
+		}
+	}
+}
+
+// excerpt, and the four ways a summary goes wrong without saying so.
+func TestExcerpt(t *testing.T) {
+	for _, tc := range []struct {
+		name, in string
+		max      int
+		want     string
+	}{
+		{"tags become a space, not nothing",
+			"<p>one</p><p>two</p>", 100, "one two"},
+		{"entities resolve after the tags are gone",
+			"<p>Tom &amp; Jerry</p>", 100, "Tom & Jerry"},
+		{"an escaped tag stays text rather than becoming one",
+			"<p>use &lt;strong&gt; for bold</p>", 100, "use <strong> for bold"},
+		{"whitespace from the source collapses",
+			"<p>one</p>\n\n   <p>two</p>", 100, "one two"},
+		{"short bodies are left alone, with no ellipsis",
+			"<p>brief</p>", 100, "brief"},
+		{"a long body is cut at a word boundary",
+			"<p>alpha beta gamma delta</p>", 12, "alpha beta…"},
+		{"trailing punctuation goes with the cut",
+			"<p>alpha beta, gamma</p>", 12, "alpha beta…"},
+		{"one unbroken token is cut hard rather than dropped entirely",
+			"aaaaaaaaaaaaaaaaaaaa", 8, "aaaaaaaa…"},
+		{"an empty body is an empty excerpt, not an ellipsis",
+			"", 100, ""},
+	} {
+		if got := excerpt(tc.in, tc.max); got != tc.want {
+			t.Errorf("%s:\n excerpt(%q, %d)\n = %q\n want %q", tc.name, tc.in, tc.max, got, tc.want)
+		}
+	}
+}
+
+// The cut is in runes, not bytes.
+//
+// Slicing a UTF-8 string by byte index splits a multi-byte character and the
+// page shows a replacement glyph — the same corruption as the mojibake in the
+// release titles, reached from the other end. Every character here is 3 bytes,
+// so a byte-based cut lands mid-character on two thirds of the possible limits.
+func TestExcerptDoesNotSplitACharacter(t *testing.T) {
+	const body = "日本語のニュース記事です。これは長い本文になります。"
+	for max := 1; max < 20; max++ {
+		got := excerpt(body, max)
+		if strings.ContainsRune(got, '\uFFFD') {
+			t.Fatalf("max=%d produced a replacement character: %q", max, got)
+		}
+		// The ellipsis is not part of the budget, so the text itself must not
+		// exceed it either.
+		if n := len([]rune(strings.TrimSuffix(got, "…"))); n > max {
+			t.Errorf("max=%d returned %d runes: %q", max, n, got)
 		}
 	}
 }

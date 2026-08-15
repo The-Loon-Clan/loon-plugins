@@ -7,6 +7,7 @@ package news
 import (
 	"context"
 	"fmt"
+	"html"
 	"html/template"
 	"log"
 	"net/http"
@@ -123,24 +124,84 @@ func (p *Plugin) Stop(ctx context.Context) error  { return nil }
 
 func (h *Handlers) NewsAll(c *gin.Context) {
 	news, _ := h.store.GetPublishedNewsPosts(c.Request.Context(), 50)
-	// Mark bodies as safe HTML so the template won't escape them — but ONLY
-	// after Sanitize, exactly as NewsDetail does. This list previously passed
-	// p.Body through raw: any markup an admin (or anything that ever reached
-	// the admin form) stored was rendered unescaped on the public feed, while
-	// the detail page for the same post was filtered. A host's Sanitize policy
-	// cannot defend a path that never calls it.
+	// The index carries an EXCERPT, not the post.
+	//
+	// It used to render every body in full, which is a list of articles rather
+	// than a feed: nothing is scannable, one long post buries the four under
+	// it, and a reader looking for what is new has to scroll past everything
+	// they have already read. Every news index worth copying — UNIT3D's
+	// article-preview among them — shows a headline, a date and a few lines.
+	//
+	// Plain text rather than truncated HTML. Cutting markup at a character
+	// count closes no tags: the excerpt ships an open <em> and the rest of the
+	// page inherits it. excerpt() strips first and cuts after, so there is
+	// nothing left to leave open — which is also why Body is gone from this
+	// view model entirely, rather than left in for a template to trim.
 	type safePost struct {
 		ID        int64
 		Title     string
 		Slug      string
-		Body      template.HTML
+		Excerpt   string
 		CreatedAt interface{}
 	}
 	safe := make([]safePost, 0, len(news))
 	for _, p := range news {
-		safe = append(safe, safePost{p.ID, p.Title, p.Slug, template.HTML(deps.Sanitize(p.Body)), p.CreatedAt})
+		// Sanitize first, then strip. The detail page renders this same body
+		// as HTML, so an admin's markup has to pass the host's policy either
+		// way — and stripping tags off UNSANITISED input would quietly make
+		// this the one path that never called it.
+		safe = append(safe, safePost{p.ID, p.Title, p.Slug,
+			excerpt(deps.Sanitize(p.Body), 280), p.CreatedAt})
 	}
 	render(c, "News", "news.html", gin.H{"News": safe})
+}
+
+// excerpt renders sanitised HTML down to a plain-text summary of at most max
+// runes, cut at a word boundary, with an ellipsis when anything was dropped.
+//
+// max is in RUNES, not bytes: cutting a UTF-8 string by byte index splits a
+// multi-byte character and the page gets a replacement glyph — the same class
+// of bug as the mojibake in the release titles, arrived at from the other end.
+func excerpt(htmlBody string, max int) string {
+	text := stripTags(htmlBody)
+	// Entities last: &amp;lt; in the source must not become < here, so unescape
+	// once, after the tags are gone rather than before.
+	text = html.UnescapeString(text)
+	text = strings.Join(strings.Fields(text), " ")
+
+	runes := []rune(text)
+	if len(runes) <= max {
+		return text
+	}
+	cut := string(runes[:max])
+	// Back up to the last space so the excerpt does not end mid-word. If there
+	// is no space at all — one very long token — the hard cut stands.
+	if i := strings.LastIndexByte(cut, ' '); i > 0 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, " ,.;:") + "…"
+}
+
+// stripTags removes tags without a parser: the input is already sanitised, so
+// what is left is a known-safe subset and the job is presentation, not defence.
+// A tag becomes a space rather than nothing, or "<p>one</p><p>two</p>" reads
+// "onetwo".
+func stripTags(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	depth := 0
+	for _, r := range s {
+		switch {
+		case r == '<':
+			depth++
+			b.WriteByte(' ')
+		case r == '>' && depth > 0:
+			depth--
+		case depth == 0:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func (h *Handlers) NewsDetail(c *gin.Context) {

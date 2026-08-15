@@ -1,104 +1,73 @@
 {{define "news.html"}}
-    {{/* The news feed.
+    {{/* The news feed — a list of PREVIEWS, not a list of posts.
 
-         Two things this markup does NOT do any more, both worth knowing before
-         adding them back.
+         Shaped after UNIT3D's article index, which is the thing this page is
+         competing with in a reader's memory: <article>, a headline that is the
+         link, a <time>, a few lines, Read more. What it replaced was every post
+         rendered in full inside a disclosure widget, which reads as a stack of
+         documents rather than as news.
 
-         It does not load Bootstrap from a CDN. It did, for one widget — the
-         collapse behaviour behind data-bs-toggle — and a host with a
-         script-src 'self' CSP blocks that request, so the toggles were dead
-         buttons and every aria-expanded="false" was a lie told to a screen
-         reader about content that was on screen. <details> is the same
-         behaviour with no script at all.
+         Two things NOT here, both deliberate:
 
-         It does not repeat the page's name. The host draws a heading from the
-         title passed to render() and a breadcrumb above that, so an eyebrow
-         reading "News" over a heading reading "All Posts" was the third and
-         fourth time the reader had been told where they were. */}}
+         No accordion. It needed a script this plugin pulled off a CDN, so a
+         host with script-src 'self' got dead toggles over bodies that were on
+         screen; and NN/g's guidance is to avoid accordions where there is
+         little content and the reader wants most of it, which is a news feed
+         exactly. With excerpts there is nothing left to collapse.
+
+         No page heading. The host draws a breadcrumb and a panel heading from
+         the title passed to render(), so an eyebrow reading "News" above a
+         heading reading "All Posts" was the third and fourth time the page said
+         where the reader was. */}}
     <style>
-        /* Spacing lives on the list, not on the page: the host's panel already
-           pads its own body, and this template adding a second set of insets is
-           what made the feed look mostly empty. */
-        .news-page { padding: 0 0 0.25rem; }
-        .news-grid { display: flex; flex-direction: column; gap: 0.6rem; }
+        /* Spacing lives on the list. The host's panel already insets its body,
+           and this template adding a second set is what made the feed look
+           mostly empty. */
+        .news-feed { padding: 0; }
 
-        .news-post {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 0.85rem 1.1rem 0.95rem;
-            transition: border-color 0.15s ease;
-        }
-        .news-post:hover { border-color: var(--blue); }
+        /* Divided rows rather than nested cards: a card inside the host's panel
+           is a box in a box, and boxes are what a settings page looks like. A
+           rule between items is what a feed looks like. */
+        .news-item { padding: 1.15rem 0; border-top: 1px solid var(--border); }
+        .news-item:first-child { border-top: 0; padding-top: 0.35rem; }
 
-        /* The whole summary row is the toggle, so it gets the pointer and the
-           focus ring rather than a nested button that steals both. */
-        .news-post > summary {
-            display: flex;
-            align-items: baseline;
-            gap: 0.75rem;
-            cursor: pointer;
-            list-style: none;
-            color: var(--text-primary);
-        }
-        .news-post > summary::-webkit-details-marker { display: none; }
-        .news-post__title { font-size: 1rem; font-weight: 700; line-height: 1.35; }
-        /* Pushed to the end and dimmed: the date is how you tell two posts
-           apart once you have read the titles, not what you read first. */
-        .news-post__date {
-            margin-left: auto;
-            flex-shrink: 0;
-            font-size: 0.72rem;
+        .news-item__title { margin: 0 0 0.3rem; font-size: 1.2rem; line-height: 1.3; font-weight: 700; }
+        .news-item__title a { color: var(--text-primary); text-decoration: none; }
+        .news-item__title a:hover { color: var(--blue); text-decoration: underline; }
+
+        .news-item__date {
+            display: block;
+            margin-bottom: 0.55rem;
+            font-size: 0.75rem;
             font-variant-numeric: tabular-nums;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
-        .news-post__chevron {
-            flex-shrink: 0;
-            color: var(--text-muted);
-            transition: transform 0.15s ease;
-        }
-        .news-post[open] > summary .news-post__chevron { transform: rotate(180deg); }
 
-        .news-post__body {
-            margin-top: 0.6rem;
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            line-height: 1.6;
-        }
-        .news-post__body > :first-child { margin-top: 0; }
-        .news-post__body > :last-child { margin-bottom: 0; }
-        .news-post__body p { margin: 0 0 0.6rem; }
-        /* Its own top margin rather than relying on the body's last paragraph
-           to leave room: a sanitised body does not have to end in a <p>, and
-           when it ends in bare text the link lands against it. */
-        .news-post__more { display: inline-block; margin-top: 0.5rem; font-size: 0.82rem; }
+        /* Full-strength text, not the muted grey the old card used: this is the
+           post talking, and muted grey is the site's colour for captions and
+           helper text. An excerpt set in it reads as a footnote. */
+        .news-item__excerpt { margin: 0; font-size: 0.94rem; line-height: 1.65; color: var(--text-primary); }
+        .news-item__more { display: inline-block; margin-top: 0.5rem; font-size: 0.85rem; font-weight: 600; }
     </style>
-    <div class="container page-narrow news-page">
+    <div class="container page-narrow news-feed">
 
         {{if .News}}
-        <div class="news-grid">
-            {{range .News}}
-            {{/* Open by default, every one of them. The list is short and a
-                 reader came here to read it — collapsing is for putting a post
-                 you have finished away, not for hiding the page's content
-                 behind one click each. */}}
-            <details class="news-post" open>
-                <summary>
-                    <span class="news-post__title">{{.Title}}</span>
-                    <span class="news-post__date">{{.CreatedAt.Format "Jan 02, 2006"}}</span>
-                    <svg class="news-post__chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
-                        <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
-                    </svg>
-                </summary>
-                <div class="news-post__body">
-                    <div class="news-content">{{.Body}}</div>
-                    <a class="news-post__more" href="/news/{{.Slug}}">Permalink</a>
-                </div>
-            </details>
-            {{end}}
-        </div>
+        {{range .News}}
+        <article class="news-item">
+            <h2 class="news-item__title"><a href="/news/{{.Slug}}">{{.Title}}</a></h2>
+            {{/* datetime carries the machine-readable value; the visible text
+                 is the one a person reads. Both from the same field, so they
+                 cannot disagree. */}}
+            <time class="news-item__date" datetime="{{.CreatedAt.Format "2006-01-02"}}">{{.CreatedAt.Format "Jan 02, 2006"}}</time>
+            {{/* No {{if}} around this: excerpt() returns "" for an empty body,
+                 and an empty <p> collapses to nothing. A post with no body is a
+                 headline and a date, which is a legitimate news item. */}}
+            <p class="news-item__excerpt">{{.Excerpt}}</p>
+            <a class="news-item__more" href="/news/{{.Slug}}">Read more</a>
+        </article>
+        {{end}}
         {{else}}
         <div class="empty">No news yet.</div>
         {{end}}
