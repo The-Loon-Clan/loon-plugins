@@ -168,11 +168,6 @@ func excerpt(htmlBody string, max int) string {
 	// once, after the tags are gone rather than before.
 	text = html.UnescapeString(text)
 	text = strings.Join(strings.Fields(text), " ")
-	// stripTags turns every tag into a space, which is right between blocks
-	// ("<p>one</p><p>two</p>" must not read "onetwo") and wrong immediately
-	// before punctuation: "Real <b>body</b>. bad" came out as "Real body . bad".
-	// Cheaper to undo here than to teach stripTags which elements are inline.
-	text = spaceBeforePunct.ReplaceAllString(text, "$1")
 
 	runes := []rune(text)
 	if len(runes) <= max {
@@ -187,30 +182,66 @@ func excerpt(htmlBody string, max int) string {
 	return strings.TrimRight(cut, " ,.;:") + "…"
 }
 
-// Closing punctuation only. An opening bracket or quote legitimately follows a
-// space, so those are not here.
-var spaceBeforePunct = regexp.MustCompile(` +([,.;:!?%\)\]])`)
+// blockTags are the elements whose boundary is a word boundary. A <p> ending
+// and another starting is a gap between two words; a </b> is not.
+//
+// This distinction is the whole reason the set exists. Emitting a space for
+// EVERY tag reads "Real <b>body</b>. bad" as "Real body . bad", and emitting
+// one for none reads "<p>one</p><p>two</p>" as "onetwo". Both were shipped
+// before this — the first onto the feed, the second caught by a test.
+//
+// A short list is safe here because the input is already sanitised: what
+// reaches this function is the host policy's subset, not arbitrary HTML. An
+// element missing from the list is treated as inline, which is the failure
+// worth having — a missing space between two blocks, rather than a space
+// inserted into the middle of a sentence.
+var blockTags = map[string]bool{
+	"address": true, "article": true, "blockquote": true, "br": true,
+	"dd": true, "div": true, "dl": true, "dt": true, "figcaption": true,
+	"figure": true, "footer": true, "h1": true, "h2": true, "h3": true,
+	"h4": true, "h5": true, "h6": true, "header": true, "hr": true,
+	"li": true, "ol": true, "p": true, "pre": true, "section": true,
+	"table": true, "tbody": true, "td": true, "th": true, "thead": true,
+	"tr": true, "ul": true,
+}
 
 // stripTags removes tags without a parser: the input is already sanitised, so
 // what is left is a known-safe subset and the job is presentation, not defence.
-// A tag becomes a space rather than nothing, or "<p>one</p><p>two</p>" reads
-// "onetwo".
 func stripTags(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
-	depth := 0
-	for _, r := range s {
-		switch {
-		case r == '<':
-			depth++
-			b.WriteByte(' ')
-		case r == '>' && depth > 0:
-			depth--
-		case depth == 0:
-			b.WriteRune(r)
+	for i := 0; i < len(s); {
+		if s[i] != '<' {
+			b.WriteByte(s[i])
+			i++
+			continue
 		}
+		end := strings.IndexByte(s[i:], '>')
+		if end < 0 {
+			// An unterminated '<' is text, not a tag. Sanitised input should
+			// not contain one, and dropping the rest of the post because it
+			// does is a worse answer than showing it.
+			b.WriteString(s[i:])
+			break
+		}
+		if blockTags[tagName(s[i+1:i+end])] {
+			b.WriteByte(' ')
+		}
+		i += end + 1
 	}
 	return b.String()
+}
+
+// tagName pulls the lower-cased element name out of a tag's innards —
+// "/p", "a href=…" and "br /" all answer with the element.
+func tagName(inner string) string {
+	inner = strings.TrimPrefix(strings.TrimSpace(inner), "/")
+	for i := 0; i < len(inner); i++ {
+		if c := inner[i]; !('a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9') {
+			return strings.ToLower(inner[:i])
+		}
+	}
+	return strings.ToLower(inner)
 }
 
 func (h *Handlers) NewsDetail(c *gin.Context) {

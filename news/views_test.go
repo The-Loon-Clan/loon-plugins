@@ -149,6 +149,20 @@ func TestExcerpt(t *testing.T) {
 			"<p>Real <b>body</b>. bad</p>", 100, "Real body. bad"},
 		{"a closing bracket keeps its place too",
 			"<p>see the <a href=\"/x\">wiki</a>) for more</p>", 100, "see the wiki) for more"},
+		{"the same at the very end of the text",
+			"<p>done <b>already</b>.</p>", 100, "done already."},
+		// The other direction, and the reason the rule tests what FOLLOWS the
+		// punctuation. ? ends a sentence in prose and opens a query string in a
+		// URL; the character alone cannot tell you which. This read
+		// "The?t=caps response" on the feed until the rule got fussier.
+		{"punctuation that starts a token keeps the space before it",
+			"<p>The <code>?t=caps</code> response</p>", 100, "The ?t=caps response"},
+		{"a bare percent is still a word of its own",
+			"<p>seeded <b>19</b> % of the time</p>", 100, "seeded 19 % of the time"},
+		{"a line break is a word boundary even though it is written inline",
+			"one<br />two", 100, "one two"},
+		{"an unterminated < is text, not the start of a tag that eats the post",
+			"a < b and that is all", 100, "a < b and that is all"},
 		{"short bodies are left alone, with no ellipsis",
 			"<p>brief</p>", 100, "brief"},
 		{"a long body is cut at a word boundary",
