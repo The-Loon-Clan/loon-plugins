@@ -409,6 +409,16 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// keeps it out of the way while the crawler seeds watermarks.
 	p.core.Scheduler.RunLoop(ctx, p.healthJob, 15*time.Minute,
 		time.Duration(p.cfg.HealthIntervalMin)*time.Minute, p.runHealthCheck)
+	// Title repair walks the host catalogue; it touches no provider connections,
+	// so it only waits long enough for the plugin to finish booting. Both jobs
+	// below return immediately when disabled, which is the default.
+	p.core.Scheduler.RunLoop(ctx, p.rot18Job, 8*time.Minute,
+		time.Duration(p.cfg.Rot18RepairIntervalMin)*time.Minute, p.runRot18Repair)
+	// The junk probe DOES spend provider bytes and borrows connections, so it
+	// boots late and behind the health sweep. It yields to the crawler on pool
+	// pressure, so a long-running crawl is never blocked by it.
+	p.core.Scheduler.RunLoop(ctx, p.junkProbeJob, 20*time.Minute,
+		time.Duration(p.cfg.JunkProbeIntervalMin)*time.Minute, p.runJunkProbe)
 	return nil
 }
 
