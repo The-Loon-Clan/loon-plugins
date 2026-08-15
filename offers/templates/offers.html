@@ -150,12 +150,17 @@
                                 <td>
                                     <div style="display:flex;align-items:center;gap:8px;">
                                         {{if .Picture}}
-                                        <span class="nzb-thumb"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
+                                        {{/* data-cover is REQUIRED, not decorative: the site's cover-preview
+                                             JS binds to .nzb-thumb and reads it WITHOUT a nil guard, so a thumb
+                                             missing it renders an empty grey preview card on hover. The title's
+                                             hover card does guard (it checks data-release first), which is why
+                                             only this one misbehaved. */}}
+                                        <span class="nzb-thumb" data-cover="{{.Picture}}" data-fallback="{{.PictureFallback}}"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
                                               onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}"></span>
                                         {{end}}
                                         <div style="min-width:0;">
                                             {{if .EntityID}}
-                                            <a href="/{{.EntityType}}/{{deref .EntityID}}" class="nzb-title" style="color:var(--text-primary);">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{deref .EntityID}}{{end}}</a>
+                                            <a href="/{{.EntityType}}/{{deref .EntityID}}" style="color:var(--text-primary);text-decoration:none;">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{deref .EntityID}}{{end}}</a>
                                             {{else}}
                                             <span style="color:var(--text-primary);">{{.EntityType}}</span>
                                             {{end}}
