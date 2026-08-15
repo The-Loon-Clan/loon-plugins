@@ -142,6 +142,13 @@ func TestExcerpt(t *testing.T) {
 			"<p>use &lt;strong&gt; for bold</p>", 100, "use <strong> for bold"},
 		{"whitespace from the source collapses",
 			"<p>one</p>\n\n   <p>two</p>", 100, "one two"},
+		// The other half of "a tag becomes a space": right between blocks,
+		// wrong right before a full stop. Found on screen, in the demo post
+		// whose body is "Real <b>body</b>. bad" — it read "Real body . bad".
+		{"an inline tag does not push punctuation off its word",
+			"<p>Real <b>body</b>. bad</p>", 100, "Real body. bad"},
+		{"a closing bracket keeps its place too",
+			"<p>see the <a href=\"/x\">wiki</a>) for more</p>", 100, "see the wiki) for more"},
 		{"short bodies are left alone, with no ellipsis",
 			"<p>brief</p>", 100, "brief"},
 		{"a long body is cut at a word boundary",

@@ -168,6 +168,11 @@ func excerpt(htmlBody string, max int) string {
 	// once, after the tags are gone rather than before.
 	text = html.UnescapeString(text)
 	text = strings.Join(strings.Fields(text), " ")
+	// stripTags turns every tag into a space, which is right between blocks
+	// ("<p>one</p><p>two</p>" must not read "onetwo") and wrong immediately
+	// before punctuation: "Real <b>body</b>. bad" came out as "Real body . bad".
+	// Cheaper to undo here than to teach stripTags which elements are inline.
+	text = spaceBeforePunct.ReplaceAllString(text, "$1")
 
 	runes := []rune(text)
 	if len(runes) <= max {
@@ -181,6 +186,10 @@ func excerpt(htmlBody string, max int) string {
 	}
 	return strings.TrimRight(cut, " ,.;:") + "…"
 }
+
+// Closing punctuation only. An opening bracket or quote legitimately follows a
+// space, so those are not here.
+var spaceBeforePunct = regexp.MustCompile(` +([,.;:!?%\)\]])`)
 
 // stripTags removes tags without a parser: the input is already sanitised, so
 // what is left is a known-safe subset and the job is presentation, not defence.
