@@ -611,6 +611,17 @@ func (h *Handlers) OfferDetailPage(c *gin.Context) {
 		deps.RenderError(c, http.StatusNotFound, "No such offer.")
 		return
 	}
+	// Opening the page is the demand signal. Anything here still undescribed
+	// jumps the offering agent's queue, so the file a member actually asked
+	// about does not wait behind thirty thousand nobody has looked at.
+	if deps.PrioritiseBucketMedia != nil {
+		for _, f := range files {
+			if !f.Probed {
+				deps.PrioritiseBucketMedia(ctx, id)
+				break
+			}
+		}
+	}
 	page(c, offerDetailTitle(bucket), "offer_detail.html", gin.H{
 		"PageTitle": offerDetailTitle(bucket),
 		"ActiveNav": "community",

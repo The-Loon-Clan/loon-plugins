@@ -60,6 +60,10 @@ type OfferedFile struct {
 	Path      string
 	SizeBytes int64
 	Probed    bool
+	// Queued means a description has been ASKED FOR and has not arrived.
+	// Distinct from not-probed, because "coming shortly" and "may be a
+	// fortnight" are different promises to a member deciding whether to wait.
+	Queued bool
 
 	Duration    string
 	Dimensions  string
@@ -265,13 +269,18 @@ type Deps struct {
 	// BucketDetail is one bucket plus the staged files behind it — the offer
 	// detail page. Files carry the agent's probe (codecs, duration, audio and
 	// subtitle tracks) so the page can describe a release nobody uploaded.
-	BucketDetail      func(ctx context.Context, bucketID int) (*Bucket, []OfferedFile, error)
-	Leaderboard       func(ctx context.Context, limit int) ([]Leader, error)
-	RecentDeliveries  func(ctx context.Context, limit int) ([]Fulfillment, error)
-	TrackerStats      func(ctx context.Context) ([]TrackerStat, error)
-	ListTrackers      func(ctx context.Context, includeBanned bool) ([]Tracker, error)
-	AdminRequests     func(ctx context.Context, limit int) ([]AdminRequest, error)
-	AdminStatusCounts func(ctx context.Context) ([]StatusCount, error)
+	BucketDetail func(ctx context.Context, bucketID int) (*Bucket, []OfferedFile, error)
+	// PrioritiseBucketMedia is called when someone opens a detail page holding
+	// undescribed files: the view IS the demand signal, and it moves those
+	// files to the front of the offering agent's probe queue. Best-effort —
+	// failing to raise a priority must never fail the page.
+	PrioritiseBucketMedia func(ctx context.Context, bucketID int)
+	Leaderboard           func(ctx context.Context, limit int) ([]Leader, error)
+	RecentDeliveries      func(ctx context.Context, limit int) ([]Fulfillment, error)
+	TrackerStats          func(ctx context.Context) ([]TrackerStat, error)
+	ListTrackers          func(ctx context.Context, includeBanned bool) ([]Tracker, error)
+	AdminRequests         func(ctx context.Context, limit int) ([]AdminRequest, error)
+	AdminStatusCounts     func(ctx context.Context) ([]StatusCount, error)
 
 	// ── reads for the external API ──
 	//

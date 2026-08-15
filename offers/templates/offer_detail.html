@@ -77,7 +77,10 @@
                         {{if .Duration}} &middot; {{.Duration}}{{end}}
                         {{if .Dimensions}} &middot; {{.Dimensions}}{{end}}
                         {{if .VideoCodec}} &middot; {{.VideoCodec}}{{end}}
-                        {{if not .Probed}} &middot; <em>not yet described</em>{{end}}
+                        {{if not .Probed}}
+                            {{if .Queued}} &middot; <em>description requested &mdash; arriving shortly</em>
+                            {{else}} &middot; <em>not yet described</em>{{end}}
+                        {{end}}
                     </div>
 
                     {{if .Probed}}
