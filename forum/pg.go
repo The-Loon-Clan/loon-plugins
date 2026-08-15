@@ -381,8 +381,8 @@ func (r *PGStore) GetForumPosts(ctx context.Context, threadID, limit, offset, vi
 	// posts in this thread, because that is what "Posts: 132" means on a forum.
 	//
 	// A FAILURE HERE IS NOT FATAL, which is the one deliberate swallow in this
-	// function. joined_at is a column the HOST's user_display view has to
-	// provide, and a host running an older view does not have it — so the query
+	// function. joined_at comes from user_stats, a view the HOST has to
+	// publish, and a host that does not have it errors here — so the query
 	// errors, and the choice is between a thread that 500s and an author card
 	// missing two lines. The stats are decoration; the thread is the page.
 	//
@@ -408,7 +408,7 @@ func (r *PGStore) GetForumPosts(ctx context.Context, threadID, limit, offset, vi
 	if err := r.db.SelectContext(ctx, &stats, `
 		SELECT u.id AS user_id, u.joined_at,
 		       COUNT(fp.id)::int AS count
-		FROM user_display u
+		FROM user_stats u
 		LEFT JOIN forum_posts fp ON fp.user_id = u.id AND fp.hidden_at IS NULL
 		WHERE u.id = ANY($1)
 		GROUP BY u.id, u.joined_at`, pq.Array(userIDs)); err == nil {
