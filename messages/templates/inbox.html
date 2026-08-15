@@ -12,6 +12,16 @@
         }
         @media (max-width: 820px) {
             .inbox-layout { grid-template-columns: 1fr; }
+            /* A grid item's min-width is auto, so it cannot shrink below its
+               widest child — and the list pane is full of white-space:nowrap
+               (.ib-name, .ib-preview, .ib-meta). One long correspondent name
+               therefore set the CARD's width and pushed it past the screen: on
+               a 390px phone the pane measured 403 and the page scrolled
+               sideways.
+               Safe to let it shrink because each of those children already has
+               overflow:hidden and text-overflow:ellipsis — they were written to
+               truncate, and this is what finally lets them. */
+            .inbox-layout > * { min-width: 0; }
         }
 
         /* ── Left pane ───────────────────────────────────────── */
