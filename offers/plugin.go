@@ -104,6 +104,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	pub.GET("", p.handlers.OffersPage)
 	pub.GET("/search", p.handlers.SearchPage)
 	pub.GET("/community", p.handlers.CommunityPage)
+	// Detail page for one bucket — what a release page is for a release, minus
+	// the download. Registered AFTER the fixed paths so /search and /community
+	// keep their own handlers rather than being read as bucket ids.
+	pub.GET("/b/:id", p.handlers.OfferDetailPage)
 
 	// Tracker catalog + offers oversight — mod or above.
 	adm := engine.Group("/admin")

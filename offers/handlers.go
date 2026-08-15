@@ -14,6 +14,7 @@ package offers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -577,4 +578,56 @@ func (h *Handlers) lookupTrackerByShortName(ctx context.Context, short string) (
 		}
 	}
 	return nil, errors.New("unknown tracker")
+}
+
+// OfferDetailPage renders one bucket: GET /offers/b/:id.
+//
+// This is a release page for something nobody uploaded. The offer system's
+// whole premise is that the bytes exist on someone else's disk, so a member
+// deciding whether to spend points has none of the usual evidence — no
+// screenshots, no mediainfo, not even a filename. The agent probes its staged
+// files and reports codecs, duration, audio tracks and subtitle languages, and
+// this is where that lands.
+//
+// There is no download button and there never will be. The action is a
+// request, which is the only thing the site can honestly offer here.
+func (h *Handlers) OfferDetailPage(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		deps.RenderError(c, http.StatusNotFound, "No such offer.")
+		return
+	}
+	if deps.BucketDetail == nil {
+		deps.RenderError(c, http.StatusNotFound, "No such offer.")
+		return
+	}
+	ctx := c.Request.Context()
+	bucket, files, err := deps.BucketDetail(ctx, id)
+	if err != nil {
+		deps.ReportError(c, "offer/detail", err)
+		return
+	}
+	if bucket == nil {
+		deps.RenderError(c, http.StatusNotFound, "No such offer.")
+		return
+	}
+	page(c, offerDetailTitle(bucket), "offer_detail.html", gin.H{
+		"PageTitle": offerDetailTitle(bucket),
+		"ActiveNav": "community",
+		"Bucket":    bucket,
+		"Files":     files,
+	})
+}
+
+// offerDetailTitle prefers the catalogue name and falls back to the bucket's
+// own identity, so a bucket whose entity is unknown still gets a usable title
+// rather than an empty tab.
+func offerDetailTitle(b *Bucket) string {
+	if b.Title != "" {
+		return b.Title
+	}
+	if b.EntityID != nil {
+		return fmt.Sprintf("%s #%d", b.EntityType, *b.EntityID)
+	}
+	return "Offer"
 }

@@ -2,6 +2,7 @@ package offers
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
 	"strings"
 	"unicode/utf8"
@@ -25,8 +26,13 @@ var pageFS embed.FS
 //
 // `slice` is not here: it has been a template builtin since Go 1.13.
 var pageTmpl = template.Must(template.New("offers").Funcs(template.FuncMap{
-	"add":     func(a, b int) int { return a + b },
-	"initial": initial,
+	"add": func(a, b int) int { return a + b },
+	// Byte formatting, same reasoning as the others: pure, trivial, and it
+	// cannot drift into a different ANSWER the way a shared hash could. The
+	// site has its own formatSize in its FuncMap; a plugin fragment is
+	// rendered by THIS template set, so it needs its own.
+	"formatSize": formatSize,
+	"initial":    initial,
 	"deref": func(p *int) int {
 		if p == nil {
 			return 0
@@ -92,4 +98,23 @@ func initial(s string) string {
 		return ""
 	}
 	return s[:size]
+}
+
+// formatSize renders a byte count the way the site's listings do: one decimal
+// place, binary units, and no trailing ".0" on whole numbers.
+func formatSize(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	v := float64(b) / float64(div)
+	if v >= 100 || v == float64(int64(v)) {
+		return fmt.Sprintf("%.0f %cB", v, "KMGTPE"[exp])
+	}
+	return fmt.Sprintf("%.1f %cB", v, "KMGTPE"[exp])
 }

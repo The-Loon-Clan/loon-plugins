@@ -1,0 +1,132 @@
+{{define "offer_detail.html"}}
+    <style>
+        .od-page   { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+        .od-head   { display: flex; gap: 1.25rem; align-items: flex-start; margin-bottom: 1.5rem; }
+        .od-cover  { flex-shrink: 0; width: 140px; border-radius: 8px; overflow: hidden;
+                     background: var(--bg-elevated); }
+        .od-cover img { width: 100%; display: block; }
+        .od-title  { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0 0 .35rem; }
+        .od-ident  { color: var(--text-muted); font-size: 0.8rem; margin-bottom: .6rem; }
+        .od-pills  { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .8rem; }
+        .od-pill   { display: inline-block; padding: .12rem .5rem; border-radius: 999px;
+                     font-size: .7rem; background: var(--bg-elevated); color: var(--text-muted);
+                     border: 1px solid var(--border); }
+        .od-card   { background: var(--bg-surface); border: 1px solid var(--border);
+                     border-radius: 12px; padding: 1rem 1.15rem; margin-bottom: 1rem; }
+        .od-card h2 { font-size: .95rem; margin: 0 0 .75rem; color: var(--text-primary); }
+        .od-file   { border-top: 1px solid var(--border); padding: .7rem 0; }
+        .od-file:first-of-type { border-top: 0; }
+        .od-fname  { color: var(--text-primary); font-size: .85rem; word-break: break-all; }
+        .od-meta   { color: var(--text-muted); font-size: .76rem; margin-top: .2rem; }
+        .od-grid   { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                     gap: .5rem .9rem; margin-top: .5rem; font-size: .78rem; }
+        .od-k      { color: var(--text-muted); }
+        .od-v      { color: var(--text-primary); }
+        .od-track  { font-size: .76rem; color: var(--text-muted); }
+        .od-note   { color: var(--text-muted); font-size: .78rem; }
+    </style>
+
+    <div class="od-page">
+        <div class="od-head">
+            {{if .Bucket.Picture}}
+            <div class="od-cover">
+                <img src="{{.Bucket.Picture}}" data-fallback="{{.Bucket.PictureFallback}}" alt="" loading="lazy"
+                     onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}">
+            </div>
+            {{end}}
+            <div style="flex:1;min-width:0;">
+                <h1 class="od-title">
+                    {{if .Bucket.Title}}{{.Bucket.Title}}{{else}}{{.Bucket.EntityType}}{{if .Bucket.EntityID}} #{{deref .Bucket.EntityID}}{{end}}{{end}}
+                </h1>
+                <div class="od-ident">
+                    {{.Bucket.EntityType}}{{if .Bucket.EntityID}}
+                    <a href="/{{.Bucket.EntityType}}/{{deref .Bucket.EntityID}}" style="color:var(--blue);text-decoration:none;">#{{deref .Bucket.EntityID}}</a>{{end}}
+                    {{if .Bucket.SeasonNum}} &middot; S{{deref .Bucket.SeasonNum}}{{end}}{{if .Bucket.EpisodeNum}}E{{deref .Bucket.EpisodeNum}}{{end}}
+                </div>
+                <div class="od-pills">
+                    {{if .Bucket.Resolution}}<span class="od-pill">{{.Bucket.Resolution}}</span>{{end}}
+                    {{if .Bucket.SourceTag}}<span class="od-pill">{{.Bucket.SourceTag}}</span>{{end}}
+                    <span class="od-pill">{{.Bucket.SizeBucket}}</span>
+                    {{if .Bucket.HasPrivate}}<span class="od-pill">private</span>{{end}}
+                    {{if .Bucket.HasPublic}}<span class="od-pill">public</span>{{end}}
+                    {{if .Bucket.HasPersonal}}<span class="od-pill">personal</span>{{end}}
+                    <span class="od-pill">{{.Bucket.ActiveOfferCount}} active offer{{if ne .Bucket.ActiveOfferCount 1}}s{{end}}</span>
+                    <span class="od-pill">{{if .Bucket.MinPoints}}{{.Bucket.MinPoints}} pts{{else}}free{{end}}</span>
+                </div>
+                {{/* The only action. There is no download and there cannot be —
+                     the bytes are on an offerer's disk, and a request is what
+                     asks them to deliver. Saying so plainly beats a disabled
+                     download button that invites the question. */}}
+                <button type="button" class="btn btn-primary of-request" data-bucket-id="{{.Bucket.BucketID}}">
+                    Request this
+                </button>
+                <div class="od-note" style="margin-top:.5rem;">
+                    Nothing is stored here. Requesting asks an offerer to fetch it and deliver an NZB.
+                </div>
+            </div>
+        </div>
+
+        <div class="od-card">
+            <h2>What is being offered</h2>
+            {{if .Files}}
+                {{range .Files}}
+                <div class="od-file">
+                    <div class="od-fname">{{.Name}}</div>
+                    <div class="od-meta">
+                        {{formatSize .SizeBytes}}
+                        {{if .Duration}} &middot; {{.Duration}}{{end}}
+                        {{if .Dimensions}} &middot; {{.Dimensions}}{{end}}
+                        {{if .VideoCodec}} &middot; {{.VideoCodec}}{{end}}
+                        {{if not .Probed}} &middot; <em>not yet described</em>{{end}}
+                    </div>
+
+                    {{if .Probed}}
+                    <div class="od-grid">
+                        {{if .Container}}<div><span class="od-k">Container</span> <span class="od-v">{{.Container}}</span></div>{{end}}
+                        {{if .FrameRate}}<div><span class="od-k">Frame rate</span> <span class="od-v">{{.FrameRate}}</span></div>{{end}}
+                        {{if .BitrateKbps}}<div><span class="od-k">Bitrate</span> <span class="od-v">{{.BitrateKbps}} kbps</span></div>{{end}}
+                    </div>
+                    {{if .AudioTracks}}
+                    <div class="od-track" style="margin-top:.4rem;">
+                        <strong>Audio:</strong>
+                        {{range $i, $a := .AudioTracks}}{{if $i}}, {{end}}{{if $a.Language}}{{$a.Language}}{{else}}und{{end}}{{if $a.Codec}} {{$a.Codec}}{{end}}{{if $a.Channels}} {{$a.Channels}}ch{{end}}{{end}}
+                    </div>
+                    {{end}}
+                    {{if .Subtitles}}
+                    <div class="od-track">
+                        <strong>Subtitles:</strong>
+                        {{range $i, $s := .Subtitles}}{{if $i}}, {{end}}{{if $s.Language}}{{$s.Language}}{{else}}und{{end}}{{if $s.Forced}} (forced){{end}}{{end}}
+                    </div>
+                    {{end}}
+                    {{end}}
+                </div>
+                {{end}}
+            {{else}}
+            <div class="od-note">
+                No file detail yet. An offerer has listed this, but their agent has not
+                described the file — the description arrives on its next pass.
+            </div>
+            {{end}}
+        </div>
+
+        <div class="od-note">
+            <a href="/offers" style="color:var(--blue);text-decoration:none;">&larr; back to offers</a>
+        </div>
+    </div>
+
+    <script>
+    document.querySelectorAll('.of-request').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            btn.disabled = true;
+            fetch('/offers/request', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRF-Token': '{{.CSRFToken}}'},
+                body: JSON.stringify({bucket_id: parseInt(btn.dataset.bucketId, 10)})
+            }).then(function (r) { return r.json(); }).then(function (d) {
+                btn.textContent = d && d.ok ? 'Requested' : (d && d.error ? d.error : 'Failed');
+                if (!d || !d.ok) { btn.disabled = false; }
+            }).catch(function () { btn.textContent = 'Failed'; btn.disabled = false; });
+        });
+    });
+    </script>
+{{end}}

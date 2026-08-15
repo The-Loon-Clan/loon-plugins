@@ -52,6 +52,36 @@ type Bucket struct {
 	HasPersonal      bool
 }
 
+// OfferedFile is one staged file behind a bucket, as the detail page shows it.
+// Everything except Name and SizeBytes may be absent: a file the agent has not
+// probed yet still belongs on the page, described by what little is known.
+type OfferedFile struct {
+	Name      string
+	Path      string
+	SizeBytes int64
+	Probed    bool
+
+	Duration    string
+	Dimensions  string
+	VideoCodec  string
+	Container   string
+	FrameRate   string
+	BitrateKbps int
+	AudioTracks []OfferedAudio
+	Subtitles   []OfferedSubtitle
+}
+
+type OfferedAudio struct {
+	Language string
+	Codec    string
+	Channels int
+}
+
+type OfferedSubtitle struct {
+	Language string
+	Forced   bool
+}
+
 // Leader is one row of the fulfilment leaderboard.
 type Leader struct {
 	UserID          int
@@ -231,7 +261,11 @@ type Deps struct {
 	LogError func(ctx context.Context, op string, err error)
 
 	// ── reads for the pages ──
-	RecentBuckets     func(ctx context.Context, entityType, sizeBucket string, limit int) ([]Bucket, error)
+	RecentBuckets func(ctx context.Context, entityType, sizeBucket string, limit int) ([]Bucket, error)
+	// BucketDetail is one bucket plus the staged files behind it — the offer
+	// detail page. Files carry the agent's probe (codecs, duration, audio and
+	// subtitle tracks) so the page can describe a release nobody uploaded.
+	BucketDetail      func(ctx context.Context, bucketID int) (*Bucket, []OfferedFile, error)
 	Leaderboard       func(ctx context.Context, limit int) ([]Leader, error)
 	RecentDeliveries  func(ctx context.Context, limit int) ([]Fulfillment, error)
 	TrackerStats      func(ctx context.Context) ([]TrackerStat, error)
