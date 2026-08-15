@@ -3,14 +3,21 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="mb-0" style="color:var(--text-muted);">News Posts</h6>
-            <button class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#new-post-form">
-                + New Post
-            </button>
         </div>
 
-        {{/* ── Create form ── */}}
-        <div class="collapse mb-4" id="new-post-form">
-            <div class="card">
+        {{/* ── Create form ──
+
+             <details> rather than a button driving a Bootstrap collapse. The
+             collapse needed a script this plugin pulled from a CDN, and a host
+             with a script-src 'self' CSP blocks it — leaving "+ New Post" as a
+             button that did nothing over a form that was already open, since
+             .collapse without Bootstrap's own CSS has no display rule either.
+             This needs no script and cannot half-work. */}}
+        <details class="mb-4" id="new-post-form">
+            <summary class="btn btn-primary btn-sm" style="display:inline-block;list-style:none;cursor:pointer;">
+                + New Post
+            </summary>
+            <div class="card mt-3">
                 <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">New Post</div>
                 <div class="card-body">
                     <form method="POST" action="/admin/news">
@@ -41,7 +48,7 @@
                     </form>
                 </div>
             </div>
-        </div>
+        </details>
 
         {{/* ── Posts list ── */}}
         <div class="card">
@@ -86,7 +93,6 @@
 
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     // Auto-generate slug from title
     document.getElementById('new-title').addEventListener('input', function() {

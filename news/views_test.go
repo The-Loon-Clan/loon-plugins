@@ -2,6 +2,7 @@ package news
 
 import (
 	"html/template"
+	"io/fs"
 	"strings"
 	"testing"
 	"time"
@@ -76,4 +77,41 @@ func TestNewsAdminPagesRender(t *testing.T) {
 func TestNewsPagesRenderEmpty(t *testing.T) {
 	render1(t, "news.html", map[string]any{"News": []safePostView{}})
 	render1(t, "admin_news.html", map[string]any{"Posts": []NewsPost{}})
+}
+
+// No template here may pull a script or a stylesheet off a third-party host.
+//
+// The news feed loaded Bootstrap from cdn.jsdelivr.net for one widget, and on a
+// host with a script-src 'self' CSP the request never happened. What that left
+// was worse than an unstyled page: the collapse toggles were buttons that did
+// nothing, and every post but the first carried aria-expanded="false" over a
+// body that was on screen — a lie to a screen reader, told silently, on a page
+// that looked fine.
+//
+// Nothing about that failure is visible from the plugin side, which is why this
+// is a test rather than a note. Every template is scanned, not just the one that
+// had the tag, because the next one added will be copied from an example that
+// has it too.
+func TestNoTemplateLoadsFromAThirdPartyHost(t *testing.T) {
+	names, err := fs.Glob(pageFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) < 4 {
+		t.Fatalf("found %d templates; the glob is not matching", len(names))
+	}
+	for _, name := range names {
+		b, err := fs.ReadFile(pageFS, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, attr := range []string{`src="http`, `src='http`, `href="http`, `href='http`} {
+			if i := strings.Index(string(b), attr); i >= 0 {
+				line := 1 + strings.Count(string(b)[:i], "\n")
+				t.Errorf("%s:%d loads from an external origin (%s…) — a host with a "+
+					"default-src 'self' CSP blocks it, and the feature it powers "+
+					"fails without saying so", name, line, attr)
+			}
+		}
+	}
 }
