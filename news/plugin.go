@@ -304,7 +304,11 @@ func (h *Handlers) NewsDetail(c *gin.Context) {
 		CreatedAt interface{}
 	}
 	safe := safePost{post.ID, post.Title, post.Slug, template.HTML(deps.Sanitize(post.Body)), post.CreatedAt}
-	render(c, "News", "news_detail.html", gin.H{"Post": safe})
+	// The POST's title, not "News". It is the page's heading, the last crumb in
+	// the host's breadcrumb and the browser tab's text, and all three were
+	// reading "News" — on a page whose whole subject is one article. The feed
+	// is still called News because that is what the feed is.
+	render(c, post.Title, "news_detail.html", gin.H{"Post": safe})
 }
 
 func (h *Handlers) NewsList(c *gin.Context) {

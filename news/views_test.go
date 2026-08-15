@@ -3,6 +3,7 @@ package news
 import (
 	"html/template"
 	"io/fs"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -250,6 +251,51 @@ func TestHumanAgeNeverPluralisesOne(t *testing.T) {
 		got := humanAge(now.Add(-d), now)
 		if strings.HasPrefix(got, "1 ") && strings.Contains(got, "s ago") {
 			t.Errorf("humanAge(now-%s) = %q", d, got)
+		}
+	}
+}
+
+// No template here draws a breadcrumb.
+//
+// The host draws one, in its header, on every page. The detail page drew a
+// SECOND one inside the article — and drew it with Bootstrap's .breadcrumb
+// classes, which a host shipping only a reset subset has no rule for, so the
+// <ol> fell back to its default markers and the trail rendered as
+//
+//  1. News
+//  2. Anime category now resolves season and episode
+//
+// under the host's own breadcrumb bar saying the same thing. Two failures at
+// once, and neither errored.
+//
+// The rule is the fix: a page's ancestry is chrome, and chrome belongs to the
+// host, which is the only side that knows what a page sits under on the site
+// running it.
+func TestNoTemplateDrawsItsOwnBreadcrumb(t *testing.T) {
+	names, err := fs.Glob(pageFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Comments come out first. The first version of this scan flagged the two
+	// templates for the comments EXPLAINING why they no longer draw one, which
+	// is a test failing on its own documentation — and the kind of false
+	// positive that gets a useful check deleted rather than fixed. Replaced
+	// with spaces, not removed, so the line numbers still point at the markup.
+	comments := regexp.MustCompile(`(?s)\{\{/\*.*?\*/\}\}|<!--.*?-->`)
+	for _, name := range names {
+		b, err := fs.ReadFile(pageFS, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		src := comments.ReplaceAllStringFunc(string(b), func(m string) string {
+			return strings.Repeat(" ", len(m)-strings.Count(m, "\n")) + strings.Repeat("\n", strings.Count(m, "\n"))
+		})
+		for _, marker := range []string{`class="breadcrumb`, `aria-label="breadcrumb`} {
+			if i := strings.Index(strings.ToLower(src), marker); i >= 0 {
+				line := 1 + strings.Count(src[:i], "\n")
+				t.Errorf("%s:%d draws a breadcrumb — the host already puts one in its "+
+					"header, and this plugin cannot know what its pages sit under", name, line)
+			}
 		}
 	}
 }
