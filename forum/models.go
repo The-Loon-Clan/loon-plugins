@@ -109,11 +109,26 @@ type ForumPost struct {
 	// rendered as a badge next to their name. Populated by GetForumPosts from
 	// users.reputation_tier — MUST stay selected there or the community_thread
 	// template errors on {{repBadge .ReputationTier}} and aborts the render.
-	ReputationTier int        `db:"reputation_tier"`
-	AvatarPath     string     `db:"avatar_path"`
-	Body           string     `db:"body"`
-	EditedAt       *time.Time `db:"edited_at"`
-	CreatedAt      time.Time  `db:"created_at"`
+	ReputationTier int    `db:"reputation_tier"`
+	AvatarPath     string `db:"avatar_path"`
+	// UserJoinedAt and UserPostCount are the author card's two stats — the
+	// "Joined" and "Posts" lines every forum shows beside a post, and the
+	// cheapest signal a reader has for how much weight to give an answer.
+	//
+	// UserJoinedAt comes off user_display (the host's view, which is what keeps
+	// this plugin off the users table); UserPostCount is a batched second query
+	// in GetForumPosts, one row per AUTHOR rather than a correlated subquery
+	// per post.
+	//
+	// Both are zero for a store that does not populate them — the in-memory one
+	// does not — and the template renders each line only when it has a value,
+	// so a host on the memory store gets an author card without stats rather
+	// than one claiming everybody joined in year 1.
+	UserJoinedAt  time.Time  `db:"user_joined_at"`
+	UserPostCount int        `db:"-"`
+	Body          string     `db:"body"`
+	EditedAt      *time.Time `db:"edited_at"`
+	CreatedAt     time.Time  `db:"created_at"`
 
 	// Quote-reply: when set, the post is a reply to another post and
 	// the UI shows a small "in reply to @user" snippet at the top.

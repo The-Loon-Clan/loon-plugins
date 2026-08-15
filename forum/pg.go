@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -371,7 +372,55 @@ func (r *PGStore) GetForumPosts(ctx context.Context, threadID, limit, offset, vi
 		}
 	}
 
+	// The author card's two stats — "Joined" and "Posts" — one query for the
+	// page, keyed by AUTHOR.
+	//
+	// Per author rather than per post because a thread page shows a handful of
+	// distinct people, and COUNT(*) over someone's whole posting history is the
+	// expensive half. Counting every visible post they have anywhere, not their
+	// posts in this thread, because that is what "Posts: 132" means on a forum.
+	//
+	// A FAILURE HERE IS NOT FATAL, which is the one deliberate swallow in this
+	// function. joined_at is a column the HOST's user_display view has to
+	// provide, and a host running an older view does not have it — so the query
+	// errors, and the choice is between a thread that 500s and an author card
+	// missing two lines. The stats are decoration; the thread is the page.
+	//
+	// Safe to degrade precisely because the zero values mean "do not render
+	// this line" rather than "permitted": the template tests each stat before
+	// showing it, so what a reader gets is an author card without them, not one
+	// claiming everybody joined in year 1 with no posts to their name.
+	userIDs := make([]int, 0, len(posts))
+	seenUser := make(map[int]bool, len(posts))
 	for _, p := range posts {
+		if !seenUser[p.UserID] {
+			seenUser[p.UserID] = true
+			userIDs = append(userIDs, p.UserID)
+		}
+	}
+	type authorStatRow struct {
+		UserID   int       `db:"user_id"`
+		JoinedAt time.Time `db:"joined_at"`
+		Count    int       `db:"count"`
+	}
+	var stats []authorStatRow
+	statsByUser := make(map[int]authorStatRow, len(userIDs))
+	if err := r.db.SelectContext(ctx, &stats, `
+		SELECT u.id AS user_id, u.joined_at,
+		       COUNT(fp.id)::int AS count
+		FROM user_display u
+		LEFT JOIN forum_posts fp ON fp.user_id = u.id AND fp.hidden_at IS NULL
+		WHERE u.id = ANY($1)
+		GROUP BY u.id, u.joined_at`, pq.Array(userIDs)); err == nil {
+		for _, st := range stats {
+			statsByUser[st.UserID] = st
+		}
+	}
+
+	for _, p := range posts {
+		if st, ok := statsByUser[p.UserID]; ok {
+			p.UserJoinedAt, p.UserPostCount = st.JoinedAt, st.Count
+		}
 		p.Reactions = byPost[p.ID]
 		if m := mineByPost[p.ID]; m != nil {
 			p.MyReactions = make([]string, 0, len(m))
