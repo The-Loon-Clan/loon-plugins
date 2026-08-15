@@ -23,9 +23,18 @@ import (
 
 // Bucket is one offerable thing: a release at a specific quality.
 type Bucket struct {
-	BucketID         int
-	EntityType       string
-	EntityID         *int
+	BucketID   int
+	EntityType string
+	EntityID   *int
+	// Title is the catalogue name — "Lady Lady!!" rather than "anime #2068".
+	//
+	// Resolved HOST-side and passed in, because the catalogue belongs to the
+	// site: this plugin has no anime_metadata to join against and should not
+	// acquire one. Empty when the entity is unknown, and the template falls
+	// back to the type-and-id form so a missing row still renders something.
+	Title string
+	// Picture is a poster/cover path for the same entity, empty when absent.
+	Picture          string
 	SeasonNum        *int
 	EpisodeNum       *int
 	Resolution       string
@@ -58,11 +67,15 @@ type Fulfillment struct {
 	DeliveredAt time.Time
 	EntityType  string
 	EntityID    *int
-	SeasonNum   *int
-	EpisodeNum  *int
-	Resolution  string
-	SourceTag   string
-	SizeBucket  string
+	// Title is the catalogue name, resolved host-side. See Bucket.Title —
+	// same contract, and the fulfillment list had the same problem: a
+	// delivery that reads "anime #2068" tells a member nothing.
+	Title      string
+	SeasonNum  *int
+	EpisodeNum *int
+	Resolution string
+	SourceTag  string
+	SizeBucket string
 }
 
 // TrackerStat is one source's contribution.

@@ -20,6 +20,7 @@
             gap: 0.85rem;
         }
         .of-card .of-title { font-weight: 600; color: var(--text-primary); font-size: 0.95rem; }
+        .of-card .of-hint  { color: var(--text-muted); font-size: 0.72rem; margin-top: 0.1rem; }
         .of-card .of-meta  { color: var(--text-muted); font-size: 0.78rem; margin-top: 0.15rem; }
         .of-pill {
             display: inline-block;
@@ -125,11 +126,17 @@
                     <div class="of-card">
                         <div style="flex:1;min-width:0;">
                             <div class="of-title">
-                                {{.EntityType}} {{if .EntityID}}#{{deref .EntityID}}{{end}}
+                                {{if .Title}}{{.Title}}{{else}}{{.EntityType}} {{if .EntityID}}#{{deref .EntityID}}{{end}}{{end}}
                                 {{if .SeasonNum}}· S{{deref .SeasonNum}}{{end}}{{if .EpisodeNum}}E{{deref .EpisodeNum}}{{end}}
                                 {{if .Resolution}}· {{.Resolution}}{{end}}
                                 {{if .SourceTag}}· {{.SourceTag}}{{end}}
                             </div>
+                            {{if .Title}}
+                            {{/* The catalogue identity, kept as a hint beneath the name. It is what
+                                 the bucket is actually keyed on, so it stays visible — the title is
+                                 the friendly face of it, not a replacement for it. */}}
+                            <div class="of-hint">{{.EntityType}}{{if .EntityID}} #{{deref .EntityID}}{{end}}</div>
+                            {{end}}
                             <div class="of-meta">
                                 {{if .HasPrivate}}<span class="of-pill of-pill-priv">private</span>{{end}}
                                 {{if .HasPublic}}<span class="of-pill of-pill-pub">public</span>{{end}}
@@ -191,7 +198,7 @@
                         <div class="oc-row">
                             <div style="flex:1;min-width:0;">
                                 <div style="font-weight:600;color:var(--text-primary);font-size:0.85rem;">
-                                    {{.EntityType}}
+                                    {{if .Title}}{{.Title}}{{else}}{{.EntityType}}{{end}}
                                     {{if .EntityID}}<a href="/{{.EntityType}}/{{.EntityID}}" style="color:var(--blue);text-decoration:none;">#{{.EntityID}}</a>{{end}}
                                     {{if .SeasonNum}}· S{{.SeasonNum}}{{end}}{{if .EpisodeNum}}E{{.EpisodeNum}}{{end}}
                                 </div>
