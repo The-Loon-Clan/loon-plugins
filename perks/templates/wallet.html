@@ -42,6 +42,16 @@
     </header>
     <div class="panel__body panel__body--flush">
         {{if .Targets}}
+        {{/* The wrapper is not optional. A .data-table is a fixed grid of
+             columns, and on a 390px screen this one runs about 100px past the
+             edge — without .data-table-wrapper's overflow-x that overflow is
+             the PAGE's, and the whole site scrolls sideways.
+
+             It went unnoticed because the table only renders when a member has
+             torrents, so it was invisible on any host with the tracker off.
+             Found the day one was switched on, by scripts/mobile.py in the
+             reference host. */}}
+        <div class="data-table-wrapper">
         <table class="data-table">
             <thead>
                 <tr><th>Torrent</th><th>Perks</th><th class="data-table__nowrap">Spend</th></tr>
@@ -69,6 +79,7 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
         {{else}}
         <p class="text-muted">
             Nothing to spend on yet — start a download and it will appear here.
