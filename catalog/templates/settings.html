@@ -3,6 +3,9 @@
     <p class="text-muted small">Everything is listed — disable the categories you don't want the indexer to surface (Newznab caps + browse). New releases are auto-categorized from their group + title.</p>
     <div class="table-responsive">
         <table class="table table-dark table-sm align-middle">
+            {{/* Named, because a screen reader announces a table by its
+                 caption and "table with 3 columns" is not a name. */}}
+            <caption class="visually-hidden">Catalogue categories and their subcategories</caption>
             <thead><tr><th>Category</th><th>Subcategories</th><th></th></tr></thead>
             <tbody>
             {{range .Categories}}

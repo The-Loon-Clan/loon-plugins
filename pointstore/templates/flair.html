@@ -1,4 +1,8 @@
 <div class="card-body">
-  <h6 class="card-title mb-1">Flair</h6>
+  {{/* h3, not h6. The heading above this on a profile is an h2, and jumping
+       to h6 leaves three empty levels — a screen reader user navigating by
+       heading hears a jump and cannot tell whether they missed a section.
+       The SIZE is what card-title is for; the level is structure. */}}
+  <h3 class="card-title mb-1 h6">Flair</h3>
   <span class="badge bg-{{.Color}}">{{.Name}}</span>
 </div>
