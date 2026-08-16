@@ -68,6 +68,13 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 
 Most severe first. These are bugs, not style.
 
+> **Status, same day (a42b37d + host a49239e):** 1–6, 8 (bootstrap tags — 17
+> found, not 11) and 10 are FIXED and verified live; the crawler now counts
+> tokens per form so class 1 cannot ship silently again. Still open: 7
+> (anidbscraper — finish or retire is an owner decision), 9 (scraper's
+> disclosure/SSRF rework), and roadmap's cytoscape, which needs local
+> bundling rather than deletion.
+
 1. **news + wiki: every plugin-owned admin POST form lacks a CSRF token and
    403s.** Verified against the running site, form by form: news create and
    all four deletes, wiki topic create and both deletes — the only tokens on
