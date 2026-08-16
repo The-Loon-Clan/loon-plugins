@@ -209,6 +209,10 @@ func (h *Handlers) BTCPayWebhook(c *gin.Context) {
 
 	log.Printf("btcpay-webhook: recorded donation $%.2f (%s) invoice=%s user=%v",
 		d.AmountUSD, d.Asset, p.InvoiceID, d.DonorUserID)
+	// Did this one meet the site's monthly goal? Checked after the row commits
+	// so the sum it reads includes this donation — before it, the payment that
+	// crosses the line is the one that does not count. See goalreward.go.
+	h.maybeOpenGoalReward(ctx)
 	// After the row commits, and NOT in the dedup branch above: a redelivery
 	// that finds the donation already recorded must not announce it a second
 	// time.
