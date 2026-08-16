@@ -37,6 +37,10 @@ func parseTemplates() error {
 		"contains":   strings.Contains,
 		"formatSize": formatSize,
 		"splitComma": splitComma,
+		// Resolves a stored backlog slug to its label, hint and colour. A
+		// function rather than three nested {{if eq}} blocks in the
+		// template, so the wording lives next to the rule that sets it.
+		"backlogLabel": BacklogLabel,
 	}).ParseFS(pageFS, "templates/*.html")
 	if err != nil {
 		return fmt.Errorf("requests: parse templates: %w", err)

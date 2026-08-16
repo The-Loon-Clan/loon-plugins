@@ -91,13 +91,25 @@
                      stored in localStorage as 'community_view_mode' and
                      applies to whichever tab the user is currently on
                      (the inactive grid/table block is hidden via
-                     pre-paint script in <head>). */}}
+                     pre-paint script in <head>).
+
+                     NOT rendered on the backlog tab, which has no grid
+                     view: the pre-paint script hides #view-table outright
+                     when the stored pref is 'grid', so a tab with only a
+                     table would render BLANK for anyone who ever clicked
+                     Covers. The backlog list is read for its reasons, and
+                     a wall of posters does not carry those. */}}
+                {{if not (eq .Tab "backlog")}}
                 <button id="toggle-view" class="btn btn-outline-secondary btn-sm" type="button">&#128444; Covers</button>
+                {{end}}
                 {{/* Hide the manual "+ New Request" affordance on the feed tab —
                      the bot auto-creates requests for the items shown there, and
                      each row already has its own per-item Request button. Keeps
-                     the feed page focused on browsing, not authoring. */}}
-                {{if not (eq .Tab "feed")}}
+                     the feed page focused on browsing, not authoring. On the
+                     backlog tab it would be worse than noise: filing a NEW
+                     request for something already shelved is the duplicate this
+                     tab exists to prevent. */}}
+                {{if not (or (eq .Tab "feed") (eq .Tab "backlog"))}}
                 <button class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#new-request-form">
                     + New Request
                 </button>
@@ -105,8 +117,8 @@
             </div>
         </div>
 
-        {{/* ── Create form ── Hidden on feed tab; bot does the creating there. */}}
-        {{if not (eq .Tab "feed")}}
+        {{/* ── Create form ── Hidden on feed + backlog; see above. */}}
+        {{if not (or (eq .Tab "feed") (eq .Tab "backlog"))}}
         <div class="collapse mb-4{{if .OpenForm}} show{{end}}" id="new-request-form">
             <div class="card">
                 <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">New Request</div>
@@ -319,17 +331,25 @@
                 </div>
             </div>
         </div>
-        {{end}}{{/* end {{if not (eq .Tab "feed")}} guard around create form */}}
+        {{end}}{{/* end tab guard around create form */}}
 
         {{/* ── Tabs ─────────────────────────────────────────────
-             "Open" — the existing open-requests list (default).
-             "Feed" — the bot's full observation log, including items
-                      it skipped (old release, dup hash/title). Lets
-                      users spot-request something the bot rejected.
+             "Open"    — the existing open-requests list (default).
+             "Backlog" — requests that stopped moving and left the open
+                         queue, with WHY, and a one-click way back in.
+             "Feed"    — the bot's full observation log, including items
+                         it skipped (old release, dup hash/title). Lets
+                         users spot-request something the bot rejected.
              */}}
         <ul class="nav tabs mb-3">
             <li class="nav-item">
                 <a class="nav-link {{if or (not .Tab) (eq .Tab "open")}}active{{end}}" href="/community/requests">Open Requests</a>
+            </li>
+            <li class="nav-item">
+                {{/* {{with}} rather than {{if gt}}: the badge renders on
+                     every tab, and a page that forgot the key would fail
+                     the comparison and take the whole listing down. */}}
+                <a class="nav-link {{if eq .Tab "backlog"}}active{{end}}" href="/community/requests?tab=backlog" title="Requests that stopped moving — nothing was deleted, and anyone can ask for one back">Backlog{{with .BacklogTotal}} <span class="tab-count">{{.}}</span>{{end}}</a>
             </li>
             <li class="nav-item">
                 <a class="nav-link {{if eq .Tab "feed"}}active{{end}}" href="/community/requests?tab=feed" title="Latest torrents observed across nyaa, tokyotosho, and nekobt feeds — including ones the bot skipped">Feed</a>
@@ -591,6 +611,138 @@
                 {{end}}
             </div>
         </div>{{/* end #view-grid */}}
+
+        {{.Pagination}}
+        {{else if eq .Tab "backlog"}}
+
+        {{/* ── Backlog tab ──────────────────────────────────────
+             Requests that stopped moving. Nothing here was deleted or
+             refused — the open queue simply stopped describing them
+             honestly once they had sat in it for months.
+
+             The page has one job: say WHY each one stalled, and let
+             anyone who still wants it put it back with one click. */}}
+
+        {{if .RequeuedID}}
+        <div class="alert alert-success alert-dismissible fade show" role="alert" style="margin-bottom:1rem;">
+            Back in the queue. <a href="/community/request/{{.RequeuedID}}" style="color:inherit;text-decoration:underline;">View it</a> — agents pick work off the open queue, so it may take a while.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {{else if eq .RequeueState "already"}}
+        <div class="alert alert-info alert-dismissible fade show" role="alert" style="margin-bottom:1rem;">
+            That one was already back in the queue — somebody beat you to it.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {{else if eq .RequeueState "error"}}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert" style="margin-bottom:1rem;">
+            That did not go through. It has been logged — try again in a moment.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {{end}}
+
+        <div class="card mb-3">
+            <div class="card-body py-3">
+                <p class="mb-2" style="font-size:0.85rem;color:var(--text-secondary);">
+                    These requests left the open queue after sitting a long time without moving.
+                    <strong>Nothing was deleted.</strong> If you still want one, ask for it back and it
+                    rejoins the queue immediately — no approval, no waiting on a mod.
+                </p>
+                {{with .BacklogSummary}}
+                <div class="d-flex flex-wrap gap-3" style="font-size:0.78rem;">
+                    {{range .}}
+                    <span title="{{.Hint}}">
+                        <span class="badge bg-{{.CSS}} bg-opacity-25 text-{{.CSS}}" style="font-size:0.68rem;">{{.Label}}</span>
+                        <span style="color:var(--text-muted);">{{.Count}}</span>
+                    </span>
+                    {{end}}
+                </div>
+                {{end}}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="table-responsive">
+            <table class="table mb-0">
+                <thead>
+                    <tr style="font-size:0.78rem;">
+                        <th style="width:36px;">Votes</th>
+                        <th style="width:36px;"></th>
+                        <th>Title</th>
+                        <th style="width:80px;">Filed</th>
+                        <th style="width:150px;">Why it stalled</th>
+                        <th style="width:130px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Requests}}
+                    <tr>
+                        <td class="text-center align-middle" style="padding:4px 2px;">
+                            <button class="vote-btn vote-request" data-id="{{.ID}}" title="Vote for this request">
+                                &#9650; <span class="vote-count">{{.VoteCount}}</span>
+                            </button>
+                        </td>
+                        <td class="align-middle" style="width:36px;padding:4px;">
+                            {{if .AnimeID}}
+                            <a href="/anime/{{deref .AnimeID}}">
+                                <img src="/static/covers/{{deref .AnimeID}}.jpg"
+                                     onerror="this.style.display='none'"
+                                     style="width:32px;height:46px;object-fit:cover;border-radius:3px;"
+                                     alt="" loading="lazy">
+                            </a>
+                            {{end}}
+                        </td>
+                        <td>
+                            <a href="/community/request/{{.ID}}" style="font-size:0.88rem;color:var(--text-primary);text-decoration:none;">{{.Title}}</a>
+                            {{if or .Resolution .Category .Season .Episodes}}
+                            <div style="margin-top:2px;">
+                                {{if .Resolution}}<span class="badge bg-primary bg-opacity-25 text-primary" style="font-size:0.65rem;vertical-align:middle;">{{.Resolution}}</span>{{end}}
+                                {{if .Category}}<span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:0.65rem;vertical-align:middle;">{{.Category}}</span>{{end}}
+                                {{if or .Season .Episodes}}<span style="font-size:0.72rem;color:var(--text-muted);">{{if .Season}}S{{.Season}}{{end}}{{if .Episodes}}{{if .Season}} {{end}}E{{.Episodes}}{{end}}</span>{{end}}
+                            </div>
+                            {{end}}
+                            <div style="font-size:0.73rem;color:var(--text-muted);">
+                                <span>{{.Username}}</span>
+                                {{if .AnimeID}} &middot; <a href="/community/requests?anime_id={{deref .AnimeID}}" class="badge bg-warning bg-opacity-25 text-warning" style="font-size:0.65rem;text-decoration:none;">AniDB:{{deref .AnimeID}}</a>{{end}}
+                                {{if .InfoHash}} &middot; <span class="badge bg-info bg-opacity-25 text-info" style="font-size:0.65rem;" title="{{.InfoHash}}">Torrent</span>{{end}}
+                                {{/* Asked back before and stalled again. Worth
+                                     showing: it is the difference between "nobody
+                                     noticed" and "people want this and it keeps
+                                     failing", which are opposite problems. */}}
+                                {{if gt .RequeueCount 0}} &middot; <span class="badge bg-warning bg-opacity-25 text-warning" style="font-size:0.65rem;" title="Asked back before and stalled again">asked back {{.RequeueCount}}&times;</span>{{end}}
+                            </div>
+                        </td>
+                        <td class="align-middle" style="font-size:0.82rem;color:var(--text-muted);">{{.CreatedAt.Format "Jan 02 2006"}}</td>
+                        <td class="align-middle">
+                            {{$reason := backlogLabel .BacklogReason}}
+                            <span class="badge bg-{{$reason.CSS}} bg-opacity-25 text-{{$reason.CSS}}" style="font-size:0.68rem;" title="{{$reason.Hint}}">{{$reason.Label}}</span>
+                            {{if .BackloggedAt}}<div style="font-size:0.68rem;color:var(--text-muted);margin-top:2px;">shelved {{.BackloggedAt.Format "Jan 02"}}</div>{{end}}
+                        </td>
+                        <td class="text-end align-middle" style="white-space:nowrap;">
+                            {{/* Signed-in only. An anonymous visitor gets the
+                                 reasons and the list — the button would just be
+                                 a 302 to the login page with the click lost. */}}
+                            {{if gt $.ViewerID 0}}
+                            <form method="POST" action="/community/requests/{{.ID}}/requeue" class="d-inline">
+                                <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                                <input type="hidden" name="page" value="{{$.Page}}">
+                                <button type="submit" class="btn btn-sm btn-outline-primary" title="Put this back in the open queue">Ask for it back</button>
+                            </form>
+                            {{else}}
+                            <a href="/login" class="btn btn-sm btn-outline-secondary" title="Sign in to ask for this back">Sign in to ask</a>
+                            {{end}}
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="6" class="text-center py-4" style="color:var(--text-muted);">
+                            Nothing in the backlog — every open request is still moving.
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            </div>{{/* end .table-responsive */}}
+        </div>
 
         {{.Pagination}}
         {{else}}

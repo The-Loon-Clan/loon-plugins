@@ -60,6 +60,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	g.POST("/requests/:id/fulfill", p.handlers.FulfillRequest)
 	g.POST("/requests/:id/retry", p.handlers.RetryRequest)
 	g.POST("/requests/:id/unpark", p.handlers.UnparkRequest)
+	g.POST("/requests/:id/requeue", p.handlers.RequeueRequest)
 	g.POST("/requests/:id/vote", p.handlers.VoteRequest)
 	g.POST("/requests/:id/boost", p.handlers.BoostRequest)
 	g.GET("/requests/scrape", p.handlers.ScrapeNyaa)

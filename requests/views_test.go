@@ -151,12 +151,17 @@ func TestDetailPageRenders(t *testing.T) {
 // so the only symptom is a 403 on submit. (The messages plugin's compose form
 // shipped without one and nobody could start a conversation for 77 days.)
 func TestEveryPostFormCarriesTheCSRFField(t *testing.T) {
-	for name, data := range map[string]gin.H{
-		"community_requests.html":       listPageData("open"),
-		"community_request_detail.html": detailPageData(),
+	for _, tc := range []struct {
+		label string
+		tmpl  string
+		data  gin.H
+	}{
+		{"open tab", "community_requests.html", listPageData("open")},
+		{"backlog tab", "community_requests.html", backlogPageData()},
+		{"detail", "community_request_detail.html", detailPageData()},
 	} {
-		t.Run(name, func(t *testing.T) {
-			out := testRender(t, name, data)
+		t.Run(tc.label, func(t *testing.T) {
+			out := testRender(t, tc.tmpl, tc.data)
 			forms := strings.Count(out, `method="POST"`)
 			tokens := strings.Count(out, `name="_csrf" value="test-csrf"`)
 			if forms == 0 {

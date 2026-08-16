@@ -49,6 +49,18 @@ type RequestStore interface {
 	GetLastFailedLockForRequest(ctx context.Context, id int64) (*RequestLock, error)
 	GetAgentQueueRequestIDs(ctx context.Context, userID int) (map[int64]bool, error)
 	GetRequestActionsForRequest(ctx context.Context, id int64) ([]*RequestAction, error)
+
+	// Backlog: requests that stopped moving. The board only READS the
+	// backlog and hands one request back when a member asks — the sweep
+	// that puts them there is the host's, because it reads the host's
+	// agent-lock and catalog tables to decide WHY each one stalled.
+	GetBacklogRequests(ctx context.Context, limit, offset int) ([]*Request, int, error)
+	// RequeueBacklogRequest reports false when the request was already back
+	// in the queue, rather than failing: two members clicking at once is
+	// normal, and the second must not see an error.
+	RequeueBacklogRequest(ctx context.Context, id int64, userID int) (bool, error)
+	// BacklogCounts is keyed by reason slug. The tab badge sums it.
+	BacklogCounts(ctx context.Context) (map[string]int, error)
 }
 
 // AnimeStore resolves catalog identities, (nil, nil) on miss.

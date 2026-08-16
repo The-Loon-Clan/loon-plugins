@@ -59,10 +59,57 @@ type Request struct {
 	ResurrectionForNzbID    *int64
 	ParkedUntil             *time.Time
 	ParkedReason            string
-	RemuxOption             string
-	UpscaleOption           string
-	CreatedAt               time.Time
-	UpdatedAt               time.Time
+	// Backlog. BackloggedAt non-nil means the request left the open queue
+	// and now waits for a member to ask for it back; BacklogReason is what
+	// was knowable when it was shelved — see BacklogReasons. RequeueCount
+	// survives the round trip, so a request that stalled twice can be told
+	// from one that stalled once.
+	//
+	// Parking is a DIFFERENT lifecycle and both can be set: parked means
+	// "come back at a time", backlogged means "come back when asked".
+	BackloggedAt  *time.Time
+	BacklogReason string
+	RequeueCount  int
+	RemuxOption   string
+	UpscaleOption string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+// BacklogReason describes one shelving cause to a member.
+//
+// The wording is the point. A request is not being dismissed — it left the
+// active queue and can be pulled back — and the three cases carry genuinely
+// different information, so collapsing them into one "old request" label
+// would throw away the only thing the member can act on.
+type BacklogReason struct {
+	Slug  string
+	Label string
+	Hint  string
+	// CSS is the Bootstrap colour role for the pill.
+	CSS string
+}
+
+// BacklogReasons is the display table, ordered strongest-signal first. The
+// slugs are the host's (migration 316); an unknown slug falls back to
+// "stale", because a reason nobody can render is worse than a vague one.
+var BacklogReasons = []BacklogReason{
+	{Slug: "attempted", Label: "Tried, failed", CSS: "danger",
+		Hint: "An agent picked this up and could not complete it — usually no seeders left, or the source went away."},
+	{Slug: "available", Label: "May already exist", CSS: "success",
+		Hint: "The title this names already has releases indexed here. It may not be the exact release you asked for."},
+	{Slug: "stale", Label: "No movement", CSS: "secondary",
+		Hint: "Open a long time with nothing else to say about it — nobody has attempted it and there is no match in the catalog."},
+}
+
+// BacklogLabel resolves a stored reason for display.
+func BacklogLabel(slug string) BacklogReason {
+	for _, r := range BacklogReasons {
+		if r.Slug == slug {
+			return r
+		}
+	}
+	return BacklogReasons[len(BacklogReasons)-1]
 }
 
 // PriorityType is one configurable request-ordering type.

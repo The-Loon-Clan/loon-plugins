@@ -121,6 +121,24 @@ func (h *Handlers) attachRequestPriorities(ctx context.Context, requests []*Requ
 	}
 }
 
+// backlogTotal is the tab badge: how many requests are shelved right now.
+//
+// Best-effort on purpose. It renders on every tab, so a failure here would
+// take down the open queue to hide a number — the badge simply does not
+// appear, which reads as "nothing shelved" rather than as a broken page.
+func (h *Handlers) backlogTotal(ctx context.Context) int {
+	counts, err := h.deps.Requests.BacklogCounts(ctx)
+	if err != nil {
+		h.errs.Report(ctx, "requests/backlog-counts", err)
+		return 0
+	}
+	total := 0
+	for _, n := range counts {
+		total += n
+	}
+	return total
+}
+
 func (h *Handlers) RequestsPage(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -172,6 +190,7 @@ func (h *Handlers) RequestsPage(c *gin.Context) {
 				// views. Fixed in the lift.
 				"AllowedHosts": allowedRequestHosts,
 				"ViewerID":     h.viewerID(c),
+				"BacklogTotal": h.backlogTotal(ctx),
 			})
 			return
 		}
@@ -249,6 +268,74 @@ func (h *Handlers) RequestsPage(c *gin.Context) {
 			"OpenForm":       false,
 			"AllowedHosts":   allowedRequestHosts,
 			"ViewerID":       h.viewerID(c),
+			"BacklogTotal":   h.backlogTotal(ctx),
+		})
+		return
+	}
+
+	// Backlog tab: requests that stopped moving and left the open queue.
+	//
+	// They are still open requests — nothing was deleted and nothing was
+	// refused. What changed is that the open queue stopped describing them
+	// honestly: 7,151 of 13,912 were over thirty days old, sitting in the
+	// same list as this morning's, so a member could not tell a live
+	// request from one that stalled in April.
+	//
+	// Anyone signed in can pull one back, because the person who knows
+	// whether a two-month-old request still matters is the person who wants
+	// it, not us. The row records who asked and how many times.
+	if tab == "backlog" {
+		requests, total, err := h.deps.Requests.GetBacklogRequests(ctx, requestsPageSize, offset)
+		if err != nil {
+			h.errs.Report(ctx, "requests/backlog-list", err)
+			c.String(http.StatusInternalServerError, "failed to load the backlog")
+			return
+		}
+		totalPages := (total + requestsPageSize - 1) / requestsPageSize
+		if totalPages < 1 {
+			totalPages = 1
+		}
+		h.attachRequestPriorities(ctx, requests)
+		counts, err := h.deps.Requests.BacklogCounts(ctx)
+		if err != nil {
+			// The listing already rendered above; a missing breakdown drops
+			// the summary strip, not the page.
+			h.errs.Report(ctx, "requests/backlog-counts", err)
+			counts = map[string]int{}
+		}
+		// Reasons in display order, dropping the ones nothing landed in —
+		// a strip of three zeroes says less than a strip of one number.
+		var summary []backlogSummaryRow
+		for _, r := range BacklogReasons {
+			if n := counts[r.Slug]; n > 0 {
+				summary = append(summary, backlogSummaryRow{BacklogReason: r, Count: n})
+			}
+		}
+		// ?requeued=<id> / ?requeue=already drive the post-action banner.
+		requeuedID, _ := strconv.ParseInt(c.Query("requeued"), 10, 64)
+		h.render(c, http.StatusOK, "Community Requests", "community_requests.html", gin.H{
+			"Tab":            "backlog",
+			"Requests":       requests,
+			"Total":          total,
+			"Page":           page,
+			"TotalPages":     totalPages,
+			"Pagination":     h.deps.RenderPagination(page, totalPages, "/community/requests?tab=backlog&"),
+			"BacklogTotal":   total,
+			"BacklogSummary": summary,
+			"RequeuedID":     requeuedID,
+			"RequeueState":   c.Query("requeue"),
+			// The create form is hidden on this tab, but the keys it reads
+			// live above the tab switch — the feed branch learned the same
+			// lesson the hard way.
+			"PriorityTypes":  h.deps.PriorityTypes(),
+			"UpscaleOptions": upscaleOpts,
+			"Prefill": map[string]string{
+				"title": "", "anime_id": "", "season": "",
+				"episodes": "", "resolution": "", "source": "",
+			},
+			"OpenForm":     false,
+			"AllowedHosts": allowedRequestHosts,
+			"ViewerID":     h.viewerID(c),
 		})
 		return
 	}
@@ -321,8 +408,59 @@ func (h *Handlers) RequestsPage(c *gin.Context) {
 		// Per-row Fulfill/Delete gates need to know "who's looking" so
 		// the buttons only render for the requester or a mod. Anon
 		// users get nothing.
-		"ViewerID": h.viewerID(c),
+		"ViewerID":     h.viewerID(c),
+		"BacklogTotal": h.backlogTotal(ctx),
 	})
+}
+
+// backlogSummaryRow is one reason and its count, for the summary strip.
+type backlogSummaryRow struct {
+	BacklogReason
+	Count int
+}
+
+// RequeueRequest puts one backlogged request back in the open queue.
+//
+// Any signed-in member, one click, no approval. The alternative — a mod
+// queue — would rebuild the bottleneck this tab exists to remove: these
+// requests stalled because nobody was looking at them, and requiring
+// somebody to look before they can move is the same wait with more steps.
+// The cost of a wrong click is one request back in a queue it was already
+// in; requeued_by_id and requeue_count record who and how often.
+func (h *Handlers) RequeueRequest(c *gin.Context) {
+	ctx := c.Request.Context()
+	back := "/community/requests?tab=backlog"
+	// Keep the reader where they were. Re-parsed rather than echoed: this
+	// value ends up in a Location header.
+	if n, err := strconv.Atoi(c.PostForm("page")); err == nil && n > 1 {
+		back += fmt.Sprintf("&page=%d", n)
+	}
+
+	user := h.deps.Viewer(c)
+	if user == nil {
+		c.Redirect(http.StatusFound, back)
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Redirect(http.StatusFound, back)
+		return
+	}
+
+	moved, err := h.deps.Requests.RequeueBacklogRequest(ctx, id, user.ID)
+	switch {
+	case err != nil:
+		// A silent failure here is indistinguishable from the button doing
+		// nothing, and the member has no other way to tell.
+		h.errs.Report(ctx, "requests/requeue", err)
+		back += "&requeue=error"
+	case moved:
+		back += fmt.Sprintf("&requeued=%d", id)
+	default:
+		// Already back — someone else clicked first, or a double submit.
+		back += "&requeue=already"
+	}
+	c.Redirect(http.StatusFound, back)
 }
 
 // RequestDetail shows full details for a single request.
