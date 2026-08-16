@@ -184,6 +184,55 @@ func (p *Plugin) refresh(ctx context.Context) {
 		return
 	}
 	p.table.Replace(all)
+	p.refreshSiteFreeleech(ctx)
+}
+
+// SiteFreeleechEvent is the scheduled-event slug that makes the whole site
+// free while one of its windows is open.
+//
+// A slug and not a config toggle: the operator defines the event once — name,
+// description, whether it is enabled — and anything may open a window on it.
+// The fundraising goal is the intended trigger, but an operator throwing the
+// switch by hand is the same mechanism, which is what makes this worth having
+// as a window rather than as a boolean somebody has to remember to turn off.
+const SiteFreeleechEvent = "site-freeleech"
+
+// refreshSiteFreeleech reads the window on the REFRESH timer, never on the
+// announce path.
+//
+// Announce is the hottest path the tracker has — every peer, every interval —
+// and this answers a question whose answer changes about twice a year. A lookup
+// there would be a cross-plugin query per peer to be told "no" almost every
+// time. Thirty seconds of staleness at the edges of a week-long window is the
+// trade, and it is the same one the perk table itself already makes.
+//
+// A host with no events plugin gets the zero time, which is exactly what "no
+// window is open" is — so absence degrades to off rather than to an error.
+func (p *Plugin) refreshSiteFreeleech(ctx context.Context) {
+	v, ok := p.core.Lookup(pluginapi.ScheduledEventsName)
+	if !ok {
+		return
+	}
+	ev, ok := v.(pluginapi.ScheduledEvents)
+	if !ok {
+		return
+	}
+	open, err := ev.OpenWindows(ctx, []string{SiteFreeleechEvent})
+	if err != nil {
+		// Keep whatever was last read, for the reason Replace above keeps the
+		// old table: a failed lookup is the events plugin's problem, and
+		// switching the site off freeleech mid-window because one query
+		// hiccuped would charge members for downloads the site had announced
+		// as free.
+		if p.core.Errors != nil {
+			p.core.Errors.Report(ctx, "perks/site-freeleech", err)
+		}
+		return
+	}
+	// Absent from the map means no window is open, which must CLEAR the state
+	// rather than leave it — otherwise a closed window stays in force until the
+	// process restarts, and the site is permanently free.
+	p.table.SetSiteFreeleech(open[SiteFreeleechEvent].Ends)
 }
 
 // ── The capability other plugins and the host use ───────────────────────────

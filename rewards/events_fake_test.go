@@ -2,6 +2,7 @@ package rewards
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -129,6 +130,15 @@ func (f *fakeEvents) NextOpen(ctx context.Context, slug string) (time.Time, erro
 		}
 	}
 	return next, nil
+}
+
+// OpenWindow satisfies the interface. rewards only ever READS windows — it
+// gates a recurring payout on whether one is open — so a double that could open
+// one would let a test set up a state the plugin cannot reach in production.
+// Failing loudly is the honest stub: if rewards ever starts opening windows,
+// this fails rather than quietly returning a window nothing wrote.
+func (f *fakeEvents) OpenWindow(ctx context.Context, slug string, dur time.Duration) (pluginapi.EventWindow, bool, error) {
+	return pluginapi.EventWindow{}, false, errors.New("fakeEvents: rewards does not open windows")
 }
 
 func (f *fakeEvents) allSlugs() []string {

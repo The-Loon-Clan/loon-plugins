@@ -53,6 +53,9 @@ type key struct {
 type Table struct {
 	mu   sync.RWMutex
 	byID map[key][]Active
+	// siteFreeleechUntil is when the site-wide window closes; zero when there
+	// is none. Guarded by the same mutex as byID because Factors reads both.
+	siteFreeleechUntil time.Time
 }
 
 func NewTable() *Table { return &Table{byID: map[key][]Active{}} }
@@ -107,7 +110,22 @@ func (t *Table) Factors(userID int64, infoHash string, now time.Time) (up, down 
 	up, down = 1, 1
 	t.mu.RLock()
 	list := t.byID[key{userID, infoHash}]
+	site := t.siteFreeleechUntil
 	t.mu.RUnlock()
+
+	// Site-wide freeleech, applied to everyone with no per-member grant. Read
+	// under the SAME lock as the token list rather than via SiteFreeleech(),
+	// because two lock acquisitions on the announce path could see the window
+	// close between them and credit a member at 1:1 for traffic the first half
+	// of this function had already called free.
+	//
+	// It does NOT short-circuit: an upload-double token still doubles during a
+	// freeleech week. The two perks answer different questions, and a member
+	// who paid points for the upload multiplier should not silently lose it
+	// because the site got generous.
+	if !site.IsZero() && now.Before(site) {
+		down = 0
+	}
 	for _, a := range list {
 		if !a.ExpiresAt.IsZero() && now.After(a.ExpiresAt) {
 			continue
@@ -133,4 +151,51 @@ func (t *Table) Factors(userID int64, infoHash string, now time.Time) (up, down 
 func (t *Table) HasFreeleech(userID int64, infoHash string, now time.Time) bool {
 	_, down := t.Factors(userID, infoHash, now)
 	return down == 0
+}
+
+// ── Site-wide freeleech ─────────────────────────────────────────────────────
+//
+// A site goal met by MANY members rewards ALL of them, and the cheap way to do
+// that is not to grant anything.
+//
+// A per-member reward costs one write per member, plus an answer to "who counts
+// as everyone" — the ones who donated? who were registered at the time? who
+// signed up an hour later? A site-wide freeleech has no such question, because
+// it is not a grant: it is a STATE, and the announce path already asks this
+// table what a member's traffic is worth. One boolean in a function that is
+// already called on every announce reaches the whole membership at once.
+//
+// The window comes from the events plugin, read on the refresh timer rather
+// than per announce — see Plugin.refresh. Announce is the hottest path on the
+// tracker and a cross-plugin lookup there would be a query per peer per
+// interval, to answer a question whose answer changes about twice a year.
+
+// SetSiteFreeleech records when the site-wide freeleech window ends.
+//
+// A time, not a bool, for the same reason Factors takes `now`: the table is
+// refreshed on a timer, so between refreshes it can be holding a window that
+// closed a minute ago. Storing the end lets every read make that judgement for
+// itself, and a site that stayed free for an extra thirty seconds after a
+// window shut is a worse outcome than one member's token doing the same.
+//
+// The zero time means no window, which is also what a host with no events
+// plugin gets — so absence and "not running" are the same state rather than two.
+func (t *Table) SetSiteFreeleech(until time.Time) {
+	t.mu.Lock()
+	t.siteFreeleechUntil = until
+	t.mu.Unlock()
+}
+
+// SiteFreeleechUntil reports the current window end, for widgets and pages that
+// want to say "free until Tuesday" rather than merely "free".
+func (t *Table) SiteFreeleechUntil() time.Time {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.siteFreeleechUntil
+}
+
+// SiteFreeleech reports whether everything is free for everyone right now.
+func (t *Table) SiteFreeleech(now time.Time) bool {
+	u := t.SiteFreeleechUntil()
+	return !u.IsZero() && now.Before(u)
 }

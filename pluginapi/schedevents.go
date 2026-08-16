@@ -150,4 +150,34 @@ type ScheduledEvents interface {
 	// Zero time means never — a disabled event, a past one-off, or a cron with
 	// no further firings.
 	NextOpen(ctx context.Context, slug string) (time.Time, error)
+
+	// OpenWindow opens a window on an existing event NOW, lasting dur, and
+	// reports whether THIS call is what opened it.
+	//
+	// The one write on an otherwise read-only contract, and it exists because
+	// some windows are not scheduled. A cron says "every Monday"; this says
+	// "the thing we were waiting for just happened" — a fundraising goal met, a
+	// milestone crossed, a manual switch thrown. Neither is expressible as a
+	// recurrence, and materialising them through the generator would mean
+	// waiting for its next pass to open a window that is meant to be open now.
+	//
+	// The event must already be DEFINED. A window belongs to an event row, and
+	// more importantly a slug that nobody configured has no name, no
+	// description and nothing an operator can see or disable — so an unknown
+	// slug is an error rather than an implicit create. The intended shape is
+	// that an operator defines "Site freeleech" as a disabled one-off and
+	// something else decides when it runs.
+	//
+	// IDEMPOTENT, and it must be: the callers are event handlers and webhooks,
+	// which are retried. A call while a window is already open returns that
+	// window with opened=false and writes nothing. Concurrent callers are
+	// arbitrated by the store's UNIQUE (event, start) rather than by a
+	// read-then-write, so exactly one of them is told it opened the window.
+	//
+	// That boolean is the whole point for a caller that must act once — post an
+	// announcement, notify members. Note the narrower guarantee: it means "no
+	// window was open when I called", NOT "this has never happened before". A
+	// caller that must fire once per MONTH has to remember the month; the
+	// window only knows about now.
+	OpenWindow(ctx context.Context, slug string, dur time.Duration) (w EventWindow, opened bool, err error)
 }
