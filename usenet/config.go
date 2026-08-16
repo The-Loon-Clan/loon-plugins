@@ -206,6 +206,11 @@ type Config struct {
 	SpotIntervalMin int `json:"spot_interval_min"` // pass cadence (default 15)
 	SpotBatchSize   int `json:"spot_batch_size"`   // articles per XOVER (default 1000)
 	SpotMaxBatches  int `json:"spot_max_batches"`  // XOVER round trips per pass, forward + backfill (default 200)
+	// The fetch pass is the expensive half: TWO article reads per spot (the
+	// document, then the NZB). Its batch is therefore in SPOTS, not batches,
+	// and is two orders of magnitude smaller than the index pass's budget.
+	SpotFetchIntervalMin int `json:"spot_fetch_interval_min"` // pass cadence (default 10)
+	SpotFetchBatch       int `json:"spot_fetch_batch"`        // spots per pass (default 200)
 
 	NFOIntervalMin int `json:"nfo_interval_min"` // pass cadence (default 60)
 	NFOBatchSize   int `json:"nfo_batch_size"`   // releases per pass (default 100)
@@ -398,6 +403,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.SpotMaxBatches <= 0 {
 		c.SpotMaxBatches = defaultSpotMaxBatches
+	}
+	if c.SpotFetchIntervalMin <= 0 {
+		c.SpotFetchIntervalMin = defaultSpotFetchIntervalMin
+	}
+	if c.SpotFetchBatch <= 0 {
+		c.SpotFetchBatch = defaultSpotFetchBatch
 	}
 	if c.NFOIntervalMin <= 0 {
 		c.NFOIntervalMin = 60

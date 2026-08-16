@@ -396,6 +396,21 @@ type AssembledRelease struct {
 	// (obfuscated posts), or a lone file with a name too short to mean anything.
 	// An empty key must never match another empty key.
 	ContentFileKey string
+	// Origin is WHERE the release came from -- "crawler" (assembled from raw
+	// articles), "spot" (a signed Spotnet announcement). Empty means crawler,
+	// so a producer that predates this field is still described correctly.
+	//
+	// Distinct from Group, which is where it was READ, and from Source, which
+	// is the media source: a spotted release can perfectly well be a BluRay.
+	Origin string
+	// OriginTrust is what that origin PROVED. Empty for producers that make no
+	// claim; for spots one of "verified", "weak-key", "unsigned".
+	//
+	// A sink MUST NOT treat a non-empty value as a reason to trust the payload.
+	// A Spotnet signature covers the message-id and nothing else -- not the
+	// title, size, or file list -- so it identifies a poster and says nothing
+	// about whether they were honest.
+	OriginTrust string
 	// Obfuscated marks a release whose subject arrived ROT18-rotated (ROT13 on
 	// letters, ROT5 on digits) and was decoded at ingest. Title, counters and
 	// sizes are all products of that decode.

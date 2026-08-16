@@ -44,6 +44,7 @@ const (
 	jobNameHealth      = "Usenet Health Check"
 	jobNameNFO         = "Usenet NFO Fetch"
 	jobNameSpotIndex   = "Usenet Spot Index"
+	jobNameSpotFetch   = "Usenet Spot Fetch"
 	jobNameJunkProbe   = "Usenet Junk Probe"
 	jobNameRot18Repair = "Usenet Title Repair"
 )
@@ -74,6 +75,7 @@ type Plugin struct {
 	healthJob    core.Job
 	nfoJob       core.Job
 	spotJob      core.Job
+	spotFetchJob core.Job
 	junkProbeJob core.Job
 	rot18Job     core.Job
 
@@ -90,6 +92,7 @@ type Plugin struct {
 	healthMu    sync.Mutex
 	nfoMu       sync.Mutex
 	spotMu      sync.Mutex
+	spotFetchMu sync.Mutex
 	junkProbeMu sync.Mutex
 	rot18Mu     sync.Mutex
 	pruneMu     sync.Mutex
@@ -321,6 +324,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 			"STATs stored NZBs to find releases whose articles have expired").MarkOffPeak().MarkWrites())
 		p.spotJob = p.duty.wrap(jobNameSpotIndex, c.Scheduler.RegisterJob(jobNameSpotIndex,
 			"Lists Spotnet spots from free.pt forward, then backfills its history").MarkOffPeak().MarkWrites())
+		p.spotFetchJob = p.duty.wrap(jobNameSpotFetch, c.Scheduler.RegisterJob(jobNameSpotFetch,
+			"Reads each indexed spot's description and NZB, and publishes it as a release").MarkOffPeak().MarkWrites())
 		p.nfoJob = p.duty.wrap(jobNameNFO, c.Scheduler.RegisterJob(jobNameNFO,
 			"Reads .nfo articles and stores their text (off by default; spends provider bytes)").MarkOffPeak().MarkWrites())
 		p.junkProbeJob = p.duty.wrap(jobNameJunkProbe, c.Scheduler.RegisterJob(jobNameJunkProbe,
@@ -335,6 +340,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		p.healthJob.SetTrigger(func() { go p.runHealthCheck(p.ctx) })
 		p.nfoJob.SetTrigger(func() { go p.runNFO(p.ctx) })
 		p.spotJob.SetTrigger(func() { go p.runSpotIndex(p.ctx) })
+		p.spotFetchJob.SetTrigger(func() { go p.runSpotFetch(p.ctx) })
 		p.junkProbeJob.SetTrigger(func() { go p.runJunkProbe(p.ctx) })
 		p.rot18Job.SetTrigger(func() { go p.runRot18Repair(p.ctx) })
 		p.svc.triggerCrawl = func() { go p.runCrawl(p.ctx) }
@@ -412,6 +418,10 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// waiting for.
 	p.core.Scheduler.RunLoop(ctx, p.spotJob, 4*time.Minute,
 		time.Duration(p.effective(ctx).SpotIntervalMin)*time.Minute, p.runSpotIndex)
+	// After the index pass: on a cold start there is nothing to fetch until it
+	// has listed something, so starting earlier only burns an empty worklist.
+	p.core.Scheduler.RunLoop(ctx, p.spotFetchJob, 6*time.Minute,
+		time.Duration(p.effective(ctx).SpotFetchIntervalMin)*time.Minute, p.runSpotFetch)
 	p.core.Scheduler.RunLoop(ctx, p.tagJob, 5*time.Minute,
 		time.Duration(p.cfg.TagFillIntervalMin)*time.Minute, p.runTagFill)
 	p.core.Scheduler.RunLoop(ctx, p.pruneJob, 10*time.Minute,

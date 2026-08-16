@@ -48,11 +48,11 @@
             {{else}}<span class="badge bg-secondary bg-opacity-25 text-secondary">not built</span>{{end}}
           </td>
           <td style="opacity:.7">
-            {{if not .FetchWired}}The expensive half: one article fetch per spot for the
-            title, description and NZB pointer, then the NZB itself from
-            <code>alt.binaries.ftd</code>. Until it exists nothing writes
-            <code>origin='spot'</code>, so the browse filter and the Spot badge
-            are live but match nothing.{{end}}
+            Two article reads per spot: the description, then the NZB from
+            <code>alt.binaries.ftd</code> by message-id. Newest spots first,
+            because old history points at articles that have mostly expired.
+            Published with <code>origin='spot'</code> and a trust label; a
+            signature that fails is never published at all.
           </td>
         </tr>
       </tbody>

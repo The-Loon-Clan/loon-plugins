@@ -43,6 +43,11 @@ const (
 	defaultSpotIntervalMin = 15
 	defaultSpotBatchSize   = 1000
 	defaultSpotMaxBatches  = 200
+
+	// The fetch pass. 200 spots is 400 article reads, which is a fraction of
+	// what the crawler moves in the same window and leaves the pool to it.
+	defaultSpotFetchIntervalMin = 10
+	defaultSpotFetchBatch       = 200
 )
 
 // runSpotIndex lists every active spot group, forward then backward.

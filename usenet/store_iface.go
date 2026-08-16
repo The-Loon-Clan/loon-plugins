@@ -61,6 +61,8 @@ type GroupStore interface {
 	lowerSpotBack(ctx context.Context, name string, back int64, done bool) error
 	countSpots(ctx context.Context) (spotCounts, error)
 	setGroupKind(ctx context.Context, name, kind string) error
+	unfetchedSpots(ctx context.Context, limit int) ([]spotWork, error)
+	markSpotFetched(ctx context.Context, messageID string, d spotDocument) error
 	// criticalBackfillPending reports whether any CRITICAL group still has
 	// history to pull on this backbone — the condition that holds the low tier.
 	criticalBackfillPending(ctx context.Context, backbone string) (backfillPending, error)

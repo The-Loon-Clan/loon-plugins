@@ -75,9 +75,7 @@ func (p *Plugin) renderSpots(ctx context.Context) (template.HTML, error) {
 		"Counts":       counts,
 		"Groups":       spotGroupVMs(groups),
 		"Indexing":     len(groups) > 0,
-		// The fetch pass is the missing half. Stated as data rather than prose
-		// so that wiring it later flips one boolean.
-		"FetchWired": false,
+		"FetchWired":   true,
 	})
 }
 

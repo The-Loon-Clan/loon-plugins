@@ -26,7 +26,7 @@ func spotsDataIndexing(probe spotProbe, have, haveProvider bool, groups []spotGr
 		"Counts":       c,
 		"Groups":       spotGroupVMs(groups),
 		"Indexing":     len(groups) > 0,
-		"FetchWired":   false,
+		"FetchWired":   true,
 	}
 }
 
@@ -100,14 +100,18 @@ func TestSpotsTabRendersInEveryState(t *testing.T) {
 	}
 }
 
-// The status table must never claim the importer works while it does not.
-func TestSpotsTabSaysImportIsNotBuilt(t *testing.T) {
+// Every stage the tab claims is ready must actually be wired. The failure this
+// guards is the opposite of the original one: a status page that says "running"
+// about a pass nobody registered.
+func TestSpotsTabClaimsMatchWhatIsWired(t *testing.T) {
 	out := renderSpotsTemplate(t, spotsData(spotProbe{}, false, true))
-	if !strings.Contains(out, "not built") {
-		t.Error("the tab does not say the importer is missing")
+	if strings.Contains(out, "not built") {
+		t.Error("the tab still says something is unbuilt — the fetch pass now exists")
 	}
-	if strings.Contains(out, "spots imported") {
-		t.Error("the tab shows an imported count, which can only be a zero that reads as broken")
+	for _, want := range []string{"origin=", "alt.binaries.ftd", "never published"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the fetch row does not explain %q", want)
+		}
 	}
 }
 

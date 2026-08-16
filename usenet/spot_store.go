@@ -233,3 +233,66 @@ func (s *PGStore) setGroupKind(ctx context.Context, name, kind string) error {
 		return err
 	})
 }
+
+// spotWork is one row of the fetch worklist.
+type spotWork struct {
+	MessageID string    `db:"message_id"`
+	GroupName string    `db:"group_name"`
+	Subject   string    `db:"subject"`
+	Poster    string    `db:"poster"`
+	SizeBytes int64     `db:"size_bytes"`
+	PostedAt  time.Time `db:"posted_at"`
+}
+
+// spotDocument is what a document fetch learned about a spot.
+type spotDocument struct {
+	Title        string
+	Description  string
+	NZBSegment   string
+	ImageSegment string
+	Trust        string
+	FetchError   string
+}
+
+// unfetchedSpots is the fetch pass's worklist: newest first.
+//
+// Newest first because a spot posted today points at articles that certainly
+// still exist, while the oldest history points at articles that mostly do not.
+// Working forward from the bottom would spend the entire budget discovering
+// expirations before reaching anything downloadable.
+func (s *PGStore) unfetchedSpots(ctx context.Context, limit int) ([]spotWork, error) {
+	if limit <= 0 {
+		limit = defaultSpotFetchBatch
+	}
+	var out []spotWork
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &out,
+			`SELECT message_id, group_name, subject, poster, size_bytes,
+			        COALESCE(posted_at, now()) AS posted_at
+			   FROM spots
+			  WHERE fetched_at IS NULL
+			  ORDER BY article_num DESC
+			  LIMIT $1`, limit)
+	})
+	return out, err
+}
+
+// markSpotFetched records the outcome of a document fetch.
+//
+// fetched_at is stamped on EVERY outcome, success or failure. A spot whose
+// articles have expired must leave the worklist permanently: retrying it costs
+// a round trip per pass forever and can never succeed, and below the retention
+// horizon that describes most of the history.
+func (s *PGStore) markSpotFetched(ctx context.Context, messageID string, d spotDocument) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`UPDATE spots
+			    SET fetched_at = now(), title = $2, description = $3,
+			        nzb_segment = $4, image_segment = $5, trust = $6, fetch_error = $7
+			  WHERE message_id = $1`,
+			messageID, pgSafeText(d.Title), pgSafeText(d.Description),
+			pgSafeText(d.NZBSegment), pgSafeText(d.ImageSegment),
+			d.Trust, pgSafeText(d.FetchError))
+		return err
+	})
+}
