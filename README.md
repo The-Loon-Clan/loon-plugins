@@ -8,6 +8,10 @@
 
 ---
 
+**New or changed plugins are held to [CHECKLIST.md](CHECKLIST.md)** — contract,
+security, i18n-readiness, admin surface, jobs, docs, tests, and how each item
+is verified.
+
 Each plugin is a self-describing module a loon host imports and boots. The job
 machinery (`RegisterJob`, `RunLoop`, off-peak gating, the `/admin/jobs` view)
 lives in loon's `schedule` package, so a plugin inherits the scheduler for free —
