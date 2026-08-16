@@ -120,6 +120,75 @@ func TestAdminTrackersPageRenders(t *testing.T) {
 	}
 }
 
+// The detail page's action area follows the request lifecycle, so every state
+// renders: delivered-and-broken (release link + re-request), live (join),
+// and never-requested (plain request). html/template streams — a field the
+// markup wants and the data lacks aborts the render part way with a 200.
+func TestOfferDetailPageRendersEveryRequestState(t *testing.T) {
+	b := sampleBucket()
+	nzbID := int64(176112514)
+
+	delivered := render(t, "offer_detail.html", gin.H{
+		"Bucket": &b, "Files": []OfferedFile{},
+		"Request": &RequestState{
+			RequestID: 1, Status: "delivered", NzbID: &nzbID,
+			DeliveredAt: ts("2026-08-16T21:07:00Z"), PoolPoints: 1000, BackerCount: 1,
+		},
+		"Backers":     []RequestBacker{{UserID: 2, Username: "kirisame", Points: 1000}},
+		"RequestLive": false, "Delivered": true,
+		"Health": "dead", "CanReRequest": true,
+	})
+	for _, want := range []string{"/release/176112514", "Request a fresh copy", "dead"} {
+		if !strings.Contains(delivered, want) {
+			t.Errorf("delivered state missing %q", want)
+		}
+	}
+
+	live := render(t, "offer_detail.html", gin.H{
+		"Bucket": &b, "Files": []OfferedFile{},
+		"Request": &RequestState{
+			RequestID: 2, Status: "open", PoolPoints: 250, BackerCount: 2,
+		},
+		"Backers": []RequestBacker{
+			{UserID: 2, Username: "kirisame", Points: 250},
+			{UserID: 3, Username: "shigure", Points: 0},
+		},
+		"RequestLive": true, "Delivered": false,
+		"Health": "", "CanReRequest": false,
+	})
+	for _, want := range []string{"Join this request", "250 pts staked", "kirisame"} {
+		if !strings.Contains(live, want) {
+			t.Errorf("live state missing %q", want)
+		}
+	}
+
+	fresh := render(t, "offer_detail.html", gin.H{
+		"Bucket": &b, "Files": []OfferedFile{},
+		"Request": (*RequestState)(nil), "Backers": []RequestBacker{},
+		"RequestLive": false, "Delivered": false,
+		"Health": "", "CanReRequest": false,
+	})
+	if !strings.Contains(fresh, "Request this") {
+		t.Error("fresh state missing the plain request button")
+	}
+}
+
+// The listing's demand column: the staked pool renders beside the count. A
+// 1000-point pool showing as "free" is the confusion this pins against.
+func TestOffersListingShowsTheStakedPool(t *testing.T) {
+	b := sampleBucket()
+	b.BackerCount = 2
+	b.PoolPoints = 1000
+	got := render(t, "offers.html", gin.H{
+		"EntityType": EntityAnime, "SizeBucket": "",
+		"Buckets": []Bucket{b}, "Leaders": []Leader{},
+		"Recent": []Fulfillment{}, "Trackers": []TrackerStat{},
+	})
+	if !strings.Contains(got, "1000 pts staked") {
+		t.Error("listing does not show the staked pool")
+	}
+}
+
 // The empty state is what an operator sees on a fresh install, and a range
 // over nothing is where a missing {{else}} shows up.
 func TestPagesRenderEmpty(t *testing.T) {

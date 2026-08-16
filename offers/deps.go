@@ -55,6 +55,10 @@ type Bucket struct {
 	// missing: an offerer scanning the page could see what they COULD give
 	// and never what anyone WANTED.
 	BackerCount int
+	// PoolPoints is the escrowed stake behind that live request — already
+	// debited, paid to whoever delivers. Rendered beside the count, because a
+	// bounty the listing cannot show is a bounty that motivates nobody.
+	PoolPoints int
 }
 
 // OfferedFile is one staged file behind a bucket, as the detail page shows it.
@@ -324,10 +328,25 @@ type Deps struct {
 	SettleEscrow func(ctx context.Context, reqID int) (pool int, backers []RequestBacker, err error)
 	// RequestBackers is who is behind one request, for the detail page.
 	RequestBackers func(ctx context.Context, reqID int) ([]RequestBacker, error)
-	// BackerCounts is bucket id -> backers on its live request, batched
-	// because the listing renders fifty rows and a per-row query would be
-	// fifty statements.
-	BackerCounts func(ctx context.Context, bucketIDs []int) (map[int]int, error)
+	// BackerStats is bucket id -> demand on its live request (how many
+	// members, and the points pool they have staked), batched because the
+	// listing renders fifty rows and a per-row query would be fifty
+	// statements. The pool travels WITH the count because the two were the
+	// same query all along — and showing "2 wanting" while a 1000-point pool
+	// rendered as "free" is the exact confusion this fixes.
+	BackerStats func(ctx context.Context, bucketIDs []int) (map[int]BackerStat, error)
+	// LatestRequestForBucket is the detail page's view of where a bucket's
+	// most relevant request stands: the LIVE one when there is one, else the
+	// most recent settled one. Nil when the bucket has never been requested.
+	//
+	// This is what stops a fulfilled request from simply vanishing — the page
+	// used to reset to a bare Request button the moment delivery landed, as
+	// if nothing had happened, with the release reachable from nowhere.
+	LatestRequestForBucket func(ctx context.Context, bucketID int) (*RequestState, error)
+	// NzbHealth reports a delivered release's health_status ('' when never
+	// probed). Optional: without it the page shows the delivery and simply
+	// cannot offer the health-based re-request.
+	NzbHealth func(ctx context.Context, nzbID int64) (string, error)
 	ClaimRequest   func(ctx context.Context, reqID, userID, offerID int, window time.Duration) (bool, error)
 	DeliverRequest func(ctx context.Context, reqID, userID int, nzbID int64) (bool, error)
 	FailRequest    func(ctx context.Context, reqID, userID int) (released bool, err error)
@@ -354,6 +373,24 @@ type RequestBacker struct {
 	UserID   int
 	Username string
 	Points   int
+}
+
+// BackerStat is one bucket's live-request demand, as the listing shows it.
+type BackerStat struct {
+	Count int
+	Pool  int
+}
+
+// RequestState is where a bucket's most relevant request stands, for the
+// detail page. Statuses are the host's own row values (open / claimed /
+// delivered / cancelled / expired).
+type RequestState struct {
+	RequestID   int
+	Status      string
+	NzbID       *int64
+	DeliveredAt *time.Time
+	PoolPoints  int
+	BackerCount int
 }
 
 // ExpiredClaim is one request the sweeper reopened, and who was waiting on it.
@@ -413,7 +450,8 @@ func (d *Deps) okWeb() bool {
 		d.RecentBuckets != nil && d.Leaderboard != nil && d.RecentDeliveries != nil &&
 		d.TrackerStats != nil && d.AdminRequests != nil && d.AdminStatusCounts != nil &&
 		d.CreateOrJoinRequest != nil && d.WithdrawBacking != nil &&
-		d.RequestBackers != nil && d.BackerCounts != nil &&
+		d.RequestBackers != nil && d.BackerStats != nil &&
+		d.LatestRequestForBucket != nil &&
 		d.OfferersFor != nil &&
 		d.SaveTracker != nil && d.DeleteTracker != nil
 }

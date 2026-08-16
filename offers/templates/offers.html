@@ -186,9 +186,12 @@
                                 {{/* Demand. Zero renders as a dash rather than
                                      "0 wanting" — an empty column reads as
                                      "nobody yet", a zero reads as a broken
-                                     counter. */}}
+                                     counter. The staked pool renders WITH the
+                                     count: it is escrow already debited, and a
+                                     1000-point bounty the row showed as "free"
+                                     motivated exactly nobody. */}}
                                 <td style="font-size:0.82rem;color:var(--text-muted);">
-                                    {{if .BackerCount}}<strong style="color:var(--bs-warning);">{{.BackerCount}}</strong> wanting{{else}}&mdash;{{end}}
+                                    {{if .BackerCount}}<strong style="color:var(--bs-warning);">{{.BackerCount}}</strong> wanting{{if .PoolPoints}}<div style="font-size:0.74rem;color:var(--bs-warning);">{{.PoolPoints}} pts staked</div>{{end}}{{else}}&mdash;{{end}}
                                 </td>
                                 <td style="font-size:0.82rem;color:var(--text-muted);">{{if .MinPoints}}{{.MinPoints}}{{else}}free{{end}}</td>
                                 <td>

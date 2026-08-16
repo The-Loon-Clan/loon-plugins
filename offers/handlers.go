@@ -278,11 +278,13 @@ func (h *Handlers) ClaimRequest(c *gin.Context) {
 	if got && deps.NotifyClaimed != nil {
 		// Fire-and-forget: notify the requester their request was
 		// picked up. Background ctx since the HTTP request will
-		// return before this completes.
+		// return before this completes. Funcs captured at dispatch —
+		// see UserCreateRequest's notify block for why.
+		notify, requesterOf := deps.NotifyClaimed, deps.RequesterOf
 		go func(rid int) {
 			bg := context.Background()
-			requester, _ := deps.RequesterOf(bg, rid)
-			deps.NotifyClaimed(bg, requester, rid)
+			requester, _ := requesterOf(bg, rid)
+			notify(bg, requester, rid)
 		}(reqID)
 	}
 	deps.JSONOK(c, gin.H{"claimed": got})
@@ -321,10 +323,11 @@ func (h *Handlers) DeliverRequest(c *gin.Context) {
 			RequestDelivered{RequestID: reqID, NzbID: body.NzbID})
 	}
 	if ok2 && deps.NotifyDelivered != nil {
+		notify, requesterOf := deps.NotifyDelivered, deps.RequesterOf
 		go func(rid int, nid int64) {
 			bg := context.Background()
-			requester, _ := deps.RequesterOf(bg, rid)
-			deps.NotifyDelivered(bg, requester, rid, nid)
+			requester, _ := requesterOf(bg, rid)
+			notify(bg, requester, rid, nid)
 		}(reqID, body.NzbID)
 	}
 	deps.JSONOK(c, gin.H{"delivered": ok2})
@@ -465,13 +468,19 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 	// about something already in their queue, and a request with twenty
 	// backers would ping them twenty times for one file.
 	if !joined && deps.NotifyRequest != nil {
+		// The funcs are captured HERE, not read from the global inside the
+		// goroutine: deps is package state, and a fire-and-forget that
+		// consults it after the handler returns can land on a different
+		// wiring than the one that served the request (which is also how a
+		// test's stray goroutine set the NEXT test's flag).
+		notify, offerersFor := deps.NotifyRequest, deps.OfferersFor
 		go func(bucketID, requestID, requesterID int, name string) {
 			bgCtx := context.Background()
-			ids, err := deps.OfferersFor(bgCtx, bucketID)
+			ids, err := offerersFor(bgCtx, bucketID)
 			if err != nil {
 				return
 			}
-			deps.NotifyRequest(bgCtx, ids, requesterID, name, bucketID, requestID)
+			notify(bgCtx, ids, requesterID, name, bucketID, requestID)
 		}(body.BucketID, id, user.ID, user.Username)
 	}
 	if !joined {
@@ -481,28 +490,30 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 	deps.JSONOK(c, gin.H{"request_id": id, "joined": joined})
 }
 
-// attachBackerCounts fills in how many members are behind each bucket's live
-// request. ONE query for the whole page — the counts are decoration on a
-// listing of a hundred rows, and a per-row lookup would be a hundred
-// statements to render a number.
+// attachBackerStats fills in the demand behind each bucket's live request —
+// backer count AND the staked pool. ONE query for the whole page — the stats
+// are decoration on a listing of a hundred rows, and a per-row lookup would
+// be a hundred statements.
 //
-// Best-effort: a page that shows offers without demand counts is the page we
+// Best-effort: a page that shows offers without demand stats is the page we
 // had yesterday, and losing it is not worth failing the render over.
-func attachBackerCounts(ctx context.Context, rows []Bucket) {
-	if len(rows) == 0 || deps.BackerCounts == nil {
+func attachBackerStats(ctx context.Context, rows []Bucket) {
+	if len(rows) == 0 || deps.BackerStats == nil {
 		return
 	}
 	ids := make([]int, 0, len(rows))
 	for _, b := range rows {
 		ids = append(ids, b.BucketID)
 	}
-	counts, err := deps.BackerCounts(ctx, ids)
+	stats, err := deps.BackerStats(ctx, ids)
 	if err != nil {
 		deps.LogError(ctx, "offer/backer-counts", err)
 		return
 	}
 	for i := range rows {
-		rows[i].BackerCount = counts[rows[i].BucketID]
+		st := stats[rows[i].BucketID]
+		rows[i].BackerCount = st.Count
+		rows[i].PoolPoints = st.Pool
 	}
 }
 
@@ -651,7 +662,7 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 	if err != nil {
 		deps.LogError(ctx, "offer/page-buckets", err)
 	}
-	attachBackerCounts(ctx, buckets)
+	attachBackerStats(ctx, buckets)
 	leaders, err := deps.Leaderboard(ctx, 25)
 	if err != nil {
 		deps.LogError(ctx, "offer/page-leaders", err)
@@ -755,11 +766,51 @@ func (h *Handlers) OfferDetailPage(c *gin.Context) {
 			}
 		}
 	}
+
+	// Where the bucket's request stands. A delivered request points at its
+	// release — the page resetting to a bare Request button the moment
+	// delivery landed was the bug: the one member who paid for the delivery
+	// had no path from here to the thing they paid for.
+	var (
+		reqState *RequestState
+		backers  []RequestBacker
+		health   string
+	)
+	if st, err := deps.LatestRequestForBucket(ctx, id); err != nil {
+		deps.LogError(ctx, "offer/detail-request", err)
+	} else {
+		reqState = st
+	}
+	if reqState != nil {
+		if rows, err := deps.RequestBackers(ctx, reqState.RequestID); err == nil {
+			backers = rows
+		}
+		if reqState.NzbID != nil && deps.NzbHealth != nil {
+			if h, err := deps.NzbHealth(ctx, *reqState.NzbID); err == nil {
+				health = h
+			}
+		}
+	}
+	// Re-requesting makes sense only when the delivered copy has been probed
+	// and found bad — a healthy or simply unprobed delivery is a release to
+	// download, not a job to redo. A live request never re-requests (join it
+	// instead), and a cancelled/expired one falls through to the ordinary
+	// Request button.
+	live := reqState != nil && (reqState.Status == "open" || reqState.Status == "claimed")
+	delivered := reqState != nil && reqState.Status == "delivered" && reqState.NzbID != nil
+	canReRequest := delivered && (health == "broken" || health == "dead")
+
 	page(c, offerDetailTitle(bucket), "offer_detail.html", gin.H{
-		"PageTitle": offerDetailTitle(bucket),
-		"ActiveNav": "community",
-		"Bucket":    bucket,
-		"Files":     files,
+		"PageTitle":    offerDetailTitle(bucket),
+		"ActiveNav":    "community",
+		"Bucket":       bucket,
+		"Files":        files,
+		"Request":      reqState,
+		"Backers":      backers,
+		"RequestLive":  live,
+		"Delivered":    delivered,
+		"Health":       health,
+		"CanReRequest": canReRequest,
 	})
 }
 

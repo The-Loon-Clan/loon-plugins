@@ -53,13 +53,67 @@
                     <span class="od-pill">{{.Bucket.ActiveOfferCount}} active offer{{if ne .Bucket.ActiveOfferCount 1}}s{{end}}</span>
                     <span class="od-pill">{{if .Bucket.MinPoints}}{{.Bucket.MinPoints}} pts{{else}}free{{end}}</span>
                 </div>
-                {{/* The only action. There is no download and there cannot be —
-                     the bytes are on an offerer's disk, and a request is what
-                     asks them to deliver. Saying so plainly beats a disabled
-                     download button that invites the question. */}}
-                <button type="button" class="btn btn-primary of-request" data-bucket-id="{{.Bucket.BucketID}}">
-                    Request this
-                </button>
+                {{/* The action area follows the request's lifecycle, because a
+                     page that reset to a bare Request button the moment a
+                     delivery landed left the member who paid for it with no
+                     path to the release. Delivered → the release link (and a
+                     re-request only when the copy has been probed bad); live →
+                     join; nothing → request. */}}
+                {{if .Delivered}}
+                <div style="border:1px solid rgba(74,222,128,.35);background:rgba(74,222,128,.08);border-radius:10px;padding:.7rem .9rem;margin-bottom:.6rem;">
+                    <div style="font-size:.9rem;color:#4ade80;font-weight:600;">
+                        Delivered{{if .Request.DeliveredAt}} {{.Request.DeliveredAt.Format "Jan 2, 2006"}}{{end}}
+                        {{/* Printed directly: html/template indirects pointers,
+                             and the deref helper is *int-only while NzbID is
+                             *int64. Delivered guarantees it is non-nil. */}}
+                        &mdash; <a href="/release/{{.Request.NzbID}}" style="color:#4ade80;">view the release &rarr;</a>
+                    </div>
+                    <div class="od-note" style="margin-top:.25rem;">
+                        {{if eq .Health "healthy"}}Health checked: articles are retrievable.
+                        {{else if .CanReRequest}}Health checked: this copy is {{.Health}} — its articles have expired. You can request a fresh delivery below.
+                        {{else}}Health not verified yet — the health job probes new releases within a day.
+                        {{end}}
+                    </div>
+                </div>
+                {{if .CanReRequest}}
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="number" class="form-control form-control-sm of-points" min="0" step="1" value="0"
+                           title="Points to stake — debited now, paid to whoever delivers" style="width:80px;">
+                    <button type="button" class="btn btn-warning btn-sm of-request" data-bucket-id="{{.Bucket.BucketID}}">
+                        Request a fresh copy
+                    </button>
+                </div>
+                {{end}}
+                {{else if .RequestLive}}
+                <div style="border:1px solid rgba(250,204,21,.35);background:rgba(250,204,21,.07);border-radius:10px;padding:.7rem .9rem;margin-bottom:.6rem;">
+                    <div style="font-size:.9rem;color:var(--bs-warning);font-weight:600;">
+                        {{if eq .Request.Status "claimed"}}Claimed — an offerer is delivering this now.
+                        {{else}}Requested by {{.Request.BackerCount}} member{{if ne .Request.BackerCount 1}}s{{end}}{{if .Request.PoolPoints}} &middot; {{.Request.PoolPoints}} pts staked{{end}}{{end}}
+                    </div>
+                    {{if .Backers}}
+                    <div class="od-note" style="margin-top:.25rem;">
+                        {{range $i, $b := .Backers}}{{if $i}}, {{end}}{{$b.Username}}{{if $b.Points}} ({{$b.Points}} pts){{end}}{{end}}
+                    </div>
+                    {{end}}
+                </div>
+                {{if ne .Request.Status "claimed"}}
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="number" class="form-control form-control-sm of-points" min="0" step="1" value="0"
+                           title="Points to stake — debited now, paid to whoever delivers, returned if you withdraw" style="width:80px;">
+                    <button type="button" class="btn btn-primary of-request" data-bucket-id="{{.Bucket.BucketID}}">
+                        Join this request
+                    </button>
+                </div>
+                {{end}}
+                {{else}}
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="number" class="form-control form-control-sm of-points" min="0" step="1" value="0"
+                           title="Points to stake — debited now, paid to whoever delivers, returned if you withdraw" style="width:80px;">
+                    <button type="button" class="btn btn-primary of-request" data-bucket-id="{{.Bucket.BucketID}}">
+                        Request this
+                    </button>
+                </div>
+                {{end}}
                 <div class="od-note" style="margin-top:.5rem;">
                     Nothing is stored here. Requesting asks an offerer to fetch it and deliver an NZB.
                 </div>
@@ -120,14 +174,24 @@
     <script>
     document.querySelectorAll('.of-request').forEach(function (btn) {
         btn.addEventListener('click', function () {
+            // The points field sits beside the button; a missing one means 0.
+            var cell = btn.parentElement;
+            var field = cell ? cell.querySelector('.of-points') : null;
+            var points = Math.max(0, parseInt((field && field.value) || '0', 10) || 0);
             btn.disabled = true;
             fetch('/offers/request', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRF-Token': '{{.CSRFToken}}'},
-                body: JSON.stringify({bucket_id: parseInt(btn.dataset.bucketId, 10)})
+                body: JSON.stringify({bucket_id: parseInt(btn.dataset.bucketId, 10), points: points, notes: ''})
             }).then(function (r) { return r.json(); }).then(function (d) {
-                btn.textContent = d && d.ok ? 'Requested' : (d && d.error ? d.error : 'Failed');
-                if (!d || !d.ok) { btn.disabled = false; }
+                if (d && d.ok) {
+                    btn.textContent = (d.joined ? 'Joined request #' : 'Requested #') + d.request_id +
+                        (points > 0 ? ' (' + points + ' pts staked)' : '');
+                    if (field) { field.remove(); }
+                } else {
+                    btn.textContent = d && d.error ? d.error : 'Failed';
+                    btn.disabled = false;
+                }
             }).catch(function () { btn.textContent = 'Failed'; btn.disabled = false; });
         });
     });
