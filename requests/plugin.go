@@ -30,8 +30,16 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "requests",
 		Version:     "1.0.0",
 		Description: "Community request board — filing, votes, points boosts, torrent scraping, fulfilment lifecycle.",
-		// Processes empty → web-only, the safe default for a
-		// route-registering plugin.
+		// The board is web AND worker: the pages plus the daily backlog
+		// sweep. This was empty, which loon reads as web-only, so Boot
+		// skipped the plugin entirely on the worker — the sweep job
+		// registered (package init runs everywhere) and showed as idle on
+		// /admin/jobs, but nothing ever built it a trigger, so every attempt
+		// to run it came back "remote" and no process picked it up.
+		//
+		// A job that registers without being provisioned is the worst of both:
+		// it is visible, it looks scheduled, and it does nothing.
+		Processes: []string{"web", "worker"},
 	}
 }
 
