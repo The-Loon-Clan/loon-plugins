@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"fmt"
 	"html/template"
 	"strings"
 	"testing"
@@ -35,7 +36,7 @@ func TestAdminPageRenders(t *testing.T) {
 				ActiveCount: 2, TorrentCount: 9, SnatchedCount: 4, LastSeen: &seen},
 				Username: "ameNZB", Entitled: true, Ratio: 5},
 			// No access and no activity: the row that must render "—" for the
-			// ratio rather than "0.00", and a secondary badge rather than blank.
+			// ratio rather than "0.00", and must be the one carrying a tag.
 			{Aggregate: &Aggregate{UserID: 8}, Username: "lurker"},
 		},
 		Torrents: []*Torrent{
@@ -52,14 +53,35 @@ func TestAdminPageRenders(t *testing.T) {
 	for _, want := range []string{
 		"Members", "ameNZB", "lurker",
 		"5.0 GiB", "1.0 GiB", // bytes rendered, not raw integers
-		"5.00", // the ratio
-		"entitled", "no access",
+		"5.00",              // the ratio
+		"no tracker access", // the EXCEPTION is what gets flagged — see below
 		// From the LAST table, so its presence proves the render reached the end.
-		"Torrents", "Some.Release-GRP", "3.0 GiB", "1 registered",
+		"Torrents", "Some.Release-GRP", "3.0 GiB",
+		"4/1", // the swarm tag
+		// The final cell of the final row. Anything earlier can pass while the
+		// stream truncated on the way to it, which is the failure this whole
+		// test exists for. renderFixture wires no deps, so `since` falls back
+		// to the absolute stamp.
+		"2026-08-01 12:00",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %q — if the earlier rows rendered, the template aborted mid-stream", want)
 		}
+	}
+	// Entitlement is shown by EXCEPTION, which is a deliberate change from the
+	// green "entitled" badge that used to sit on every row.
+	//
+	// A column that reads the same on every row carries no information — except
+	// on the row where it does not, and that row is the entire reason a mod
+	// opened this page: somebody still accumulating ratio after their access was
+	// revoked. Marking only the exception makes it the thing that stands out
+	// instead of the thing that blends in.
+	//
+	// Asserted as a COUNT rather than mere presence, because "no tracker access"
+	// appearing once proves nothing about which row it landed on: two members
+	// here, one entitled and one not.
+	if n := strings.Count(html, "no tracker access"); n != 1 {
+		t.Errorf("the access tag appears %d times for one unentitled member of two", n)
 	}
 	// A zero ratio must read as "—", never "0.00": an inactive member has no
 	// ratio rather than a ratio of nothing.
@@ -211,5 +233,67 @@ func TestStatsFragmentCarriesTheCSRFToken(t *testing.T) {
 	}
 	if !strings.Contains(sb.String(), `name="_csrf" value="the-token"`) {
 		t.Error("the rotate form has no CSRF token; the POST would be refused")
+	}
+}
+
+// The torrent name links to the release it was made from — and only then.
+//
+// Three cases, because the failure modes differ and two of them are silent. A
+// torrent uploaded directly has no nzb_id; a host that wires no ReleaseURL seam
+// has no page to point at. Either one emitting <a href=""> gives a member a link
+// that reloads the page they are on, which reads as the site being broken rather
+// than as there being nothing to link to.
+func TestTorrentNameLinksToItsReleaseOnlyWhenThereIsOne(t *testing.T) {
+	id := int64(4242)
+	for _, tc := range []struct {
+		name     string
+		nzbID    *int64
+		seam     func(int64) string
+		wantLink bool
+	}{
+		{"a torrent made from a release, on a host that has release pages",
+			&id, func(n int64) string { return fmt.Sprintf("/release/%d", n) }, true},
+		{"a torrent uploaded directly, so there is no release behind it",
+			nil, func(n int64) string { return fmt.Sprintf("/release/%d", n) }, false},
+		{"a host that wired no seam, so it has nowhere to point",
+			&id, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			SetDeps(Deps{
+				RenderPage:   func(*gin.Context, string, template.HTML) {},
+				CSRFToken:    func(*gin.Context) string { return "tok" },
+				RelativeTime: func(time.Time) string { return "now" },
+				ReleaseURL:   tc.seam,
+			})
+			t.Cleanup(func() { deps = nil })
+
+			p := &Plugin{}
+			if err := p.parseTemplates(); err != nil {
+				t.Fatal(err)
+			}
+			var sb strings.Builder
+			if err := p.tmpl.ExecuteTemplate(&sb, "tracker_list.html", PageData{
+				Torrents: []*Torrent{{
+					InfoHash: strings.Repeat("b", 40), Name: "Linked.Release-GRP",
+					Size: 1 << 30, FileCount: 3, NzbID: tc.nzbID, AddedAt: time.Now(),
+				}},
+				Total: 1,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			out := sb.String()
+			if got := strings.Contains(out, `href="/release/4242"`); got != tc.wantLink {
+				t.Errorf("release link present = %v, want %v", got, tc.wantLink)
+			}
+			// Whichever branch ran, the name itself must be on the page. An
+			// empty <a> or a dropped <span> would both still pass the check
+			// above.
+			if !strings.Contains(out, "Linked.Release-GRP") {
+				t.Error("the torrent name did not render at all")
+			}
+			if strings.Contains(out, `href=""`) {
+				t.Error("an empty href reached the page — a link that reloads this page")
+			}
+		})
 	}
 }

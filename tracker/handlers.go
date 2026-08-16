@@ -40,6 +40,20 @@ type Deps struct {
 	// ("3 hours ago"). Borrowed rather than reimplemented so the tracker's
 	// "last seen" column does not drift from every other one.
 	RelativeTime func(t time.Time) string
+
+	// ReleaseURL is the host's page for the release a torrent was made from.
+	// Empty string when the host has no page for that id.
+	//
+	// OPTIONAL, and the only optional seam here — the three above are required
+	// because without them a page is broken, while without this one a listing
+	// renders the torrent's name as text instead of a link. depsReady does not
+	// check it for that reason.
+	//
+	// A seam rather than the plugin building "/release/%d" itself. The torrent
+	// row carries nzb_id, which is an ID IN THE HOST'S INDEX; where that id is
+	// browsable is the host's fact, and a plugin that hardcodes another
+	// component's URL scheme is one that breaks silently when the scheme moves.
+	ReleaseURL func(nzbID int64) string
 }
 
 var deps *Deps

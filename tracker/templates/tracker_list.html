@@ -1,80 +1,148 @@
-{{/* The swarm, as a member sees it. A FRAGMENT: the host wraps it in the site
-     chrome, so there is no doctype, navbar or footer here. Adapted from the
-     host's tracker_list.html, with two deliberate changes — the ratio card now
-     reads the plugin's Totals.Ratio() instead of recomputing the division in the
-     template, and the download button is unchanged because /tracker/download
-     keeps its URL. */}}
-{{define "tracker_list.html"}}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h5 style="font-weight:600;margin:0;">Private Tracker</h5>
-    <a href="/tracker/my" class="btn btn-sm btn-outline-secondary">My Stats</a>
-</div>
+{{/* The swarm, as a member sees it.
 
-<div class="card mb-3" style="background:var(--bg-elevated); border:1px solid var(--border);">
-    <div class="card-body py-2">
-        <div class="row small">
-            <div class="col-md-4">
-                <div class="text-muted" style="font-size:0.75rem;">Uploaded (all time)</div>
-                <div><strong>{{bytes .Totals.Uploaded}}</strong></div>
-            </div>
-            <div class="col-md-4">
-                <div class="text-muted" style="font-size:0.75rem;">Downloaded (all time)</div>
-                <div><strong>{{bytes .Totals.Downloaded}}</strong></div>
-            </div>
-            <div class="col-md-4">
-                <div class="text-muted" style="font-size:0.75rem;">Ratio</div>
-                <div><strong>{{ratio .Totals.Ratio}}</strong></div>
-            </div>
-        </div>
+     A FRAGMENT: the host wraps it in the site chrome (Deps.RenderPage → the
+     host's site_page.html), so there is no doctype, navbar or footer here — and
+     no page heading either. The host draws a breadcrumb and a panel heading
+     from the title passed to render(), so the <h5> that used to open this file
+     made every page say its name twice.
+
+     WRITTEN IN THE HOST'S DESIGN VOCABULARY, NOT BOOTSTRAP'S. What was here
+     before — card, card-body, row, col-md-4, table table-sm, btn
+     btn-outline-primary, alert alert-secondary — was Bootstrap markup that
+     happened to survive because this host's CSS defines some of those names.
+     "Happens to render" is not the same as "is designed for", and the two come
+     apart at the edges: the table sat in a .table-responsive rather than a
+     .data-table-wrapper, so on a phone it ran 364px past the screen.
+
+     The classes below are the ones /browse and /search already use for exactly
+     this kind of content — a list of things with a size, a swarm and a
+     download. A torrent listing IS a release listing with different columns, so
+     it reads the same way rather than being a second design for one idea. In
+     particular .tag--seed is the host's own swarm tag, already used on every
+     release row, so "12 seeding, 3 leeching" looks identical in both places.
+
+     Keys (PageData, member_handler.go): Torrents []*Torrent, Total int,
+     Totals Totals, Passkey, AnnounceURL, CSRFToken string.
+
+     Funcs are the plugin's own set (views.go): bytes, ratio, since, release.
+     The host's template helpers — dict, hue, timeAgo — are NOT in scope here;
+     this fragment is executed by the plugin's parsed set, not the host's. */}}
+{{define "tracker_list.html"}}
+
+{{/* The viewer's own standing, first, because it is the number they came to
+     check. stat-tile is the host's component — /stats builds its whole tracker
+     panel out of these — so three figures here look like six figures there. */}}
+<div class="stat-grid">
+    <div class="stat-tile">
+        <svg class="icon stat-tile__icon" aria-hidden="true"><use href="#chevron-up"></use></svg>
+        <span class="stat-tile__label">Uploaded</span>
+        <span class="stat-tile__value">{{bytes .Totals.Uploaded}}</span>
     </div>
+    <div class="stat-tile">
+        <svg class="icon stat-tile__icon" aria-hidden="true"><use href="#chevron-down"></use></svg>
+        <span class="stat-tile__label">Downloaded</span>
+        <span class="stat-tile__value">{{bytes .Totals.Downloaded}}</span>
+    </div>
+    {{/* The ratio tile is a LINK to the member's own page, which is where the
+         per-torrent breakdown behind this number lives. a.stat-tile is styled
+         for it (components.css), so this is the host's affordance rather than
+         an anchor dropped on a box. It replaces the "My Stats" button that used
+         to sit in a header bar of its own. */}}
+    <a class="stat-tile" href="/tracker/my">
+        <svg class="icon stat-tile__icon" aria-hidden="true"><use href="#shield"></use></svg>
+        <span class="stat-tile__label">Ratio &middot; your stats</span>
+        <span class="stat-tile__value">{{ratio .Totals.Ratio}}</span>
+    </a>
 </div>
 
 {{if .Torrents}}
-<div class="table-responsive">
-<table class="table table-sm table-hover">
-    <thead>
-        <tr class="small text-muted">
-            <th>Name</th>
-            <th class="text-end">Size</th>
-            <th class="text-end">Files</th>
-            <th class="text-end">Swarm</th>
-            <th class="text-end">Snatches</th>
-            <th class="text-end">Added</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-        {{range .Torrents}}
-        <tr>
-            <td>
-                <div>{{.Name}}</div>
-                <div class="text-muted" style="font-size:0.75rem;"><code>{{.InfoHash}}</code></div>
-            </td>
-            <td class="text-end">{{bytes .Size}}</td>
-            <td class="text-end">{{.FileCount}}</td>
-            <td class="text-end">
-                <span style="color:#22c55e;">{{.Seeders}}S</span> /
-                <span style="color:#f97316;">{{.Leechers}}L</span>
-            </td>
-            <td class="text-end">{{.Snatches}}</td>
-            <td class="text-end text-muted" style="font-size:0.75rem;">{{since .AddedAt}}</td>
-            <td class="text-end">
-                <a class="btn btn-sm btn-outline-primary"
-                   href="/tracker/download/{{.InfoHash}}">.torrent</a>
-            </td>
-        </tr>
-        {{end}}
-    </tbody>
-</table>
-</div>
-{{else}}
-<div class="alert alert-secondary">
-    No torrents registered yet.
-</div>
-{{end}}
+<div class="data-table-wrapper">
+    <table class="data-table">
+        {{/* Named, because a screen reader announcing "table, 6 columns" with
+             no name gives a member no way to tell it from any other table on
+             the page. Two of these were found unnamed across this plugin
+             ecosystem by the host's a11y audit; this one is not going to be a
+             third. */}}
+        <caption class="visually-hidden">Torrents on this tracker, newest first, with their swarm and size</caption>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th class="data-table__nowrap">Size</th>
+                <th class="data-table__nowrap">Files</th>
+                <th class="data-table__nowrap">Swarm</th>
+                <th class="data-table__nowrap">Snatches</th>
+                <th class="data-table__nowrap">Added</th>
+                <th><span class="visually-hidden">Download</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Torrents}}
+            {{$release := release .NzbID}}
+            <tr>
+                <td>
+                    <div class="data-table__name">
+                        <div class="data-table__name-body">
+                            {{/* Linked to the release it was made from, when
+                                 there is one. That page has the cover, the
+                                 metadata and the file list — everything this
+                                 row cannot fit — and without the link a member
+                                 looking at a scene name has no way to reach any
+                                 of it.
 
-<div class="text-muted mt-3" style="font-size:0.75rem;">
-    {{.Total}} torrent{{if ne .Total 1}}s{{end}} registered.
-    Your passkey is embedded in each download — keep it private.
+                                 A torrent uploaded directly has no nzb_id, so
+                                 the name is plain text rather than a link to
+                                 nowhere. Same markup either way except the
+                                 element, so the two do not sit at different
+                                 heights in the same column. */}}
+                            {{if $release}}
+                            <a class="data-table__title" href="{{$release}}">{{.Name}}</a>
+                            {{else}}
+                            <span class="data-table__title">{{.Name}}</span>
+                            {{end}}
+                            <div class="data-table__meta">
+                                <code>{{.InfoHash}}</code>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+                <td class="data-table__nowrap">{{bytes .Size}}</td>
+                <td class="data-table__nowrap">{{.FileCount}}</td>
+                <td class="data-table__nowrap">
+                    {{/* The host's swarm tag, the same one every release row
+                         carries. Rendered on every torrent, never guarded on
+                         the counts: 0/0 is a real figure and means a dead
+                         torrent, which is a different claim from a release that
+                         has no torrent at all — and on this page, where every
+                         row IS a torrent, it is always the first meaning. */}}
+                    <span class="tag tag--seed" title="{{.Seeders}} seeding, {{.Leechers}} leeching">
+                        <svg class="icon icon--sm" aria-hidden="true"><use href="#users"></use></svg>{{.Seeders}}/{{.Leechers}}
+                    </span>
+                </td>
+                <td class="data-table__nowrap">{{.Snatches}}</td>
+                <td class="data-table__nowrap">{{since .AddedAt}}</td>
+                <td class="data-table__nowrap">
+                    <a class="button button--sm" href="/tracker/download/{{.InfoHash}}">
+                        <svg class="icon icon--sm" aria-hidden="true"><use href="#download"></use></svg>.torrent
+                    </a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
 </div>
+
+<p class="text-muted small">
+    {{.Total}} torrent{{if ne .Total 1}}s{{end}} registered. Every .torrent you
+    download carries your own passkey in its announce URL &mdash; keep it
+    private, and <a href="/tracker/my">rotate it</a> if it gets out.
+</p>
+{{else}}
+{{/* An empty tracker is a state, not an error, so this is a notice rather than
+     a warning — and it says what would fill it, because "No torrents" alone
+     reads as something being broken. */}}
+<p class="notice notice--info">
+    <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+    No torrents registered yet. They appear here once somebody uploads one.
+</p>
+{{end}}
 {{end}}

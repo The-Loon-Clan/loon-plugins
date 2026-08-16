@@ -1,89 +1,190 @@
+{{/* Swarm oversight: every member's accounting, and every torrent.
+
+     Rendered into the host's ADMIN chrome (core.SlotAdminPage → /admin/p/
+     tracker), which draws the tab strip and the page heading, so this file
+     starts at the first panel.
+
+     Same translation as the two member fragments: card / card-header /
+     table table-sm / badge bg-success / alert were Bootstrap names that this
+     host's CSS happens to define. They are now panelV2, data-table and the
+     host's own tag components, so a mod moving between this page and the rest
+     of the admin area reads one design instead of two.
+
+     Keys (adminVM, views.go): Msg, Err string; Idle bool; Members []memberVM;
+     Torrents []*Torrent; Total int. Funcs: bytes, ratio, ts, ts_at, since,
+     release. */}}
 {{define "tracker_admin.html"}}
-{{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
+{{if .Msg}}
+<p class="notice notice--success">
+    <svg class="icon notice__icon" aria-hidden="true"><use href="#check"></use></svg>{{.Msg}}
+</p>
+{{end}}
+{{if .Err}}
+<p class="notice notice--danger">
+    <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>{{.Err}}
+</p>
+{{end}}
 
 {{if .Idle}}
 {{/* Said outright rather than shown as an empty table. Provision registers no
      routes when the host has no Redis, so a blank page would read as "a tracker
-     nobody uses" when the truth is "a tracker that cannot run". */}}
-<div class="alert alert-warning">
-  <strong>The tracker is idle.</strong>
-  No Redis is configured, and the peer store has no durable fallback &mdash; announce,
-  scrape and the member pages are not registered. Set the host's Redis config to
-  enable it.
-</div>
+     nobody uses" when the truth is "a tracker that cannot run" — and those two
+     want completely different things done about them. */}}
+<p class="notice notice--warning">
+    <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+    <strong>The tracker is idle.</strong>
+    No Redis is configured and the peer store has no durable fallback, so
+    announce, scrape and the member pages are not registered. Set the host's
+    Redis config to enable it.
+</p>
 {{else}}
 
-<div class="card mb-3">
-  <div class="card-header d-flex justify-content-between align-items-center">
-    <strong>Members</strong>
-    <span class="text-muted small">
-      sort by
-      <a href="?sort=last_seen">recent</a> &middot;
-      <a href="?sort=uploaded">uploaded</a> &middot;
-      <a href="?sort=downloaded">downloaded</a> &middot;
-      <a href="?sort=torrents">torrents</a>
-    </span>
-  </div>
-  <div class="table-responsive">
-    <table class="table table-sm mb-0 align-middle">
-      <thead><tr>
-        <th>Member</th><th>Access</th><th>Uploaded</th><th>Downloaded</th>
-        <th>Ratio</th><th>Active</th><th>Torrents</th><th>Snatched</th><th>Last seen</th>
-      </tr></thead>
-      <tbody>
-      {{range .Members}}
-        <tr>
-          <td>{{.Username}}</td>
-          <td>{{if .Entitled}}<span class="badge bg-success">entitled</span>
-              {{else}}<span class="badge bg-secondary">no access</span>{{end}}</td>
-          <td>{{bytes .Uploaded}}</td>
-          <td>{{bytes .Downloaded}}</td>
-          <td>{{ratio .Ratio}}</td>
-          <td>{{.ActiveCount}}</td>
-          <td>{{.TorrentCount}}</td>
-          <td>{{.SnatchedCount}}</td>
-          <td>{{ts .LastSeen}}</td>
-        </tr>
-      {{else}}
-        <tr><td colspan="9" class="text-muted">
-          No member has announced yet. A member with the
-          <code>tracker.access</code> entitlement appears here after their first announce.
-        </td></tr>
-      {{end}}
-      </tbody>
-    </table>
-  </div>
-</div>
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#users"></use></svg>
+            Members
+        </h2>
+        {{/* The sort links are panel actions, which is what the host calls a
+             control that belongs to a panel rather than to the page. */}}
+        <div class="panel__actions">
+            <a class="panel__action" href="?sort=last_seen">Recent</a>
+            <a class="panel__action" href="?sort=uploaded">Uploaded</a>
+            <a class="panel__action" href="?sort=downloaded">Downloaded</a>
+            <a class="panel__action" href="?sort=torrents">Torrents</a>
+        </div>
+    </header>
+    <div class="panel__body panel__body--flush">
+        <div class="data-table-wrapper">
+            <table class="data-table">
+                <caption class="visually-hidden">Every member who has announced, with their ratio accounting</caption>
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        <th class="data-table__nowrap">Uploaded</th>
+                        <th class="data-table__nowrap">Downloaded</th>
+                        <th class="data-table__nowrap">Ratio</th>
+                        <th class="data-table__nowrap">Active</th>
+                        <th class="data-table__nowrap">Torrents</th>
+                        <th class="data-table__nowrap">Snatched</th>
+                        <th class="data-table__nowrap">Last seen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {{range .Members}}
+                    <tr>
+                        <td>
+                            <div class="data-table__name">
+                                <div class="data-table__name-body">
+                                    <span class="data-table__title">{{.Username}}</span>
+                                    {{/* Entitlement under the name rather than
+                                         in a column of its own. It is a fact
+                                         ABOUT this member, like their name, and
+                                         a whole column that reads "entitled" on
+                                         every row is a column carrying no
+                                         information — except on the row where
+                                         it does not, which is exactly the one
+                                         that must stand out.
 
-<div class="card">
-  <div class="card-header d-flex justify-content-between align-items-center">
-    <strong>Torrents</strong>
-    <span class="text-muted small">{{.Total}} registered &mdash; newest first</span>
-  </div>
-  <div class="table-responsive">
-    <table class="table table-sm mb-0 align-middle">
-      <thead><tr>
-        <th>Name</th><th>Size</th><th>Files</th>
-        <th>Seed</th><th>Leech</th><th>Snatches</th><th>Added</th>
-      </tr></thead>
-      <tbody>
-      {{range .Torrents}}
-        <tr>
-          <td><code class="small">{{.Name}}</code></td>
-          <td>{{bytes .Size}}</td>
-          <td>{{.FileCount}}</td>
-          <td>{{.Seeders}}</td>
-          <td>{{.Leechers}}</td>
-          <td>{{.Snatches}}</td>
-          <td>{{ts_at .AddedAt}}</td>
-        </tr>
-      {{else}}
-        <tr><td colspan="7" class="text-muted">No torrents registered.</td></tr>
-      {{end}}
-      </tbody>
-    </table>
-  </div>
-</div>
+                                         Only the exception is shown for that
+                                         reason: a member still accumulating
+                                         ratio after their access was revoked is
+                                         what a mod opened this page to find. */}}
+                                    {{if not .Entitled}}
+                                    <div class="data-table__meta">
+                                        <span class="tag tag--warning">no tracker access</span>
+                                    </div>
+                                    {{end}}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="data-table__nowrap">{{bytes .Uploaded}}</td>
+                        <td class="data-table__nowrap">{{bytes .Downloaded}}</td>
+                        <td class="data-table__nowrap">{{ratio .Ratio}}</td>
+                        <td class="data-table__nowrap">{{.ActiveCount}}</td>
+                        <td class="data-table__nowrap">{{.TorrentCount}}</td>
+                        <td class="data-table__nowrap">{{.SnatchedCount}}</td>
+                        {{/* Relative here, absolute in the title. "4 minutes
+                             ago" is what a mod is actually asking, and the
+                             exact stamp is one hover away when it matters. */}}
+                        <td class="data-table__nowrap" title="{{ts .LastSeen}}">
+                            {{if .LastSeen}}{{since .LastSeen.UTC}}{{else}}&mdash;{{end}}
+                        </td>
+                    </tr>
+                {{else}}
+                    <tr>
+                        <td colspan="8" class="text-muted">
+                            No member has announced yet. A member with the
+                            <code>tracker.access</code> entitlement appears here after
+                            their first announce.
+                        </td>
+                    </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#database"></use></svg>
+            Torrents <span class="panel__grouping">({{.Total}})</span>
+        </h2>
+    </header>
+    <div class="panel__body panel__body--flush">
+        <div class="data-table-wrapper">
+            <table class="data-table">
+                <caption class="visually-hidden">Every torrent this tracker is tracking, newest first</caption>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th class="data-table__nowrap">Size</th>
+                        <th class="data-table__nowrap">Files</th>
+                        <th class="data-table__nowrap">Swarm</th>
+                        <th class="data-table__nowrap">Snatches</th>
+                        <th class="data-table__nowrap">Added</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {{range .Torrents}}
+                {{$release := release .NzbID}}
+                    <tr>
+                        <td>
+                            <div class="data-table__name">
+                                <div class="data-table__name-body">
+                                    {{if $release}}
+                                    <a class="data-table__title" href="{{$release}}">{{.Name}}</a>
+                                    {{else}}
+                                    <span class="data-table__title">{{.Name}}</span>
+                                    {{end}}
+                                    {{/* The hash is here and not on the member
+                                         page's equivalent table, because this is
+                                         where somebody is looking one up: it is
+                                         the identity an announce arrives with
+                                         and the only thing a log line names. */}}
+                                    <div class="data-table__meta"><code>{{.InfoHash}}</code></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="data-table__nowrap">{{bytes .Size}}</td>
+                        <td class="data-table__nowrap">{{.FileCount}}</td>
+                        <td class="data-table__nowrap">
+                            <span class="tag tag--seed" title="{{.Seeders}} seeding, {{.Leechers}} leeching">
+                                <svg class="icon icon--sm" aria-hidden="true"><use href="#users"></use></svg>{{.Seeders}}/{{.Leechers}}
+                            </span>
+                        </td>
+                        <td class="data-table__nowrap">{{.Snatches}}</td>
+                        <td class="data-table__nowrap" title="{{ts_at .AddedAt}}">{{since .AddedAt}}</td>
+                    </tr>
+                {{else}}
+                    <tr><td colspan="6" class="text-muted">No torrents registered.</td></tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
 {{end}}
 {{end}}

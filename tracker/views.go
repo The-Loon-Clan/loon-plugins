@@ -89,6 +89,20 @@ func (p *Plugin) parseTemplates() error {
 			}
 			return fmt.Sprintf("%.2f", r)
 		},
+		// release resolves a torrent's nzb_id to the host's page for it, or ""
+		// when there is no release behind this torrent or the host wired no
+		// seam. A template branches on the empty string rather than the plugin
+		// emitting a dead <a>, so an unlinkable name is plain text.
+		//
+		// Takes the *int64 straight off the row: nzb_id is nullable, and
+		// requiring the template to unwrap it is how a nil gets dereferenced
+		// mid-render, which truncates the page at that row.
+		"release": func(id *int64) string {
+			if id == nil || deps == nil || deps.ReleaseURL == nil {
+				return ""
+			}
+			return deps.ReleaseURL(*id)
+		},
 		// since borrows the host's relative-time formatting so the tracker's
 		// "last seen" and "added" columns read like every other one on the site.
 		// Falls back to an absolute stamp rather than failing: a page is more

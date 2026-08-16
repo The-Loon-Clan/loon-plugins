@@ -87,9 +87,22 @@ admin page), `Entitlements` (`tracker.access`), `Redis` (the peer store),
 | `RenderPage(c, title, body)` | Wraps a plugin fragment in the site chrome. |
 | `CSRFToken(c)` | The double-submit token for the rotate form; a host session concern. |
 | `RelativeTime(t)` | So "last seen" reads like every other timestamp on the site. |
+| `ReleaseURL(nzbID)` | **Optional.** Where the release a torrent was made from is browsable. `torrents.nzb_id` is an id in the HOST's index, and the route that renders it is the host's to move — so the listing asks rather than hardcoding `/release/%d`. Unwired, or a torrent with no `nzb_id`, renders the name as text instead of a link. |
 
 `Provision` refuses an incomplete `Deps` rather than discovering it at first
-request.
+request. `ReleaseURL` is exempt: a nil seam there costs a link, not a page.
+
+**Markup is the host's design vocabulary, not Bootstrap's.** The three templates
+were lifted carrying `card` / `row` / `col-md-4` / `btn btn-outline-primary` /
+`table-responsive`, which rendered on the reference host only because its CSS
+happens to define some of those names — and came apart where it does not: the
+listing's table sat in a `.table-responsive` rather than a `.data-table-wrapper`
+and ran 364px past a 390px screen. They now use `panelV2`, `data-table`,
+`stat-tile`, `tag--seed` and `notice`, the same components the host's own
+listings use, so a torrent row and a release row describe a swarm identically.
+A host with different component names should override the templates rather than
+expect these to be neutral — they are not, and markup that pretends to be is
+markup that renders wrong somewhere without saying so.
 
 **Config (`plugins.tracker.*`):**
 
