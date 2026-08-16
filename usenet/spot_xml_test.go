@@ -139,3 +139,51 @@ func TestSpotXMLWithoutNZB(t *testing.T) {
 		t.Errorf("Title = %q", doc.Posting.Title)
 	}
 }
+
+// The NZB pointer is a LIST, and reading only its first element is how a
+// multi-article NZB became a partial one. ParseSpotXML already takes the slice
+// of X-Xml pieces rather than a string for exactly this reason — "so a caller
+// cannot accidentally pass the first header and get a plausible-looking
+// answer" — and the NZB pointer needed the same treatment.
+func TestNZBSegmentsKeepsEveryPiece(t *testing.T) {
+	doc, err := ParseSpotXML([]string{`<Spotnet><Posting><NZB>
+		<Segment>one@spot.net</Segment>
+		<Segment>two@spot.net</Segment>
+		<Segment>three@spot.net</Segment>
+	</NZB></Posting></Spotnet>`})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	got := doc.NZBSegments()
+	want := []string{"one@spot.net", "two@spot.net", "three@spot.net"}
+	if len(got) != len(want) {
+		t.Fatalf("NZBSegments() = %v, want %v — a multi-article NZB would fetch short", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("segment %d = %q, want %q (order is the DEFLATE stream's order)", i, got[i], want[i])
+		}
+	}
+	// The singular form stays the first one: it is what the stored column and
+	// the "does this spot carry an NZB at all" check read.
+	if doc.NZBSegment() != "one@spot.net" {
+		t.Errorf("NZBSegment() = %q, want the first", doc.NZBSegment())
+	}
+}
+
+// Blank segments are dropped rather than fetched as "<>".
+func TestNZBSegmentsSkipsEmptyEntries(t *testing.T) {
+	doc, err := ParseSpotXML([]string{`<Spotnet><Posting><NZB>
+		<Segment>  </Segment><Segment> real@spot.net </Segment><Segment></Segment>
+	</NZB></Posting></Spotnet>`})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := doc.NZBSegments(); len(got) != 1 || got[0] != "real@spot.net" {
+		t.Errorf("NZBSegments() = %v, want just the real one", got)
+	}
+	var nilDoc *SpotXML
+	if nilDoc.NZBSegments() != nil {
+		t.Error("a nil document produced segments")
+	}
+}

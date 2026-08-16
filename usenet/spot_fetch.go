@@ -20,6 +20,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -66,7 +68,19 @@ func decodeSpotBinary(lines []string, compressed bool) ([]byte, error) {
 	// Bounded: a corrupt or hostile length field should not become an
 	// out-of-memory. 32MB is far past any real NZB.
 	out, err := io.ReadAll(io.LimitReader(r, 32<<20))
-	if err != nil && len(out) == 0 {
+	if err != nil {
+		// ANY error fails the decode, including one that produced bytes.
+		//
+		// This used to keep the partial output whenever some had been
+		// produced, and that is how a truncated stream became a published
+		// release: half an NZB inflates fine, parses far enough to look real,
+		// and describes a fraction of the file. Nothing downstream can tell
+		// "the first 9GB of an 89GB release" from a small release, so the
+		// judgement has to be made here, where the EOF is visible.
+		//
+		// Trailing junk is not a false positive for this: flate stops at the
+		// final block and never reads past it, so an error genuinely means the
+		// stream ended early or is corrupt.
 		return nil, err
 	}
 	return out, nil
@@ -206,7 +220,7 @@ func (p *Plugin) fetchOneSpot(ctx context.Context, pool *nntp.Pool, sink release
 		return out
 	}
 
-	nzbXML, err := p.fetchSpotNZB(ctx, pool, d.NZBSegment)
+	nzbXML, err := p.fetchSpotNZB(ctx, pool, doc.NZBSegments())
 	p.opstats.noteErr("spot-nzb", err)
 	if err != nil {
 		out.gone = true
@@ -251,25 +265,44 @@ func (p *Plugin) headSpot(ctx context.Context, pool *nntp.Pool, msgID string) (s
 }
 
 // fetchSpotNZB reads and inflates the NZB a spot points at.
-func (p *Plugin) fetchSpotNZB(ctx context.Context, pool *nntp.Pool, segment string) ([]byte, error) {
-	id := segment
-	if !strings.HasPrefix(id, "<") {
-		id = "<" + id + ">"
+// fetchSpotNZB reads every article the spot names and inflates the whole.
+//
+// The DEFLATE stream spans the concatenation, so the bodies are joined BEFORE
+// decoding rather than decoded one at a time and appended: an individual
+// article after the first is not a valid stream on its own, and the boundary
+// falls at an arbitrary byte.
+//
+// Order is the posting order in the document and must be preserved. A missing
+// or reordered middle segment fails the inflate, which is the outcome we want
+// — a partial NZB is worse than none, because it publishes as a working
+// release describing a fraction of the file.
+func (p *Plugin) fetchSpotNZB(ctx context.Context, pool *nntp.Pool, segments []string) ([]byte, error) {
+	if len(segments) == 0 {
+		return nil, errors.New("spot has no nzb segment")
 	}
 	var lines []string
-	err := pool.TryDo(ctx, func(c *nntp.Conn) error {
-		// The payload group, selected only so providers that demand it will
-		// serve the message-id. It is never crawled.
-		_, _, _, _ = c.Group(SpotNZBGroup)
-		body, err := c.Body(id)
-		if err != nil {
-			return err
+	for _, segment := range segments {
+		id := segment
+		if !strings.HasPrefix(id, "<") {
+			id = "<" + id + ">"
 		}
-		lines, err = readBodyLines(body)
-		return err
-	})
-	if err != nil {
-		return nil, err
+		var part []string
+		err := pool.TryDo(ctx, func(c *nntp.Conn) error {
+			// The payload group, selected only so providers that demand it
+			// will serve the message-id. It is never crawled.
+			_, _, _, _ = c.Group(SpotNZBGroup)
+			body, err := c.Body(id)
+			if err != nil {
+				return err
+			}
+			part, err = readBodyLines(body)
+			return err
+		})
+		if err != nil {
+			// One missing piece means no NZB, not most of one.
+			return nil, fmt.Errorf("segment %d/%d: %w", len(lines)+1, len(segments), err)
+		}
+		lines = append(lines, part...)
 	}
 	return decodeSpotBinary(lines, true)
 }

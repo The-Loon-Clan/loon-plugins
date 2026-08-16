@@ -221,3 +221,40 @@ func TestAssembledReleaseOriginIsOptional(t *testing.T) {
 		t.Error("zero value carries a provenance claim")
 	}
 }
+
+// A truncated DEFLATE stream must FAIL, not hand back what it managed.
+//
+// This is the bug that shipped an 89GB release with about a tenth of its
+// segments. The decoder kept partial output whenever any had been produced, so
+// reading one article of a multi-article NZB inflated cleanly enough to parse,
+// published as a working release, and the only outward sign was the file list
+// failing to load. Nothing downstream can tell "the first 9GB of an 89GB
+// release" from a small release — the judgement has to be made here.
+func TestDecodeSpotBinaryRejectsATruncatedStream(t *testing.T) {
+	nzb := strings.Repeat(`<file subject="x"><segments><segment number="1">abc</segment></segments></file>`, 400)
+	var deflated bytes.Buffer
+	w, _ := flate.NewWriter(&deflated, flate.DefaultCompression)
+	_, _ = w.Write([]byte(nzb))
+	w.Close()
+
+	full := specialZipStr(deflated.String())
+	// Keep the first fifth, the way fetching segment 1 of 5 would.
+	cut := len(full) / 5
+	if cut < 32 {
+		t.Fatalf("fixture too small to truncate meaningfully (%d bytes)", len(full))
+	}
+
+	got, err := decodeSpotBinary([]string{full[:cut]}, true)
+	if err == nil {
+		t.Fatalf("a truncated stream decoded without error into %d bytes — it would have been published", len(got))
+	}
+	if got != nil {
+		t.Errorf("returned %d bytes alongside the error; a caller reading both would publish them", len(got))
+	}
+
+	// And the whole thing still decodes, so the check is not simply refusing
+	// everything.
+	if _, err := decodeSpotBinary([]string{full}, true); err != nil {
+		t.Errorf("the complete stream was rejected too: %v", err)
+	}
+}

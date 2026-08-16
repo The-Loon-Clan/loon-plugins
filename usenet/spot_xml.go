@@ -96,13 +96,42 @@ func ParseSpotXML(values []string) (*SpotXML, error) {
 	return &doc, nil
 }
 
-// NZBSegment is the message-id of the article holding this spot's NZB, or ""
-// when the spot points at none.
+// NZBSegments are the message-ids of the articles holding this spot's NZB, in
+// posting order. Empty when the spot points at none.
+//
+// PLURAL, and that is the whole point. A spot's NZB is one DEFLATE stream cut
+// across as many articles as it takes, so a big release announces several
+// segments and only their concatenation inflates to a document. Reading the
+// first one alone yields a stream that decodes part-way and then stops — which
+// is not a decode failure, it is a shorter NZB that parses far enough to look
+// real. An 89GB release shipped with roughly a tenth of its segments that way,
+// and the only outward sign was the file list failing to load.
+//
+// The same trap already had a warning on it twelve lines up: ParseSpotXML
+// takes the slice of X-Xml pieces rather than a string precisely "so a caller
+// cannot accidentally pass the first header and get a plausible-looking
+// answer". The NZB pointer needed the same treatment and did not have it.
+func (s *SpotXML) NZBSegments() []string {
+	if s == nil {
+		return nil
+	}
+	out := make([]string, 0, len(s.Posting.NZB.Segment))
+	for _, seg := range s.Posting.NZB.Segment {
+		if seg = strings.TrimSpace(seg); seg != "" {
+			out = append(out, seg)
+		}
+	}
+	return out
+}
+
+// NZBSegment is the first segment, kept for the stored column and the
+// "does this spot carry an NZB at all" check. Never use it to FETCH.
 func (s *SpotXML) NZBSegment() string {
-	if s == nil || len(s.Posting.NZB.Segment) == 0 {
+	segs := s.NZBSegments()
+	if len(segs) == 0 {
 		return ""
 	}
-	return strings.TrimSpace(s.Posting.NZB.Segment[0])
+	return segs[0]
 }
 
 // CategoryValue is the numeric category as written in the document ("02"),
