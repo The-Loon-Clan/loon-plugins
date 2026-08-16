@@ -64,16 +64,17 @@
             Your announce URL
         </h2>
     </header>
-    <div class="panel__body panel__body--flush">
-        <dl class="key-value">
-            <div class="key-value__group">
-                <dt>Announce</dt>
-                <dd><code>{{.AnnounceURL}}</code></dd>
-            </div>
-        </dl>
-    </div>
     <div class="panel__body">
-        <p class="text-muted small">
+        {{/* Not a key-value row, which is what this was first. That component
+             right-aligns its <dd> — right for "Size: 3.5 GiB", wrong for a
+             90-character URL, which ended up jammed against the panel edge with
+             a word of label stranded on the far side.
+
+             Full width and left-aligned, so it reads from the start and a
+             triple-click selects the whole thing, which is what somebody is
+             here to do. */}}
+        <p class="mb-0"><code>{{.AnnounceURL}}</code></p>
+        <p class="text-muted small mt-1">
             Paste this into a client that wants a tracker URL directly, or
             download a .torrent from the <a href="/tracker">list</a> &mdash; those
             already carry it.
@@ -123,10 +124,30 @@
                                  requires the reader to know that left means
                                  remaining and that zero means finished; a
                                  member scanning for what they are still
-                                 downloading should not have to. */}}
+                                 downloading should not have to.
+
+                                 NOT "Seeding" and "Downloading", which is what
+                                 this first said. Those claim something is
+                                 happening NOW, and the only fact behind them is
+                                 user_stats.completed — sticky, set once, and
+                                 true forever after. The tiles above DO count
+                                 the present (Store.Totals uses a one-hour
+                                 announce window), so a row tagged "Seeding"
+                                 under a tile reading "Seeding now: 0" had the
+                                 page contradicting itself, with the wrong half
+                                 looking more authoritative because there were
+                                 twelve of it.
+
+                                 "Snatched" is this site's own word for a
+                                 finished download — the tile above and the
+                                 admin table both use it — and neither word says
+                                 anything about right now. */}}
                             <div class="data-table__meta">
-                                {{if .Completed}}<span class="tag tag--success">Seeding</span>
-                                {{else}}<span class="tag tag--warning">Downloading</span>{{end}}
+                                {{if .Completed}}
+                                <span class="tag tag--success" title="You have the whole torrent">Snatched</span>
+                                {{else}}
+                                <span class="tag tag--warning" title="{{bytes .LeftBytes}} still to download">Not finished</span>
+                                {{end}}
                             </div>
                         </div>
                     </div>

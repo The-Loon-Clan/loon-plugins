@@ -99,9 +99,18 @@
                             {{else}}
                             <span class="data-table__title">{{.Name}}</span>
                             {{end}}
-                            <div class="data-table__meta">
-                                <code>{{.InfoHash}}</code>
-                            </div>
+                            {{/* NO info hash here, though there is one on the
+                                 admin page's equivalent table.
+
+                                 A member does not look a torrent up by hash —
+                                 they recognise it by name and click download.
+                                 Forty hex characters under every one of a
+                                 hundred rows is a second line of noise on each,
+                                 and it competes with the name for the eye. A
+                                 mod DOES look one up by hash: it is the
+                                 identity an announce arrives with and the only
+                                 thing a log line names. Same data, different
+                                 reader, different page. */}}
                         </div>
                     </div>
                 </td>
