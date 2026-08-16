@@ -316,6 +316,7 @@ func (h *Handlers) DeliverRequest(c *gin.Context) {
 	// served or released, and announcing it would credit an offerer twice for
 	// one file.
 	if ok2 {
+		h.payEscrow(c, reqID, user.ID)
 		h.emit(c.Request.Context(), EventRequestDelivered, user.ID,
 			RequestDelivered{RequestID: reqID, NzbID: body.NzbID})
 	}
@@ -327,6 +328,35 @@ func (h *Handlers) DeliverRequest(c *gin.Context) {
 		}(reqID, body.NzbID)
 	}
 	deps.JSONOK(c, gin.H{"delivered": ok2})
+}
+
+// payEscrow hands a delivered request's pool to the offerer who filled it.
+//
+// Settlement is claimed in the database first and paid second, and the claim is
+// what makes it exactly once: an agent that retries /deliver, or two workers
+// racing the same callback, would otherwise pay the pool twice. A caller
+// arriving second gets zero and pays nothing.
+//
+// Called after the delivery has already been recorded, so a failure here cannot
+// un-deliver the file — it leaves points owed, which is why it is reported
+// rather than swallowed. Nothing about the member's download depends on it.
+func (h *Handlers) payEscrow(c *gin.Context, reqID, offererID int) {
+	if deps.SettleEscrow == nil {
+		return
+	}
+	ctx := c.Request.Context()
+	pool, _, err := deps.SettleEscrow(ctx, reqID)
+	if err != nil {
+		deps.ReportError(c, "offer/escrow-settle", err)
+		return
+	}
+	if pool <= 0 {
+		return
+	}
+	if _, err := h.core.Points.Award(ctx, int64(offererID), pool,
+		"offer_delivered", "delivered a requested file", int64(reqID)); err != nil {
+		deps.ReportError(c, "offer/escrow-award", err)
+	}
 }
 
 // POST /api/offers/requests/:id/fail — releases the claim back to
@@ -387,9 +417,42 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 		deps.JSONError(c, http.StatusBadRequest, "bucket_id required")
 		return
 	}
+	if body.Points < 0 {
+		deps.JSONError(c, http.StatusBadRequest, "points cannot be negative")
+		return
+	}
 	ctx := c.Request.Context()
-	id, err := deps.CreateRequest(ctx, body.BucketID, user.ID, body.Points, body.Notes)
+
+	// Escrow BEFORE the row, not after.
+	//
+	// The order is the whole guarantee. Debit first and the worst case is a
+	// member charged for a request that failed to write — visible, refundable,
+	// and caught below. Write first and the worst case is a pool an offerer
+	// can see, act on, and never be paid from, which is discovered only after
+	// they have spent the bandwidth.
+	if body.Points > 0 {
+		if _, err := h.core.Points.Deduct(ctx, int64(user.ID), body.Points,
+			"offer_request", "staked on an offer request", int64(body.BucketID)); err != nil {
+			if errors.Is(err, core.ErrInsufficientPoints) {
+				// Business outcome, not a fault: tell them, do not log it.
+				deps.JSONError(c, http.StatusBadRequest, "you do not have that many points")
+				return
+			}
+			deps.ReportError(c, "offer/request-escrow", err)
+			return
+		}
+	}
+
+	id, joined, err := deps.CreateOrJoinRequest(ctx, body.BucketID, user.ID, body.Points, body.Notes)
 	if err != nil {
+		// Give it back. A member charged for a request that does not exist has
+		// no way to notice and no way to ask.
+		if body.Points > 0 {
+			if _, rerr := h.core.Points.Refund(ctx, int64(user.ID), body.Points,
+				"offer_request_failed", "request could not be filed", int64(body.BucketID)); rerr != nil {
+				deps.ReportError(c, "offer/request-escrow-refund", rerr)
+			}
+		}
 		deps.ReportError(c, "offer/request-create", err)
 		return
 	}
@@ -397,7 +460,11 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 	// bucket. Best-effort, fire-and-forget so a slow notif write
 	// can't gate the response. The recipient list excludes the
 	// requester themselves (handled in OnOfferRequest).
-	if deps.NotifyRequest != nil {
+	//
+	// Only for a NEW request. Joining an existing one re-notifies offerers
+	// about something already in their queue, and a request with twenty
+	// backers would ping them twenty times for one file.
+	if !joined && deps.NotifyRequest != nil {
 		go func(bucketID, requestID, requesterID int, name string) {
 			bgCtx := context.Background()
 			ids, err := deps.OfferersFor(bgCtx, bucketID)
@@ -407,9 +474,74 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 			deps.NotifyRequest(bgCtx, ids, requesterID, name, bucketID, requestID)
 		}(body.BucketID, id, user.ID, user.Username)
 	}
-	h.emit(ctx, EventRequestCreated, user.ID,
-		RequestCreated{RequestID: id, BucketID: body.BucketID, Points: body.Points})
-	deps.JSONOK(c, gin.H{"request_id": id})
+	if !joined {
+		h.emit(ctx, EventRequestCreated, user.ID,
+			RequestCreated{RequestID: id, BucketID: body.BucketID, Points: body.Points})
+	}
+	deps.JSONOK(c, gin.H{"request_id": id, "joined": joined})
+}
+
+// attachBackerCounts fills in how many members are behind each bucket's live
+// request. ONE query for the whole page — the counts are decoration on a
+// listing of a hundred rows, and a per-row lookup would be a hundred
+// statements to render a number.
+//
+// Best-effort: a page that shows offers without demand counts is the page we
+// had yesterday, and losing it is not worth failing the render over.
+func attachBackerCounts(ctx context.Context, rows []Bucket) {
+	if len(rows) == 0 || deps.BackerCounts == nil {
+		return
+	}
+	ids := make([]int, 0, len(rows))
+	for _, b := range rows {
+		ids = append(ids, b.BucketID)
+	}
+	counts, err := deps.BackerCounts(ctx, ids)
+	if err != nil {
+		deps.LogError(ctx, "offer/backer-counts", err)
+		return
+	}
+	for i := range rows {
+		rows[i].BackerCount = counts[rows[i].BucketID]
+	}
+}
+
+// POST /offers/request/:id/withdraw — take back a stake.
+//
+// The necessary other half of escrow: points left the balance, so there has to
+// be a way to get them back that is not "wait forever". Withdrawing the last
+// stake cancels the request, because a request nobody is behind would have
+// offerers doing work for an audience that left.
+//
+// A CLAIMED request refuses — an offerer is already downloading it, and pulling
+// the request out from under them is how you teach people not to claim.
+func (h *Handlers) UserWithdrawRequest(c *gin.Context) {
+	user := deps.Viewer(c)
+	if user == nil {
+		deps.JSONError(c, http.StatusUnauthorized, "login required")
+		return
+	}
+	reqID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || reqID <= 0 {
+		deps.JSONError(c, http.StatusBadRequest, "bad id")
+		return
+	}
+	ctx := c.Request.Context()
+	refund, cancelled, err := deps.WithdrawBacking(ctx, reqID, user.ID)
+	if err != nil {
+		deps.ReportError(c, "offer/request-withdraw", err)
+		return
+	}
+	if refund > 0 {
+		// The stake is already gone from the row, so a failure here is a
+		// member genuinely out of pocket — never silenced.
+		if _, rerr := h.core.Points.Refund(ctx, int64(user.ID), refund,
+			"offer_request_withdrawn", "withdrew from an offer request", int64(reqID)); rerr != nil {
+			deps.ReportError(c, "offer/request-withdraw-refund", rerr)
+			return
+		}
+	}
+	deps.JSONOK(c, gin.H{"refunded": refund, "cancelled": cancelled})
 }
 
 // GET /api/offers/buckets/:id — returns the bucket fields (incl.
@@ -519,6 +651,7 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 	if err != nil {
 		deps.LogError(ctx, "offer/page-buckets", err)
 	}
+	attachBackerCounts(ctx, buckets)
 	leaders, err := deps.Leaderboard(ctx, 25)
 	if err != nil {
 		deps.LogError(ctx, "offer/page-leaders", err)

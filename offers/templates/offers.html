@@ -140,8 +140,9 @@
                                 <th style="width:130px;">Tags</th>
                                 <th style="width:90px;">Size</th>
                                 <th style="width:80px;">Offers</th>
+                                <th style="width:80px;">Wanted</th>
                                 <th style="width:80px;">Points</th>
-                                <th style="width:100px;"></th>
+                                <th style="width:180px;"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -182,8 +183,31 @@
                                 <td style="font-size:0.82rem;color:var(--text-muted);">
                                     <strong style="color:var(--text-primary);">{{.ActiveOfferCount}}</strong>{{if ne .ActiveOfferCount .OfferCount}} / {{.OfferCount}}{{end}}
                                 </td>
+                                {{/* Demand. Zero renders as a dash rather than
+                                     "0 wanting" — an empty column reads as
+                                     "nobody yet", a zero reads as a broken
+                                     counter. */}}
+                                <td style="font-size:0.82rem;color:var(--text-muted);">
+                                    {{if .BackerCount}}<strong style="color:var(--bs-warning);">{{.BackerCount}}</strong> wanting{{else}}&mdash;{{end}}
+                                </td>
                                 <td style="font-size:0.82rem;color:var(--text-muted);">{{if .MinPoints}}{{.MinPoints}}{{else}}free{{end}}</td>
-                                <td><button type="button" class="btn btn-primary btn-sm of-request" data-bucket-id="{{.BucketID}}">Request</button></td>
+                                <td>
+                                    {{/* Points are OPTIONAL and default to zero, so the
+                                         one-click path is unchanged for anyone who does
+                                         not care. What they buy is priority: an offerer
+                                         choosing between requests can see which one
+                                         somebody actually staked something on.
+
+                                         The stake is debited on submit, not promised —
+                                         so the input is capped at what the member holds
+                                         and the server refuses the rest. */}}
+                                    <div style="display:flex;gap:4px;align-items:center;">
+                                        <input type="number" class="form-control form-control-sm of-points"
+                                               min="0" step="1" value="0" title="Points to stake — debited now, paid to whoever delivers, returned if you withdraw"
+                                               style="width:64px;font-size:0.78rem;">
+                                        <button type="button" class="btn btn-primary btn-sm of-request" data-bucket-id="{{.BucketID}}">{{if .BackerCount}}Join{{else}}Request{{end}}</button>
+                                    </div>
+                                </td>
                             </tr>
                         {{end}}
                         </tbody>
@@ -297,6 +321,12 @@
     // Request modal-less click — POST + replace button with status line.
     document.querySelectorAll('.of-request').forEach(btn => {
         btn.addEventListener('click', async () => {
+            // The points input sits beside the button in the same cell. Read it
+            // here rather than binding per-row state: a NaN or a negative would
+            // be refused by the server anyway, and 0 is the honest default.
+            const cell   = btn.closest('div');
+            const field  = cell ? cell.querySelector('.of-points') : null;
+            const points = Math.max(0, parseInt((field && field.value) || '0', 10) || 0);
             btn.disabled = true;
             btn.textContent = '…';
             try {
@@ -306,13 +336,23 @@
                         'Content-Type': 'application/json',
                         'X-CSRF-Token': (document.cookie.match(/(?:^|;\s*)csrf_tok=([^;]+)/) || [])[1] || '',
                     },
-                    body: JSON.stringify({bucket_id: parseInt(btn.dataset.bucketId, 10), points: 0, notes: ''}),
+                    body: JSON.stringify({bucket_id: parseInt(btn.dataset.bucketId, 10), points: points, notes: ''}),
                 });
                 const j = await r.json();
                 if (j.ok) {
-                    btn.outerHTML = '<span style="color:#4ade80;font-size:0.78rem;">Request #' + j.request_id + ' filed</span>';
+                    // "joined" and "filed" are genuinely different outcomes and
+                    // saying "filed" for both would tell a member they started
+                    // something when they added themselves to it.
+                    const what = j.joined ? 'Joined request #' : 'Request #';
+                    const tail = points > 0 ? ' (' + points + ' pts staked)' : '';
+                    if (field) field.remove();
+                    btn.outerHTML = '<span style="color:#4ade80;font-size:0.78rem;">' + what + j.request_id + tail + '</span>';
                 } else {
+                    // The server's message is the useful one here — "you do not
+                    // have that many points" is a thing the member can act on,
+                    // and a bare "Failed" is not.
                     btn.textContent = 'Failed';
+                    btn.title = j.error || '';
                     btn.disabled = false;
                 }
             } catch (e) {

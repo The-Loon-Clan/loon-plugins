@@ -101,6 +101,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 	pub := engine.Group("/offers")
 	pub.Use(c.Auth.Authenticate()...)
 	pub.POST("/request", p.handlers.UserCreateRequest)
+	// Withdrawing a stake is the other half of escrow: points left the
+	// balance, so there has to be a way back that is not "wait forever".
+	pub.POST("/request/:id/withdraw", p.handlers.UserWithdrawRequest)
 	pub.GET("", p.handlers.OffersPage)
 	pub.GET("/search", p.handlers.SearchPage)
 	pub.GET("/community", p.handlers.CommunityPage)

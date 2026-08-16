@@ -50,6 +50,11 @@ type Bucket struct {
 	HasPrivate       bool
 	HasPublic        bool
 	HasPersonal      bool
+	// BackerCount is how many members are behind this bucket's live request,
+	// 0 when nobody has asked. It is the demand signal the listing was
+	// missing: an offerer scanning the page could see what they COULD give
+	// and never what anyone WANTED.
+	BackerCount int
 }
 
 // OfferedFile is one staged file behind a bucket, as the detail page shows it.
@@ -300,10 +305,29 @@ type Deps struct {
 	Heartbeat      func(ctx context.Context, userID int, bucketIDs []int) error
 	UserHasTracker func(ctx context.Context, userID, trackerID int) (bool, error)
 	GrantTracker   func(ctx context.Context, userID, trackerID int) error
-	// notes is the member's free text on the request, which the offerer
-	// reads before deciding to take it -- the only prose on the whole
-	// exchange, so it crosses rather than being dropped.
-	CreateRequest  func(ctx context.Context, bucketID, userID, points int, notes string) (int, error)
+	// CreateOrJoinRequest files a request for a bucket, or joins the live
+	// one. A bucket has at most one live request because what is being asked
+	// for is a FILE: two members wanting it is one job for an offerer, not
+	// two identical downloads. The second member joins as a backer, and
+	// `joined` is the only difference the UI has to speak to.
+	//
+	// notes is the member's free text, which the offerer reads before
+	// deciding to take it -- the only prose on the whole exchange, so it
+	// crosses rather than being dropped.
+	CreateOrJoinRequest func(ctx context.Context, bucketID, userID, points int, notes string) (requestID int, joined bool, err error)
+	// WithdrawBacking removes one member's stake and reports what to refund.
+	// The last backer leaving cancels the request.
+	WithdrawBacking func(ctx context.Context, reqID, userID int) (refund int, cancelled bool, err error)
+	// SettleEscrow closes a request's pool EXACTLY ONCE, returning the total
+	// and the stakes behind it. A second call returns zero and no error,
+	// which is what makes a retried delivery callback safe to pay from.
+	SettleEscrow func(ctx context.Context, reqID int) (pool int, backers []RequestBacker, err error)
+	// RequestBackers is who is behind one request, for the detail page.
+	RequestBackers func(ctx context.Context, reqID int) ([]RequestBacker, error)
+	// BackerCounts is bucket id -> backers on its live request, batched
+	// because the listing renders fifty rows and a per-row query would be
+	// fifty statements.
+	BackerCounts func(ctx context.Context, bucketIDs []int) (map[int]int, error)
 	ClaimRequest   func(ctx context.Context, reqID, userID, offerID int, window time.Duration) (bool, error)
 	DeliverRequest func(ctx context.Context, reqID, userID int, nzbID int64) (bool, error)
 	FailRequest    func(ctx context.Context, reqID, userID int) (released bool, err error)
@@ -318,6 +342,18 @@ type Deps struct {
 	NotifyClaimed   func(ctx context.Context, requesterID, requestID int)
 	NotifyDelivered func(ctx context.Context, requesterID, requestID int, nzbID int64)
 	NotifyFailed    func(ctx context.Context, requesterID, requestID int)
+}
+
+// RequestBacker is one member's stake in a request.
+//
+// Points here are ALREADY DEBITED from that member's balance — escrow, not a
+// pledge. That is what makes the pool safe for an offerer to act on: the
+// alternative is finding out after the download that the promise was never
+// covered.
+type RequestBacker struct {
+	UserID   int
+	Username string
+	Points   int
 }
 
 // ExpiredClaim is one request the sweeper reopened, and who was waiting on it.
@@ -362,6 +398,10 @@ func (d *Deps) okAPI() bool {
 		d.UpsertBucket != nil && d.UpsertOffer != nil && d.Heartbeat != nil &&
 		d.UserHasTracker != nil && d.GrantTracker != nil &&
 		d.ClaimRequest != nil && d.DeliverRequest != nil && d.FailRequest != nil &&
+		// SettleEscrow is required on the API half too: delivery is what pays
+		// the pool out, and the api process is where delivery lands. A wiring
+		// that omitted it would take points off members and never pay them.
+		d.SettleEscrow != nil &&
 		d.RequesterOf != nil && d.ListTrackers != nil
 }
 
@@ -372,7 +412,9 @@ func (d *Deps) okWeb() bool {
 		d.Viewer != nil &&
 		d.RecentBuckets != nil && d.Leaderboard != nil && d.RecentDeliveries != nil &&
 		d.TrackerStats != nil && d.AdminRequests != nil && d.AdminStatusCounts != nil &&
-		d.CreateRequest != nil && d.OfferersFor != nil &&
+		d.CreateOrJoinRequest != nil && d.WithdrawBacking != nil &&
+		d.RequestBackers != nil && d.BackerCounts != nil &&
+		d.OfferersFor != nil &&
 		d.SaveTracker != nil && d.DeleteTracker != nil
 }
 
