@@ -152,10 +152,27 @@ func (p *Plugin) indexSpotGroup(ctx context.Context, cfg Config, pool *nntp.Pool
 		g.HighWatermark = high
 	}
 
+	// Consecutive overview failures tolerated before this group is left for the
+	// next pass.
+	//
+	// One failure used to end the group outright, which threw away the other
+	// 199 batches of budget: the first live run did four batches of two hundred
+	// and stopped. frugalusenet answers "511 issue with group" intermittently
+	// mid-walk, and the next attempt on a fresh connection succeeds, so a
+	// hiccup must cost a retry rather than the pass. Bounded, because a range
+	// that fails every time is a real fault and spinning on it would be worse
+	// than stopping.
+	//
+	// The retry is always the SAME range. Skipping past a failure would advance
+	// the watermark over articles nothing ever read, and that loss is silent
+	// and permanent -- the one outcome worth more than a wasted pass.
+	const maxOverviewRetries = 3
+
 	forward := 0
 	// FORWARD first, always. New spots are what a member is waiting for; the
 	// history has waited years and can wait one more pass.
 	mark := g.HighWatermark
+	fails := 0
 	for budget > 0 && ctx.Err() == nil {
 		from, to, ok := spotForwardRange(mark, low, high, batch)
 		if !ok {
@@ -163,8 +180,12 @@ func (p *Plugin) indexSpotGroup(ctx context.Context, cfg Config, pool *nntp.Pool
 		}
 		n, err := p.readSpotRange(ctx, pool, g.Name, from, to)
 		if err != nil {
+			if fails++; fails < maxOverviewRetries {
+				continue
+			}
 			return forward, 0, err
 		}
+		fails = 0
 		forward += n
 		if err := p.st.advanceSpotHigh(ctx, g.Name, to); err != nil {
 			return forward, 0, err
@@ -182,6 +203,7 @@ func (p *Plugin) indexSpotGroup(ctx context.Context, cfg Config, pool *nntp.Pool
 	// reaches it is done for good rather than retried every pass.
 	backfilled := 0
 	back := g.BackWatermark
+	fails = 0
 	for budget > 0 && ctx.Err() == nil {
 		from, to, done, ok := spotBackRange(back, low, batch)
 		if !ok {
@@ -189,8 +211,12 @@ func (p *Plugin) indexSpotGroup(ctx context.Context, cfg Config, pool *nntp.Pool
 		}
 		n, err := p.readSpotRange(ctx, pool, g.Name, from, to)
 		if err != nil {
+			if fails++; fails < maxOverviewRetries {
+				continue
+			}
 			return forward, backfilled, err
 		}
+		fails = 0
 		backfilled += n
 		if err := p.st.lowerSpotBack(ctx, g.Name, from, done); err != nil {
 			return forward, backfilled, err
