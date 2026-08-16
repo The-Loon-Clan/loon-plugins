@@ -164,6 +164,46 @@ func VerifySpot(pub *rsa.PublicKey, messageID string, signature []byte) error {
 	return nil
 }
 
+// Trust labels for a spot, stored on the release as nzbs.origin_trust.
+const (
+	// SpotTrustVerified: signature checked against a key worth checking.
+	SpotTrustVerified = "verified"
+	// SpotTrustWeakKey: the signature is arithmetically valid and proves
+	// nothing, because the key is small enough to forge cheaply.
+	SpotTrustWeakKey = "weak-key"
+	// SpotTrustUnsigned: no key or no signature to check at all.
+	SpotTrustUnsigned = "unsigned"
+)
+
+// SpotTrust turns a VerifySpot result into the label stored with the release.
+//
+// This exists so the import path has ONE place that decides what a
+// verification outcome means, rather than each call site inventing its own
+// mapping — the difference between "unprovable" and "forged" is the whole
+// value of the check, and it is exactly the distinction an ad-hoc `if err !=
+// nil` at the call site would flatten.
+//
+// A false second return means DO NOT IMPORT. Note that a weak key is
+// importable: refusing it would drop half the live feed, and the honest
+// treatment is to carry it with a label saying the signature proved nothing.
+func SpotTrust(err error) (string, bool) {
+	switch {
+	case err == nil:
+		return SpotTrustVerified, true
+	case errors.Is(err, ErrSpotWeakKey):
+		return SpotTrustWeakKey, true
+	case errors.Is(err, ErrSpotBadKey):
+		// An unparseable key is indistinguishable from an absent one for our
+		// purposes: nothing can be checked, so nothing is claimed.
+		return SpotTrustUnsigned, true
+	default:
+		// ErrSpotBadSignature and anything unforeseen. A signature that was
+		// checked and FAILED is the one case that must never reach the index:
+		// it is a positive claim of authorship that did not hold up.
+		return "", false
+	}
+}
+
 // bracketMessageID normalises a message-id to the <id> form that is signed.
 func bracketMessageID(id string) string {
 	id = strings.TrimSpace(id)

@@ -286,3 +286,40 @@ func TestVerifySpotRejectsANilKey(t *testing.T) {
 		t.Error("key with nil modulus was not rejected")
 	}
 }
+
+// The import policy in one place: what a verification outcome means for the
+// release row. The case that matters is the asymmetry — a spot nobody could
+// check is importable, a spot whose signature was checked and FAILED is not.
+func TestSpotTrust(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		err     error
+		label   string
+		import_ bool
+	}{
+		{"verified", nil, SpotTrustVerified, true},
+		{"weak key is kept, not dropped", ErrSpotWeakKey, SpotTrustWeakKey, true},
+		{"nothing to check", ErrSpotBadKey, SpotTrustUnsigned, true},
+		{"checked and failed", ErrSpotBadSignature, "", false},
+		{"unforeseen errors are refused", errors.New("boom"), "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			label, ok := SpotTrust(tc.err)
+			if label != tc.label || ok != tc.import_ {
+				t.Errorf("SpotTrust(%v) = %q,%v want %q,%v", tc.err, label, ok, tc.label, tc.import_)
+			}
+		})
+	}
+}
+
+// The labels are stored in Postgres and read by a template, so a rename here
+// silently mislabels every existing row rather than failing to compile.
+func TestSpotTrustLabelsAreStable(t *testing.T) {
+	for got, want := range map[string]string{
+		SpotTrustVerified: "verified", SpotTrustWeakKey: "weak-key", SpotTrustUnsigned: "unsigned",
+	} {
+		if got != want {
+			t.Errorf("label changed to %q, want %q — migration 315 and browse.html expect the old value", got, want)
+		}
+	}
+}
