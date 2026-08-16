@@ -113,7 +113,12 @@ the site_settings bug shipped because nobody ever did.
 
 Verify: `python scripts/sqllint.py` and `python scripts/audit_access.py` in
 the host; review against this list; for webhooks, a replay test that proves
-the dedupe.
+the dedupe. NOTE the audit's blind spot: it probes destructive POSTs WITH a
+valid token by design (it tests the gate, not the form), so a form that never
+carries a token is invisible to it and simply 403s for every human — which is
+exactly how news's and wiki's admin forms shipped broken. The check that
+catches that is a template test counting `_csrf` inputs per POST form
+(releasegroups' CSRF-per-form invariant is the pattern).
 
 ## 4. Events & exports
 
@@ -159,6 +164,14 @@ plugin building on this one subscribe to, and is it declared?"
       half-returned query must not demote half the membership.
 - [ ] **MUST** — the manual trigger works while the loop is idle, and pause
       is respected on both paths.
+- [ ] **MUST** — a DAEMON job — a held connection (irc, discord), not a sweep
+      — is the exception to the SetIdle rule: "running" IS its honest steady
+      state, with `SetError` on disconnect. Grading the first sweep of this
+      list nearly flagged irc for the missing-SetIdle bug before reading the
+      shape; the rule above applies to work that FINISHES.
+- [ ] **MUST** — `SetIdle`/`SetError` must not fight: a `defer SetIdle(...)`
+      runs after an error path's `SetError` and erases it, so failures display
+      as clean idle runs (found live in the tracker's cheat sweep).
 - [ ] **SHOULD** — a run that changed nothing logs nothing; a run that
       changed something logs the counts ("Promoted 2, demoted 1").
 
