@@ -255,6 +255,7 @@ func (h *Handlers) AdminIndex(c *gin.Context) {
 		postsByTopic[t.ID] = posts
 	}
 	render(c, http.StatusOK, "Wiki — admin", "admin_wiki.html", gin.H{
+		"CSRFToken":    deps.CSRFToken(c),
 		"Topics":       topics,
 		"PostsByTopic": postsByTopic,
 	})
@@ -262,8 +263,9 @@ func (h *Handlers) AdminIndex(c *gin.Context) {
 
 func (h *Handlers) NewTopic(c *gin.Context) {
 	render(c, http.StatusOK, "Wiki topic", "admin_wiki_topic_form.html", gin.H{
-		"Action": "Create",
-		"Icons":  TopicIcons,
+		"CSRFToken": deps.CSRFToken(c),
+		"Action":    "Create",
+		"Icons":     TopicIcons,
 	})
 }
 
@@ -321,9 +323,10 @@ func (h *Handlers) EditTopic(c *gin.Context) {
 	for _, t := range topics {
 		if t.ID == id {
 			render(c, http.StatusOK, "Wiki topic", "admin_wiki_topic_form.html", gin.H{
-				"Action": "Edit",
-				"Topic":  t,
-				"Icons":  TopicIcons,
+				"CSRFToken": deps.CSRFToken(c),
+				"Action":    "Edit",
+				"Topic":     t,
+				"Icons":     TopicIcons,
 			})
 			return
 		}
@@ -357,8 +360,9 @@ func (h *Handlers) NewPost(c *gin.Context) {
 	topicIDStr := c.Query("topic_id")
 	topicID, _ := strconv.Atoi(topicIDStr)
 	render(c, http.StatusOK, "Wiki page", "admin_wiki_post_form.html", gin.H{
-		"Action":  "Create",
-		"TopicID": topicID,
+		"CSRFToken": deps.CSRFToken(c),
+		"Action":    "Create",
+		"TopicID":   topicID,
 	})
 }
 
@@ -394,8 +398,9 @@ func (h *Handlers) EditPost(c *gin.Context) {
 		return
 	}
 	render(c, http.StatusOK, "Wiki page", "admin_wiki_post_form.html", gin.H{
-		"Action": "Edit",
-		"Post":   post,
+		"CSRFToken": deps.CSRFToken(c),
+		"Action":    "Edit",
+		"Post":      post,
 	})
 }
 

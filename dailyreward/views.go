@@ -121,24 +121,35 @@ func (p *Plugin) claim(c *gin.Context) {
 		return
 	}
 	if claimed {
-		// After the claim committed, and only when it did: `claimed` false
-		// means somebody already took today's, and announcing that would
-		// credit a member for a second claim they never made.
-		p.core.Emit(c.Request.Context(), core.Event{
-			Name: EventClaimed, UserID: u.ID,
-			Data: Claimed{Streak: streak, Reward: reward},
-		})
+		// Award FIRST, announce second. The emit sat above the award, so a
+		// failed Award still announced Claimed{Reward: N} — an event asserting
+		// points that were never paid, to every subscriber scoring on it.
+		//
+		// The claim row is already committed either way, so on a failed award
+		// the member's streak advanced and their points did not — that
+		// inconsistency existed before this reorder and is logged loudly; what
+		// the reorder fixes is the LIE. The event now reports Reward: 0 in
+		// that case, which is what actually happened, and `claimed` false
+		// still emits nothing because somebody else took today's.
+		paid := reward
 		if _, err := p.core.Points.Award(c.Request.Context(), u.ID, reward, "earn_daily",
 			fmt.Sprintf("Daily login reward (streak %d)", streak), 0); err != nil {
-			p.core.LoggerFor("dailyreward").Error("award", "err", err)
+			p.core.LoggerFor("dailyreward").Error("award", "err", err, "user", u.ID, "amount", reward)
+			paid = 0
 		}
+		p.core.Emit(c.Request.Context(), core.Event{
+			Name: EventClaimed, UserID: u.ID,
+			Data: Claimed{Streak: streak, Reward: paid},
+		})
 		// Tell the user via the notification pipeline (fans out to the inbox bell,
 		// the logger, and any other channel the host registered). System event,
 		// so no actor.
 		_ = p.core.Notifications.Notify(c.Request.Context(), u.ID, core.Notification{
 			Kind:  "daily_reward",
 			Title: "Daily reward claimed",
-			Body:  fmt.Sprintf("You earned %d points (streak %d).", reward, streak),
+			// paid, not reward: after a failed award "you earned N points" is
+			// exactly the claim the reorder above stopped the event making.
+			Body: fmt.Sprintf("You earned %d points (streak %d).", paid, streak),
 		})
 	}
 	// The widget redraws itself from these; the totals come back from the same

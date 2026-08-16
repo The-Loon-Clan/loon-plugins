@@ -136,3 +136,35 @@ func TestWikiPagesRenderEmpty(t *testing.T) {
 	render1(t, "admin_wiki.html", map[string]any{
 		"Topics": []*Topic{}, "PostsByTopic": map[int][]*Post{}})
 }
+
+// Every POST form must carry the CSRF field.
+//
+// This plugin SHIPPED without the CSRFToken seam: all seven admin forms posted
+// tokenless and the host's CSRF middleware refused each with 403 — the wiki
+// admin could not create or delete anything, and nothing said so. The access
+// audit probes destructive routes WITH a valid token by design (it tests the
+// gate, not the form), so counting tokens in the RENDERED output is the only
+// check that catches this class.
+func TestEveryWikiPostFormCarriesTheCSRFField(t *testing.T) {
+	for name, data := range map[string]map[string]any{
+		"admin_wiki.html": {"Topics": func() []*Topic { ts, _, _ := topicsAndPosts(); return ts }(),
+			"PostsByTopic": func() map[int][]*Post { _, _, bt := topicsAndPosts(); return bt }(),
+			"CSRFToken":    "test-csrf"},
+		"admin_wiki_topic_form.html": {"Action": "/admin/wiki/topics/1", "Icons": TopicIcons,
+			"Topic": sampleTopic(), "CSRFToken": "test-csrf"},
+		"admin_wiki_post_form.html": {"Action": "/admin/wiki/posts/2", "Post": samplePost(),
+			"CSRFToken": "test-csrf"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out := render1(t, name, data)
+			forms := strings.Count(out, `method="POST"`)
+			tokens := strings.Count(out, `name="_csrf" value="test-csrf"`)
+			if forms == 0 {
+				t.Fatal("no POST form rendered — the branch under test did not open")
+			}
+			if tokens != forms {
+				t.Errorf("%d POST forms but %d CSRF fields — a form would 403 on submit", forms, tokens)
+			}
+		})
+	}
+}

@@ -35,6 +35,15 @@ type Deps struct {
 	// Sanitize cleans admin-authored news body HTML before it is
 	// rendered unescaped (the host's news sanitization policy).
 	Sanitize func(html string) string
+	// CSRFToken supplies the double-submit token for the admin forms — the
+	// host's session concern, which is why the plugin asks rather than mints.
+	//
+	// REQUIRED, and its absence was not theoretical: this plugin shipped
+	// without the seam, every admin form posted tokenless, and the host's CSRF
+	// middleware refused the lot with 403 — create and delete were both dead,
+	// and the access audit could not see it because it probes WITH a valid
+	// token by design (it tests the gate, not the form).
+	CSRFToken func(c *gin.Context) string
 }
 
 var deps Deps
@@ -71,8 +80,8 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
-	if deps.RenderPage == nil || deps.Sanitize == nil {
-		return fmt.Errorf("news: SetDeps not called (RenderPage/Sanitize required) — wire it in main() before core.Boot")
+	if deps.RenderPage == nil || deps.Sanitize == nil || deps.CSRFToken == nil {
+		return fmt.Errorf("news: SetDeps not called (RenderPage/Sanitize/CSRFToken required) — wire it in main() before core.Boot")
 	}
 	db := c.Storage.DB()
 	if db == nil {
@@ -317,7 +326,7 @@ func (h *Handlers) NewsList(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed to get news posts")
 		return
 	}
-	render(c, "News — admin", "admin_news.html", gin.H{"Posts": posts})
+	render(c, "News — admin", "admin_news.html", gin.H{"Posts": posts, "CSRFToken": deps.CSRFToken(c)})
 }
 
 func (h *Handlers) CreateNews(c *gin.Context) {
@@ -345,7 +354,7 @@ func (h *Handlers) EditNewsPage(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/admin/news")
 		return
 	}
-	render(c, "News post", "admin_news_form.html", gin.H{"Post": post})
+	render(c, "News post", "admin_news_form.html", gin.H{"Post": post, "CSRFToken": deps.CSRFToken(c)})
 }
 
 func (h *Handlers) UpdateNews(c *gin.Context) {

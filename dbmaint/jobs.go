@@ -337,6 +337,13 @@ func (p *Plugin) runVerify(ctx context.Context) {
 			continue
 		case verifyAborted:
 			p.verify.Log("Stopping: %v", ctx.Err())
+			// SetIdle, not a bare return: this path follows SetRunning, and a
+			// return that reaches neither SetIdle nor SetError leaves the card
+			// showing "running" forever — and the scheduler will not re-trigger
+			// a job it believes is still going, so an aborted verify pass
+			// (a shutdown mid-check, a cancelled context) silently retired the
+			// job until the next restart.
+			p.verify.SetIdle(time.Now().Add(time.Duration(verifyIntervalMin) * time.Minute))
 			return
 		case verifySkipped:
 			skipped++

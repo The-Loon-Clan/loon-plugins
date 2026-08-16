@@ -54,6 +54,14 @@ type Deps struct {
 	// the failure would be silent.
 	Markdown func(string) template.HTML
 
+	// CSRFToken supplies the double-submit token for the five POST forms — the
+	// host's session concern. REQUIRED with the modern contract: this plugin
+	// shipped without it, every form posted tokenless, and the host's CSRF
+	// middleware refused each with 403 — a member could not open a ticket at
+	// all. (The legacy BaseData contract injects the token host-side, which is
+	// why it needs nothing here.)
+	CSRFToken func(c *gin.Context) string
+
 	// PageOffset and Pagination are the host's paging helpers. Passed rather
 	// than copied: the value is consumed by the host's pagination PARTIAL, so
 	// a lifted copy would render correctly until the partial changed.
@@ -113,7 +121,7 @@ func (d *Deps) ready() bool {
 	// name-and-data-map one. Not a mixture — a host that set half of each
 	// would render some pages and blank others.
 	modern := d.RenderPage != nil && d.RenderPagination != nil &&
-		d.RenderEditor != nil && d.Markdown != nil
+		d.RenderEditor != nil && d.Markdown != nil && d.CSRFToken != nil
 	legacy := d.BaseData != nil && d.Pagination != nil
 	return modern || legacy
 }

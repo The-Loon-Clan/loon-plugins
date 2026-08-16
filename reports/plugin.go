@@ -48,6 +48,7 @@ type vm struct {
 	Resolved       bool
 	Page           int
 	PaginationHTML template.HTML
+	CSRFToken      string
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
@@ -93,6 +94,16 @@ func (p *Plugin) Provision(c *core.Core) error {
 	return nil
 }
 
+// csrf reads the host seam, tolerating a host that has not wired it — the
+// form then posts tokenless and the host's middleware answers, which is the
+// pre-seam behaviour rather than a new failure.
+func csrf(c *gin.Context) string {
+	if deps == nil || deps.CSRFToken == nil {
+		return ""
+	}
+	return deps.CSRFToken(c)
+}
+
 func (p *Plugin) Start(ctx context.Context) error { return nil }
 func (p *Plugin) Stop(ctx context.Context) error  { return nil }
 
@@ -121,6 +132,7 @@ func (p *Plugin) render(c *gin.Context) (template.HTML, error) {
 		Resolved:       resolved,
 		Page:           page,
 		PaginationHTML: deps.RenderPagination(page, pageSize, total, base),
+		CSRFToken:      csrf(c),
 	}); err != nil {
 		return "", err
 	}

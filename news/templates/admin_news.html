@@ -21,6 +21,7 @@
                 <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">New Post</div>
                 <div class="card-body">
                     <form method="POST" action="/admin/news">
+                        <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         <div class="mb-3">
                             <label class="form-label" style="font-size:0.85rem;">Title</label>
                             <input type="text" name="title" class="form-control" required maxlength="255" id="new-title">
@@ -80,6 +81,7 @@
                             <a href="/admin/news/{{.ID}}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
                             <form method="POST" action="/admin/news/{{.ID}}/delete" class="d-inline"
                                   onsubmit="return confirm('Delete this post?')">
+                                <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
                             </form>
                         </td>

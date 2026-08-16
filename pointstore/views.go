@@ -89,7 +89,22 @@ func (p *Plugin) buy(c *gin.Context) (template.HTML, error) {
 	}
 	if err := p.st.SetFlair(ctx, u.ID, f.ID); err != nil {
 		p.core.LoggerFor("pointstore").Error("set flair", "err", err)
-		return storeRedirect(c, "err", "Purchase failed.")
+		// REFUND before reporting failure. Deduct has already committed, so
+		// stopping here would keep the member's points and give them nothing —
+		// the debit and the grant are two writes in two stores and cannot share
+		// a transaction, which makes the unwind the contract (store/handlers.go
+		// runs the same shape: deduct, grant, refund on failure).
+		//
+		// A refund that itself fails is reported loudly and NOT retried: at
+		// that point the ledger is the operator's to repair, and the member's
+		// error message says so rather than claiming a clean failure.
+		if _, rerr := p.core.Points.Award(ctx, u.ID, f.Cost, "refund_flair",
+			"Refund: equipping "+f.Name+" failed", 0); rerr != nil {
+			p.core.LoggerFor("pointstore").Error("refund after failed equip",
+				"user", u.ID, "amount", f.Cost, "err", rerr)
+			return storeRedirect(c, "err", "Purchase failed and the refund did too — contact staff.")
+		}
+		return storeRedirect(c, "err", "Purchase failed; your points were refunded.")
 	}
 	return storeRedirect(c, "msg", "Equipped "+f.Name+"!")
 }

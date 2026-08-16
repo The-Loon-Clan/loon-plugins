@@ -36,7 +36,21 @@ func (p *Plugin) runCheatSweep(ctx context.Context) {
 		return
 	}
 	p.cheatJob.SetRunning()
-	defer p.cheatJob.SetIdle(time.Now().Add(CheatSweepInterval))
+	// NOT a bare `defer SetIdle`, which is what this was. A deferred SetIdle
+	// runs AFTER every SetError below and overwrites it, so a failed sweep
+	// displayed as a clean idle run — the job card showed green while the
+	// candidate query was erroring every fifteen minutes. The failure flag only
+	// survives if the deferred call knows to stand down.
+	failed := false
+	defer func() {
+		if !failed {
+			p.cheatJob.SetIdle(time.Now().Add(CheatSweepInterval))
+		}
+	}()
+	fail := func(msg string) {
+		failed = true
+		p.cheatJob.SetError(msg)
+	}
 
 	policy := p.cfg.Cheat.normalise()
 	policy.Enabled = p.cfg.Cheat.Enabled
@@ -46,7 +60,7 @@ func (p *Plugin) runCheatSweep(ctx context.Context) {
 		// feature that does nothing for its first fifteen minutes reads as
 		// broken to whoever just enabled it.
 		if _, err := p.cheat.SaveCheatSnapshots(ctx, time.Now()); err != nil {
-			p.cheatJob.SetError(err.Error())
+			fail(err.Error())
 			return
 		}
 		p.cheatJob.Log("detection off — sampled only (plugins.tracker.cheat.enabled)")
@@ -55,7 +69,7 @@ func (p *Plugin) runCheatSweep(ctx context.Context) {
 
 	cands, err := p.cheat.CheatCandidates(ctx, cheatBatch)
 	if err != nil {
-		p.cheatJob.SetError(err.Error())
+		fail(err.Error())
 		return
 	}
 	flagged := 0
@@ -85,7 +99,7 @@ func (p *Plugin) runCheatSweep(ctx context.Context) {
 	// Only now. See the note at the top of this file.
 	n, err := p.cheat.SaveCheatSnapshots(ctx, time.Now())
 	if err != nil {
-		p.cheatJob.SetError(err.Error())
+		fail(err.Error())
 		return
 	}
 	p.cheatJob.Log("compared %d pair(s), flagged %d, sampled %d", len(cands), flagged, n)

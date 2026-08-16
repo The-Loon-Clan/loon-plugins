@@ -51,6 +51,7 @@
             <div class="card-footer d-flex align-items-center gap-2" style="font-size:0.82rem;background:var(--bg-elevated);">
                 <span style="color:var(--text-muted);">Visibility:</span>
                 <form method="POST" action="/support/{{.Ticket.ID}}/visibility" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     {{if .Ticket.Public}}
                     <span style="color:var(--blue);">🌐 Public</span>
                     <span style="color:var(--text-muted);font-size:0.75rem;">— anyone signed in can read this ticket. Replies are still owner + admin only.</span>
@@ -69,6 +70,7 @@
             <div class="card-footer d-flex align-items-center gap-2 flex-wrap" style="font-size:0.82rem;">
                 <span style="color:var(--text-muted);">Status:</span>
                 <form method="POST" action="/admin/tickets/{{.Ticket.ID}}/update" class="d-flex gap-1 align-items-center">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <select name="status" class="form-select form-select-sm" style="width:auto;font-size:0.8rem;">
                         <option value="open" {{if eq .Ticket.Status "open"}}selected{{end}}>Open</option>
                         <option value="in_progress" {{if eq .Ticket.Status "in_progress"}}selected{{end}}>In Progress</option>
@@ -79,6 +81,7 @@
                 </form>
                 <form method="POST" action="/admin/tickets/{{.Ticket.ID}}/delete" class="ms-auto"
                       onsubmit="return confirm('Delete this ticket permanently?')">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <button type="submit" class="btn btn-sm btn-outline-danger py-0" style="font-size:0.78rem;">Delete Ticket</button>
                 </form>
             </div>
@@ -123,6 +126,7 @@
         <div class="card">
             <div class="card-body">
                 <form method="POST" action="/support/{{.Ticket.ID}}/reply">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     {{.EditorHTML}}
                     <div class="text-end mt-2">
                         <button type="submit" class="btn btn-primary btn-sm">Send Reply</button>
@@ -135,7 +139,6 @@
         {{end}}
 
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Auto-scroll the conversation pane to the most recent message
         // so the reply form is always visible without manual scroll.

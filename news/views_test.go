@@ -1,6 +1,8 @@
 package news
 
 import (
+	"github.com/gin-gonic/gin"
+
 	"html/template"
 	"io/fs"
 	"regexp"
@@ -297,5 +299,46 @@ func TestNoTemplateDrawsItsOwnBreadcrumb(t *testing.T) {
 					"header, and this plugin cannot know what its pages sit under", name, line)
 			}
 		}
+	}
+}
+
+// Every POST form must carry the CSRF field.
+//
+// Not hypothetical hardening: this plugin SHIPPED without the CSRFToken seam,
+// every admin form posted tokenless, and the host's CSRF middleware refused
+// the lot with 403 — create and delete were both dead features. The access
+// audit could not see it because it probes destructive routes WITH a valid
+// token by design; counting tokens in the RENDERED forms is the check that
+// catches this class.
+func TestEveryNewsPostFormCarriesTheCSRFField(t *testing.T) {
+	old := deps
+	deps = Deps{
+		RenderPage: func(*gin.Context, string, template.HTML) {},
+		Sanitize:   func(s string) string { return s },
+		CSRFToken:  func(*gin.Context) string { return "test-csrf" },
+	}
+	t.Cleanup(func() { deps = old })
+
+	post := NewsPost{ID: 3, Title: "T", Slug: "t", Body: "b", Published: true,
+		CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	for name, data := range map[string]gin.H{
+		"admin_news.html":      {"Posts": []NewsPost{post}, "CSRFToken": "test-csrf"},
+		"admin_news_form.html": {"Post": post, "CSRFToken": "test-csrf"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var sb strings.Builder
+			if err := pageTmpl.ExecuteTemplate(&sb, name, data); err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			out := sb.String()
+			forms := strings.Count(out, `method="POST"`)
+			tokens := strings.Count(out, `name="_csrf" value="test-csrf"`)
+			if forms == 0 {
+				t.Fatal("no POST form rendered — the branch under test did not open")
+			}
+			if tokens != forms {
+				t.Errorf("%d POST forms but %d CSRF fields — a form would 403 on submit", forms, tokens)
+			}
+		})
 	}
 }

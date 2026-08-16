@@ -66,10 +66,13 @@ type Warning struct {
 type Standing struct {
 	ActiveWarnings int
 	Warnings       []Warning
-	// AtRisk are snatches that would become warnings if nothing changes. This
-	// is the useful half of the page — a list of warnings is a bill, a list of
-	// what to reseed is something a member can act on.
-	AtRisk []Candidate
+	// NO AtRisk field, and there deliberately was one. At-risk is a POLICY
+	// judgment — snatches evaluated against the live rules — and the store
+	// does not know the policy, so the field could only ever be empty. It was:
+	// nothing populated it, the widget read it anyway, and its count was
+	// permanently zero. Callers compute at-risk from UserSnatches + AtRisk()
+	// the way /hitrun and the widget both do now; a field that cannot be
+	// filled honestly is better not offered.
 }
 
 // activeWindow is how recently a member must have announced to count as still

@@ -15,6 +15,7 @@
                 <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">New Group</div>
                 <div class="card-body">
                     <form method="POST" action="/admin/wiki/topics">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         <div class="row g-3 mb-3">
                             <div class="col-sm-6">
                                 <label class="form-label" style="font-size:0.85rem;">Name <span class="text-danger">*</span></label>
@@ -50,6 +51,7 @@
                 <a href="/admin/wiki/topics/{{.ID}}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
                 <form method="POST" action="/admin/wiki/topics/{{.ID}}/delete" class="d-inline"
                       onsubmit="return confirm('Delete this group and all its posts?')">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
                 </form>
             </div>
@@ -80,6 +82,7 @@
                             <a href="/admin/wiki/posts/{{.ID}}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
                             <form method="POST" action="/admin/wiki/posts/{{.ID}}/delete" class="d-inline"
                                   onsubmit="return confirm('Delete this post?')">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
                             </form>
                         </td>

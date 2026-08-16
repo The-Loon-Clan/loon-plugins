@@ -48,9 +48,11 @@
             <div class="card-body">
                 {{if eq .Action "Edit"}}
                 <form method="POST" action="/admin/wiki/posts/{{.Post.ID}}/update" id="post-form">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <input type="hidden" name="topic_id" value="{{.Post.TopicID}}">
                 {{else}}
                 <form method="POST" action="/admin/wiki/posts" id="post-form">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <input type="hidden" name="topic_id" value="{{.TopicID}}">
                 {{end}}
 

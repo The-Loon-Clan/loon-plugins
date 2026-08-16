@@ -49,6 +49,13 @@ type Deps struct {
 	// decides where that lives on disk (or, later, remotely) and what
 	// public URL it serves under.
 	Files blob.Store
+	// CSRFToken supplies the double-submit token for the admin forms — the
+	// host's session concern. REQUIRED: this plugin shipped without it, all
+	// seven admin forms posted tokenless, and the host's CSRF middleware
+	// refused every one with 403 — the wiki admin could not create or delete
+	// anything. The access audit probes WITH a valid token by design, so only
+	// counting tokens in the rendered forms catches this class.
+	CSRFToken func(c *gin.Context) string
 }
 
 var deps Deps
@@ -81,8 +88,8 @@ func (p *Plugin) Metadata() core.Metadata {
 // domain-specific paths via Engine(), and moving them would break
 // bookmarks, templates, and sitemap URLs for zero gain.
 func (p *Plugin) Provision(c *core.Core) error {
-	if (deps.RenderPage == nil && deps.BaseData == nil) || deps.Markdown == nil || deps.Files == nil {
-		return fmt.Errorf("wiki: SetDeps not called (RenderPage or BaseData, plus Markdown/Files — wire it in main() before core.Boot)")
+	if (deps.RenderPage == nil && deps.BaseData == nil) || deps.Markdown == nil || deps.Files == nil || deps.CSRFToken == nil {
+		return fmt.Errorf("wiki: SetDeps not called (RenderPage or BaseData, plus Markdown/Files/CSRFToken — wire it in main() before core.Boot)")
 	}
 	db := c.Storage.DB()
 	if db == nil {

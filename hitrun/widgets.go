@@ -42,10 +42,27 @@ func (p *Plugin) registerWidgets(c *core.Core) {
 			if err != nil {
 				return "", nil
 			}
+			// The at-risk count is COMPUTED here, the same way /hitrun computes
+			// it: the member's snatches judged by the live policy. It used to
+			// read Standing.AtRisk — a field the store has never populated,
+			// because at-risk is a POLICY judgment and the store deliberately
+			// does not know the policy — so the widget's second figure was
+			// permanently zero and the whole card vanished for a member with
+			// no warnings but plenty about to become one, which is exactly the
+			// member the card exists to warn.
+			atRisk := 0
+			if snatches, err := p.st.UserSnatches(gc.Request.Context(), u.ID); err == nil {
+				pol := p.Policy()
+				for _, s := range snatches {
+					if AtRisk(pol, s.Snatch) {
+						atRisk++
+					}
+				}
+			}
 			// Nothing owed and nothing at risk: render NOTHING. A permanent
 			// "0 warnings" card is a rule shouting at somebody who is keeping
 			// it, and the host drops an empty fragment rather than framing it.
-			if st.ActiveWarnings == 0 && len(st.AtRisk) == 0 {
+			if st.ActiveWarnings == 0 && atRisk == 0 {
 				return "", nil
 			}
 
@@ -55,10 +72,10 @@ func (p *Plugin) registerWidgets(c *core.Core) {
 					`<div class="key-value__group"><dt>Warnings</dt><dd>%d</dd></div>`,
 					st.ActiveWarnings)
 			}
-			if len(st.AtRisk) > 0 {
+			if atRisk > 0 {
 				out += fmt.Sprintf(
 					`<div class="key-value__group"><dt>At risk</dt><dd>%d</dd></div>`,
-					len(st.AtRisk))
+					atRisk)
 			}
 			out += `</dl>`
 			// A way to act, not just a number. The member page lists which

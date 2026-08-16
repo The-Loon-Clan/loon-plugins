@@ -30,7 +30,22 @@ func (h *Handlers) CreateList(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/lists")
 		return
 	}
-	_ = deps.Create(c.Request.Context(), userID, name, desc, public)
+	// The error is checked and the event fires only on success. This line was
+	// `_ = deps.Create(...)`, which had two costs at once: a failed create was
+	// invisible (the member landed back on /lists with their list silently not
+	// there), and EventListCreated — declared in events.go since the start —
+	// had never been emitted by anything. A declared event nothing sends is
+	// indistinguishable from a working one to every subscriber that never
+	// fires.
+	if err := deps.Create(c.Request.Context(), userID, name, desc, public); err != nil {
+		if busCore != nil && busCore.Errors != nil {
+			busCore.Errors.Report(c.Request.Context(), "lists/create", err)
+		}
+		c.Redirect(http.StatusFound, "/lists")
+		return
+	}
+	emit(c.Request.Context(), EventListCreated, userID, name,
+		ListCreated{Name: name, Public: public})
 	c.Redirect(http.StatusFound, "/lists")
 }
 

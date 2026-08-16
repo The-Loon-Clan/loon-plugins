@@ -63,6 +63,14 @@ func render(c *gin.Context, status int, title, name string, data gin.H) {
 		c.HTML(status, name, deps.BaseData(c, data))
 		return
 	}
+	// The token is injected HERE, in the one function every page passes
+	// through, rather than at six call sites where the seventh forgets. The
+	// legacy branch above needs nothing: BaseData hosts inject it themselves.
+	if deps.CSRFToken != nil {
+		if _, ok := data["CSRFToken"]; !ok {
+			data["CSRFToken"] = deps.CSRFToken(c)
+		}
+	}
 	var sb strings.Builder
 	if err := pageTmpl.ExecuteTemplate(&sb, name, data); err != nil {
 		// html/template streams, so a partly-rendered page must not go out as

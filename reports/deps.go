@@ -51,6 +51,12 @@ type Deps struct {
 	// session, and the attribution is the point — a queue that records only
 	// that something was resolved is not an audit trail.
 	ActingAdmin func(c *gin.Context) int
+
+	// CSRFToken supplies the double-submit token for the resolve form — the
+	// host's session concern. Without it the form posted tokenless and the
+	// host's CSRF middleware refused every resolve with 403: the queue could
+	// be read and never cleared.
+	CSRFToken func(c *gin.Context) string
 }
 
 var deps *Deps
