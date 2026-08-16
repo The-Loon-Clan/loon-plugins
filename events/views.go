@@ -223,13 +223,13 @@ func (p *Plugin) actionSaveEvent(gc *gin.Context) (template.HTML, error) {
 		ev.StartsAt = &t
 	}
 
-	// The schema's own CHECK, restated here so the operator gets a sentence
-	// instead of a constraint-violation error page. Both exist on purpose: this
-	// one is the message, the constraint is the guarantee.
-	if ev.Cron == "" && ev.StartsAt == nil {
-		return p.renderPage(ctx, "", "",
-			"An event needs a cron expression or a start date — otherwise it can never open.")
-	}
+	// Neither a cron nor a start date is ALLOWED, and means "opened on demand"
+	// — see migration 003 and ScheduledEvent.Triggered. The schema's CHECK that
+	// used to forbid it is gone, so there is nothing to restate here.
+	//
+	// It is worth knowing what an operator has just created, because it looks
+	// identical to a half-filled form: an event that will sit with no windows
+	// until a goal, a milestone or a switch opens one.
 	// Validate the cron HERE rather than discovering it in the generator's log,
 	// where a typo becomes "my event has no windows" hours later.
 	if ev.Cron != "" {

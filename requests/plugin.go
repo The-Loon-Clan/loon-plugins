@@ -17,6 +17,12 @@ func init() {
 // are no-ops.
 type Plugin struct {
 	handlers *Handlers
+	// process is the kind captured at Provision. Start needs it because the
+	// sweep must run in exactly one place: a web and a worker both running it
+	// would shelve the same rows twice and log two different counts for one
+	// day's work.
+	process string
+	sweeper *backlogSweeper
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -30,6 +36,14 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
+	p.process = c.Process
+	// The sweep is worker work and is built even in a headless worker, which
+	// has no routes at all — hence before the web gate below.
+	if c.Process == "worker" || c.Process == "all" {
+		if jobDeps.ok() {
+			p.sweeper = newBacklogSweeper(*jobDeps)
+		}
+	}
 	if c.Process != "web" && c.Process != "all" {
 		return nil
 	}
@@ -73,7 +87,15 @@ func (p *Plugin) Provision(c *core.Core) error {
 	return nil
 }
 
-func (p *Plugin) Start(ctx context.Context) error { return nil }
-func (p *Plugin) Stop(ctx context.Context) error  { return nil }
+func (p *Plugin) Start(ctx context.Context) error {
+	if p.sweeper != nil {
+		p.sweeper.start(ctx)
+	}
+	return nil
+}
+
+// Stop is a no-op: the sweep's loop derives from Start's context, so cancelling
+// it is what stops the goroutine.
+func (p *Plugin) Stop(ctx context.Context) error { return nil }
 
 var _ core.Plugin = (*Plugin)(nil)

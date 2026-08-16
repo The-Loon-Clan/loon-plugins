@@ -57,6 +57,19 @@ type ScheduledEvent struct {
 // OneOff reports whether this event has no recurrence.
 func (e ScheduledEvent) OneOff() bool { return e.Cron == "" }
 
+// Triggered reports whether this event has no schedule of any kind, and so
+// opens only when something calls OpenWindow.
+//
+// Neither a cron nor a start date. The events schema refused that combination
+// until OpenWindow existed, on the grounds that such a row could never open —
+// which was true while every window came from the generator, and is exactly
+// what a goal-triggered event now needs to say: a name, a description, and
+// nothing about when.
+//
+// Callers that GENERATE windows must skip these; callers that AUDIT events must
+// not report them as broken for having none.
+func (e ScheduledEvent) Triggered() bool { return e.Cron == "" && e.StartsAt == nil }
+
 // Perpetual reports whether a window of this event, once open, never closes.
 // True only for a one-off with no duration — a recurring event with no duration
 // is contiguous rather than perpetual, because the next firing ends the current

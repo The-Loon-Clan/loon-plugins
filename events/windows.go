@@ -45,6 +45,12 @@ func GenerateWindows(ev pluginapi.ScheduledEvent, from, until time.Time) ([]plug
 	if until.Before(from) {
 		return nil, nil
 	}
+	if ev.Triggered() {
+		// Nothing to generate, and NOT an error. Its windows come from
+		// OpenWindow when something happens; inventing one here would open it
+		// on a date nobody chose.
+		return nil, nil
+	}
 
 	if ev.OneOff() {
 		return oneOffWindow(ev, from, until)

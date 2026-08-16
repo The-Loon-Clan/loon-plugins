@@ -172,8 +172,37 @@ func (d *Deps) ok() bool {
 	// refresh) rather than the page.
 }
 
-var deps *Deps
+// JobDeps is the worker side — the backlog sweep, and nothing else.
+//
+// Separate from Deps because the two halves run in different processes: a
+// split-mode web process has the pages and must not run the loop, and a
+// headless worker has the loop and no template stack. Requiring one struct
+// would force each to satisfy the other's seams for no reason.
+type JobDeps struct {
+	// BacklogSweep shelves open requests older than the window and returns
+	// how many moved. The host owns it because deciding WHY each one stalled
+	// reads the host's agent-lock and catalog tables.
+	BacklogSweep func(ctx context.Context, olderThanDays int) (int, error)
+	// BacklogWindowDays is the operator's setting, read every tick so a change
+	// takes effect without a restart. Nil falls back to the default; zero
+	// disables the sweep.
+	BacklogWindowDays func(ctx context.Context) int
+	ReportError       func(ctx context.Context, op string, err error)
+}
+
+func (d *JobDeps) ok() bool {
+	return d != nil && d.BacklogSweep != nil && d.ReportError != nil
+}
+
+var (
+	deps    *Deps
+	jobDeps *JobDeps
+)
 
 // SetDeps hands the plugin its host seams. Called once from the composition
 // root before core.Boot.
 func SetDeps(d Deps) { deps = &d }
+
+// SetJobDeps hands the plugin its worker-side seams. Optional: a host that
+// does not call it simply gets no sweep, and the board still serves.
+func SetJobDeps(d JobDeps) { jobDeps = &d }

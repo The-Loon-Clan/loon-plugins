@@ -90,10 +90,41 @@ func TestOneOffWindows(t *testing.T) {
 		}
 	})
 
-	t.Run("a one-off with no start date is an error, not a silent no-op", func(t *testing.T) {
-		ev := pluginapi.ScheduledEvent{Slug: "nowhen", Enabled: true}
-		if _, err := GenerateWindows(ev, from, until); err == nil {
-			t.Error("accepted an event that can never open")
+	// This used to assert the opposite — "a one-off with no start date is an
+	// error, not a silent no-op" — and that was right while the generator was
+	// the only thing that could open a window. An event with neither a cron nor
+	// a start could never open, so accepting one silently was a definition an
+	// operator would later swear they had configured.
+	//
+	// OpenWindow changed what the combination MEANS. It is now the way to say
+	// "this opens when something happens": a fundraising goal met, a milestone
+	// crossed, a switch thrown. The generator must leave it alone rather than
+	// invent a window on a date nobody chose — and must not error either, since
+	// it runs across every event and one triggered definition would otherwise
+	// fail the whole pass.
+	t.Run("a triggered event generates nothing, and that is not an error", func(t *testing.T) {
+		ev := pluginapi.ScheduledEvent{Slug: "site-freeleech", Enabled: true}
+		ws, err := GenerateWindows(ev, from, until)
+		if err != nil {
+			t.Fatalf("the generator refused a triggered event: %v", err)
+		}
+		if len(ws) != 0 {
+			t.Errorf("the generator invented %d window(s) for an event with no schedule", len(ws))
+		}
+	})
+
+	// A one-off that DOES name a start is unchanged: it is scheduled, and a
+	// missing start on something otherwise scheduled is still a fault. Kept so
+	// relaxing the rule above cannot be read as relaxing it everywhere.
+	t.Run("a one-off is still generated from its start date", func(t *testing.T) {
+		at := from.Add(2 * time.Hour)
+		ev := pluginapi.ScheduledEvent{Slug: "launch", Enabled: true, StartsAt: &at, Duration: time.Hour}
+		ws, err := GenerateWindows(ev, from, until)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ws) != 1 || !ws[0].Starts.Equal(at) {
+			t.Errorf("got %d window(s) starting %v, want 1 starting %v", len(ws), ws, at)
 		}
 	})
 }

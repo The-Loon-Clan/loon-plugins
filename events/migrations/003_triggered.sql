@@ -1,0 +1,22 @@
+-- Events with no schedule at all: opened on demand, by something that happened.
+--
+-- 001 required a cron or a start date, and its comment gave the reason: "A row
+-- with neither a cron nor a start date can never open, and storing one is a
+-- definition an operator will later swear they configured."
+--
+-- That was true when every window came from the generator. It stopped being
+-- true when the capability gained OpenWindow, which materialises a window
+-- because something HAPPENED — a fundraising goal met, a milestone crossed, an
+-- operator throwing a switch. None of those is a recurrence and none has a
+-- start date to write down, so the definition an operator wants is exactly the
+-- one the constraint refused: a name, a description, and nothing about when.
+--
+-- So the CHECK goes, and "neither" now MEANS triggered-only. What replaces the
+-- guarantee it gave is the generator, which skips such an event rather than
+-- inventing a window for it, and the validator, which no longer reports it as
+-- broken for having none.
+--
+-- The second CHECK stays and still means something: a duration with no origin
+-- is unmeasurable from a schedule. A triggered event's duration comes from the
+-- OpenWindow caller instead, which is why it may carry none of its own.
+ALTER TABLE events DROP CONSTRAINT IF EXISTS events_has_a_start;

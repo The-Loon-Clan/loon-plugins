@@ -108,6 +108,14 @@ func validateEvents(evs []pluginapi.ScheduledEvent, cov map[string]Coverage, now
 		c := cov[ev.Slug]
 		subject := "event " + ev.Slug
 
+		if c.Windows == 0 && ev.Triggered() {
+			// Normal. A triggered event has no windows until something opens
+			// one, and most of the time nothing has — a site-freeleech event on
+			// a site that has not met its goal this month is correctly idle,
+			// not broken. Reporting it as an error would train an operator to
+			// ignore this page.
+			continue
+		}
 		if c.Windows == 0 {
 			// ADAPTATION 1: a one-off whose start is beyond the generation
 			// horizon legitimately has no windows yet. Rewards never generated
