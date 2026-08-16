@@ -43,6 +43,7 @@ const (
 	jobNamePrune       = "Usenet Prune"
 	jobNameHealth      = "Usenet Health Check"
 	jobNameNFO         = "Usenet NFO Fetch"
+	jobNameSpotIndex   = "Usenet Spot Index"
 	jobNameJunkProbe   = "Usenet Junk Probe"
 	jobNameRot18Repair = "Usenet Title Repair"
 )
@@ -72,6 +73,7 @@ type Plugin struct {
 	pruneJob     core.Job
 	healthJob    core.Job
 	nfoJob       core.Job
+	spotJob      core.Job
 	junkProbeJob core.Job
 	rot18Job     core.Job
 
@@ -87,6 +89,7 @@ type Plugin struct {
 	buildMu     sync.Mutex
 	healthMu    sync.Mutex
 	nfoMu       sync.Mutex
+	spotMu      sync.Mutex
 	junkProbeMu sync.Mutex
 	rot18Mu     sync.Mutex
 	pruneMu     sync.Mutex
@@ -316,6 +319,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 			"Sweeps stale staging + junk; deletes old NZBs only when nzb_retention_days is set").MarkWrites())
 		p.healthJob = p.duty.wrap(jobNameHealth, c.Scheduler.RegisterJob(jobNameHealth,
 			"STATs stored NZBs to find releases whose articles have expired").MarkOffPeak().MarkWrites())
+		p.spotJob = p.duty.wrap(jobNameSpotIndex, c.Scheduler.RegisterJob(jobNameSpotIndex,
+			"Lists Spotnet spots from free.pt forward, then backfills its history").MarkOffPeak().MarkWrites())
 		p.nfoJob = p.duty.wrap(jobNameNFO, c.Scheduler.RegisterJob(jobNameNFO,
 			"Reads .nfo articles and stores their text (off by default; spends provider bytes)").MarkOffPeak().MarkWrites())
 		p.junkProbeJob = p.duty.wrap(jobNameJunkProbe, c.Scheduler.RegisterJob(jobNameJunkProbe,
@@ -329,6 +334,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		p.pruneJob.SetTrigger(func() { go p.runPrune(p.ctx) })
 		p.healthJob.SetTrigger(func() { go p.runHealthCheck(p.ctx) })
 		p.nfoJob.SetTrigger(func() { go p.runNFO(p.ctx) })
+		p.spotJob.SetTrigger(func() { go p.runSpotIndex(p.ctx) })
 		p.junkProbeJob.SetTrigger(func() { go p.runJunkProbe(p.ctx) })
 		p.rot18Job.SetTrigger(func() { go p.runRot18Repair(p.ctx) })
 		p.svc.triggerCrawl = func() { go p.runCrawl(p.ctx) }
@@ -401,6 +407,11 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// Boot backfill after the forward crawl has had a pass to seed watermarks.
 	p.core.Scheduler.RunLoop(ctx, p.backfillJob, 3*time.Minute, backfillInterval, p.runBackfill)
 	p.core.Scheduler.RunLoop(ctx, p.buildJob, 90*time.Second, interval, p.runBuild)
+	// Later boot delay than the crawler: on a cold start the crawler should
+	// have the pool to itself while it catches up on what members are actually
+	// waiting for.
+	p.core.Scheduler.RunLoop(ctx, p.spotJob, 4*time.Minute,
+		time.Duration(p.effective(ctx).SpotIntervalMin)*time.Minute, p.runSpotIndex)
 	p.core.Scheduler.RunLoop(ctx, p.tagJob, 5*time.Minute,
 		time.Duration(p.cfg.TagFillIntervalMin)*time.Minute, p.runTagFill)
 	p.core.Scheduler.RunLoop(ctx, p.pruneJob, 10*time.Minute,

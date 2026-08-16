@@ -186,7 +186,7 @@ func tabForAction(path string) string {
 	case strings.HasSuffix(path, "/crawl"), strings.HasSuffix(path, "/backfill"),
 		strings.HasSuffix(path, "/reset-backfill"):
 		return "crawlers"
-	case strings.HasSuffix(path, "/spot-probe"):
+	case strings.HasSuffix(path, "/spot-probe"), strings.HasSuffix(path, "/spot-enable"):
 		return "spots"
 	case strings.HasSuffix(path, "/filter-add"), strings.HasSuffix(path, "/filter-toggle"),
 		strings.HasSuffix(path, "/filter-del"), strings.HasSuffix(path, "/filter-reset"):

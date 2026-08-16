@@ -52,6 +52,15 @@ type GroupStore interface {
 	allGroups(ctx context.Context, query string, limit int) ([]pluginapi.GroupInfo, error)
 	activeGroups(ctx context.Context, limit int) ([]groupRow, error)
 	activeGroupsForBackbone(ctx context.Context, backbone string, limit int, holdLow bool) ([]groupRow, error)
+
+	// Spotnet index (spot_store.go).
+	upsertSpots(ctx context.Context, rows []spotRow) (int, error)
+	spotGroups(ctx context.Context) ([]spotGroup, error)
+	setSpotGroupExtent(ctx context.Context, name string, low, high int64) error
+	advanceSpotHigh(ctx context.Context, name string, high int64) error
+	lowerSpotBack(ctx context.Context, name string, back int64, done bool) error
+	countSpots(ctx context.Context) (spotCounts, error)
+	setGroupKind(ctx context.Context, name, kind string) error
 	// criticalBackfillPending reports whether any CRITICAL group still has
 	// history to pull on this backbone — the condition that holds the low tier.
 	criticalBackfillPending(ctx context.Context, backbone string) (backfillPending, error)

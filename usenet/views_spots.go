@@ -55,6 +55,16 @@ func (p *Plugin) renderSpots(ctx context.Context) (template.HTML, error) {
 			}
 		}
 	}
+	// Best-effort, both of them: a counts query that fails should not blank a
+	// page whose other half explains how to turn the feature on.
+	counts, cerr := p.st.countSpots(ctx)
+	if cerr != nil {
+		p.reportErr(ctx, "usenet/spot-counts", cerr)
+	}
+	groups, gerr := p.st.spotGroups(ctx)
+	if gerr != nil {
+		p.reportErr(ctx, "usenet/spot-groups-view", gerr)
+	}
 	return p.frag("spots.html", map[string]any{
 		"Group":        SpotGroup,
 		"MinKeyBits":   MinSpotKeyBits,
@@ -62,9 +72,12 @@ func (p *Plugin) renderSpots(ctx context.Context) (template.HTML, error) {
 		"HaveProbe":    have,
 		"ProbeAge":     humanSince(probe.At),
 		"HaveProvider": haveProvider,
-		// The importer is the missing half. Stated as data rather than prose
-		// in the template so that wiring it later flips one boolean.
-		"ImportWired": false,
+		"Counts":       counts,
+		"Groups":       spotGroupVMs(groups),
+		"Indexing":     len(groups) > 0,
+		// The fetch pass is the missing half. Stated as data rather than prose
+		// so that wiring it later flips one boolean.
+		"FetchWired": false,
 	})
 }
 
@@ -131,4 +144,79 @@ func (p *Plugin) actionProbeSpots(gc *gin.Context) (template.HTML, error) {
 		return settingsRedirect(gc, "err", "spot probe: "+probe.Err)
 	}
 	return settingsRedirect(gc, "msg", probe.Summary())
+}
+
+// spotGroupVM is one spot group's progress, as the tab shows it.
+type spotGroupVM struct {
+	Name      string
+	Indexed   string
+	Remaining int64
+	Done      bool
+	Percent   int
+}
+
+// spotGroupVMs turns watermark state into "how much of the history is in".
+//
+// Measured against what the SERVER still holds (server_high - server_low), not
+// against the group's whole numbering: articles below server_low expired years
+// ago and can never be read, so counting them would pin the bar short of 100%
+// forever and make a finished backfill look stuck.
+func spotGroupVMs(gs []spotGroup) []spotGroupVM {
+	out := make([]spotGroupVM, 0, len(gs))
+	for _, g := range gs {
+		vm := spotGroupVM{Name: g.Name, Done: g.BackfillDone}
+		span := g.ServerHigh - g.ServerLow
+		if span <= 0 {
+			out = append(out, vm)
+			continue
+		}
+		back := g.BackWatermark
+		if back <= 0 {
+			back = g.ServerHigh
+		}
+		read := g.ServerHigh - back
+		if g.BackfillDone {
+			read = span
+		}
+		if read < 0 {
+			read = 0
+		}
+		vm.Remaining = back - g.ServerLow
+		if vm.Remaining < 0 || g.BackfillDone {
+			vm.Remaining = 0
+		}
+		vm.Percent = int(read * 100 / span)
+		if vm.Percent > 100 {
+			vm.Percent = 100
+		}
+		vm.Indexed = humanCount(read)
+		out = append(out, vm)
+	}
+	return out
+}
+
+// humanCount keeps six- and seven-figure article counts readable in a table.
+func humanCount(n int64) string {
+	switch {
+	case n >= 1_000_000:
+		return strconv.FormatFloat(float64(n)/1e6, 'f', 1, 64) + "M"
+	case n >= 1_000:
+		return strconv.FormatFloat(float64(n)/1e3, 'f', 1, 64) + "k"
+	default:
+		return strconv.FormatInt(n, 10)
+	}
+}
+
+// actionEnableSpots marks the Spotnet index group as one, and activates it.
+//
+// A button rather than documentation: the group has to exist in newsgroups
+// with kind='spots' before the pass will look at it, and "add free.pt on the
+// Newsgroups tab, then set a column we do not expose" is not an instruction
+// anyone should have to follow.
+func (p *Plugin) actionEnableSpots(gc *gin.Context) (template.HTML, error) {
+	ctx := gc.Request.Context()
+	if err := p.st.setGroupKind(ctx, SpotGroup, "spots"); err != nil {
+		return settingsRedirect(gc, "err", err.Error())
+	}
+	return settingsRedirect(gc, "msg", SpotGroup+" is now indexed as a Spotnet source — the Spot Index job will pick it up on its next pass")
 }

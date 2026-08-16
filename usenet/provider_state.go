@@ -115,6 +115,10 @@ func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, 
 			   LEFT JOIN newsgroup_state st
 			     ON st.group_name = g.name AND st.backbone = $1
 			  WHERE g.active = TRUE
+			    -- Spot groups belong to the spot pass. Running the assembler
+			    -- over 5.9M one-article postings would stage millions of
+			    -- subjects that can never complete a set.
+			    AND g.kind <> 'spots'
 			  ORDER BY `+tierOrderSQL+`, g.sort_order, g.name`, backbone) // sqllint:allow constant tier-rank expression, no input
 	})
 	if err != nil {

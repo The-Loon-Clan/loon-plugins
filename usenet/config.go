@@ -199,9 +199,16 @@ type Config struct {
 	// account's bytes are finite and metered. An operator should choose to
 	// spend them rather than discover the choice was made for them by an
 	// upgrade.
-	NFOEnabled     bool `json:"nfo_enabled"`      // read .nfo articles at all (default false)
-	NFOIntervalMin int  `json:"nfo_interval_min"` // pass cadence (default 60)
-	NFOBatchSize   int  `json:"nfo_batch_size"`   // releases per pass (default 100)
+	NFOEnabled bool `json:"nfo_enabled"` // read .nfo articles at all (default false)
+	// Spotnet. The index pass is cheap by design -- one XOVER round trip per
+	// SpotBatchSize articles -- so its budget is expressed in BATCHES, and a
+	// full history sweep is a few thousand of them rather than millions.
+	SpotIntervalMin int `json:"spot_interval_min"` // pass cadence (default 15)
+	SpotBatchSize   int `json:"spot_batch_size"`   // articles per XOVER (default 1000)
+	SpotMaxBatches  int `json:"spot_max_batches"`  // XOVER round trips per pass, forward + backfill (default 200)
+
+	NFOIntervalMin int `json:"nfo_interval_min"` // pass cadence (default 60)
+	NFOBatchSize   int `json:"nfo_batch_size"`   // releases per pass (default 100)
 	// NFOBudgetMB caps the bytes ONE PASS may read. The genuinely new control
 	// this feature needs: providers meter bytes, so unlike connection pressure
 	// -- which the pool already expresses and TryDo already yields to -- there
@@ -382,6 +389,15 @@ func (c *Config) applyDefaults() {
 	}
 	if c.HealthIntervalMin <= 0 {
 		c.HealthIntervalMin = 60
+	}
+	if c.SpotIntervalMin <= 0 {
+		c.SpotIntervalMin = defaultSpotIntervalMin
+	}
+	if c.SpotBatchSize <= 0 {
+		c.SpotBatchSize = defaultSpotBatchSize
+	}
+	if c.SpotMaxBatches <= 0 {
+		c.SpotMaxBatches = defaultSpotMaxBatches
 	}
 	if c.NFOIntervalMin <= 0 {
 		c.NFOIntervalMin = 60

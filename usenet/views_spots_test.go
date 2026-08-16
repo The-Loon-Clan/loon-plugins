@@ -11,10 +11,22 @@ import (
 // spotsData builds the template's data map the way renderSpots does. Kept in
 // one place so a field added to the view cannot be forgotten in the tests.
 func spotsData(probe spotProbe, have, haveProvider bool) map[string]any {
+	return spotsDataIndexing(probe, have, haveProvider, nil, spotCounts{})
+}
+
+// spotsDataIndexing mirrors renderSpots EXACTLY. If the two drift, the render
+// tests keep passing while the sections they were written to cover stop being
+// reached — a map lookup that misses is not an error in html/template, it is a
+// false branch. Keeping one constructor is what stops that.
+func spotsDataIndexing(probe spotProbe, have, haveProvider bool, groups []spotGroup, c spotCounts) map[string]any {
 	return map[string]any{
 		"Group": SpotGroup, "MinKeyBits": MinSpotKeyBits,
 		"Probe": probe, "HaveProbe": have, "ProbeAge": humanSince(probe.At),
-		"HaveProvider": haveProvider, "ImportWired": false,
+		"HaveProvider": haveProvider,
+		"Counts":       c,
+		"Groups":       spotGroupVMs(groups),
+		"Indexing":     len(groups) > 0,
+		"FetchWired":   false,
 	}
 }
 
@@ -58,6 +70,19 @@ func TestSpotsTabRendersInEveryState(t *testing.T) {
 			[]string{"5903617", "verified", "weak key", "bad signature", "384", "1024", "1h ago"}},
 		{"no provider disables the button", spotsData(spotProbe{}, false, false),
 			[]string{"needs an enabled provider", "disabled"}},
+		// Not yet indexing: the tab must offer the button that turns it on
+		// rather than describing a column nobody can set.
+		{"indexing off offers the enable button", spotsData(spotProbe{}, false, true),
+			[]string{"spot-enable", "Index " + SpotGroup, "off"}},
+		{"indexing mid-backfill", spotsDataIndexing(spotProbe{}, false, true,
+			[]spotGroup{{Name: SpotGroup, ServerLow: 3118, ServerHigh: 5906734, BackWatermark: 3000000}},
+			spotCounts{Total: 2906734, Unfetched: 2906734, Verified: 0}),
+			[]string{"2906734", "backfilling", "2.9M", "49%"}},
+		{"backfill complete", spotsDataIndexing(spotProbe{}, false, true,
+			[]spotGroup{{Name: SpotGroup, ServerLow: 3118, ServerHigh: 5906734,
+				BackWatermark: 3118, BackfillDone: true}},
+			spotCounts{Total: 5903616, Verified: 2951808, WeakKey: 2951808}),
+			[]string{"backfill complete", "100%"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := renderSpotsTemplate(t, tc.data)

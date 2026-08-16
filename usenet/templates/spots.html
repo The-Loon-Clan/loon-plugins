@@ -30,20 +30,96 @@
           </td>
         </tr>
         <tr>
-          <td>Import</td>
+          <td>Index (headers)</td>
           <td>
-            {{if .ImportWired}}<span class="badge bg-success bg-opacity-25 text-success">running</span>
+            {{if .Indexing}}<span class="badge bg-success bg-opacity-25 text-success">indexing</span>
+            {{else}}<span class="badge bg-secondary bg-opacity-25 text-secondary">off</span>{{end}}
+          </td>
+          <td style="opacity:.7">
+            Reads <code>{{.Group}}</code> forward, then backfills its history.
+            One round trip per thousand articles, so the whole archive is
+            reachable rather than theoretical.
+          </td>
+        </tr>
+        <tr>
+          <td>Fetch (documents)</td>
+          <td>
+            {{if .FetchWired}}<span class="badge bg-success bg-opacity-25 text-success">running</span>
             {{else}}<span class="badge bg-secondary bg-opacity-25 text-secondary">not built</span>{{end}}
           </td>
           <td style="opacity:.7">
-            {{if not .ImportWired}}Nothing writes <code>origin='spot'</code> yet, so the
-            browse filter and the Spot badge are live but will match nothing. The
-            remaining work is listing <code>{{.Group}}</code> against its own
-            watermark and fetching each spot&rsquo;s NZB by message-id.{{end}}
+            {{if not .FetchWired}}The expensive half: one article fetch per spot for the
+            title, description and NZB pointer, then the NZB itself from
+            <code>alt.binaries.ftd</code>. Until it exists nothing writes
+            <code>origin='spot'</code>, so the browse filter and the Spot badge
+            are live but match nothing.{{end}}
           </td>
         </tr>
       </tbody>
     </table>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header">Index progress</div>
+  <div class="card-body">
+    {{if .Indexing}}
+    <div class="row g-2 mb-3">
+      <div class="col-6 col-md-3">
+        <div class="p-2 rounded" style="background:rgba(255,255,255,.03)">
+          <div style="font-size:1.3rem;line-height:1.1">{{.Counts.Total}}</div>
+          <div style="font-size:.75rem;opacity:.6">spots indexed</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="p-2 rounded" style="background:rgba(255,255,255,.03)">
+          <div style="font-size:1.3rem;line-height:1.1">{{.Counts.Unfetched}}</div>
+          <div style="font-size:.75rem;opacity:.6">awaiting a document fetch</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="p-2 rounded" style="background:rgba(255,255,255,.03)">
+          <div style="font-size:1.3rem;line-height:1.1">{{.Counts.Verified}}</div>
+          <div style="font-size:.75rem;opacity:.6">verified</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="p-2 rounded" style="background:rgba(255,255,255,.03)">
+          <div style="font-size:1.3rem;line-height:1.1">{{.Counts.WithNZB}}</div>
+          <div style="font-size:.75rem;opacity:.6">with an NZB pointer</div>
+        </div>
+      </div>
+    </div>
+
+    <table class="table table-sm mb-0" style="font-size:.85rem">
+      <thead><tr><th>group</th><th>history read</th><th>remaining</th><th></th></tr></thead>
+      <tbody>
+        {{range .Groups}}
+        <tr>
+          <td><code>{{.Name}}</code></td>
+          <td>{{.Indexed}} ({{.Percent}}%)</td>
+          <td>{{if .Done}}&mdash;{{else}}{{.Remaining}}{{end}}</td>
+          <td>
+            {{if .Done}}<span class="badge bg-success bg-opacity-25 text-success">backfill complete</span>
+            {{else}}<span class="badge bg-info bg-opacity-25 text-info">backfilling</span>{{end}}
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="4" style="opacity:.6">No spot groups yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p style="opacity:.75;font-size:.85rem;margin:0 0 .8rem">
+      Nothing is being indexed. Enabling marks <code>{{.Group}}</code> as a
+      Spotnet source; the Spot Index job then reads it forward and backfills the
+      history behind it. It is kept off the ordinary crawler, whose assembler
+      would stage millions of one-article subjects that can never complete.
+    </p>
+    <form method="post" action="/admin/p/usenet/spot-enable">
+      <button class="btn btn-sm btn-outline-primary">Index {{.Group}}</button>
+    </form>
+    {{end}}
   </div>
 </div>
 
