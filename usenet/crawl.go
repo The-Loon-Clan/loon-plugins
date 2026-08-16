@@ -311,8 +311,10 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 		// on -- the point is to use connections the crawler does not want,
 		// and "the crawler just staged nothing" is the clearest statement of
 		// that there is. runNFO returns immediately when the feature is off,
-		// which is the default.
+		// which is the default. Image fetch rides the same dispatch on the
+		// same terms.
 		go p.runNFO(ctx)
+		go p.runImage(ctx)
 	}
 }
 

@@ -227,7 +227,11 @@
         </label>
         <label class="d-block small mb-1">
             <input type="hidden" name="has_nfo_enabled" value="1">
-            <input type="checkbox" name="nfo_enabled" {{if .NFOEnabled}}checked{{end}}> Read NFO articles (fetches the .nfo of releases that have one and stores the text — the only job here that spends provider bytes, so it is off until you choose it; bounded by the NFO budget above)
+            <input type="checkbox" name="nfo_enabled" {{if .NFOEnabled}}checked{{end}}> Read NFO articles (fetches the .nfo of releases that have one and stores the text — spends provider bytes, so it is off until you choose it; bounded by the NFO budget above)
+        </label>
+        <label class="d-block small mb-1">
+            <input type="hidden" name="has_image_enabled" value="1">
+            <input type="checkbox" name="image_enabled" {{if .ImageEnabled}}checked{{end}}> Read proof/sample images (fetches the proof JPG or sample PNG of releases whose document lists a small one, and stores it as a release screenshot awaiting approval — spends provider bytes; bounded by the image budget above)
         </label>
         <label class="d-block small mb-1">
             <input type="hidden" name="has_junk_probe_enabled" value="1">

@@ -751,6 +751,56 @@ func LookupReleaseNFOStore(c *core.Core) (ReleaseNFOStore, bool) {
 	return s, ok
 }
 
+// UsenetImageStoreName is the registry key for the host's proof-image store —
+// the second body-fetch feature, same seam shape as NFO.
+const UsenetImageStoreName = "usenet.imagestore"
+
+// ImageCandidate is one release whose proof image is known but unfetched.
+//
+// Unlike an NFO, an image larger than one article spans segments and is
+// useless without every one of them, so the whole list travels — bounded by
+// the host at scan time (small files only), never hundreds of ids.
+type ImageCandidate struct {
+	ID         int64
+	MessageIDs []string
+	// Group is advisory, as on NFOCandidate: some providers require a group
+	// to be selected before an article can be fetched by message-id.
+	Group string
+}
+
+// ReleaseImageStore is the host's side of proof-image extraction. The plugin
+// fetches and decodes; what "storing an image for a release" means — files on
+// disk, an approval queue, a thumbnail pipeline — belongs entirely to the
+// host.
+type ReleaseImageStore interface {
+	// ImageCandidates returns up to limit releases with a recorded image file
+	// and no stored images yet. The host decides the order; newest-first is
+	// the sensible default for the same reason as NFOs.
+	ImageCandidates(ctx context.Context, limit int) ([]ImageCandidate, error)
+
+	// StoreReleaseImage hands the host one decoded image (already
+	// signature-checked as JPEG or PNG by the plugin). The host owns
+	// validation beyond that, storage, and whether it needs approval before
+	// members see it.
+	StoreReleaseImage(ctx context.Context, id int64, data []byte) error
+
+	// MarkImageUnavailable / RecordImageAttemptFailure carry the same
+	// contract as their NFO counterparts: permanent write-off vs a counted
+	// transport failure, with the ceiling decided by the caller.
+	MarkImageUnavailable(ctx context.Context, id int64, reason string) error
+	RecordImageAttemptFailure(ctx context.Context, id int64) (attempts int, err error)
+}
+
+// LookupReleaseImageStore resolves the host-registered image store, if any.
+func LookupReleaseImageStore(c *core.Core) (ReleaseImageStore, bool) {
+	v, ok := c.Lookup(UsenetImageStoreName)
+	if !ok {
+		return nil, false
+	}
+	s, ok := v.(ReleaseImageStore)
+	return s, ok
+}
+
 // UsenetRetitleStoreName is an OPTIONAL capability a host registers so the
 // plugin can repair titles it can PROVE it mis-stored.
 //

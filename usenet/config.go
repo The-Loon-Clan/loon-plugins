@@ -252,6 +252,16 @@ type Config struct {
 	// ceiling and restores retry-forever.
 	NFOMaxRetries int `json:"nfo_max_retries"` // transport failures before write-off (default 3)
 
+	// Proof-image extraction (image.go), the second body-fetch feature. Same
+	// default-off reasoning as NFO — it spends metered provider bytes — and a
+	// bigger per-item cost: a proof JPG spans several whole articles where an
+	// NFO is one small one.
+	ImageEnabled     bool `json:"image_enabled"`      // fetch proof images at all (default false)
+	ImageIntervalMin int  `json:"image_interval_min"` // pass cadence (default 60)
+	ImageBatchSize   int  `json:"image_batch_size"`   // releases per pass (default 25)
+	ImageBudgetMB    int  `json:"image_budget_mb"`    // per-pass byte ceiling (default 128)
+	ImageMaxRetries  int  `json:"image_max_retries"`  // transport failures before write-off (default 3)
+
 	// NNTP transport bounds. Per-provider behavior lives on the servers table;
 	// these are the plugin-wide dial/operation limits every pool is built with.
 	// DialTimeoutSec bounds one connect+greeting attempt. OpTimeoutSec bounds
@@ -436,6 +446,20 @@ func (c *Config) applyDefaults() {
 	} else if c.NFOMaxRetries == 0 {
 		c.NFOMaxRetries = 3
 	}
+	if c.ImageIntervalMin <= 0 {
+		c.ImageIntervalMin = 60
+	}
+	if c.ImageBatchSize <= 0 {
+		c.ImageBatchSize = 25
+	}
+	if c.ImageBudgetMB <= 0 {
+		c.ImageBudgetMB = 128
+	}
+	if c.ImageMaxRetries < 0 {
+		c.ImageMaxRetries = 0 // explicit opt-out: retry forever
+	} else if c.ImageMaxRetries == 0 {
+		c.ImageMaxRetries = 3
+	}
 	if c.HealthBatchSize <= 0 {
 		c.HealthBatchSize = 50
 	}
@@ -519,6 +543,10 @@ func (c *Config) knobFields() map[string]*int {
 		"nfo_batch_size":                &c.NFOBatchSize,
 		"nfo_budget_mb":                 &c.NFOBudgetMB,
 		"nfo_max_retries":               &c.NFOMaxRetries,
+		"image_interval_min":            &c.ImageIntervalMin,
+		"image_batch_size":              &c.ImageBatchSize,
+		"image_budget_mb":               &c.ImageBudgetMB,
+		"image_max_retries":             &c.ImageMaxRetries,
 		"junk_probe_interval_min":       &c.JunkProbeIntervalMin,
 		"rot18_repair_interval_min":     &c.Rot18RepairIntervalMin,
 		"rot18_repair_max_min":          &c.Rot18RepairMaxMin,
@@ -585,6 +613,7 @@ func (c *Config) boolFields() map[string]*bool {
 		// the box -- which is the shape of setting this project already
 		// decided against.
 		"nfo_enabled":          &c.NFOEnabled,
+		"image_enabled":        &c.ImageEnabled,
 		"junk_probe_enabled":   &c.JunkProbeEnabled,
 		"rot18_repair_enabled": &c.Rot18RepairEnabled,
 	}

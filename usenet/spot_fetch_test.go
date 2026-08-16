@@ -222,6 +222,87 @@ func TestAssembledReleaseOriginIsOptional(t *testing.T) {
 	}
 }
 
+// deflateOf compresses a payload as one raw DEFLATE stream, the way PHP's
+// gzdeflate does.
+func deflateOf(t *testing.T, payload string) string {
+	t.Helper()
+	var b bytes.Buffer
+	w, _ := flate.NewWriter(&b, flate.DefaultCompression)
+	if _, err := w.Write([]byte(payload)); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	return b.String()
+}
+
+// Some posting tools cut the DOCUMENT and deflate each piece on its own, so
+// the wire carries several complete streams back to back. flate stops at the
+// first final block — reading one stream silently kept a third of the document
+// and published it, which is how an 89GB pack shipped describing 38GB.
+func TestDecodeSpotBinaryJoinsConsecutiveStreams(t *testing.T) {
+	const a = `<?xml version="1.0"?><nzb><file subject="p1"><segments>`
+	const b = `<segment number="1">abc@x</segment>`
+	const c = `</segments></file></nzb>`
+	wire := specialZipStr(deflateOf(t, a) + deflateOf(t, b) + deflateOf(t, c))
+
+	got, err := decodeSpotBinary([]string{wire}, true)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if string(got) != a+b+c {
+		t.Errorf("joined %d bytes, want %d:\n%q", len(got), len(a+b+c), got)
+	}
+}
+
+// Trailing bytes that are NOT another stream must not fail a decode that
+// already produced a complete stream — some tools pad the final article. The
+// XML validation is what judges completeness, not the padding.
+func TestDecodeSpotBinaryToleratesTrailingJunk(t *testing.T) {
+	const doc = `<nzb><file subject="x"><segments><segment>a@b</segment></segments></file></nzb>`
+	wire := specialZipStr(deflateOf(t, doc) + "\x00\x00\x00\x00")
+
+	got, err := decodeSpotBinary([]string{wire}, true)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if string(got) != doc {
+		t.Errorf("got %q", got)
+	}
+}
+
+// A VALID stream carrying a TRUNCATED document is the case only validation can
+// catch: the poster's own tooling cut the XML before it was ever compressed,
+// so every byte-level check passes and the release describes a fraction of
+// the file.
+func TestValidateNZBDocument(t *testing.T) {
+	const whole = `<?xml version="1.0" encoding="iso-8859-1" ?>
+<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">
+  <file poster="x@y" date="1" subject="a"><segments>
+    <segment bytes="100" number="1">one@x</segment>
+    <segment bytes="100" number="2">two@x</segment>
+    <segment bytes="100" number="2">two@x</segment>
+  </segments></file>
+</nzb>`
+
+	n, err := validateNZBDocument([]byte(whole))
+	if err != nil {
+		t.Fatalf("complete document rejected: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("distinct segments = %d, want 2 (the repeat must not double-count)", n)
+	}
+
+	// Cut mid-attribute, the exact shape found in the stored Euphoria blob.
+	cut := whole[:len(whole)/2]
+	if _, err := validateNZBDocument([]byte(cut)); err == nil {
+		t.Error("a document cut mid-token validated — it would have been published")
+	}
+
+	if _, err := validateNZBDocument([]byte(`<nzb></nzb>`)); err == nil {
+		t.Error("an empty shell validated")
+	}
+}
+
 // A truncated DEFLATE stream must FAIL, not hand back what it managed.
 //
 // This is the bug that shipped an 89GB release with about a tenth of its

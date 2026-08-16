@@ -43,6 +43,7 @@ const (
 	jobNamePrune       = "Usenet Prune"
 	jobNameHealth      = "Usenet Health Check"
 	jobNameNFO         = "Usenet NFO Fetch"
+	jobNameImage       = "Usenet Image Fetch"
 	jobNameSpotIndex   = "Usenet Spot Index"
 	jobNameSpotFetch   = "Usenet Spot Fetch"
 	jobNameJunkProbe   = "Usenet Junk Probe"
@@ -74,6 +75,7 @@ type Plugin struct {
 	pruneJob     core.Job
 	healthJob    core.Job
 	nfoJob       core.Job
+	imageJob     core.Job
 	spotJob      core.Job
 	spotFetchJob core.Job
 	junkProbeJob core.Job
@@ -91,6 +93,7 @@ type Plugin struct {
 	buildMu     sync.Mutex
 	healthMu    sync.Mutex
 	nfoMu       sync.Mutex
+	imageMu     sync.Mutex
 	spotMu      sync.Mutex
 	opstats     *opCounter
 	spotFetchMu sync.Mutex
@@ -330,6 +333,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 			"Reads each indexed spot's description and NZB, and publishes it as a release").MarkOffPeak().MarkWrites())
 		p.nfoJob = p.duty.wrap(jobNameNFO, c.Scheduler.RegisterJob(jobNameNFO,
 			"Reads .nfo articles and stores their text (off by default; spends provider bytes)").MarkOffPeak().MarkWrites())
+		p.imageJob = p.duty.wrap(jobNameImage, c.Scheduler.RegisterJob(jobNameImage,
+			"Reads proof/sample image articles and stores them as release screenshots (off by default; spends provider bytes)").MarkOffPeak().MarkWrites())
 		p.junkProbeJob = p.duty.wrap(jobNameJunkProbe, c.Scheduler.RegisterJob(jobNameJunkProbe,
 			"Reads the bodies of junk-dropped postings to see whether the yEnc header names a real file (off by default; spends provider bytes)").MarkOffPeak().MarkWrites())
 		p.rot18Job = p.duty.wrap(jobNameRot18Repair, c.Scheduler.RegisterJob(jobNameRot18Repair,
@@ -341,6 +346,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		p.pruneJob.SetTrigger(func() { go p.runPrune(p.ctx) })
 		p.healthJob.SetTrigger(func() { go p.runHealthCheck(p.ctx) })
 		p.nfoJob.SetTrigger(func() { go p.runNFO(p.ctx) })
+		p.imageJob.SetTrigger(func() { go p.runImage(p.ctx) })
 		p.spotJob.SetTrigger(func() { go p.runSpotIndex(p.ctx) })
 		p.spotFetchJob.SetTrigger(func() { go p.runSpotFetch(p.ctx) })
 		p.junkProbeJob.SetTrigger(func() { go p.runJunkProbe(p.ctx) })

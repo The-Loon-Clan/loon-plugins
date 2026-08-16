@@ -16,10 +16,12 @@ package usenet
 
 import (
 	"bufio"
+	"bytes"
 	"compress/flate"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -58,32 +60,143 @@ func unspecialZipStr(s string) string {
 //
 // The result is raw DEFLATE (PHP's gzinflate), not zlib and not gzip — neither
 // has a header here, so compress/flate is the exact counterpart.
+//
+// CONSECUTIVE STREAMS, not one. Posting tools disagree about how a multi-
+// article NZB is compressed: some deflate the whole document and cut the
+// compressed bytes across articles (one stream), others cut the DOCUMENT and
+// deflate each piece on its own (one stream per article, concatenated on the
+// wire). flate stops at the first final block and says nothing about what
+// follows, so reading a single stream silently drops every piece after the
+// first for the second kind of poster — an 89GB Euphoria pack decoded to 3.5MB
+// of XML ending mid-attribute, with no error anywhere. The loop keeps inflating
+// while bytes remain; a remainder that is not a stream (trailing padding) ends
+// the loop and the XML validation in fetchSpotNZB is what judges the result.
 func decodeSpotBinary(lines []string, compressed bool) ([]byte, error) {
 	raw := unspecialZipStr(strings.Join(lines, ""))
 	if !compressed {
 		return []byte(raw), nil
 	}
-	r := flate.NewReader(strings.NewReader(raw))
-	defer r.Close()
+	// bytes.Reader implements io.ByteReader, so flate consumes EXACTLY its
+	// stream and the position after EOF is the start of whatever follows —
+	// which is what makes restarting on the remainder correct.
+	br := bytes.NewReader([]byte(raw))
 	// Bounded: a corrupt or hostile length field should not become an
 	// out-of-memory. 32MB is far past any real NZB.
-	out, err := io.ReadAll(io.LimitReader(r, 32<<20))
-	if err != nil {
-		// ANY error fails the decode, including one that produced bytes.
-		//
-		// This used to keep the partial output whenever some had been
-		// produced, and that is how a truncated stream became a published
-		// release: half an NZB inflates fine, parses far enough to look real,
-		// and describes a fraction of the file. Nothing downstream can tell
-		// "the first 9GB of an 89GB release" from a small release, so the
-		// judgement has to be made here, where the EOF is visible.
-		//
-		// Trailing junk is not a false positive for this: flate stops at the
-		// final block and never reads past it, so an error genuinely means the
-		// stream ended early or is corrupt.
-		return nil, err
+	const maxOut = 32 << 20
+	var out []byte
+	for br.Len() > 0 {
+		r := flate.NewReader(br)
+		chunk, err := io.ReadAll(io.LimitReader(r, int64(maxOut-len(out))))
+		r.Close()
+		if err != nil {
+			// The FIRST stream failing fails the decode, bytes or no bytes.
+			//
+			// This used to keep the partial output whenever some had been
+			// produced, and that is how a truncated stream became a published
+			// release: half an NZB inflates fine, parses far enough to look
+			// real, and describes a fraction of the file. Nothing downstream
+			// can tell "the first 9GB of an 89GB release" from a small
+			// release, so the judgement has to be made here, where the EOF is
+			// visible.
+			if len(out) == 0 {
+				return nil, err
+			}
+			// A CONTINUATION failing is different: at least one whole stream
+			// decoded, and the remainder may simply be padding rather than a
+			// second stream. The partial chunk is discarded — appending bytes
+			// from a stream that did not finish would corrupt the document —
+			// and the caller's XML validation decides whether what we have is
+			// complete.
+			break
+		}
+		out = append(out, chunk...)
+		if len(out) >= maxOut {
+			break
+		}
 	}
 	return out, nil
+}
+
+// validateNZBDocument parses an NZB to completion and reports its distinct
+// segment count.
+//
+// This is the check the decode alone cannot make: a poster whose own tooling
+// truncated the document posts a VALID deflate stream of HALF an NZB, and the
+// only way to notice is to read what came out. xml.Decoder errors on a
+// document cut mid-token, and requiring at least one file with one segment
+// rejects the technically-well-formed-but-empty shell.
+func validateNZBDocument(doc []byte) (int, error) {
+	dec := xml.NewDecoder(bytes.NewReader(doc))
+	// Real NZBs declare iso-8859-1 (the DTD's own example does); Go's decoder
+	// refuses any non-UTF-8 label unless told how to read it. Byte-for-rune is
+	// exact for latin-1 and close enough for the windows-1252 mislabels, and
+	// message-ids — the only thing counted — are ASCII by RFC 5536 either way.
+	dec.CharsetReader = func(label string, input io.Reader) (io.Reader, error) {
+		return &latin1Reader{r: input}, nil
+	}
+	seen := make(map[string]struct{})
+	files := 0
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return 0, fmt.Errorf("nzb document does not parse (truncated?): %w", err)
+		}
+		se, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		switch se.Name.Local {
+		case "file":
+			files++
+		case "segment":
+			var mid string
+			if err := dec.DecodeElement(&mid, &se); err != nil {
+				return 0, fmt.Errorf("nzb segment does not parse: %w", err)
+			}
+			if mid != "" {
+				seen[mid] = struct{}{}
+			}
+		}
+	}
+	if files == 0 || len(seen) == 0 {
+		return 0, fmt.Errorf("nzb document lists %d files / %d segments", files, len(seen))
+	}
+	return len(seen), nil
+}
+
+// latin1Reader maps every input byte onto the code point with its value, which
+// is the whole of ISO 8859-1. Streaming, so a multi-megabyte document is not
+// buffered twice just to satisfy the decoder's charset check.
+type latin1Reader struct {
+	r   io.Reader
+	buf [2048]byte
+}
+
+func (l *latin1Reader) Read(p []byte) (int, error) {
+	// Each latin-1 byte expands to at most 2 UTF-8 bytes.
+	max := len(p) / 2
+	if max == 0 {
+		return 0, nil
+	}
+	if max > len(l.buf) {
+		max = len(l.buf)
+	}
+	n, err := l.r.Read(l.buf[:max])
+	w := 0
+	for _, c := range l.buf[:n] {
+		if c < 0x80 {
+			p[w] = c
+			w++
+			continue
+		}
+		p[w] = 0xC0 | c>>6
+		p[w+1] = 0x80 | c&0x3F
+		w += 2
+	}
+	return w, err
 }
 
 // runSpotFetch works the unfetched-spot worklist.
@@ -220,7 +333,7 @@ func (p *Plugin) fetchOneSpot(ctx context.Context, pool *nntp.Pool, sink release
 		return out
 	}
 
-	nzbXML, err := p.fetchSpotNZB(ctx, pool, doc.NZBSegments())
+	nzbXML, listed, err := p.fetchSpotNZB(ctx, pool, doc.NZBSegments())
 	p.opstats.noteErr("spot-nzb", err)
 	if err != nil {
 		out.gone = true
@@ -239,6 +352,11 @@ func (p *Plugin) fetchOneSpot(ctx context.Context, pool *nntp.Pool, sink release
 		return out
 	}
 	rel := spotRelease(s, d, doc, gz)
+	// The validated distinct segment count. Without it the sink cannot tell a
+	// complete re-fetch from the partial copy it may already hold, and every
+	// repair of a truncated spot would be refused as "no better than what we
+	// have" — which is exactly what happened to the first repair pass.
+	rel.Segments = listed
 	if _, created, err := sink.store(ctx, rel); err != nil {
 		p.reportErr(ctx, "usenet/spot-store", err)
 	} else if created {
@@ -264,21 +382,24 @@ func (p *Plugin) headSpot(ctx context.Context, pool *nntp.Pool, msgID string) (s
 	return h, err
 }
 
-// fetchSpotNZB reads and inflates the NZB a spot points at.
-// fetchSpotNZB reads every article the spot names and inflates the whole.
+// fetchSpotNZB reads every article the spot names, inflates the whole, and
+// validates that what came out is a complete NZB. Returns the document and its
+// distinct segment count — the count is what lets the sink judge a re-fetch
+// against the copy it already holds.
 //
-// The DEFLATE stream spans the concatenation, so the bodies are joined BEFORE
-// decoding rather than decoded one at a time and appended: an individual
-// article after the first is not a valid stream on its own, and the boundary
-// falls at an arbitrary byte.
+// The DEFLATE payload spans the concatenation, so the bodies are joined BEFORE
+// decoding rather than decoded one at a time and appended: with a single
+// stream cut across articles, an individual article after the first is not a
+// valid stream on its own, and the boundary falls at an arbitrary byte.
+// (Per-article streams also exist in the wild; decodeSpotBinary handles both.)
 //
 // Order is the posting order in the document and must be preserved. A missing
-// or reordered middle segment fails the inflate, which is the outcome we want
-// — a partial NZB is worse than none, because it publishes as a working
-// release describing a fraction of the file.
-func (p *Plugin) fetchSpotNZB(ctx context.Context, pool *nntp.Pool, segments []string) ([]byte, error) {
+// or reordered middle segment fails the inflate or the validation, which is
+// the outcome we want — a partial NZB is worse than none, because it publishes
+// as a working release describing a fraction of the file.
+func (p *Plugin) fetchSpotNZB(ctx context.Context, pool *nntp.Pool, segments []string) ([]byte, int, error) {
 	if len(segments) == 0 {
-		return nil, errors.New("spot has no nzb segment")
+		return nil, 0, errors.New("spot has no nzb segment")
 	}
 	var lines []string
 	for _, segment := range segments {
@@ -300,11 +421,23 @@ func (p *Plugin) fetchSpotNZB(ctx context.Context, pool *nntp.Pool, segments []s
 		})
 		if err != nil {
 			// One missing piece means no NZB, not most of one.
-			return nil, fmt.Errorf("segment %d/%d: %w", len(lines)+1, len(segments), err)
+			return nil, 0, fmt.Errorf("segment %d/%d: %w", len(lines)+1, len(segments), err)
 		}
 		lines = append(lines, part...)
 	}
-	return decodeSpotBinary(lines, true)
+	doc, err := decodeSpotBinary(lines, true)
+	if err != nil {
+		return nil, 0, err
+	}
+	// A valid stream can still carry a truncated document — the poster's own
+	// tooling cut it before it was ever compressed. Only a full parse can tell,
+	// and refusing here records a fetch_error instead of publishing a release
+	// that describes a fraction of the file.
+	listed, err := validateNZBDocument(doc)
+	if err != nil {
+		return nil, 0, err
+	}
+	return doc, listed, nil
 }
 
 // spotRelease maps a fetched spot onto the sink's release shape.

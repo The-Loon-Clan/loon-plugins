@@ -66,6 +66,10 @@ func knobList(cfg Config) []knob {
 		{"nfo_batch_size", "NFO releases per pass", cfg.NFOBatchSize, "how many releases one pass may read (default 100) — bounded again by the byte budget below, whichever is reached first"},
 		{"nfo_budget_mb", "NFO byte budget per pass (MB)", cfg.NFOBudgetMB, "hard ceiling on article data one pass may pull (default 64). The only control here that meters BYTES rather than connections, which is what a block account is actually sold by"},
 		{"nfo_max_retries", "NFO transport retries", cfg.NFOMaxRetries, "how many provider timeouts one release may cost before its NFO is written off (default 3). A server refusal is permanent and written off at once; 0 here means retry a timing-out article forever"},
+		{"image_interval_min", "Image pass interval (min)", cfg.ImageIntervalMin, "how often to look for proof/sample images to read (default 60). Like NFO, the pass only runs after a crawl that staged nothing"},
+		{"image_batch_size", "Image releases per pass", cfg.ImageBatchSize, "how many releases one pass may fetch images for (default 25) — an image is several whole articles, so this is deliberately smaller than the NFO batch"},
+		{"image_budget_mb", "Image byte budget per pass (MB)", cfg.ImageBudgetMB, "hard ceiling on article data one image pass may pull (default 128); checked against each candidate's worst case before any of its articles are read"},
+		{"image_max_retries", "Image transport retries", cfg.ImageMaxRetries, "provider timeouts one release may cost before its image is written off (default 3); a missing article writes it off at once, since half an image is nothing"},
 		{"rot18_repair_interval_min", "Title repair interval (min)", cfg.Rot18RepairIntervalMin, "how often to look for ROT18-rotated titles stored before the crawler could decode them (default 60). Once the catalogue has been walked this finds nothing and costs one indexed query per pass"},
 		{"rot18_repair_max_min", "Title repair pass budget (min)", cfg.Rot18RepairMaxMin, "how long ONE pass may run (default 10). The first pass walks the whole catalogue; every pass after it resumes from where that stopped"},
 		{"junk_probe_interval_min", "Junk probe interval (min)", cfg.JunkProbeIntervalMin, "how often to read the bodies of junk-dropped postings (default 360). Diagnostic rather than a feature: it measures how often a scrambled subject hid a real filename"},
@@ -214,6 +218,7 @@ func boolViewData(cfg Config) map[string]any {
 		"walk_past_no_evict":        "WalkPastNoEvict",
 		"walk_past_no_salvage":      "WalkPastNoSalvage",
 		"nfo_enabled":               "NFOEnabled",
+		"image_enabled":             "ImageEnabled",
 		"junk_probe_enabled":        "JunkProbeEnabled",
 		"rot18_repair_enabled":      "Rot18RepairEnabled",
 	}
