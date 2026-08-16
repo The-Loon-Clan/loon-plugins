@@ -39,7 +39,8 @@ func NewPGStore(db *core.SchemaDB) *PGStore {
 var _ Store = (*PGStore)(nil)
 
 const groupCols = `id, slug, name, kind, visible, parent_id, depth, color,
-                   title_color, icon, cost_points, duration_days, sort_order, created_at`
+                   title_color, icon, cost_points, duration_days, sort_order, created_at,
+                   min_uploaded, min_ratio, min_age_days`
 
 type groupRow struct {
 	ID           int           `db:"id"`
@@ -56,6 +57,9 @@ type groupRow struct {
 	DurationDays int           `db:"duration_days"`
 	SortOrder    int           `db:"sort_order"`
 	CreatedAt    time.Time     `db:"created_at"`
+	MinUploaded  int64         `db:"min_uploaded"`
+	MinRatio     float64       `db:"min_ratio"`
+	MinAgeDays   int           `db:"min_age_days"`
 }
 
 func (r groupRow) toGroup() Group {
@@ -64,6 +68,7 @@ func (r groupRow) toGroup() Group {
 		Depth: r.Depth, Color: r.Color, TitleColor: r.TitleColor, Icon: r.Icon,
 		CostPoints: r.CostPoints, DurationDays: r.DurationDays, SortOrder: r.SortOrder,
 		CreatedAt: r.CreatedAt, Grants: map[string]int64{},
+		MinUploaded: r.MinUploaded, MinRatio: r.MinRatio, MinAgeDays: r.MinAgeDays,
 	}
 	if r.ParentID.Valid {
 		p := int(r.ParentID.Int64)
@@ -638,4 +643,14 @@ func intervalArg(d time.Duration) string {
 		h = 1
 	}
 	return fmt.Sprintf("%d hours", h)
+}
+
+// RemoveMember drops one membership. See the Store interface for why an absent
+// row is success rather than an error.
+func (s *PGStore) RemoveMember(ctx context.Context, userID, groupID int) error {
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`DELETE FROM group_members WHERE user_id = $1 AND group_id = $2`, userID, groupID)
+		return err
+	})
 }

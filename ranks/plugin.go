@@ -28,13 +28,14 @@ func init() {
 }
 
 type Plugin struct {
-	process string
-	expiry  *rankExpiry
-	store   Store
-	ents    *entSync
-	log     *slog.Logger
-	errs    core.ErrorReporter
-	auth    core.AuthService
+	process   string
+	expiry    *rankExpiry
+	promotion *rankPromotion
+	store     Store
+	ents      *entSync
+	log       *slog.Logger
+	errs      core.ErrorReporter
+	auth      core.AuthService
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -71,6 +72,21 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// SetJobDeps gate any more — nothing has to be handed in before Boot.
 	if p.process == "worker" || p.process == "all" {
 		p.expiry = newRankExpiry(p.store, p.ents, c.Scheduler)
+		// And the promotion sweep beside it, which is what makes kind='earned'
+		// mean anything (promote.go).
+		//
+		// The stats capability is looked up SOFTLY and may be nil: it is
+		// published by the host, so unlike a sibling plugin's capability there
+		// is no Metadata.Requires that can order it, and a host with no tracker
+		// has no upload figures to judge anyone on. The job registers either
+		// way and reports the absence itself — an operator who has configured a
+		// ladder and sees nothing happen needs to be told the figures never
+		// arrived, not left with a job that quietly is not there.
+		var stats pluginapi.RankStats
+		if v, ok := c.Lookup(pluginapi.RankStatsName); ok {
+			stats, _ = v.(pluginapi.RankStats)
+		}
+		p.promotion = newRankPromotion(p.store, p.ents, stats, c.Scheduler)
 	}
 	// Capabilities publish on EVERY leg, including the headless worker. They
 	// are process-local registry entries with no router involvement, and the
@@ -150,6 +166,9 @@ func (p *Plugin) Start(ctx context.Context) error {
 		} else if n > 0 {
 			p.log.Info("entitlement grants rebuilt", "grants", n)
 		}
+	}
+	if p.promotion != nil {
+		p.promotion.start(ctx)
 	}
 	if p.expiry != nil {
 		p.expiry.start(ctx)

@@ -32,6 +32,12 @@ type Group struct {
 	SortOrder    int
 	CreatedAt    time.Time
 	Grants       map[string]int64
+
+	// Promotion criteria (migration 003). Zero means "not a criterion"; a
+	// group with all three zero is not automatic at all — see Automatic.
+	MinUploaded int64
+	MinRatio    float64
+	MinAgeDays  int
 }
 
 // Member is one membership. ExpiresAt nil means permanent — only reachable
@@ -128,6 +134,13 @@ type Store interface {
 	// ExpireMemberships removes every lapsed membership and returns them.
 	// Permanent memberships (NULL expiry) are never swept.
 	ExpireMemberships(ctx context.Context) ([]Member, error)
+
+	// RemoveMember drops one membership outright, for a demotion — where
+	// ExpireMemberships drops whatever has run out of time. Removing a
+	// membership that is not there is not an error: the promotion sweep and an
+	// operator can both act on the same member, and losing a race should not
+	// fail the rest of the pass.
+	RemoveMember(ctx context.Context, userID, groupID int) error
 
 	// MembersOfGroups returns the live memberships of the given groups. Used
 	// by the entitlement sync, which has to fan out to a group's members when
@@ -405,6 +418,14 @@ func (m *MemStore) ExpireMemberships(context.Context) ([]Member, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UserID < out[j].UserID })
 	return out, nil
+}
+
+// RemoveMember drops one membership. Absent is success — see the interface.
+func (m *MemStore) RemoveMember(_ context.Context, userID, groupID int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.members, [2]int{userID, groupID})
+	return nil
 }
 
 func (m *MemStore) MembersOfGroups(_ context.Context, groupIDs []int) ([]Member, error) {
