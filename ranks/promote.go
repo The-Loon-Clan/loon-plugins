@@ -211,6 +211,12 @@ func (p *rankPromotion) run(ctx context.Context) {
 		return
 	}
 	p.job.SetRunning()
+	// NOTE: every path below this line must reach SetIdle or SetError. A run
+	// that returns after SetRunning and does neither leaves the job displayed
+	// as "running" forever — and the scheduler will not re-trigger one it
+	// believes is still going, so the job silently never runs again. Found
+	// exactly that way: the first sweep worked, and every manual trigger after
+	// it returned 200 and did nothing.
 	if p.stats == nil {
 		// No host seam: nothing to judge anyone on. Said rather than silently
 		// doing nothing, because an operator who has configured a ladder and
@@ -232,6 +238,7 @@ func (p *rankPromotion) run(ctx context.Context) {
 	}
 	if automatic == 0 {
 		p.job.Log("No earned group has criteria set, so there is nothing to promote to")
+		p.job.SetIdle(time.Now().Add(promotionInterval))
 		return
 	}
 
@@ -285,4 +292,5 @@ func (p *rankPromotion) run(ctx context.Context) {
 	if promoted > 0 || demoted > 0 {
 		p.job.Log("Promoted %d, demoted %d", promoted, demoted)
 	}
+	p.job.SetIdle(time.Now().Add(promotionInterval))
 }
