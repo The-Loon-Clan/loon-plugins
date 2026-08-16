@@ -92,6 +92,7 @@ type Plugin struct {
 	healthMu    sync.Mutex
 	nfoMu       sync.Mutex
 	spotMu      sync.Mutex
+	opstats     *opCounter
 	spotFetchMu sync.Mutex
 	junkProbeMu sync.Mutex
 	rot18Mu     sync.Mutex
@@ -195,6 +196,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.tel = newTelemetry()
 	p.duty = newDutyTracker()
 	p.hits = newFilterHits()
+	p.opstats = newOpCounter()
 	p.posterHits = newPosterHits()
 	p.posterWatch = newPosterWatch(nil) // replaced per pass from the DB
 	p.outcomes = newBuildOutcomes()

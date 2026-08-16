@@ -27,6 +27,7 @@ func spotsDataIndexing(probe spotProbe, have, haveProvider bool, groups []spotGr
 		"Groups":       spotGroupVMs(groups),
 		"Indexing":     len(groups) > 0,
 		"FetchWired":   true,
+		"OpStats":      opStatVMs(nil),
 	}
 }
 
@@ -187,5 +188,52 @@ func TestSpotProbeSummary(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("summary %q missing %q", got, want)
 		}
+	}
+}
+
+// The rate is the point. A failure count with no denominator is what three
+// weeks of unread "500 command unimplemented" already proved useless.
+func TestOpStatVMs(t *testing.T) {
+	vms := opStatVMs([]opStatRow{
+		{Op: "overview", Outcome: "ok", Count: 1_000_000},
+		{Op: "overview", Outcome: "511", Count: 1435},
+		{Op: "overview", Outcome: "timeout", Count: 65},
+		{Op: "spot-head", Outcome: "ok", Count: 10},
+		{Op: "spot-head", Outcome: "430", Count: 90},
+	})
+	if len(vms) != 2 {
+		t.Fatalf("got %d operations, want 2", len(vms))
+	}
+
+	ov := vms[0]
+	if ov.Total != 1_001_500 || ov.OK != 1_000_000 {
+		t.Errorf("overview totals = %d/%d", ov.OK, ov.Total)
+	}
+	// The whole argument for this feature: the same 1,435 failures that read as
+	// alarming in the error log are 0.14% here, and healthy.
+	if ov.Rate != "99.85" {
+		t.Errorf("overview rate = %s, want 99.85", ov.Rate)
+	}
+	if !ov.Healthy {
+		t.Error("99.85% was not treated as healthy")
+	}
+	if len(ov.Failures) != 2 || ov.Failures[0].Outcome != "511" || ov.Failures[0].Pct != "0.14" {
+		t.Errorf("overview failures = %+v", ov.Failures)
+	}
+
+	// And the inverse: a small absolute count that IS a problem.
+	sh := vms[1]
+	if sh.Rate != "10.00" || sh.Healthy {
+		t.Errorf("spot-head = %s healthy=%v, want 10.00 and unhealthy", sh.Rate, sh.Healthy)
+	}
+}
+
+// An operation with no attempts must not divide by zero or claim 0% success.
+func TestOpStatVMsSkipsEmptyOperations(t *testing.T) {
+	if got := opStatVMs([]opStatRow{{Op: "idle", Outcome: "ok", Count: 0}}); len(got) != 0 {
+		t.Errorf("an operation with no attempts produced %+v", got)
+	}
+	if got := opStatVMs(nil); len(got) != 0 {
+		t.Errorf("nil produced %+v", got)
 	}
 }

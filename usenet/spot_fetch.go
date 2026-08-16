@@ -135,6 +135,7 @@ func (p *Plugin) runSpotFetch(ctx context.Context) {
 			stored++
 		}
 	}
+	p.flushOpStats(ctx)
 	p.spotFetchJob.Log("fetched %d spots: %d released, %d expired, %d refused (bad signature)",
 		fetched, stored, gone, refused)
 	p.spotFetchJob.SetIdle(p.nextSpotFetch(ctx))
@@ -151,6 +152,7 @@ func (p *Plugin) fetchOneSpot(ctx context.Context, pool *nntp.Pool, sink release
 	var out spotFetchResult
 
 	hdrs, err := p.headSpot(ctx, pool, s.MessageID)
+	p.opstats.noteErr("spot-head", err)
 	if err != nil {
 		// Expired, cancelled, or briefly unreachable. Below the retention
 		// horizon this is the NORMAL outcome for old history and must not be
@@ -169,11 +171,13 @@ func (p *Plugin) fetchOneSpot(ctx context.Context, pool *nntp.Pool, sink release
 			label, ok := SpotTrust(VerifySpot(key, s.MessageID, sig))
 			if !ok {
 				out.refused = true
+				p.opstats.note("spot-trust", "bad-signature")
 				_ = p.st.markSpotFetched(ctx, s.MessageID, spotDocument{
 					Trust: "", FetchError: "signature does not match the spot's key"})
 				return out
 			}
 			trust = label
+			p.opstats.note("spot-trust", label)
 		}
 	}
 
@@ -203,6 +207,7 @@ func (p *Plugin) fetchOneSpot(ctx context.Context, pool *nntp.Pool, sink release
 	}
 
 	nzbXML, err := p.fetchSpotNZB(ctx, pool, d.NZBSegment)
+	p.opstats.noteErr("spot-nzb", err)
 	if err != nil {
 		out.gone = true
 		_ = p.st.markSpotFetched(ctx, s.MessageID, spotDocument{

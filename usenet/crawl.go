@@ -150,6 +150,7 @@ func (p *Plugin) runCrawl(ctx context.Context) {
 	// for that worker's groups. drain() resets on flush, so double-flushing
 	// with the builder cannot double-count.
 	defer p.flushFilterHits(ctx)
+	defer p.flushOpStats(ctx)
 	defer p.flushGroupingWatch(ctx)
 	totalStaged := 0
 	// Catch-up loop: when the servers still hold a meaningful forward backlog
@@ -896,6 +897,11 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, provID int, j 
 		// is surfaced where it is actionable — openFleet benches dead pools
 		// and reports usenet/provider-dead once — and the batch still returns
 		// ok=false, so nothing advances past it.
+		// Counted BEFORE the reporting filter, and counted for pool-empty too:
+		// suppressing a report is a decision about noise, not about whether the
+		// attempt happened, and a denominator that quietly excludes the most
+		// common failure describes a healthier system than the real one.
+		p.opstats.noteErr("overview", err)
 		if !errors.Is(err, nntp.ErrPoolEmpty) {
 			p.reportErr(ctx, "usenet/crawl-fetch",
 				fmt.Errorf("%s %d-%d: %w", j.group, j.lo, j.hi, err))
@@ -904,6 +910,7 @@ func (p *Plugin) fetchBatch(ctx context.Context, pool *nntp.Pool, provID int, j 
 		p.tel.noteProviderBatch(provID, 0, 0, 0, false)
 		return res // ok stays false — the watermark will not pass this range
 	}
+	p.opstats.note("overview", outcomeOK)
 	res.articles, res.wire = len(ovs), wire
 	res.maxDate = newestDate(ovs)
 	res.minDate = oldestDate(ovs)

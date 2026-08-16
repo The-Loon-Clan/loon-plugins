@@ -109,6 +109,7 @@ func (p *Plugin) runSpotIndex(ctx context.Context) {
 			p.spotJob.Log("%s: %v", g.Name, err)
 		}
 	}
+	p.flushOpStats(ctx)
 	p.spotJob.Log("indexed %d new spots (%d from backfill)", total, back)
 	p.spotJob.SetIdle(p.nextSpotIndex(ctx))
 }
@@ -293,6 +294,10 @@ func (p *Plugin) readSpotRange(ctx context.Context, pool *nntp.Pool, group strin
 		rows = spotRowsFromOverview(group, over)
 		return nil
 	})
+	// Both branches, one call. The retry loop above means a pass can survive
+	// failures entirely, so counting only the fatal ones would report a success
+	// rate of 100% on a pass that retried its way through a hundred 511s.
+	p.opstats.noteErr("spot-list", err)
 	if err != nil {
 		return 0, err
 	}

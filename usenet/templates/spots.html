@@ -61,6 +61,38 @@
 </div>
 
 <div class="card mt-3">
+  <div class="card-header">Operation health &mdash; last 7 days</div>
+  <div class="card-body">
+    <p style="opacity:.75;font-size:.85rem;margin:0 0 .8rem">
+      Successes as well as failures. A failure count on its own cannot be acted
+      on: 1,435 overview errors is an outage at ten thousand attempts and noise
+      at ten million, and the error log only ever sees the bad half.
+    </p>
+    <table class="table table-sm mb-0" style="font-size:.85rem">
+      <thead><tr><th>operation</th><th>attempts</th><th>success</th><th>failures by reason</th></tr></thead>
+      <tbody>
+        {{range .OpStats}}
+        <tr>
+          <td><code>{{.Op}}</code></td>
+          <td>{{.Total}}</td>
+          <td>
+            {{if .Healthy}}<span class="text-success">{{.Rate}}%</span>
+            {{else}}<span class="text-warning">{{.Rate}}%</span>{{end}}
+          </td>
+          <td style="opacity:.8">
+            {{range .Failures}}<span class="me-2"><code>{{.Outcome}}</code> {{.Count}} ({{.Pct}}%)</span>{{end}}
+            {{if not .Failures}}&mdash;{{end}}
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="4" style="opacity:.6">No passes have reported yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card mt-3">
   <div class="card-header">Index progress</div>
   <div class="card-body">
     {{if .Indexing}}

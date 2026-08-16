@@ -306,3 +306,59 @@ func (s *PGStore) markSpotFetched(ctx context.Context, messageID string, d spotD
 		return err
 	})
 }
+
+// recordOpStats merges a pass's outcome counters into today's row.
+//
+// One statement for the whole pass, and additive rather than last-write-wins:
+// several workers flush concurrently and each one's counts are real.
+func (s *PGStore) recordOpStats(ctx context.Context, stats map[opStatKey]int64) error {
+	if len(stats) == 0 {
+		return nil
+	}
+	ops := make([]string, 0, len(stats))
+	outcomes := make([]string, 0, len(stats))
+	counts := make([]int64, 0, len(stats))
+	for k, n := range stats {
+		if n <= 0 {
+			continue
+		}
+		ops = append(ops, k.Op)
+		outcomes = append(outcomes, k.Outcome)
+		counts = append(counts, n)
+	}
+	if len(ops) == 0 {
+		return nil
+	}
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`INSERT INTO op_stats (day, op, outcome, count)
+			 SELECT CURRENT_DATE, * FROM unnest($1::text[], $2::text[], $3::bigint[])
+			 ON CONFLICT (day, op, outcome) DO UPDATE SET count = op_stats.count + EXCLUDED.count`,
+			pgTextArray(ops), pgTextArray(outcomes), pq.Array(counts))
+		return err
+	})
+}
+
+// opStatRow is one line of the metrics readout.
+type opStatRow struct {
+	Op      string `db:"op"`
+	Outcome string `db:"outcome"`
+	Count   int64  `db:"count"`
+}
+
+// recentOpStats reads the last `days` days of counters.
+func (s *PGStore) recentOpStats(ctx context.Context, days int) ([]opStatRow, error) {
+	if days <= 0 {
+		days = 7
+	}
+	var out []opStatRow
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &out,
+			`SELECT op, outcome, sum(count)::bigint AS count
+			   FROM op_stats
+			  WHERE day >= CURRENT_DATE - make_interval(days => $1)
+			  GROUP BY op, outcome
+			  ORDER BY op, sum(count) DESC`, days)
+	})
+	return out, err
+}

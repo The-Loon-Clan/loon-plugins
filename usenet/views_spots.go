@@ -65,7 +65,15 @@ func (p *Plugin) renderSpots(ctx context.Context) (template.HTML, error) {
 	if gerr != nil {
 		p.reportErr(ctx, "usenet/spot-groups-view", gerr)
 	}
+	// Best-effort: metrics are decoration over the rest of the tab.
+	var opStats []opStatVM
+	if rows, err := p.st.recentOpStats(ctx, 7); err == nil {
+		opStats = opStatVMs(rows)
+	} else {
+		p.reportErr(ctx, "usenet/op-stats-read", err)
+	}
 	return p.frag("spots.html", map[string]any{
+		"OpStats":      opStats,
 		"Group":        SpotGroup,
 		"MinKeyBits":   MinSpotKeyBits,
 		"Probe":        probe,
@@ -217,4 +225,65 @@ func (p *Plugin) actionEnableSpots(gc *gin.Context) (template.HTML, error) {
 		return settingsRedirect(gc, "err", err.Error())
 	}
 	return settingsRedirect(gc, "msg", SpotGroup+" is now indexed as a Spotnet source — the Spot Index job will pick it up on its next pass")
+}
+
+// opStatVM is one operation's success rate over the reporting window.
+type opStatVM struct {
+	Op       string
+	Total    int64
+	OK       int64
+	Rate     string
+	Failures []opFailVM
+	Healthy  bool
+}
+
+type opFailVM struct {
+	Outcome string
+	Count   int64
+	Pct     string
+}
+
+// opStatVMs turns raw counters into the readout.
+//
+// The success RATE is the output, not the failure count, because the failure
+// count on its own is what three weeks of unread "500 command unimplemented"
+// already proved useless. 1,435 failures is an outage or it is nothing, and
+// only the denominator says which.
+func opStatVMs(rows []opStatRow) []opStatVM {
+	byOp := map[string][]opStatRow{}
+	order := []string{}
+	for _, r := range rows {
+		if _, seen := byOp[r.Op]; !seen {
+			order = append(order, r.Op)
+		}
+		byOp[r.Op] = append(byOp[r.Op], r)
+	}
+	out := make([]opStatVM, 0, len(order))
+	for _, op := range order {
+		vm := opStatVM{Op: op}
+		for _, r := range byOp[op] {
+			vm.Total += r.Count
+			if r.Outcome == outcomeOK {
+				vm.OK += r.Count
+			}
+		}
+		if vm.Total == 0 {
+			continue
+		}
+		for _, r := range byOp[op] {
+			if r.Outcome == outcomeOK {
+				continue
+			}
+			vm.Failures = append(vm.Failures, opFailVM{
+				Outcome: r.Outcome, Count: r.Count,
+				Pct: strconv.FormatFloat(100*float64(r.Count)/float64(vm.Total), 'f', 2, 64),
+			})
+		}
+		vm.Rate = strconv.FormatFloat(100*float64(vm.OK)/float64(vm.Total), 'f', 2, 64)
+		// 99% is not a target, it is the line above which the retry is doing
+		// its job and nobody needs to read the error log.
+		vm.Healthy = float64(vm.OK)/float64(vm.Total) >= 0.99
+		out = append(out, vm)
+	}
+	return out
 }
