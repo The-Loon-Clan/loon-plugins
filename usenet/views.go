@@ -51,13 +51,15 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			})
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
-			"knobs":            p.actionSaveKnobs,
-			"fetch-groups":     p.actionFetchGroups,
-			"group":            p.actionToggleGroup,
-			"provider":         p.actionSaveProvider,
-			"provider-del":     p.actionDeleteProvider,
-			"provider-test":    p.actionTestProvider,
-			"provider-probe":   p.actionProbeProvider,
+			"knobs":          p.actionSaveKnobs,
+			"fetch-groups":   p.actionFetchGroups,
+			"group":          p.actionToggleGroup,
+			"provider":       p.actionSaveProvider,
+			"provider-del":   p.actionDeleteProvider,
+			"provider-test":  p.actionTestProvider,
+			"provider-probe": p.actionProbeProvider,
+			// Spots tab: sample free.pt and report what the feed looks like.
+			"spot-probe":       p.actionProbeSpots,
 			"group-tune":       p.actionTuneGroup,
 			"group-move":       p.actionMoveGroup,
 			"group-reset":      p.actionResetWatermark,
@@ -184,6 +186,8 @@ func tabForAction(path string) string {
 	case strings.HasSuffix(path, "/crawl"), strings.HasSuffix(path, "/backfill"),
 		strings.HasSuffix(path, "/reset-backfill"):
 		return "crawlers"
+	case strings.HasSuffix(path, "/spot-probe"):
+		return "spots"
 	case strings.HasSuffix(path, "/filter-add"), strings.HasSuffix(path, "/filter-toggle"),
 		strings.HasSuffix(path, "/filter-del"), strings.HasSuffix(path, "/filter-reset"):
 		return "filters"

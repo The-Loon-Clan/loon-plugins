@@ -179,6 +179,7 @@ func (p *Plugin) renderSettings(ctx context.Context, q settingsQuery) (template.
 		return p.renderFilters(ctx, "", "", q.DiagKind, q.DiagPage)
 	})
 	nfoTab := tab("nfo", func() (template.HTML, error) { return p.renderNFO(ctx) })
+	spotsTab := tab("spots", func() (template.HTML, error) { return p.renderSpots(ctx) })
 	data := map[string]any{
 		"Servers": servers, "DefaultConns": p.effective(ctx).Connections,
 		"Knobs": p.knobs(ctx), "SkipBackfill": p.effective(ctx).SkipBackfill,
@@ -189,8 +190,8 @@ func (p *Plugin) renderSettings(ctx context.Context, q settingsQuery) (template.
 		"Groups":                 groups, "GroupQuery": gq, "Tiers": AllTiers,
 		"GroupTotal": total, "Shown": len(groups),
 		"CrawlersTab": crawlersTab, "JobsTab": jobsTab, "FiltersTab": filtersTab,
-		"NFOTab": nfoTab,
-		"Msg":    msg, "Err": errMsg,
+		"NFOTab": nfoTab, "SpotsTab": spotsTab,
+		"Msg": msg, "Err": errMsg,
 	}
 	for k, v := range boolViewData(p.effective(ctx)) {
 		data[k] = v

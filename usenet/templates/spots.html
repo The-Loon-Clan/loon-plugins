@@ -1,0 +1,176 @@
+{{/* The Spots tab. Leads with what is and is not wired, because the counters
+     below it are honestly zero until an importer exists and a page of zeros
+     reads as broken rather than unfinished. */}}
+
+<div class="card mt-3">
+  <div class="card-header">Spotnet</div>
+  <div class="card-body">
+    <p style="opacity:.75;font-size:.85rem;margin:0 0 .8rem">
+      Spotnet is a decentralised index that lives <em>on</em> usenet: a human
+      &ldquo;spots&rdquo; an upload and posts a signed description to
+      <code>{{.Group}}</code>, and every client builds its own copy by reading
+      that group. A spotted release is described by a person rather than
+      inferred from a subject line. We read it; we do not post to it.
+    </p>
+
+    <table class="table table-sm mb-0" style="font-size:.85rem">
+      <tbody>
+        <tr>
+          <td style="width:11rem">Header + document parser</td>
+          <td><span class="badge bg-success bg-opacity-25 text-success">ready</span></td>
+          <td style="opacity:.7">XOVER listing fields and the repeated <code>X-Xml</code> document.</td>
+        </tr>
+        <tr>
+          <td>Signature verification</td>
+          <td><span class="badge bg-success bg-opacity-25 text-success">ready</span></td>
+          <td style="opacity:.7">
+            Pinned against live spots. A spot signs its <em>message-id</em>, so a
+            valid signature identifies the poster and covers none of the payload
+            &mdash; not the title, size or NZB pointer.
+          </td>
+        </tr>
+        <tr>
+          <td>Import</td>
+          <td>
+            {{if .ImportWired}}<span class="badge bg-success bg-opacity-25 text-success">running</span>
+            {{else}}<span class="badge bg-secondary bg-opacity-25 text-secondary">not built</span>{{end}}
+          </td>
+          <td style="opacity:.7">
+            {{if not .ImportWired}}Nothing writes <code>origin='spot'</code> yet, so the
+            browse filter and the Spot badge are live but will match nothing. The
+            remaining work is listing <code>{{.Group}}</code> against its own
+            watermark and fetching each spot&rsquo;s NZB by message-id.{{end}}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header d-flex align-items-center">
+    <span>Live sample of {{.Group}}</span>
+    <span class="ms-auto" style="font-size:.8rem;opacity:.6">{{.ProbeAge}}</span>
+  </div>
+  <div class="card-body">
+    <p style="opacity:.75;font-size:.85rem;margin:0 0 .8rem">
+      Reads the newest articles in <code>{{.Group}}</code> and checks each
+      signature. On demand rather than on page load: the probe fetches one
+      article per sampled spot, against the same connection budget the crawler
+      is already short of.
+    </p>
+
+    {{if .HaveProbe}}
+      {{if .Probe.Err}}
+        <div class="alert alert-warning py-2" style="font-size:.85rem">{{.Probe.Err}}</div>
+      {{else if not .Probe.Carried}}
+        <div class="alert alert-warning py-2" style="font-size:.85rem">
+          <strong>{{.Probe.Server}} does not carry {{.Group}}.</strong>
+          Spots cannot be read from this provider; a second source would be needed.
+        </div>
+      {{else}}
+        <div class="row g-2 mb-3">
+          <div class="col-6 col-md-3">
+            <div class="p-2 rounded" style="background:rgba(255,255,255,.03)">
+              <div style="font-size:1.3rem;line-height:1.1">{{.Probe.Articles}}</div>
+              <div style="font-size:.75rem;opacity:.6">articles carried</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="p-2 rounded" style="background:rgba(255,255,255,.03)">
+              <div style="font-size:1.3rem;line-height:1.1">{{.Probe.Spots}} / {{.Probe.Sampled}}</div>
+              <div style="font-size:.75rem;opacity:.6">sampled were spots</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="p-2 rounded" style="background:rgba(255,255,255,.03)">
+              <div style="font-size:1.3rem;line-height:1.1">{{.Probe.Verified}}</div>
+              <div style="font-size:.75rem;opacity:.6">verified</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="p-2 rounded" style="background:rgba(255,255,255,.03)">
+              <div style="font-size:1.3rem;line-height:1.1">{{.Probe.ForgeableShare}}%</div>
+              <div style="font-size:.75rem;opacity:.6">signed with a forgeable key</div>
+            </div>
+          </div>
+        </div>
+
+        <table class="table table-sm mb-2" style="font-size:.85rem">
+          <tbody>
+            <tr>
+              <td style="width:11rem">verified</td>
+              <td style="width:4rem">{{.Probe.Verified}}</td>
+              <td style="opacity:.7">Signed with a key of at least {{.MinKeyBits}} bits.</td>
+            </tr>
+            <tr>
+              <td>weak key</td>
+              <td>{{.Probe.WeakKey}}</td>
+              <td style="opacity:.7">
+                Signature is valid and proves nothing &mdash; the key is small
+                enough to forge cheaply. Imported and labelled
+                <em>unverified</em>, because refusing these would drop a large
+                part of the feed for no gain in safety.
+              </td>
+            </tr>
+            <tr>
+              <td>unsigned</td>
+              <td>{{.Probe.Unsigned}}</td>
+              <td style="opacity:.7">No key or signature to check at all.</td>
+            </tr>
+            <tr>
+              <td>bad signature</td>
+              <td>
+                {{if gt .Probe.BadSig 0}}<span class="text-danger">{{.Probe.BadSig}}</span>
+                {{else}}{{.Probe.BadSig}}{{end}}
+              </td>
+              <td style="opacity:.7">
+                Checked and <strong>failed</strong>. The only one of these four
+                that means someone is forging rather than merely unprovable, so
+                it is counted separately and never imported. Anything above zero
+                here is worth investigating.
+              </td>
+            </tr>
+            <tr>
+              <td>not spots</td>
+              <td>{{.Probe.NotSpots}}</td>
+              <td style="opacity:.7">
+                Ordinary posts. Not a fault &mdash; {{.Group}} carries them too.
+              </td>
+            </tr>
+            {{if gt .Probe.Malformed 0}}
+            <tr>
+              <td>malformed</td>
+              <td>{{.Probe.Malformed}}</td>
+              <td style="opacity:.7">
+                Spot-shaped and unparseable. Means a format change or a bug here.
+              </td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        {{if .Probe.SmallestK}}
+        <p style="font-size:.8rem;opacity:.6;margin:0">
+          Key sizes seen: {{.Probe.SmallestK}}&ndash;{{.Probe.LargestK}} bits.
+          Article range {{.Probe.Low}}&ndash;{{.Probe.High}} on {{.Probe.Server}}.
+        </p>
+        {{end}}
+      {{end}}
+    {{else}}
+      <p style="opacity:.6;font-size:.85rem">No probe has been run yet.</p>
+    {{end}}
+
+    <form method="post" action="/admin/p/usenet/spot-probe" class="mt-3 d-flex align-items-center gap-2">
+      <label style="font-size:.85rem;opacity:.7" for="spot-sample">sample</label>
+      <input id="spot-sample" type="number" name="sample" value="25" min="1" max="200"
+             class="form-control form-control-sm" style="width:6rem">
+      <button class="btn btn-sm btn-outline-primary" {{if not .HaveProvider}}disabled{{end}}>
+        Probe {{.Group}}
+      </button>
+      {{if not .HaveProvider}}
+      <span style="font-size:.8rem;opacity:.6">needs an enabled provider</span>
+      {{end}}
+    </form>
+  </div>
+</div>
