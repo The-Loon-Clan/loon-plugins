@@ -143,11 +143,21 @@ func (s *PGStore) upsertSpots(ctx context.Context, rows []spotRow) (int, error) 
 }
 
 // spotGroups lists the active spot groups.
+//
+// back_watermark is COALESCEd because it is the one nullable column here: it
+// has no default, so a group inserted by anything other than the crawler's own
+// path arrives with NULL meaning "backfill has never started". Scanning that
+// into an int64 fails the whole query, which is how the first live run of this
+// pass ended -- "converting NULL to int64 is unsupported", every pass, with no
+// spot ever read. 0 is already this code's unseeded sentinel and seeds from
+// server_high on first sight, so the collapse is exact rather than a papering
+// over. The other four columns are NOT NULL with defaults and are left alone.
 func (s *PGStore) spotGroups(ctx context.Context) ([]spotGroup, error) {
 	var out []spotGroup
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.SelectContext(ctx, &out,
-			`SELECT name, high_watermark, back_watermark, server_low, server_high, backfill_done
+			`SELECT name, high_watermark, COALESCE(back_watermark, 0) AS back_watermark,
+			        server_low, server_high, backfill_done
 			   FROM newsgroups WHERE active = TRUE AND kind = 'spots' ORDER BY name`)
 	})
 	return out, err
