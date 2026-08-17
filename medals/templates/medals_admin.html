@@ -1,0 +1,92 @@
+{{/* Admin → Medals: the catalogue. */}}
+{{if .Msg}}<div class="notice notice--success"><span>{{.Msg}}</span></div>{{end}}
+{{if .Err}}<div class="notice notice--warning"><span>{{.Err}}</span></div>{{end}}
+
+<div class="data-table-wrapper">
+    <table class="data-table">
+        <caption class="visually-hidden">Every medal, enabled or not</caption>
+        <thead>
+            <tr><th>Medal</th><th>Slug</th><th>Bonus</th><th>Price</th><th>State</th><th></th><th></th></tr>
+        </thead>
+        <tbody>
+            {{$csrf := .CSRFToken}}
+            {{range .Medals}}
+            <tr>
+                <td>
+                    {{if .Icon}}<img src="{{.Icon}}" alt="" style="width:32px;height:32px;object-fit:cover;border-radius:6px;vertical-align:middle">{{end}}
+                    {{.Name}}
+                </td>
+                <td><code>{{.Slug}}</code></td>
+                <td>{{if .BonusPct}}+{{.BonusPct}}%{{else}}&mdash;{{end}}</td>
+                <td>{{if .Price}}{{.Price}}{{else}}award only{{end}}</td>
+                <td>{{if .Enabled}}<span class="tag tag--success">enabled</span>{{else}}<span class="tag">disabled</span>{{end}}</td>
+                <td>
+                    <form method="post" action="/admin/p/medals/toggle" style="display:inline">
+                        <input type="hidden" name="_csrf" value="{{$csrf}}">
+                        <input type="hidden" name="id" value="{{.ID}}">
+                        <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
+                        <button class="button button--sm" type="submit">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+                    </form>
+                </td>
+                <td>
+                    <form method="post" action="/admin/p/medals/delete" style="display:inline"
+                          onsubmit="return confirm('Delete this medal? Every member holding it loses it.');">
+                        <input type="hidden" name="_csrf" value="{{$csrf}}">
+                        <input type="hidden" name="id" value="{{.ID}}">
+                        <button class="button button--sm" type="submit">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="7" class="text-muted">No medals yet &mdash; define the first below.</td></tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<h3 class="h5 mt-4">Define a medal</h3>
+<form method="post" action="/admin/p/medals/create">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+        <label class="form__label" for="md-slug">Slug
+            <input id="md-slug" name="slug" class="form__input" placeholder="founder" pattern="[a-z0-9]+(-[a-z0-9]+)*">
+        </label>
+        <label class="form__label" for="md-name">Name
+            <input id="md-name" name="name" class="form__input" placeholder="Founder">
+        </label>
+        <label class="form__label" for="md-icon" style="flex:1;min-width:220px">Icon URL
+            <input id="md-icon" name="icon" class="form__input" placeholder="/uploads/medals/founder.png">
+        </label>
+    </div>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap" class="mt-2">
+        <label class="form__label" for="md-bonus">Bonus % <span class="text-muted small">(0 = just a medal)</span>
+            <input id="md-bonus" name="bonus_pct" class="form__input" inputmode="numeric" value="0" size="4">
+        </label>
+        <label class="form__label" for="md-price">Price <span class="text-muted small">(0 = award only)</span>
+            <input id="md-price" name="price" class="form__input" inputmode="numeric" value="0" size="7">
+        </label>
+        <label class="form__label" for="md-ordinal">Order
+            <input id="md-ordinal" name="ordinal" class="form__input" inputmode="numeric" value="0" size="4">
+        </label>
+        <label class="form__label" for="md-l10n">Description localization slug
+            {{if .L10nSlugs}}
+            <select id="md-l10n" name="description_slug" class="form__input">
+                <option value="">&mdash; use the description text &mdash;</option>
+                {{range .L10nSlugs}}<option value="{{.}}">{{.}}</option>{{end}}
+            </select>
+            {{else}}
+            <input id="md-l10n" name="description_slug" class="form__input" placeholder="medal.founder.desc">
+            {{end}}
+        </label>
+    </div>
+    <label class="form__label mt-2" for="md-desc">Description (the fallback text)
+        <input id="md-desc" name="description" class="form__input" placeholder="What this medal means">
+    </label>
+    <button class="button button--primary button--sm mt-2" type="submit">Create</button>
+    <p class="text-muted small mt-2">
+        A medal with a price is buyable at /p/medals; price 0 is award-only — pay it
+        through a reward with a payout of kind <code>medal</code> targeting the slug.
+        The bonus is a number this plugin only REPORTS (medals.bonus); whether it
+        does anything is the host&#39;s choice, and on this site today it does not.
+    </p>
+</form>

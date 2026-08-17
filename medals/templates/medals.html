@@ -1,0 +1,49 @@
+{{/* Medals — /p/medals: the catalogue and your cabinet in one view. */}}
+{{if .Msg}}<div class="notice notice--success"><span>{{.Msg}}</span></div>{{end}}
+{{if .Err}}<div class="notice notice--warning"><span>{{.Err}}</span></div>{{end}}
+
+<p class="text-muted">
+    Medals you hold can be worn on your profile &mdash; tick the ones to show and
+    save. Some are for sale, some are only ever awarded.
+</p>
+
+<form method="post" action="/p/medals/wear">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+    <div class="data-table-wrapper">
+        <table class="data-table">
+            <caption class="visually-hidden">The medal catalogue and your collection</caption>
+            <thead>
+                <tr><th>Medal</th><th>About</th><th>Bonus</th><th>Price</th><th></th><th>Wear</th></tr>
+            </thead>
+            <tbody>
+                {{$csrf := .CSRFToken}}
+                {{range .Medals}}
+                <tr>
+                    <td>
+                        {{if .Icon}}<img src="{{.Icon}}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;vertical-align:middle">{{end}}
+                        <strong>{{.Name}}</strong>
+                    </td>
+                    <td class="text-muted">{{.Description}}</td>
+                    <td>{{if .BonusPct}}<span class="tag tag--success">+{{.BonusPct}}%</span>{{else}}<span class="text-muted small">&mdash;</span>{{end}}</td>
+                    <td>{{if .Price}}{{.Price}} points{{else}}<span class="text-muted small">award only</span>{{end}}</td>
+                    <td>
+                        {{if .Owned}}<span class="tag">held</span>
+                        {{else if .Price}}
+                        {{/* A nested form cannot live inside the wear form, so
+                             buying posts through a formaction button. */}}
+                        <button class="button button--sm" type="submit"
+                                formaction="/p/medals/buy" name="id" value="{{.ID}}">Buy</button>
+                        {{end}}
+                    </td>
+                    <td>
+                        {{if .Owned}}<input type="checkbox" name="wear/{{.ID}}" value="1" {{if .Shown}}checked{{end}} aria-label="Wear {{.Name}}">{{end}}
+                    </td>
+                </tr>
+                {{else}}
+                <tr><td colspan="6" class="text-muted">No medals exist yet.</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    <button class="button button--primary button--sm mt-2" type="submit">Save what I wear</button>
+</form>
