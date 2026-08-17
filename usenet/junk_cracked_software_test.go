@@ -25,6 +25,10 @@ func TestJunkCatchesCrackedSoftware(t *testing.T) {
 		"installer.msi",
 		"Origin Emu fix",
 		"Total Commander serial key",
+		// The 2026-08-17 report: repack-and-portable + N-bit arch markers,
+		// which a 3-part version and no "by" slipped past everything.
+		"MediaHuman YouTube Downloader 3.9.20 (0605) (Repack & Portable) 64-bit",
+		"SomeApp 2.1 Repack and Portable 32bit",
 	}
 	for _, title := range junk {
 		if got := whichJunkRule(title); got == "" {
@@ -48,6 +52,13 @@ func TestJunkDoesNotCatchRealTitlesThatLookLikeCracks(t *testing.T) {
 		"Euphoria.US.S03E06.Stand.Still.and.See.1080p.WEB-DL.DDP5.H264-iND",
 		"Kaiju No 8 S02E01 1080p WEB-DL AAC2 0 H 264",
 		"Cowboy Bebop - Complete Series [1080p]",
+		// Guards for the repack-and-portable + N-bit rules: scene REPACK
+		// tags are legit re-releases, "Portable" is a real title word
+		// (PSP-era adaptations), and anime bit-depth markers are 8/10-bit,
+		// never 32/64.
+		"Frieren S01E12 REPACK 1080p WEB H.264",
+		"Persona 3 Portable The Movie 1080p BluRay",
+		"[Group] Some Show - 05 (Hi10P 10-bit 1080p)",
 	}
 	for _, title := range real {
 		if got := whichJunkRule(title); got == "cracked_software" {
