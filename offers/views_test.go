@@ -107,8 +107,9 @@ func TestOffersPageRenders(t *testing.T) {
 	if got := strings.Count(got, "Yamada and the Seven Witches"); got != 1 {
 		t.Errorf("the show's title renders %d times — variants must group under ONE card", got)
 	}
-	// Two variants → collapsed by default (the page is a list of shows);
-	// the disclosure is a native <details>, so it works scriptless.
+	// Every show renders collapsed — including single-variant ones, by the
+	// operator's call: the page is a list of shows, uniformly. The
+	// disclosure is a native <details>, so it works scriptless.
 	if !strings.Contains(got, "<details") || strings.Contains(got, "<details class=\"card mb-2 of-group\" open") {
 		t.Error("a multi-variant show should render as a collapsed <details>")
 	}
@@ -116,8 +117,8 @@ func TestOffersPageRenders(t *testing.T) {
 	single := render(t, "offers.html", listingData(gin.H{
 		"Groups": groupOf("One Variant Show", a), "Total": 1,
 	}))
-	if !strings.Contains(single, " open") {
-		t.Error("a single-variant show should render open — there is nothing to hide behind a click")
+	if strings.Contains(single, "of-group\" open") || strings.Contains(single, "<details open") {
+		t.Error("a single-variant show must render collapsed like every other card")
 	}
 	for _, gone := range []string{"Top deliverers", "Recent fulfillments", "Active trackers"} {
 		if strings.Contains(got, gone) {

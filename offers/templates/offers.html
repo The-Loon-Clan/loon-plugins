@@ -96,7 +96,7 @@
                      keyboard included, no script. Single-variant shows stay
                      open: there is nothing to hide behind a click, and every
                      request would otherwise cost one. */}}
-                <details class="card mb-2 of-group" {{if eq (len .Buckets) 1}}open{{end}}>
+                <details class="card mb-2 of-group">
                     <summary class="card-header" style="display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;">
                         {{if .Picture}}
                         <span class="nzb-thumb" data-cover="{{.Picture}}" data-fallback="{{.PictureFallback}}"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
