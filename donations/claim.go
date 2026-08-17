@@ -129,6 +129,12 @@ func (h *Handlers) ClaimPackage(c *gin.Context) {
 	if label := clampDonorLabel(c.PostForm("donor_label")); label != "" {
 		meta["donor_label"] = label
 	}
+	// The donor's don't-list-me choice rides the invoice with the rest of
+	// their identity: the webhook is the only writer, and metadata is the only
+	// channel that survives the round trip through BTCPay.
+	if c.PostForm("anonymous") == "1" {
+		meta["anonymous"] = "1"
+	}
 
 	reqBody := btcpayInvoiceRequest{
 		Amount:   fmt.Sprintf("%.2f", pkg.AmountUSD),

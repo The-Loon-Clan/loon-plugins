@@ -116,11 +116,11 @@ func (r *PGStore) CreateDonation(ctx context.Context, d *Donation, donatorThresh
 
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO donations (asset, txid, amount_native, amount_usd, donor_user_id,
-		                       donor_label, received_at, note, overfunded, package_id)
-		VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()), $8, $9, $10)
+		                       donor_label, received_at, note, overfunded, package_id, anonymous)
+		VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()), $8, $9, $10, $11)
 		RETURNING id, received_at`,
 		d.Asset, d.Txid, d.AmountNative, d.AmountUSD, d.DonorUserID,
-		d.DonorLabel, donationNullTime(d.ReceivedAt), d.Note, d.Overfunded, d.PackageID,
+		d.DonorLabel, donationNullTime(d.ReceivedAt), d.Note, d.Overfunded, d.PackageID, d.Anonymous,
 	).Scan(&d.ID, &d.ReceivedAt)
 	if err != nil {
 		return err
@@ -162,10 +162,11 @@ func (r *PGStore) GetDonationByTxid(ctx context.Context, txid string) (*Donation
 	return &d, nil
 }
 
-// ListRecentDonations returns the N most-recent rows for the public
-// page. donor_label is the public-display name; rows where the donor
-// opted out (empty label) come back as 'Anonymous' on render — the
-// label column itself stays untouched.
+// ListRecentDonations returns the N most-recent PUBLIC rows for the donate
+// page. Two different opt-outs meet here and they are not the same choice:
+// an empty donor_label lists the donation as "Anonymous", while anonymous=true
+// keeps the row off the list entirely. Sums elsewhere never filter on either —
+// hiding a donation from display must never hide it from the thermometer.
 func (r *PGStore) ListRecentDonations(ctx context.Context, limit int) ([]*Donation, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 20
@@ -175,6 +176,7 @@ func (r *PGStore) ListRecentDonations(ctx context.Context, limit int) ([]*Donati
 		SELECT id, asset, txid, amount_native, amount_usd, donor_user_id,
 		       donor_label, received_at, note, overfunded, package_id
 		  FROM donations
+		 WHERE NOT anonymous
 		 ORDER BY received_at DESC
 		 LIMIT $1`, limit)
 	return out, err

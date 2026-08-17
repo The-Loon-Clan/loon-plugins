@@ -47,6 +47,13 @@ type Donation struct {
 	// migration 261. The BTCPay webhook reads package_id from the
 	// invoice metadata it issued and writes it here on settlement.
 	PackageID *int64 `db:"package_id"     json:"package_id,omitempty"`
+	// Anonymous keeps this donation OFF the public page entirely — the recent
+	// list and any future donor roll. Not the same as an empty DonorLabel,
+	// which lists an "Anonymous" row: some donors are fine with a nameless
+	// row, some do not want the row at all. Sums still include it — money
+	// that asked not to be displayed still pays the bills and still crosses
+	// the goal.
+	Anonymous bool `db:"anonymous"      json:"anonymous"`
 }
 
 // DonationPackage is one admin-defined "buy a slot" target shown on

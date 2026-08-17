@@ -568,9 +568,24 @@
                         <div class="pkg-bar"><div class="pkg-bar-fill" style="width:{{.PercentRound}}%;"></div></div>
                     </div>
                     <form method="POST" action="/donate/claim-package/{{.ID}}" class="pkg-form">
-                        {{/* CSRF token middleware injects this on protected
-                             forms; harmless if it's a no-op for this route. */}}
-                        {{if $.CSRFToken}}<input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">{{end}}
+                        {{/* _csrf, the field name the host middleware actually
+                             checks — this said csrf_token, which no middleware
+                             reads, so on a host that gates this route the claim
+                             403'd regardless of the token's value. */}}
+                        {{if $.CSRFToken}}<input type="hidden" name="_csrf" value="{{$.CSRFToken}}">{{end}}
+                        {{/* The donor decides how this appears BEFORE paying,
+                             because afterwards there is no one to ask: the
+                             webhook is the only writer and it only knows what
+                             rode the invoice. Blank name = listed as
+                             "Anonymous"; the checkbox = no public row at all.
+                             Two different kinds of quiet, deliberately. */}}
+                        <input type="text" name="donor_label" maxlength="40"
+                               placeholder="Shown as (blank = Anonymous)"
+                               aria-label="Name to show on the donor list">
+                        <label class="pkg-anon">
+                            <input type="checkbox" name="anonymous" value="1">
+                            Don't list this donation publicly
+                        </label>
                         <button type="submit" class="btn btn-primary btn-sm pkg-claim">Claim this slot →</button>
                     </form>
                 </div>

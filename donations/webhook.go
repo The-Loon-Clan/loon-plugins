@@ -162,6 +162,7 @@ func (h *Handlers) BTCPayWebhook(c *gin.Context) {
 		AmountNative: amountNative,
 		AmountUSD:    amountUSD,
 		DonorLabel:   donorLabel,
+		Anonymous:    metaString(p.Metadata, "anonymous") == "1",
 		Note:         "btcpay invoice " + p.InvoiceID,
 		ReceivedAt:   time.Unix(p.Timestamp, 0).UTC(),
 	}
