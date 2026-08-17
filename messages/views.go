@@ -35,7 +35,11 @@ func parseTemplates() {
 		return
 	}
 	pageTmpl = template.Must(template.New("messages").Funcs(template.FuncMap{
-		"markdown":     func(s string) template.HTML { return deps.Markdown(s) },
+		"markdown": func(s string) template.HTML { return deps.Markdown(s) },
+		// preview is the sidebar's one-liner: the same pipeline as markdown,
+		// flattened to plain text (see previewBody) — the row is a summary,
+		// not a rendering surface.
+		"preview":      func(s string) string { return previewBody(s, 0) },
 		"relativeTime": func(v any) string { return deps.RelativeTime(v) },
 		// initial is rune-safe on purpose: `slice name 0 1` counts BYTES, so
 		// a multi-byte username renders half a rune and an empty one is a

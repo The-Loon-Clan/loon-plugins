@@ -2,6 +2,7 @@ package messages
 
 import (
 	"context"
+	"html"
 	"net/http"
 	"sort"
 	"strconv"
@@ -489,12 +490,49 @@ func (h *Handlers) UnblockDMUser(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/inbox")
 }
 
-// previewBody returns the first N chars of a message body for
-// notification previews. Adds an ellipsis only when truncating.
+// previewBody reduces a message body to the text a one-line preview can
+// hold: through the same sanitising markdown pipeline the message pane
+// renders with, then flattened — tags dropped, entities unescaped,
+// whitespace collapsed — so "**hi**" previews as "hi" and a typed "<b>"
+// reads as the same literal text the pane shows, not as double-escaped
+// markup. Rune-safe cap (n > 0) with an ellipsis only when truncating.
 func previewBody(body string, n int) string {
-	body = strings.TrimSpace(body)
-	if len(body) <= n {
+	if deps != nil && deps.Markdown != nil {
+		body = stripTags(string(deps.Markdown(body)))
+		// The pipeline's output entity-escapes what it refused to treat as
+		// markup; a PREVIEW is plain text, so the escapes come back off.
+		// Safe because html/template re-escapes on render.
+		body = html.UnescapeString(body)
+	}
+	body = strings.Join(strings.Fields(body), " ")
+	if n <= 0 {
 		return body
 	}
-	return body[:n] + "…"
+	runes := []rune(body)
+	if len(runes) <= n {
+		return body
+	}
+	return string(runes[:n]) + "…"
+}
+
+// stripTags drops every tag from already-SANITISED html. It can afford to be
+// this simple because the input went through deps.Markdown, which removes
+// script/style with their contents — there is no dangerous interior left to
+// mis-skip.
+func stripTags(s string) string {
+	var b strings.Builder
+	depth := 0
+	for _, r := range s {
+		switch {
+		case r == '<':
+			depth++
+		case r == '>':
+			if depth > 0 {
+				depth--
+			}
+		case depth == 0:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

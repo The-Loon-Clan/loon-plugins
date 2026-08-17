@@ -328,7 +328,7 @@
                     {{end}}
                     <a href="{{$href}}"
                        class="ib-row {{if $isActive}}is-active{{end}}"
-                       data-search="{{.DisplayName}} {{.Subtitle}}">
+                       data-search="{{.DisplayName}} {{preview .Subtitle}}">
                         {{if eq .Kind "dm"}}
                             {{if .AvatarPath}}
                             <img src="{{.AvatarPath}}" alt="{{.DisplayName}}" class="ib-avatar">
@@ -340,7 +340,7 @@
                         {{end}}
                         <div class="ib-body">
                             <div class="ib-name">{{.DisplayName}}</div>
-                            <div class="ib-preview">{{.Subtitle}}</div>
+                            <div class="ib-preview">{{preview .Subtitle}}</div>
                         </div>
                         <div class="ib-meta">
                             <span>{{relativeTime .UpdatedAt}}</span>
