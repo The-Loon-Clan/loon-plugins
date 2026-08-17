@@ -1,11 +1,23 @@
 {{define "news_detail.html"}}
     <style>
-        .news-body { font-size: 0.9rem; line-height: 1.7; color: var(--text-muted); }
+        /* Full-strength text, same reasoning as the feed's excerpt: this is
+           the post talking, and muted grey is the colour of captions. */
+        .news-body { font-size: 0.95rem; line-height: 1.7; color: var(--text-primary); }
         .news-body p { margin-bottom: 0.8rem; }
         .news-body h2, .news-body h3 { color: var(--text-primary); margin-top: 1.5rem; }
         .news-body a { color: var(--blue); }
         .news-body img { max-width: 100%; border-radius: 4px; margin: 0.5rem 0; }
         .news-body ul, .news-body ol { padding-left: 1.5rem; margin-bottom: 0.8rem; }
+        /* The same card the FEED draws its previews in — a reader clicks a
+           card there and lands on bare text floating on the page background
+           here, which reads as leaving the news section rather than opening
+           the post. Same tokens, same fallbacks. */
+        .news-post-card {
+            background: var(--surface-3, var(--bg-elevated, transparent));
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.6rem 1.75rem 1.5rem;
+        }
     </style>
     {{/* No breadcrumb here, and no heading.
 
@@ -20,19 +32,29 @@
          The host draws the trail (Home › News › this post) and the heading from
          the title passed to render(), so both belong to it. What is left here
          is the post. */}}
-    <article class="container site-container mt-4">
-        {{/* Conditional on the host: a chrome that draws the heading from
-             render()'s title makes this a duplicate; a chrome that draws
-             nothing left the post as a date and a body with no title
-             anywhere on the page. See Deps.HeadingInFragment. */}}
-        {{if .ShowHeading}}<h1 style="font-size:1.5rem;font-weight:700;margin:0 0 .5rem;">{{.PageHeading}}</h1>{{end}}
-        <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 1.25rem;">
-            <time datetime="{{.Post.CreatedAt.Format "2006-01-02"}}">{{.Post.CreatedAt.Format "January 02, 2006"}}</time>
+    {{/* page-narrow, matching the FEED's column: landing from an ~880px list
+         onto an ~1200px page made every post feel like a different site. */}}
+    <div class="container mt-4 page-narrow mb-5">
+        {{/* A real button, above the card: the old plain "← All news" link
+             hid at the bottom of the body, so the only way back was the
+             browser. */}}
+        <p style="margin:0 0 0.9rem;">
+            <a class="btn btn-sm btn-outline-secondary" href="/news">&larr; All news</a>
         </p>
-        <div class="news-body">{{.Post.Body}}</div>
-        <p style="margin:1.75rem 0 0;">
-            <a href="/news">← All news</a>
+        <article class="news-post-card">
+            {{/* Conditional on the host: a chrome that draws the heading from
+                 render()'s title makes this a duplicate; a chrome that draws
+                 nothing left the post as a date and a body with no title
+                 anywhere on the page. See Deps.HeadingInFragment. */}}
+            {{if .ShowHeading}}<h1 style="font-size:1.5rem;font-weight:700;margin:0 0 .5rem;">{{.PageHeading}}</h1>{{end}}
+            <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 1.25rem;">
+                <time datetime="{{.Post.CreatedAt.Format "2006-01-02"}}">{{.Post.CreatedAt.Format "January 02, 2006"}}</time>
+            </p>
+            <div class="news-body">{{.Post.Body}}</div>
+        </article>
+        <p style="margin:1rem 0 0;">
+            <a href="/news" style="color:var(--blue);text-decoration:none;font-size:0.85rem;">&larr; All news</a>
         </p>
-    </article>
+    </div>
 
 {{end}}
