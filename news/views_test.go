@@ -76,6 +76,32 @@ func TestNewsPagesRender(t *testing.T) {
 	}
 }
 
+// The heading seam, both ways: a host whose chrome draws no page heading
+// (HeadingInFragment → ShowHeading) gets exactly one <h1> on the feed and on
+// the post; the default renders none, because on the other kind of host the
+// chrome's own heading would make it a duplicate — the a11y audit's finding.
+func TestHeadingRendersOnlyWhenTheHostAsks(t *testing.T) {
+	withHeading := render1(t, "news.html", map[string]any{
+		"News": []safePostView{sampleSafe()}, "ShowHeading": true, "PageHeading": "News"})
+	if strings.Count(withHeading, "<h1") != 1 {
+		t.Errorf("feed with ShowHeading has %d h1(s), want exactly 1", strings.Count(withHeading, "<h1"))
+	}
+	without := render1(t, "news.html", map[string]any{"News": []safePostView{sampleSafe()}})
+	if strings.Contains(without, "<h1") {
+		t.Error("feed renders an h1 the host's chrome will duplicate")
+	}
+
+	detail := render1(t, "news_detail.html", map[string]any{
+		"Post": sampleSafe(), "ShowHeading": true, "PageHeading": "Server maintenance"})
+	if strings.Count(detail, "<h1") != 1 || !strings.Contains(detail, "Server maintenance") {
+		t.Error("post with ShowHeading must carry its title as the one h1 — " +
+			"without it the page was a date and a body with no title anywhere")
+	}
+	if strings.Contains(render1(t, "news_detail.html", map[string]any{"Post": sampleSafe()}), "<h1") {
+		t.Error("post renders an h1 the host's chrome will duplicate")
+	}
+}
+
 func TestNewsAdminPagesRender(t *testing.T) {
 	posts := []NewsPost{{ID: 1, Title: "Server maintenance", Slug: "server-maintenance",
 		Body: "back shortly", Published: true, CreatedAt: time.Now()}}

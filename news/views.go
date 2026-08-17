@@ -24,6 +24,11 @@ func render(c *gin.Context, title, name string, data gin.H) {
 	if data == nil {
 		data = gin.H{}
 	}
+	// One place, all four pages: whether the fragment draws its own <h1>
+	// (chrome supplies none on this host) and what it says. See
+	// Deps.HeadingInFragment for why hosts differ.
+	data["ShowHeading"] = deps.HeadingInFragment
+	data["PageHeading"] = title
 	var sb strings.Builder
 	if err := pageTmpl.ExecuteTemplate(&sb, name, data); err != nil {
 		// html/template streams: a partly-rendered page must not go out as

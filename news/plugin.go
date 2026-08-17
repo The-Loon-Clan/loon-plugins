@@ -32,6 +32,15 @@ type Deps struct {
 	// are this plugin's markup now, so what it needs from the host is chrome
 	// rather than a data map.
 	RenderPage func(c *gin.Context, title string, body template.HTML)
+	// HeadingInFragment says this host's chrome draws NO page heading, so
+	// the fragments must render their own <h1> from the title passed to
+	// render(). Hosts disagree here and both are right: a chrome that draws
+	// a panel heading from the title makes a fragment h1 a duplicate (the
+	// a11y audit caught exactly that), while a chrome that deliberately
+	// draws nothing left every news post rendering headline-less — a date
+	// and a body with no title anywhere on the page. Default false keeps
+	// the chrome-draws-it behaviour.
+	HeadingInFragment bool
 	// Sanitize cleans admin-authored news body HTML before it is
 	// rendered unescaped (the host's news sanitization policy).
 	Sanitize func(html string) string

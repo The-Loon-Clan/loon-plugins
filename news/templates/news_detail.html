@@ -20,7 +20,12 @@
          The host draws the trail (Home › News › this post) and the heading from
          the title passed to render(), so both belong to it. What is left here
          is the post. */}}
-    <article class="container site-container">
+    <article class="container site-container mt-4">
+        {{/* Conditional on the host: a chrome that draws the heading from
+             render()'s title makes this a duplicate; a chrome that draws
+             nothing left the post as a date and a body with no title
+             anywhere on the page. See Deps.HeadingInFragment. */}}
+        {{if .ShowHeading}}<h1 style="font-size:1.5rem;font-weight:700;margin:0 0 .5rem;">{{.PageHeading}}</h1>{{end}}
         <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 1.25rem;">
             <time datetime="{{.Post.CreatedAt.Format "2006-01-02"}}">{{.Post.CreatedAt.Format "January 02, 2006"}}</time>
         </p>
