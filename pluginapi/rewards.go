@@ -73,6 +73,28 @@ type InviteGranter interface {
 	GrantInvites(ctx context.Context, userID, n int) (label string, err error)
 }
 
+// FlairGranterName is the Core extension-registry key under which the
+// pointstore plugin publishes its FlairGranter.
+const FlairGranterName = "pointstore.granter"
+
+// FlairGranter equips a profile flair — the capability the pointstore plugin
+// exposes so the points store can sell flair without importing it.
+//
+// GRANT-ONLY, exactly like RankGranter: the caller debits the points BEFORE
+// calling and unwinds them if this fails. Equipping REPLACES whatever flair
+// the member wore, which is the pointstore's own semantic — one flair per
+// member, a new one takes the slot.
+//
+// This seam exists because the alternative was a page: the pointstore used to
+// register its own /p/store shop for three items, which sat in the nav one
+// menu away from the points store and read as a second one. One shop, many
+// granters is the shape everything else here already has.
+type FlairGranter interface {
+	// EquipFlair equips flairID for userID, returning the flair's display
+	// name for the receipt. Unknown ids are an error, never a guess.
+	EquipFlair(ctx context.Context, userID int64, flairID string) (name string, err error)
+}
+
 // PerkGranterName is the Core extension-registry key under which the perks
 // plugin publishes its PerkGranter.
 const PerkGranterName = "perks.granter"

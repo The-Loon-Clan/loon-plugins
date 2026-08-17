@@ -8,9 +8,10 @@ package pointstore
 import (
 	"context"
 	"embed"
+	"fmt"
 	"html/template"
 
-	"github.com/gin-gonic/gin"
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 
 	"github.com/the-loon-clan/loon/core"
 )
@@ -51,16 +52,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.tmpl = t
 
-	// The store page (login-gated site page) + its buy action.
-	if err := c.RegisterView(core.View{
-		Slug: "store", Title: "Store", Slot: core.SlotSitePage,
-		MinRole: core.RoleUser,
-		Render:  p.renderStore,
-		Actions: map[string]func(*gin.Context) (template.HTML, error){
-			"buy": p.buy,
-		},
-	}); err != nil {
-		return err
+	// NO shop page. This plugin used to register /p/store — its own
+	// three-item storefront, sitting in the site nav one menu away from the
+	// points store and reading as a second one. Flair is a points-store ITEM
+	// now (store.RewardFlair), bought where invites and ranks are bought;
+	// what stays here is what is genuinely this plugin's: the catalogue, the
+	// equip rule, the profile widget, and the granter the store calls.
+	if err := c.Register(pluginapi.FlairGranterName, p); err != nil {
+		return fmt.Errorf("pointstore: registering %q: %w", pluginapi.FlairGranterName, err)
 	}
 
 	// The equipped flair, shown on the subject's public profile.

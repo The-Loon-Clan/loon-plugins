@@ -24,6 +24,11 @@ const (
 	// once SPENT, which is a different clock and not the store's to set.
 	// Invokes pluginapi.PerkGranter.
 	RewardPerk RewardType = "perk"
+
+	// RewardFlair equips a profile flair: RewardRef = the flair id
+	// ("supporter", "vip", ...). RewardDays is unused — a flair is worn until
+	// replaced, not until a date. Invokes pluginapi.FlairGranter.
+	RewardFlair RewardType = "flair"
 )
 
 // Item is a purchasable catalog entry priced in points. PointsCost is
@@ -65,6 +70,8 @@ func (i *Item) Icon() string {
 		return "envelope"
 	case RewardPerk:
 		return "bolt"
+	case RewardFlair:
+		return "star"
 	}
 	// Deliberately generic. The migration comments name freeleech and points
 	// bonuses as the next reward types; until they exist, a neutral tag reads

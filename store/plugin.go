@@ -179,6 +179,19 @@ func (p *Plugin) Provision(c *core.Core) error {
 		perks = g
 	}
 
+	// The flair granter, on the same terms as perks: a sibling plugin a host
+	// may not install, so absence fails the individual flair purchase rather
+	// than boot, and a wrong type under the right name is a loud wiring bug.
+	var flair pluginapi.FlairGranter
+	if svc, ok := c.Lookup(pluginapi.FlairGranterName); ok {
+		g, ok := svc.(pluginapi.FlairGranter)
+		if !ok {
+			return fmt.Errorf("store: %q is %T, not pluginapi.FlairGranter",
+				pluginapi.FlairGranterName, svc)
+		}
+		flair = g
+	}
+
 	var invites pluginapi.InviteGranter
 	if svc, ok := c.Lookup(pluginapi.InviteGranterName); ok {
 		if g, ok := svc.(pluginapi.InviteGranter); ok {
@@ -202,6 +215,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		granter: granter,
 		invites: invites,
 		perks:   perks,
+		flair:   flair,
 		errs:    c.Errors,
 		core:    c,
 	}

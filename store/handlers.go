@@ -34,6 +34,7 @@ type Handlers struct {
 	// perks may be nil for the same reason invites may: a host with no tracker
 	// economy is legitimate, and only perk items need it.
 	perks pluginapi.PerkGranter
+	flair pluginapi.FlairGranter
 	errs  core.ErrorReporter
 }
 
@@ -262,6 +263,23 @@ func (h *Handlers) grantReward(ctx context.Context, userID int, item *Item) (str
 			return "", fmt.Errorf("grant perk %q: %w", item.RewardRef, err)
 		}
 		return item.RewardRef + " token", nil
+	case RewardFlair:
+		// Same terms as perks: an absent capability fails THIS purchase and
+		// the caller unwinds the points. reward_ref is the flair id and gets
+		// no fallback — the pointstore rejects an unknown id, and guessing
+		// would equip a member with something they did not choose.
+		if h.flair == nil {
+			return "", fmt.Errorf("flair item %d: no %s registered on this host",
+				item.ID, pluginapi.FlairGranterName)
+		}
+		if item.RewardRef == "" {
+			return "", fmt.Errorf("flair item %d has no reward_ref (the flair id)", item.ID)
+		}
+		name, err := h.flair.EquipFlair(ctx, int64(userID), item.RewardRef)
+		if err != nil {
+			return "", fmt.Errorf("equip flair %q: %w", item.RewardRef, err)
+		}
+		return name + " flair equipped", nil
 	default:
 		return "", fmt.Errorf("unknown reward_type %q on item %d", item.RewardType, item.ID)
 	}
