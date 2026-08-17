@@ -12,7 +12,7 @@ require (
 	github.com/lrstanley/girc v1.1.1
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/the-loon-clan/loon v0.0.0-00010101000000-000000000000
+	github.com/the-loon-clan/loon v0.0.0-20260817043606-a53a74993b2c
 	github.com/yuin/goldmark v1.7.13
 	golang.org/x/image v0.44.0
 	golang.org/x/net v0.53.0

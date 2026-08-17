@@ -117,8 +117,16 @@
                     </select>
                 </label>
                 <label class="form__label">Pays reward
+                    {{if .RewardOptions}}
+                    <select name="reward_slug" class="form__input">
+                        <option value="">&mdash; badge only &mdash;</option>
+                        {{range .RewardOptions}}<option value="{{.}}">{{.}}</option>{{end}}
+                    </select>
+                    <span class="form-help text-muted small">only rewards the grant path will accept are offered</span>
+                    {{else}}
                     <input name="reward_slug" class="form__input" placeholder="badge-bonus">
                     <span class="form-help text-muted small">a one_off reward's slug from the Rewards page; blank = a pure badge</span>
+                    {{end}}
                 </label>
                 <label class="form__label">Default icon
                     {{if .IconOptions}}
@@ -133,6 +141,29 @@
                 {{if .CanUpload}}
                 <label class="form__label">Badge image
                     <input name="image" type="file" accept="image/*" class="form__input">
+                </label>
+                {{end}}
+                {{if .ImageOptions}}
+                <label class="form__label">&hellip;or an existing image
+                    <select name="image_existing" class="form__input">
+                        <option value="">&mdash; none &mdash;</option>
+                        {{range .ImageOptions}}<option value="{{.URL}}">{{.Name}}</option>{{end}}
+                    </select>
+                    <span class="form-help text-muted small">an upload wins when both are set</span>
+                </label>
+                {{end}}
+                {{if .L10nSlugs}}
+                <label class="form__label">Title localization slug
+                    <select name="title_slug" class="form__input">
+                        <option value="">&mdash; use the title text &mdash;</option>
+                        {{range .L10nSlugs}}<option value="{{.}}">{{.}}</option>{{end}}
+                    </select>
+                </label>
+                <label class="form__label">Description localization slug
+                    <select name="description_slug" class="form__input">
+                        <option value="">&mdash; use the description text &mdash;</option>
+                        {{range .L10nSlugs}}<option value="{{.}}">{{.}}</option>{{end}}
+                    </select>
                 </label>
                 {{end}}
                 <label class="form__label">Order

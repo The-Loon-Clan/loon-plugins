@@ -19,6 +19,8 @@
 package achievements
 
 import (
+	"github.com/gin-gonic/gin"
+
 	"context"
 	"embed"
 	"fmt"
@@ -61,6 +63,11 @@ type Plugin struct {
 	// achievements.files, which hides the upload control rather than
 	// rendering it broken.
 	files blob.Store
+	// l10nSlugs lists the host's message-catalogue slugs (dropdown source);
+	// l10n resolves one for the current viewer. Both nil on a host without a
+	// catalogue, in which case the text columns are the content.
+	l10nSlugs func(context.Context) ([]string, error)
+	l10n      func(*gin.Context, string) (string, bool)
 	// iconOptions is the host's sprite vocabulary (achievements.icons), for
 	// the definition form's default-icon picker. Empty means free text.
 	iconOptions []string
@@ -129,6 +136,26 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// The two optional host extras for the definition page. Soft on purpose:
 	// a host without uploads still defines achievements, it just cannot give
 	// them images.
+	// The localization seams, both host-registered and both optional. A host
+	// with a message catalogue supplies the slug list (for the definition
+	// form's dropdowns) and per-viewer resolution (for the plugin's own
+	// rendered surfaces); without them the text columns simply ARE the
+	// content, which is every pre-catalogue site.
+	if v, ok := c.Lookup("achievements.l10n.slugs"); ok {
+		if fn, ok := v.(func(context.Context) ([]string, error)); ok {
+			p.l10nSlugs = fn
+		} else {
+			return fmt.Errorf("achievements: %q is %T, want func(context.Context) ([]string, error)", "achievements.l10n.slugs", v)
+		}
+	}
+	if v, ok := c.Lookup("achievements.l10n.resolve"); ok {
+		if fn, ok := v.(func(*gin.Context, string) (string, bool)); ok {
+			p.l10n = fn
+		} else {
+			return fmt.Errorf("achievements: %q is %T, want func(*gin.Context, string) (string, bool)", "achievements.l10n.resolve", v)
+		}
+	}
+
 	if v, ok := c.Lookup("achievements.files"); ok {
 		fs, ok := v.(blob.Store)
 		if !ok {

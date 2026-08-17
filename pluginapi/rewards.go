@@ -98,6 +98,14 @@ type RewardBySlugGranter interface {
 	// reference. granted=false with nil err means the member already holds
 	// it. An unknown, disabled, payout-less or non-one_off reward is an error.
 	GrantOneOff(ctx context.Context, userID int64, slug, reference string) (granted bool, err error)
+
+	// ListOneOff returns the slugs GrantOneOff would accept right now —
+	// enabled one_off rewards WITH payout lines, sorted. It exists so a
+	// definition form can offer a dropdown of things that can actually pay
+	// instead of a text field an operator can typo: the eager payability
+	// signal the schema split took away comes back as "only payable things
+	// are offered".
+	ListOneOff(ctx context.Context) ([]string, error)
 }
 
 // AchievementGranterName is the Core extension-registry key under which the

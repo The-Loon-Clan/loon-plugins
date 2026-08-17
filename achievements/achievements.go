@@ -90,6 +90,11 @@ type Achievement struct {
 	// kept as the default rather than a special case.
 	Icon      string
 	ImagePath string
+	// TitleSlug and DescriptionSlug are optional localization keys. A host
+	// with a message catalogue resolves them per viewer locale; Name and
+	// Description are what everyone else (and any failed lookup) reads.
+	TitleSlug       string
+	DescriptionSlug string
 	// EarnedAt is when the completion was recorded. Zero unless earned, so a
 	// caller can print an em dash rather than the epoch.
 	EarnedAt time.Time
@@ -113,6 +118,8 @@ type achievementRow struct {
 	Hidden      bool          `db:"hidden"`
 	Icon        string        `db:"icon"`
 	ImagePath   string        `db:"image_path"`
+	TitleSlug   string        `db:"title_slug"`
+	DescSlug    string        `db:"description_slug"`
 	Progress    sql.NullInt64 `db:"progress"`
 	Times       sql.NullInt32 `db:"times"`
 	CompletedAt sql.NullTime  `db:"completed_at"`
@@ -124,6 +131,7 @@ func (r achievementRow) achievement() Achievement {
 		ID: r.ID, Slug: r.Slug, Name: r.Name, Description: r.Description,
 		Metric: r.Metric, Threshold: r.Threshold, Hidden: r.Hidden,
 		Icon: r.Icon, ImagePath: r.ImagePath,
+		TitleSlug: r.TitleSlug, DescriptionSlug: r.DescSlug,
 		Progress: r.Progress.Int64, Times: int(r.Times.Int32),
 		State: AchievementLocked,
 	}
@@ -168,9 +176,12 @@ type AchievementDef struct {
 	// Empty means the host picks, which is what every early row did.
 	Icon      string `db:"icon"`
 	ImagePath string `db:"image_path"`
-	Ordinal   int    `db:"ordinal"`
-	Hidden    bool   `db:"hidden"`
-	Enabled   bool   `db:"enabled"`
+	// Localization slugs (002). Optional; Name/Description are the fallback.
+	TitleSlug       string `db:"title_slug"`
+	DescriptionSlug string `db:"description_slug"`
+	Ordinal         int    `db:"ordinal"`
+	Hidden          bool   `db:"hidden"`
+	Enabled         bool   `db:"enabled"`
 }
 
 // AchievementCounts summarises a member's standing for a statistics panel.

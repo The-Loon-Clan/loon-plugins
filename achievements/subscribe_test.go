@@ -23,6 +23,11 @@ type fakeGranter struct {
 
 func newFakeGranter() *fakeGranter { return &fakeGranter{granted: map[string]bool{}} }
 
+// ListOneOff satisfies the widened contract. The tests that use this fake
+// exercise GRANTING; none build the dropdown, so an empty shelf is the honest
+// stub rather than inventing rewards the fake cannot pay.
+func (g *fakeGranter) ListOneOff(ctx context.Context) ([]string, error) { return nil, nil }
+
 func (g *fakeGranter) GrantOneOff(ctx context.Context, userID int64, slug, reference string) (bool, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()

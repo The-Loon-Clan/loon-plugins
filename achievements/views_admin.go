@@ -32,6 +32,10 @@ import (
 // as paid_at staying NULL on the member's row. Less immediate, honest about
 // where the authority lives.
 
+// badgeImagePrefix is the file-store namespace badge images live under —
+// one const so Save and List cannot drift apart about where "here" is.
+const badgeImagePrefix = "achievement-badges/"
+
 // achAdminVM is the definition page.
 type achAdminVM struct {
 	Msg, Err     string
@@ -52,6 +56,19 @@ type achAdminVM struct {
 	// (achievements.files). The upload control is HIDDEN without one rather
 	// than rendered broken.
 	CanUpload bool
+	// RewardOptions is the shelf: every reward slug GrantOneOff would accept
+	// right now, from the granter's own ListOneOff — so the dropdown can only
+	// offer something the grant path will take, which is the eager
+	// payability signal the schema split had cost. Empty (no granter, or a
+	// rewards read failing) degrades the field to free text.
+	RewardOptions []string
+	// ImageOptions is every badge image already uploaded, for re-use — the
+	// "select img" half that had to wait for blob.Store to learn List.
+	ImageOptions []blob.Entry
+	// L10nSlugs is the host message catalogue's slug list. Non-empty is what
+	// finally turns the title/description localization fields from a pending
+	// note into dropdowns.
+	L10nSlugs []string
 }
 
 // renderAdminPage draws the definition page.
@@ -61,6 +78,24 @@ func (p *Plugin) renderAdminPage(ctx context.Context, msg, errMsg string) (templ
 		TriggerOptions: p.triggerOptions(),
 		IconOptions:    p.iconOptions,
 		CanUpload:      p.files != nil,
+	}
+	// All three pickers are best-effort: the page's first job is the table,
+	// and a dropdown degrading to text is a visible symptom where a 500 would
+	// hide everything else.
+	if p.granter != nil {
+		if slugs, err := p.granter.ListOneOff(ctx); err == nil {
+			vm.RewardOptions = slugs
+		}
+	}
+	if p.files != nil {
+		if entries, err := p.files.List(ctx, badgeImagePrefix); err == nil {
+			vm.ImageOptions = entries
+		}
+	}
+	if p.l10nSlugs != nil {
+		if slugs, err := p.l10nSlugs(ctx); err == nil {
+			vm.L10nSlugs = slugs
+		}
 	}
 	if defs, err := p.store.ListAchievementDefs(ctx); err == nil {
 		vm.Achievements = defs
@@ -129,6 +164,10 @@ func parseNewAchievement(form url.Values) (NewAchievement, error) {
 		Metric:      strings.TrimSpace(form.Get("metric")),
 		Trigger:     strings.TrimSpace(form.Get("trigger")),
 		Hidden:      form.Get("hidden") != "",
+		// The localization slugs, straight through: empty is the no-catalogue
+		// case and the fallback case alike.
+		TitleSlug:       strings.TrimSpace(form.Get("title_slug")),
+		DescriptionSlug: strings.TrimSpace(form.Get("description_slug")),
 	}
 	if a.Slug == "" {
 		return a, errField("slug is required")
@@ -215,11 +254,19 @@ func (p *Plugin) actionCreateAchievement(gc *gin.Context) (template.HTML, error)
 		if !ok {
 			return p.redirect(gc, "badge image must be JPEG, PNG, GIF or WebP")
 		}
-		url, serr := p.files.Save(gc.Request.Context(), "achievement-badges/"+a.Slug+ext, data)
+		url, serr := p.files.Save(gc.Request.Context(), badgeImagePrefix+a.Slug+ext, data)
 		if serr != nil {
 			return p.redirect(gc, fmt.Sprintf("saving image: %v", serr))
 		}
 		a.ImagePath = url
+	}
+	// Re-use beats re-upload: a picked existing image only applies when no new
+	// file came in, so uploading always wins the tie the form technically
+	// allows. The value is one of our own List URLs, offered by the same page.
+	if a.ImagePath == "" {
+		if existing := strings.TrimSpace(gc.PostForm("image_existing")); existing != "" {
+			a.ImagePath = existing
+		}
 	}
 	if _, err := p.admin.CreateAchievement(gc.Request.Context(), a); err != nil {
 		return p.redirect(gc, err.Error())

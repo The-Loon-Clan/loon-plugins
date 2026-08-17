@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"github.com/the-loon-clan/loon/core"
@@ -32,6 +33,9 @@ import (
 type byslugGranter struct {
 	store  Store
 	engine *Engine
+	// admin is here for ListOneOff only: the full-catalogue read lives on the
+	// AdminStore interface, and the shelf listing is an admin-page concern.
+	admin AdminStore
 }
 
 var _ pluginapi.RewardBySlugGranter = byslugGranter{}
@@ -121,5 +125,24 @@ func (p *Plugin) registerByslugGranter(c *core.Core) error {
 		Summary: "grant a named enabled one_off reward to a member under a caller-chosen dedup reference; idempotent — the achievements plugin pays badges through this",
 		Kind:    core.ExtService,
 		Stable:  true,
-	}, byslugGranter{store: p.store, engine: p.engine})
+	}, byslugGranter{store: p.store, engine: p.engine, admin: p.admin})
+}
+
+// ListOneOff returns what GrantOneOff would accept: enabled one_off rewards
+// with payout lines, sorted by slug. The same three refusals GrantOneOff
+// makes, applied as a filter — so a dropdown built from this can only ever
+// offer something the grant path will take.
+func (g byslugGranter) ListOneOff(ctx context.Context) ([]string, error) {
+	all, err := g.admin.ListRewards(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(all))
+	for _, r := range all {
+		if r.Enabled && r.Kind == KindOneOff && len(r.Payouts) > 0 {
+			out = append(out, r.Slug)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }

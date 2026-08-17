@@ -64,7 +64,8 @@ func uniqueViolation(err error) bool {
 // defCols is the definition column list, one declaration so the three def
 // queries cannot drift on which columns a def needs.
 const defCols = `id, slug, name, description, reward_slug, metric, threshold,
-	trigger, icon, image_path, ordinal, hidden, enabled, backfilled_at`
+	trigger, icon, image_path, title_slug, description_slug,
+	ordinal, hidden, enabled, backfilled_at`
 
 // AchievementDefsByTrigger returns the enabled achievements a declared event
 // completes. Empty trigger matches nothing useful — trigger-less rows are the
@@ -133,7 +134,7 @@ func (s *PGStore) Achievements(ctx context.Context, userID int64) ([]Achievement
 	var rows []achievementRow
 	err := s.sel(ctx, &rows, `
 		SELECT a.id, a.slug, a.name, a.description, a.metric, a.threshold, a.hidden,
-		       a.icon, a.image_path,
+		       a.icon, a.image_path, a.title_slug, a.description_slug,
 		       ua.progress, ua.times, ua.completed_at, ua.paid_at
 		  FROM achievements a
 		  LEFT JOIN user_achievements ua
@@ -330,6 +331,11 @@ type NewAchievement struct {
 	// URL. Optional — empty defers to the host's state icons.
 	Icon      string
 	ImagePath string
+	// Localization slugs (optional). When set, a host with a message
+	// catalogue resolves these per viewer locale; Name/Description are the
+	// fallback either way.
+	TitleSlug       string
+	DescriptionSlug string
 }
 
 // CreateAchievement validates and inserts one, DISABLED.
@@ -362,11 +368,12 @@ func (s *PGStore) CreateAchievement(ctx context.Context, a NewAchievement) (int6
 	var id int64
 	err := s.get(ctx, &id, `
 		INSERT INTO achievements
-		    (slug, name, description, reward_slug, metric, threshold, trigger, icon, image_path, ordinal, hidden, enabled)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, FALSE)
+		    (slug, name, description, reward_slug, metric, threshold, trigger, icon, image_path,
+		     title_slug, description_slug, ordinal, hidden, enabled)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE)
 		RETURNING id`,
 		a.Slug, a.Name, a.Description, a.RewardSlug, a.Metric, a.Threshold,
-		a.Trigger, a.Icon, a.ImagePath, a.Ordinal, a.Hidden)
+		a.Trigger, a.Icon, a.ImagePath, a.TitleSlug, a.DescriptionSlug, a.Ordinal, a.Hidden)
 	if uniqueViolation(err) {
 		return 0, fmt.Errorf("an achievement with slug %q already exists", a.Slug)
 	}

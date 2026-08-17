@@ -68,6 +68,12 @@ func (p *Plugin) renderProfileAchievements(gc *gin.Context) (template.HTML, erro
 			self = true
 		}
 	}
+	// Localize the display names for THIS viewer before the pure VM build —
+	// buildProfileVM stays a pure function over the list, and localization is
+	// a per-request fact that belongs with the request.
+	for i := range all {
+		all[i].Name = p.localizedName(gc, all[i])
+	}
 	vm := buildProfileVM(all, self)
 
 	// Nothing to say: render nothing rather than an empty card. A "no
@@ -137,4 +143,18 @@ func buildProfileVM(all []Achievement, self bool) profileVM {
 		return vm.InProgress[i].PercentDone > vm.InProgress[j].PercentDone
 	})
 	return vm
+}
+
+// localizedName resolves an achievement's display title for this viewer: the
+// catalogue slug when one is set AND the host wired a resolver, the plain
+// Name otherwise. The wiki content block cannot do this — it renders from a
+// bare context with no viewer to have a locale — which is why the fallback
+// text stays mandatory on every definition.
+func (p *Plugin) localizedName(gc *gin.Context, a Achievement) string {
+	if a.TitleSlug != "" && p.l10n != nil {
+		if t, ok := p.l10n(gc, a.TitleSlug); ok && t != "" {
+			return t
+		}
+	}
+	return a.Name
 }
