@@ -29,7 +29,9 @@ import (
 // counted over a lifetime, while "days registered" only ever counts and
 // "password changed" only ever fires. One flag could not say that.
 type SourceDef struct {
-	// Key is the stable id stored in rewards.trigger / achievements.metric.
+	// Key is the stable id stored in rewards.trigger. (The achievements
+	// plugin's metric column pointed here too before it moved out; its
+	// pickers now derive from registered sources and declared events.)
 	// Dotted and lowercase by convention: "posts.created".
 	Key string
 	// Label is the dropdown text: "Posts created".
@@ -291,6 +293,45 @@ func (s *PGStore) ListSources(ctx context.Context) (SourceCatalog, error) {
 	return out, nil
 }
 
+// UpsertSource adds a catalogue entry or edits one in place.
+//
+// Keyed on the key, which is also what rewards.trigger stores (and what the
+// achievements plugin's metric column used to point at) — so this cannot
+// rename, only create or edit. Renaming would orphan everything pointing at
+// the old key, silently, which is why the table makes key its primary key
+// rather than something renameable.
+func (s *PGStore) UpsertSource(ctx context.Context, d SourceDef) error {
+	if err := d.Valid(); err != nil {
+		return err
+	}
+	_, err := s.exec(ctx, `
+		INSERT INTO reward_sources (key, label, grp, fires, counts, unit, units, ordinal, stock)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE)
+		ON CONFLICT (key) DO UPDATE
+		   SET label = EXCLUDED.label, grp = EXCLUDED.grp,
+		       fires = EXCLUDED.fires, counts = EXCLUDED.counts,
+		       unit  = EXCLUDED.unit,  units  = EXCLUDED.units,
+		       ordinal = EXCLUDED.ordinal`,
+		d.Key, d.Label, d.Group, d.Fires, d.Counts, d.Unit, d.Units, 0)
+	return err
+}
+
+// SetSourceEnabled turns a catalogue entry on or off.
+//
+// Disabling hides it from the pickers without deleting it, which is what an
+// operator wants for a source this site does not have: deleting would orphan
+// any reward already pointing at it.
+func (s *PGStore) SetSourceEnabled(ctx context.Context, key string, on bool) error {
+	n, err := s.exec(ctx, `UPDATE reward_sources SET enabled = $2 WHERE key = $1`, key, on)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("source %q does not exist", key)
+	}
+	return nil
+}
+
 // CountSources counts every row, enabled or not. The seed asks this, and it
 // must see a disabled row: an operator who turned every stock source off did
 // not ask for them back on the next boot.
@@ -316,18 +357,18 @@ func (s *PGStore) SeedSources(ctx context.Context, cat SourceCatalog) error {
 	return nil
 }
 
-// unitSourceDoc and metricSourceDoc exist ONLY to be registered against the
-// two callback conventions, so the extension directory can list them.
+// unitSourceDoc exists ONLY to be registered against the callback convention,
+// so the extension directory can list it.
 //
-// The real registrations are dynamic — one per reward slug, one per metric —
-// and are made by the HOST, so there is no single value to describe. A
-// placeholder under the pattern name is how a directory built from a flat
-// registry can still say "this shape exists, and you are the one who supplies
-// it". Registering nothing would leave the most easily-missed seam in the
-// plugin invisible: a callback nobody knows to implement simply never fires,
-// and nothing reports it.
+// The real registrations are dynamic — one per reward slug — and are made by
+// the HOST, so there is no single value to describe. A placeholder under the
+// pattern name is how a directory built from a flat registry can still say
+// "this shape exists, and you are the one who supplies it". Registering
+// nothing would leave the most easily-missed seam in the plugin invisible: a
+// callback nobody knows to implement simply never fires, and nothing reports
+// it. (The metric-source twin of this placeholder moved to the achievements
+// plugin, under achievements.metrics.)
 type unitSourceDoc struct{}
-type metricSourceDoc struct{}
 
 // docExtension is one documented convention: the definition and the
 // placeholder value registered under it.
@@ -358,16 +399,11 @@ func docExtensions() []docExtension {
 			Summary: "HOST SUPPLIES, one per reward slug as rewards.units.<slug>: the current counter value per member for a per_unit reward",
 			Kind:    core.ExtCallback, Stable: true,
 		}, unitSourceDoc{}},
-		{core.ExtensionDef{
-			Name:    strings.TrimSuffix(MetricSourcePrefix, "."),
-			Summary: "HOST SUPPLIES, one per metric as rewards.metrics.<metric>: the current counter value per member for scoring achievements",
-			Kind:    core.ExtCallback,
-		}, metricSourceDoc{}},
 	}
 }
 
 // scannedPrefixes are the namespaces Provision walks and type-asserts. Nothing
 // this plugin registers may land inside one.
 func scannedPrefixes() []string {
-	return []string{UnitSourcePrefix, MetricSourcePrefix}
+	return []string{UnitSourcePrefix}
 }

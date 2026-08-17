@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/the-loon-clan/loon/blob"
 	"github.com/the-loon-clan/loon/core"
 	"github.com/the-loon-clan/loon/schedule"
 
@@ -71,17 +70,6 @@ type Plugin struct {
 	// Provision because the registry is written during boot and read on a
 	// worker tick; re-looking-up per tick would race a plugin still booting.
 	units map[string]UnitSource
-
-	// Achievement metric counters the host published, by metric name.
-	// Snapshotted for the same reason units are: the registry is written
-	// during boot and read on a worker tick.
-	metrics map[string]MetricSource
-	// files stores badge images; nil when no host registered rewards.files,
-	// which hides the upload control rather than rendering it broken.
-	files blob.Store
-	// iconOptions is the host's sprite vocabulary (rewards.icons), for the
-	// definition form's default-icon picker. Empty means free text.
-	iconOptions []string
 
 	// events answers which scheduled events exist and which are open. Looked up
 	// off the extension registry, so nil on a host with no events plugin —
@@ -225,36 +213,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 		}
 	}
 
-	// The two optional host extras for the achievements definition page.
-	// Soft on purpose: a host without uploads still defines achievements, it
-	// just cannot give them images.
-	if v, ok := c.Lookup("rewards.files"); ok {
-		if fs, ok := v.(blob.Store); ok {
-			p.files = fs
-		} else {
-			return fmt.Errorf("rewards: %q is %T, want blob.Store", "rewards.files", v)
-		}
-	}
-	if v, ok := c.Lookup("rewards.icons"); ok {
-		if icons, ok := v.([]string); ok {
-			p.iconOptions = icons
-		}
-	}
-
-	p.metrics = map[string]MetricSource{}
-	for _, name := range c.ExtensionNames() {
-		if !strings.HasPrefix(name, MetricSourcePrefix) {
-			continue
-		}
-		v, _ := c.Lookup(name)
-		src, ok := v.(MetricSource)
-		if !ok {
-			// Right key, wrong shape: the achievement would silently never
-			// progress, which is the failure this plugin exists to stop.
-			return fmt.Errorf("rewards: extension %q is %T, want rewards.MetricSource", name, v)
-		}
-		p.metrics[strings.TrimPrefix(name, MetricSourcePrefix)] = src
-	}
+	// The achievement metric sources, the badge-image file store and the
+	// icon vocabulary were collected here until the achievements plugin
+	// moved out; they are its to collect now, under achievements.metrics.* /
+	// achievements.files / achievements.icons.
 
 	// Tell a member when something is waiting for them. Absent notifications
 	// are fine: the grant is durable and the card shows it regardless, so this
@@ -287,8 +249,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 		Summary: "cross-check the whole configuration and report what cannot pay",
 		Kind:    core.ExtService, Stable: true,
 	}, Validator(p))
-	// ...and a host achievements page reads member standing through this.
-	if err := p.registerAchievements(c); err != nil {
+	// ...and the achievements plugin pays achievements through this. The
+	// per-member achievements read, the profile card and the wiki block all
+	// moved out with that plugin.
+	if err := p.registerByslugGranter(c); err != nil {
 		return err
 	}
 	// Listen to the site. Done AFTER every plugin has provisioned would be
@@ -296,7 +260,6 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// provisions in dependency order and there is no post-Boot hook, so an
 	// emitter this plugin wants must be declared in Metadata.Requires. The
 	// directory shows anything missed as an event with no listener.
-	p.subscribeAchievements(c)
 	p.subscribeRewards(c)
 
 	// The admin page is web-only: the worker has no router, and registering a
@@ -307,18 +270,6 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// The member-facing claim card and its POST. Registered before the admin
 	// pages so a failure here is a boot error rather than a half-wired plugin
 	// that serves an admin surface for a delivery mode members cannot reach.
-	// The profile card. Order against registerViews (below, which parses the
-	// template set) does not matter: registration stores a Render closure, and
-	// nothing renders until a request arrives long after Boot.
-	if err := p.registerAchievementProfile(c); err != nil {
-		return err
-	}
-	// The public catalogue, as a content block the wiki can embed. Registered
-	// rather than routed: the page that shows it is editor-authored, so the
-	// plugin supplies the table and the site supplies the words around it.
-	if err := p.registerAchievementBlock(c); err != nil {
-		return err
-	}
 	if err := p.registerMemberViews(c); err != nil {
 		return err
 	}
@@ -417,22 +368,10 @@ func (p *Plugin) maintain(ctx context.Context) error {
 		}
 	}
 
-	// Achievement metrics. The other half of how progress moves: events give
-	// increments live, this gives the ABSOLUTE total on a tick. Both are
-	// needed and neither is redundant — an event stream drifts the moment one
-	// is dropped, and a counter alone cannot react to anything. This pass is
-	// what makes a dropped event self-heal, and the only way an achievement on
-	// something nothing emits (tenure years) can ever progress at all.
-	for metric, src := range p.metrics {
-		n, err := p.scoreMetric(ctx, metric, src)
-		if err != nil {
-			p.job.Log("metric %q: %v", metric, err)
-			continue
-		}
-		if n > 0 {
-			p.job.Log("%s: completed %d achievement(s)", metric, n)
-		}
-	}
+	// Achievement metric scoring ran here too, between the unit grants and
+	// the expiry sweep, until the achievements plugin took it: its
+	// "Achievement Scoring" job now owns that pass, including the backfill
+	// semantics and the payment repair sweep.
 
 	expired, err := p.store.ExpireGrants(ctx, time.Now(), expireBatch)
 	if err != nil {

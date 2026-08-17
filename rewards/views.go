@@ -68,8 +68,10 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	// One page now. The Events page moved to the events plugin, which owns the
 	// tables -- the comment that used to sit here explained why it should:
 	// "Events are not reward-specific ... it also keeps each page to one job:
-	// Events is WHEN, Rewards is WHAT." This page is the WHAT.
-	if err := c.RegisterView(core.View{
+	// Events is WHEN, Rewards is WHAT." This page is the WHAT. The
+	// Achievements page moved out the same way, with the achievements plugin
+	// that owns those tables; its slug and URL survived the move.
+	return c.RegisterView(core.View{
 		Slug: "rewards", Title: "Rewards", Slot: core.SlotAdminPage,
 		Description: "What is earnable, what it pays, and what has actually been granted.",
 		Nav:         core.NavHint{Group: "Operations"},
@@ -80,28 +82,6 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			"reward-create": p.actionCreateReward,
 			"reward-toggle": p.actionToggleReward,
 			"test-grant":    p.actionTestGrant,
-		},
-	}); err != nil {
-		return err
-	}
-	// Achievements get their OWN page. They lived as the last section of the
-	// rewards page, below three tables about a different concept — an operator
-	// looking for "where do I define an achievement" had to already know it
-	// was filed under Rewards and then scroll past all of them. A definition
-	// page is a destination, and the hub lists it by name now.
-	return c.RegisterView(core.View{
-		Slug: "achievements", Title: "Achievements", Slot: core.SlotAdminPage,
-		Description: "Define what can be earned: criterion, value, and what the badge looks like.",
-		Nav:         core.NavHint{Group: "Operations"},
-		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.renderAchievementsPage(gc.Request.Context(), gc.Query("msg"), gc.Query("err"))
-		},
-		Actions: map[string]func(*gin.Context) (template.HTML, error){
-			// Create and enable are SEPARATE actions on purpose: enabling
-			// backfills the achievement to everyone already past the threshold,
-			// so one click must not both define and award it.
-			"achievement-create": p.actionCreateAchievement,
-			"achievement-toggle": p.actionToggleAchievement,
 		},
 	})
 }

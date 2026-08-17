@@ -81,10 +81,6 @@ func (p *Plugin) Validate(ctx context.Context) ([]Finding, error) {
 			knownEvents[ev.Slug] = ev.Enabled
 		}
 	}
-	achievements, err := p.admin.ListAchievementDefs(ctx)
-	if err != nil {
-		return nil, err
-	}
 	catalogue, err := p.Catalogue(ctx)
 	if err != nil {
 		return nil, err
@@ -97,15 +93,12 @@ func (p *Plugin) Validate(ctx context.Context) ([]Finding, error) {
 	// Event window coverage is no longer checked here. The events plugin owns
 	// its own generator and its admin page reports coverage per event, so a
 	// second opinion computed from this side could only ever disagree.
+	// Achievement validation moved out with the achievements plugin, for the
+	// same ownership reason: the criterion, the metric sources and the
+	// payability question all live on that side of the seam now.
 	var out []Finding
 	out = append(out, validateRewards(rewards, knownEvents, p.handlerKinds())...)
-
-	rewardsByID := make(map[int64]Reward, len(rewards))
-	for _, r := range rewards {
-		rewardsByID[r.ID] = r
-	}
-	out = append(out, validateAchievements(achievements, rewardsByID, p.metricNames())...)
-	out = append(out, validateCatalogue(catalogue, rewards, achievements, p.metricNames())...)
+	out = append(out, validateCatalogue(catalogue, rewards)...)
 
 	if stale > 0 {
 		out = append(out, Finding{
@@ -224,107 +217,32 @@ func validateRewards(rewards []Reward, knownEvents map[string]bool, handled map[
 	return out
 }
 
-// validateAchievements is the guard that keeps repeatability from having two
-// sources of truth.
-//
-// An achievement declares no repeatability of its own — deliberately, because
-// rewards.kind already does and the engine enforces it through the reference
-// it computes per grant. What remains is making sure the reward an achievement
-// points at is one whose repeatability MEANS anything for a criterion that
-// latches:
-//
-//   - one_off   — earn once, ever. The only kind allowed today.
-//   - recurring — once per event window. Coherent (a seasonal achievement),
-//     but not enabled yet; enabling it is a change here, not a migration.
-//   - per_unit  — incoherent. per_unit pays per delta forever, while a
-//     criterion latches the moment it is met. An achievement on one would
-//     complete once and then keep paying on every subsequent unit, which is
-//     not an achievement at all.
-//
-// The other silent failure this catches is a criterion nothing can ever score:
-// a metric with no registered source is inert, exactly as a payout kind with
-// no handler is, and an operator has no way to see that from the admin page.
-func validateAchievements(defs []AchievementDef, rewards map[int64]Reward, metrics map[string]bool) []Finding {
-	var out []Finding
-	for _, d := range defs {
-		if !d.Enabled {
-			continue
-		}
-		r, ok := rewards[d.RewardID]
-		switch {
-		case !ok:
-			out = append(out, Finding{
-				Severity: SeverityError,
-				Subject:  "achievement " + d.Slug,
-				Problem:  "points at a reward that does not exist",
-				Fix:      "pick an existing reward, or disable the achievement",
-			})
-		case !r.Enabled:
-			out = append(out, Finding{
-				Severity: SeverityError,
-				Subject:  "achievement " + d.Slug,
-				Problem:  fmt.Sprintf("pays reward %q, which is disabled — it can be earned but not paid", r.Slug),
-				Fix:      "enable the reward, or disable the achievement so it stops offering",
-			})
-		case r.Kind == KindPerUnit:
-			out = append(out, Finding{
-				Severity: SeverityError,
-				Subject:  "achievement " + d.Slug,
-				Problem: fmt.Sprintf("pays reward %q, which is per_unit — a criterion latches once, "+
-					"but per_unit keeps paying on every later unit", r.Slug),
-				Fix: "point it at a one_off reward",
-			})
-		case r.Kind != KindOneOff:
-			out = append(out, Finding{
-				Severity: SeverityError,
-				Subject:  "achievement " + d.Slug,
-				Problem:  fmt.Sprintf("pays reward %q of kind %s; achievements are one_off today", r.Slug, r.Kind),
-				Fix:      "point it at a one_off reward",
-			})
-		}
-
-		if d.Metric == "" {
-			out = append(out, Finding{
-				Severity: SeverityError,
-				Subject:  "achievement " + d.Slug,
-				Problem:  "has no metric, so nothing can ever score it",
-				Fix:      "set the metric to a counter the site registers",
-			})
-			continue
-		}
-		if !metrics[d.Metric] {
-			// Warn, not error: a host that has not booted its source yet is a
-			// deployment ordering problem, and refusing would make the admin
-			// page unusable during one.
-			out = append(out, Finding{
-				Severity: SeverityWarn,
-				Subject:  "achievement " + d.Slug,
-				Problem:  fmt.Sprintf("scored by metric %q, which no source is registered for — progress will never move", d.Metric),
-				Fix:      "register a MetricSource under " + MetricSourcePrefix + d.Metric + ", or retire the achievement",
-			})
-		}
-	}
-	return out
-}
+// validateAchievements lived here until the achievements plugin moved out.
+// Its concerns split with the code: the criterion checks went with the
+// plugin, and the payability half (an achievement pointing at a disabled,
+// deleted, payout-less or wrong-kind reward) is now reported LAZILY by that
+// plugin's scoring job — eager reporting would require reading this schema's
+// tables from over there, which is the coupling the split removed.
 
 // validateCatalogue cross-checks the declared vocabulary against what is
-// actually configured and actually registered.
+// actually configured.
 //
-// Three ways a catalogue and a configuration drift apart, all of them silent:
-// a reward or achievement pointing at a key the catalogue does not contain
-// (usually a rename, and the row simply stops working); a source that says it
-// Counts but has no MetricSource behind it, so every achievement on it sits at
-// zero forever; and a catalogue that is empty, which is not an error but is
-// worth saying, because it means every picker is still free text.
-func validateCatalogue(cat SourceCatalog, rewards []Reward, achievements []AchievementDef, metrics map[string]bool) []Finding {
+// Two ways a catalogue and a configuration drift apart, both silent: a reward
+// pointing at a key the catalogue does not contain (usually a rename, and the
+// row simply stops working), and a catalogue that is empty, which is not an
+// error but is worth saying, because it means the trigger picker is still
+// free text. (The achievement-metric checks, and the counter-with-no-
+// MetricSource check, moved out with the achievements plugin — its pickers no
+// longer read this catalogue.)
+func validateCatalogue(cat SourceCatalog, rewards []Reward) []Finding {
 	if len(cat) == 0 {
-		if len(rewards) == 0 && len(achievements) == 0 {
+		if len(rewards) == 0 {
 			return nil // nothing configured yet; nothing to say
 		}
 		return []Finding{{
 			Severity: SeverityInfo,
 			Subject:  "catalogue",
-			Problem:  "no source catalogue is registered, so the trigger and metric pickers are free text",
+			Problem:  "no source catalogue is registered, so the trigger picker is free text",
 			Fix:      "register a rewards.SourceCatalog under " + SourceCatalogExtension + " (see StockSources)",
 		}}
 	}
@@ -355,44 +273,6 @@ func validateCatalogue(cat SourceCatalog, rewards []Reward, achievements []Achie
 				Subject:  "reward " + r.Slug,
 				Problem:  fmt.Sprintf("fires on %q, which is a counter rather than an event", d.Key),
 				Fix:      "pick a source that fires, or make this a per_unit reward scored by the counter",
-			})
-		}
-	}
-
-	for _, a := range achievements {
-		if !a.Enabled || a.Metric == "" {
-			continue
-		}
-		d, ok := known[a.Metric]
-		if !ok {
-			out = append(out, Finding{
-				Severity: SeverityError,
-				Subject:  "achievement " + a.Slug,
-				Problem:  fmt.Sprintf("scored by %q, which the catalogue does not declare", a.Metric),
-				Fix:      "pick a declared metric, or add it to the catalogue",
-			})
-			continue
-		}
-		if !d.Counts {
-			out = append(out, Finding{
-				Severity: SeverityError,
-				Subject:  "achievement " + a.Slug,
-				Problem:  fmt.Sprintf("scored by %q, which is an event rather than a counter — a threshold needs something to count", d.Key),
-				Fix:      "pick a source that counts",
-			})
-		}
-	}
-
-	// A declared counter with nothing behind it. Warn rather than error: this
-	// is what a half-deployed host looks like during a rollout.
-	for _, d := range cat {
-		if d.Counts && !metrics[d.Key] {
-			out = append(out, Finding{
-				Severity: SeverityWarn,
-				Subject:  "source " + d.Key,
-				Problem: "is declared as a counter but no MetricSource is registered, so an " +
-					"achievement on it counts only what happens from now on and can never reflect history",
-				Fix: "register one under " + MetricSourcePrefix + d.Key + ", or clear its Counts flag",
 			})
 		}
 	}

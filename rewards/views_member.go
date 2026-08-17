@@ -21,6 +21,15 @@ import (
 // a real option rather than a half-built one — and it is what lets a reward be
 // offered to someone who appears once a year.
 
+// CSRFExtension is the registry key under which the HOST supplies its
+// per-session CSRF token func (func(*gin.Context) string), for the claim
+// card's form. A host concern, like every other CSRF seam in this tree — the
+// plugin must never mint its own, or the token it embeds is not the one the
+// host's middleware checks. Registered before Boot; absent means the card's
+// form posts tokenless, which the tokenless-form probe proved the host
+// middleware refuses with 403 — so wiring this is what makes the card WORK.
+const CSRFExtension = "rewards.csrf"
+
 type claimVM struct {
 	Grants    []claimRow
 	Msg       string

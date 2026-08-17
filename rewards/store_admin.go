@@ -29,18 +29,12 @@ type GrantRow struct {
 // engine's dependency stays the narrow hot-path one.
 type AdminStore interface {
 	ListRewards(ctx context.Context) ([]Reward, error)
-	ListAchievementDefs(ctx context.Context) ([]AchievementDef, error)
-	// AchievementDefsByMetric backs the event subscriber: one indexed read
-	// per event, rather than filtering the whole catalogue per post.
-	AchievementDefsByMetric(ctx context.Context, metric string) ([]AchievementDef, error)
 	// The source catalogue: configuration, not code. See sources.go.
+	// (Achievement definition CRUD lived here too until the achievements
+	// plugin moved out with its tables.)
 	ListSources(ctx context.Context) (SourceCatalog, error)
 	CountSources(ctx context.Context) (int, error)
 	SeedSources(ctx context.Context, cat SourceCatalog) error
-	// Definition CRUD -- see admin_achievements.go for why these validate
-	// rather than just insert.
-	CreateAchievement(ctx context.Context, a NewAchievement) (int64, error)
-	SetAchievementEnabled(ctx context.Context, id int64, on bool) error
 	UpsertSource(ctx context.Context, d SourceDef) error
 	SetSourceEnabled(ctx context.Context, key string, on bool) error
 	RecentGrants(ctx context.Context, limit int) ([]GrantRow, error)

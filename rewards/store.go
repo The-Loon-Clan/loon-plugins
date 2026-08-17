@@ -98,52 +98,9 @@ type Store interface {
 
 	// Events and windows used to be here, along with a generator this plugin
 	// ran. Both belong to the events plugin now.
-
-	// ── Achievements ───────────────────────────────────────────────────────
 	//
-	// These arrived on *PGStore only, which made the evaluation path reachable
-	// solely through a type assertion and testable solely against a real
-	// database. Almost none of that path is about SQL — which achievements get
-	// selected, whether a threshold was crossed, whether a completion should be
-	// announced, what happens when the reward behind one is disabled — and
-	// needing Postgres to exercise any of it was a property of the interface, not
-	// of the logic.
-	//
-	// The mock is held to the schema's invariants (see MemStore): a double that
-	// is more permissive than production is a test that passes on code Postgres
-	// rejects. What the mock CANNOT prove is atomicity under concurrency, so the
-	// transaction, the CHECK and the UNIQUE race stay covered by
-	// achievements_pg_test.go. Those are complementary, not alternatives.
-
-	// AchievementDefsByTrigger returns enabled achievements a surface can move.
-	AchievementDefsByTrigger(ctx context.Context, trigger string) ([]AchievementDef, error)
-
-	// AchievementDefsByMetric returns every enabled achievement scored by one
-	// metric, so a whole set is evaluated from one counter read.
-	AchievementDefsByMetric(ctx context.Context, metric string) ([]AchievementDef, error)
-
-	// ListAchievementDefs returns every achievement, enabled or not — the admin
-	// page and the validator both need the disabled ones.
-	ListAchievementDefs(ctx context.Context) ([]AchievementDef, error)
-
-	// Achievements is one member's standing on every achievement.
-	Achievements(ctx context.Context, userID int64) ([]Achievement, error)
-
-	// RecordProgress SETS progress to an absolute value (a metric read) and
-	// reports whether that crossed the threshold.
-	RecordProgress(ctx context.Context, achievementID, userID, value int64) (reached bool, err error)
-
-	// IncrementProgress ADDS to progress (an event delta) and reports whether
-	// that crossed the threshold. Distinct from RecordProgress because an event
-	// knows only what just happened and a metric knows only the total; using
-	// either where the other belongs double-counts or flatlines.
-	IncrementProgress(ctx context.Context, achievementID, userID, delta int64) (reached bool, err error)
-
-	// CompleteAchievement stamps the completion and writes the grant in ONE
-	// transaction. Returns ErrAlreadyGranted when there is nothing to complete —
-	// no progress row, or somebody else got there first.
-	CompleteAchievement(ctx context.Context, achievementID int64, g Grant, payouts []Payout) (Grant, error)
-
-	// MarkBackfilled stamps the end of an achievement's first scoring pass, once.
-	MarkBackfilled(ctx context.Context, achievementID int64) error
+	// Achievements used to be here too — defs, progress, the one-transaction
+	// CompleteAchievement. They are the achievements plugin's now; what
+	// remains on this side is paying, through the RewardBySlugGranter it
+	// calls (granter_byslug.go).
 }

@@ -136,8 +136,8 @@ cannot be built on.
 - [ ] **MUST** — capabilities and extensions are registered DESCRIBED, so
       `/admin/plugins` can answer "what is this and am I meant to call it or
       supply it" without reading source.
-- [ ] **SHOULD** — per-member counters the plugin owns are offered as a
-      `rewards.MetricSource` (one call for the whole membership), so
+- [ ] **SHOULD** — per-member counters the plugin owns are offered as an
+      `achievements.MetricSource` (one call for the whole membership), so
       operators can score achievements on them. Absent, never stubbed at
       zero: a stub is indistinguishable from a real counter for a member who
       has done nothing.
@@ -317,8 +317,8 @@ cookie; the README row matches the registered route.
       each fact has one computation. The goal-reward trigger reads the same
       two sums the donate page's thermometer renders "so the window opens
       exactly when the bar members are watching reaches the top".
-- [ ] **SHOULD** — a `rewards.MetricSource` for countable per-member facts
-      (see §4), and admin-page counts where an operator will ask "is it
+- [ ] **SHOULD** — an `achievements.MetricSource` for countable per-member
+      facts (see §4), and admin-page counts where an operator will ask "is it
       working".
 
 Verify: host `go test` (the logkeys sweep runs repo-wide); review question —

@@ -1,5 +1,13 @@
 -- Migration 002 — Achievements.
 --
+-- SUPERSEDED: these tables' successor lives in the ACHIEVEMENTS plugin
+-- (achievements/migrations/001_init.sql), which lifts their rows on its first
+-- boot and records payment as its own paid_at fact instead of a grant link.
+-- This file stays because migration history is append-only, and the tables
+-- stay until the operator drops them once satisfied the lift is complete —
+-- nothing writes them any more. The comments below describe the design as it
+-- was when this was the achievements' home.
+--
 -- An achievement is a CRITERION attached to a reward. That split is the whole
 -- design: the rewards engine already owns definitions, repeatability,
 -- triggers, jobs, callbacks and pay-once-as-a-constraint, and the one thing it

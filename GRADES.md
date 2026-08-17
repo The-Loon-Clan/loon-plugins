@@ -64,6 +64,10 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 | usenet | ✓ | ~ | ✓ | ~ | ✓ | ✓ | ✓ | — | — | ~ | ✓ | ✓ | ✓ | ✓ |
 | wiki | ✓ | ~ | ✗ | ✓ | — | ✓ | ✗ | ✗ | ~ | ~ | — | ~ | ~ | ~ |
 
+*Post-snapshot: the achievements half of rewards was extracted into its own
+`achievements` plugin (2026-08-16). Neither row is regraded here — this file
+is a snapshot; regrade after real work and replace it wholesale.*
+
 ## Confirmed defects — verified beyond the reviewer's word
 
 Most severe first. These are bugs, not style.

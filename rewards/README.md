@@ -130,6 +130,9 @@ appear on the wrong days with no error anywhere.
   delivery, synchronous, because the response has to render the button).
   **`rewards.admin`** — the `AdminStore`, consumed by the host's ops API.
   **`rewards.validator`** — the cross-table check, same consumer.
+  **`rewards.granter.byslug`** — `pluginapi.RewardBySlugGranter`, the
+  idempotent by-slug grant the achievements plugin pays badges through (see
+  "Achievements — moved out").
 - Extensions CONSUMED: **`rewards.units.<reward slug>`** — a `UnitSource`
   supplying current counts for a `per_unit` reward. The plugin deliberately
   knows nothing about what is being counted; the host counts, and the engine
@@ -192,12 +195,13 @@ one thing the whole model rests on.
 
 ## The catalogue — why the pickers are dropdowns
 
-`rewards.trigger` and `achievements.metric` name what the site does. They used
-to be free text, and the picker was assembled from whatever was **already
-configured** plus a hardcoded `"login"` — a list that is empty exactly when it
-is most needed, setting up the first one. A typo then produced a reward that
-looked perfectly healthy and could never fire, because nothing anywhere knew
-what the valid names were.
+`rewards.trigger` names what the site does (the achievements plugin's metric
+column pointed here too, before it moved out). It used to be free text, and
+the picker was assembled from whatever was **already configured** plus a
+hardcoded `"login"` — a list that is empty exactly when it is most needed,
+setting up the first one. A typo then produced a reward that looked perfectly
+healthy and could never fire, because nothing anywhere knew what the valid
+names were.
 
 So the catalogue is a **table** — `reward_sources` — and every picker reads it
 live. A host registers a SEED under `rewards.sources`:
@@ -218,9 +222,10 @@ bucket it, and two independent flags:
 
 - **`Fires`** — a surface announces it the moment it happens, so it can be a
   reward's trigger.
-- **`Counts`** — a running total exists, so it can score an achievement
-  threshold. A counting source must also register a `MetricSource` under
-  `rewards.metrics.<key>`; the configuration check reports one that does not.
+- **`Counts`** — a running total exists. It used to mark what could score an
+  achievement threshold; the achievements plugin derives its own metric
+  picker now (registered sources + countable events), so within rewards the
+  flag is descriptive.
 
 They are separate because most things are both and some are only one: a post
 announces itself AND is counted for a lifetime, "days registered" only counts,
@@ -241,69 +246,32 @@ predating the catalogue still works. Keys already in use are always merged into
 the options, so renaming one in the catalogue cannot make an existing reward's
 own trigger vanish from the dropdown that edits it.
 
-## Achievements
+## Achievements — moved out
 
-An achievement is a **criterion attached to a reward**. That split is the whole
-design, and the reason there is not a second engine here.
+Achievements live in their own plugin now — see
+[../achievements/](../achievements/). They started here as "a criterion
+attached to a reward", sharing this schema so a completion and its grant could
+land in one transaction; the day the reward became **optional** (a pure badge
+is a legitimate achievement) that transaction stopped being the design's
+spine, and the split followed. Their tables' successor is
+`achievements/migrations/001_init.sql`, which lifts the rows on its first
+boot; `rewards.achievements` / `rewards.user_achievements` remain here,
+unwritten, until the operator drops them (migration `002` carries the note).
 
-The engine already owns definitions, repeatability, triggers, jobs, callbacks
-and pay-once-as-a-constraint. The one thing it cannot express is "reach N of
-X": `per_unit` counts a number and pays per delta, with no threshold that
-latches. So `achievements` owns the criterion — a `metric` and a `threshold` —
-and a `reward_id` says what it pays. Payment then goes through the ordinary
-grant path, which means an achievement cannot pay twice even under a race
-without any new locking or idempotency scheme.
+What rewards keeps from that era:
 
-**There is deliberately no `repeatable` column.** `rewards.kind` already
-declares repeatability and the engine enforces it through the `reference` it
-computes per grant; a second copy here could disagree, and an achievement
-marked repeatable whose reward is `one_off` would complete over and over while
-paying exactly once, with nothing reporting it. Validation restricts
-achievements to `one_off` rewards today. Allowing `recurring` (a seasonal
-achievement) is coherent and needs a validation change, not a migration.
-`per_unit` is refused outright: a criterion latches, and `per_unit` keeps
-paying on every later unit.
+- **`pluginapi.RewardBySlugGranter`** (`rewards.granter.byslug`,
+  `granter_byslug.go`) — the seam the achievements plugin pays through: grant
+  a named enabled `one_off` reward under a caller-chosen dedup reference,
+  idempotently. The engine's `UNIQUE (reward, user, reference)` is what makes
+  "call it again after a crash" safe, which is the whole contract.
+- **The `achievement` payout kind** — a reward can still hand over a badge as
+  one of its payout lines, through whatever handler the host registers under
+  `rewards.payout.achievement` (the achievements plugin publishes an
+  `AchievementGranter` a host can wire there).
+- **`reward_grants.silent`** — not an achievement concept and never was:
+  `reward_issuances` back-payments want the same suppression.
 
-**Completion is one transaction.** Stamping `user_achievements.completed_at`
-and creating the `reward_grants` row happen together or not at all — a
-completion with no grant paid nothing, and a grant with no completion pays
-again on the next evaluation because nothing recorded that it fired. The schema
-carries the same rule as a `CHECK ((completed_at IS NULL) = (grant_id IS
-NULL))`, so a future writer that sets one without the other is rejected rather
-than merely wrong.
-
-**Creating an achievement BACKFILLS it — silently.** The first scoring pass
-after an achievement is created awards it to everyone already past the
-threshold and tells none of them: they earned it before the thing existed, and
-announcing to three thousand people at once about something they did months ago
-is a mailshot rather than a notification. The pass then stamps
-`achievements.backfilled_at`, and every completion after that is announced
-normally. The badge is awarded either way — only the telling is suppressed.
-
-The mechanism is `reward_grants.silent`, not an achievement concept:
-`reward_issuances` (deliberate retroactive grants to a cohort) wants exactly
-the same thing, and an operator back-paying six months of a reward should not
-fire six months of notifications either.
-
-**The award itself is the point, so it is never suppressed.** One scored on a counter is awarded
-retroactively to everyone who already meets the threshold, on the next job
-tick, and each of them is notified. That is the point of an absolute counter —
-"100 posts" should recognise people who already wrote a hundred — but it means
-creating a row is an action with an immediate, member-visible blast radius.
-Count the qualifying set before creating it; there is no way to suppress the
-backfill's notifications yet. On 2026-08-07 a threshold-1 achievement awarded
-23 members and sent 23 notifications within seconds of the INSERT. See
-`docs/ACHIEVEMENTS.md` in the ameNZB repo.
-
-**Metrics** are host-registered under `rewards.metrics.<name>`, the same shape
-as `rewards.units.<slug>`, and a metric with no source is **inert** rather than
-a boot error — the configuration check reports it instead, so a half-deployed
-site says so on the admin page rather than refusing to start.
-
-Built so far: schema, the per-member read, progress recording, the completion
-transaction, and validation. **Not yet wired: the trigger path and the job that
-call `CompleteAchievement`** — so nothing completes an achievement in
-production yet. Design: `docs/ACHIEVEMENTS.md` in the ameNZB repo.
 
 ## The configuration check
 
@@ -361,11 +329,9 @@ model replaces.
 
 ## Not built yet
 
-
-
 The design (`docs/REWARDS.md` in the private site repo) also specifies
-achievements (a counter crossing a threshold) and retroactive issuances. The
-schema for issuances is here; the logic is not. Achievements have neither yet.
+retroactive issuances: the schema is here, the logic is not. (Achievements,
+once on this list, are built — in their own plugin.)
 
 Editing is create-and-toggle only — no in-place edit of an existing event or
 reward, and no adding a payout line after creation. Deleting and recreating
