@@ -117,7 +117,10 @@
          no wrapper of its own. page-narrow width: this is a prose column,
          and the cards cap their excerpts at 74ch anyway. */}}
     <div class="container mt-4 page-narrow mb-5">
-    <h1 style="font-size:1.4rem;font-weight:700;margin:0 0 1rem;">News</h1>
+    {{/* No <h1> here — the host chrome already draws one from render()'s
+         title, so a second gave the page two identical h1s and the a11y
+         audit flagged it. This fragment's own header comment states the
+         rule; the recent container work reintroduced it by accident. */}}
     <div class="news-feed">
 
         {{if .News}}
