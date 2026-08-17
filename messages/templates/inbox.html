@@ -40,7 +40,14 @@
             flex-direction: column;
             max-height: 80vh;
         }
-        #ib-row-list { flex: 1; overflow-y: auto; min-height: 0; }
+        #ib-row-list {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
         .ib-list-search {
             position: relative;
             margin-bottom: 0.7rem;
@@ -54,7 +61,7 @@
             color: var(--text-primary);
             font-size: 0.85rem;
         }
-        .ib-list-search input:focus { outline: none; border-color: var(--blue); }
+        .ib-list-search input:focus { outline: none; border-color: var(--primary, var(--blue)); }
         .ib-list-search::before {
             content: "🔍";
             position: absolute;
@@ -73,21 +80,30 @@
             align-items: center;
             gap: 0.5rem;
         }
+        /* Each conversation is its own CARD — the same lift-off-the-panel
+           treatment the news feed uses, and for the same NN/g reason: things
+           inside one boundary read as one item, and a run of borderless rows
+           read as one undifferentiated list. Colour comes from the host's
+           SEMANTIC tokens (--primary and friends), not the literal --blue
+           set, so the accent follows whichever theme the member picked. */
         .ib-row {
             display: flex;
             align-items: center;
             gap: 0.6rem;
-            padding: 0.6rem 0.55rem;
-            border-radius: 8px;
+            padding: 0.6rem 0.65rem;
+            border-radius: 10px;
+            background: var(--surface-3, var(--bg-elevated, transparent));
+            border: 1px solid var(--border);
             text-decoration: none;
             color: var(--text-primary);
-            transition: background-color 0.12s;
+            transition: border-color 0.12s, background-color 0.12s;
         }
-        .ib-row:hover { background: var(--bg-elevated); }
+        .ib-row:hover { border-color: var(--primary, var(--blue)); }
         .ib-row.is-active {
-            background: var(--blue-tint-soft);
+            border-color: var(--primary, var(--blue));
+            background: var(--primary-soft, var(--blue-tint-soft));
         }
-        .ib-row.is-active .ib-name { color: var(--blue); }
+        .ib-row.is-active .ib-name { color: var(--primary-tint, var(--blue)); }
         .ib-avatar {
             width: 36px; height: 36px;
             border-radius: 50%;
@@ -98,8 +114,8 @@
         .ib-avatar-fallback {
             width: 36px; height: 36px;
             border-radius: 50%;
-            background: var(--blue-dim);
-            color: var(--blue);
+            background: var(--primary-soft, var(--blue-dim));
+            color: var(--primary-tint, var(--blue));
             display: inline-flex;
             align-items: center; justify-content: center;
             font-weight: 700;
@@ -107,13 +123,14 @@
             flex-shrink: 0;
         }
         .ib-avatar-system {
-            background: var(--blue);
+            background: var(--primary, var(--blue));
             color: #fff;
         }
         .ib-body { flex: 1; min-width: 0; }
         .ib-name {
             font-size: 0.88rem;
             font-weight: 600;
+            color: var(--text-strong, var(--text-primary));
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -127,7 +144,7 @@
         }
         .ib-meta {
             font-size: 0.7rem;
-            color: var(--text-muted);
+            color: var(--muted-2, var(--text-muted));
             white-space: nowrap;
             display: flex;
             flex-direction: column;
@@ -140,7 +157,7 @@
             min-width: 18px; height: 18px;
             padding: 0 5px;
             border-radius: 9px;
-            background: var(--blue);
+            background: var(--primary, var(--blue));
             color: #fff;
             font-size: 0.65rem;
             font-weight: 700;
@@ -164,6 +181,7 @@
             border-bottom: 1px solid var(--border);
             font-size: 0.9rem;
         }
+        .ib-pane-head strong { color: var(--text-strong, var(--text-primary)); }
         .ib-pane-head .ib-pane-sub {
             color: var(--text-muted);
             font-size: 0.78rem;
@@ -205,7 +223,7 @@
         }
         .ib-msg-from-me {
             align-self: flex-end;
-            background: var(--blue);
+            background: var(--primary, var(--blue));
             color: #fff;
         }
         .ib-msg-row { display: flex; flex-direction: column; }
@@ -271,7 +289,7 @@
             font-family: inherit;
             margin-bottom: 0.9rem;
         }
-        .ib-compose input[type="text"]:focus { outline: none; border-color: var(--blue); }
+        .ib-compose input[type="text"]:focus { outline: none; border-color: var(--primary, var(--blue)); }
     </style>
 
     {{/* No .container here, and it is the whole spacing fix. The fragment
