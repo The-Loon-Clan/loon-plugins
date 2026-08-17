@@ -1,0 +1,47 @@
+{{/* Admin -> Settings -> Games. */}}
+{{if .Msg}}<div class="notice notice--success"><span>{{.Msg}}</span></div>{{end}}
+
+<form method="post" action="/admin/settings/games/save">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+    <h3 class="h5">The pot</h3>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+        <label class="form__label" for="g-pot-target">Pot size (points)
+            <input id="g-pot-target" name="pot_target" class="form__input" inputmode="numeric" value="{{.PotTarget}}" size="8">
+        </label>
+        <label class="form__label" for="g-pot-pct">Winner&#39;s share (%)
+            <input id="g-pot-pct" name="pot_win_pct" class="form__input" inputmode="numeric" value="{{.PotWinPct}}" size="4">
+        </label>
+        <label class="form__label" for="g-pot-daily">Daily max per member
+            <input id="g-pot-daily" name="pot_daily_max" class="form__input" inputmode="numeric" value="{{.PotDailyMax}}" size="6">
+        </label>
+        <label class="form__label" for="g-pot-min">Reward threshold
+            <input id="g-pot-min" name="pot_reward_min" class="form__input" inputmode="numeric" value="{{.PotRewardMin}}" size="6">
+        </label>
+        <label class="form__label" for="g-pot-slug">Contributor reward
+            {{if .RewardOptions}}
+            {{$cur := .PotRewardSlug}}
+            <select id="g-pot-slug" name="pot_reward_slug" class="form__input">
+                <option value="">&mdash; none &mdash;</option>
+                {{range .RewardOptions}}<option value="{{.}}" {{if eq . $cur}}selected{{end}}>{{.}}</option>{{end}}
+            </select>
+            {{else}}
+            <input id="g-pot-slug" name="pot_reward_slug" class="form__input" value="{{.PotRewardSlug}}" placeholder="a one_off reward slug">
+            {{end}}
+        </label>
+    </div>
+    <p class="text-muted small">The rest of the pot leaves the economy &mdash; the house keeps it, which is the point-sink every points economy needs.</p>
+
+    <h3 class="h5 mt-3">Charity</h3>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+        <label class="form__label" for="g-ch-min">Minimum gift
+            <input id="g-ch-min" name="charity_min" class="form__input" inputmode="numeric" value="{{.CharityMin}}" size="7">
+        </label>
+        <label class="form__label" for="g-ch-max">Maximum gift
+            <input id="g-ch-max" name="charity_max" class="form__input" inputmode="numeric" value="{{.CharityMax}}" size="7">
+        </label>
+        <label class="form__label" for="g-ch-floor">Downloaded floor (GB)
+            <input id="g-ch-floor" name="charity_dl_floor_gb" class="form__input" inputmode="numeric" value="{{.CharityDLFloorGB}}" size="5">
+        </label>
+    </div>
+    <button class="button button--primary button--sm mt-3" type="submit">Save</button>
+</form>

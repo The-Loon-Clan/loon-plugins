@@ -6,7 +6,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-const itemCols = `id, name, description, points_cost, reward_type, reward_ref, reward_days, stock, active, sort_order, created_at`
+const itemCols = `id, name, description, points_cost, reward_type, reward_ref, reward_days, stock, active, sort_order, flavour, created_at`
 
 // PGStore is the Postgres impl of Store over the dedicated "store"
 // schema (store.items / store.purchases), created by
@@ -40,11 +40,11 @@ func (r *PGStore) GetItem(ctx context.Context, id int) (*Item, error) {
 
 func (r *PGStore) CreateItem(ctx context.Context, it *Item) error {
 	return r.db.QueryRowxContext(ctx,
-		`INSERT INTO store.items (name, description, points_cost, reward_type, reward_ref, reward_days, stock, active, sort_order)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		`INSERT INTO store.items (name, description, points_cost, reward_type, reward_ref, reward_days, stock, active, sort_order, flavour)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 		 RETURNING id, created_at`,
 		it.Name, it.Description, it.PointsCost, it.RewardType, it.RewardRef,
-		it.RewardDays, it.Stock, it.Active, it.SortOrder,
+		it.RewardDays, it.Stock, it.Active, it.SortOrder, it.Flavour,
 	).Scan(&it.ID, &it.CreatedAt)
 }
 
@@ -52,10 +52,10 @@ func (r *PGStore) UpdateItem(ctx context.Context, it *Item) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE store.items
 		    SET name=$2, description=$3, points_cost=$4, reward_type=$5, reward_ref=$6,
-		        reward_days=$7, stock=$8, active=$9, sort_order=$10
+		        reward_days=$7, stock=$8, active=$9, sort_order=$10, flavour=$11
 		  WHERE id=$1`,
 		it.ID, it.Name, it.Description, it.PointsCost, it.RewardType, it.RewardRef,
-		it.RewardDays, it.Stock, it.Active, it.SortOrder)
+		it.RewardDays, it.Stock, it.Active, it.SortOrder, it.Flavour)
 	return err
 }
 

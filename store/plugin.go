@@ -26,6 +26,10 @@ import (
 //go:embed migrations/*.sql
 var storeMigrations embed.FS
 
+// FlavourExtension is the registry key a host publishes its flavour answer
+// under: func() (indexer, tracker bool). See Item.Flavour.
+const FlavourExtension = "store.flavour"
+
 func init() {
 	core.RegisterPlugin("store", func() core.Plugin { return &Plugin{} })
 }
@@ -204,6 +208,31 @@ func (p *Plugin) Provision(c *core.Core) error {
 		}
 	}
 
+	// The tracker's transfer credit, on the invites/perks terms: absent is a
+	// legitimate host (no tracker, or an idle one), wrong-typed is a wiring
+	// bug.
+	var credit pluginapi.TrackerCredit
+	if svc, ok := c.Lookup(pluginapi.TrackerCreditName); ok {
+		g, ok := svc.(pluginapi.TrackerCredit)
+		if !ok {
+			return fmt.Errorf("store: %q is %T, not pluginapi.TrackerCredit",
+				pluginapi.TrackerCreditName, svc)
+		}
+		credit = g
+	}
+
+	// Which site flavours are on, for hiding items whose half is off. A host
+	// registers func() (indexer, tracker bool) under store.flavour; absent
+	// means every item shows.
+	var halves func() (bool, bool)
+	if svc, ok := c.Lookup(FlavourExtension); ok {
+		fn, ok := svc.(func() (bool, bool))
+		if !ok {
+			return fmt.Errorf("store: %q is %T, not func() (bool, bool)", FlavourExtension, svc)
+		}
+		halves = fn
+	}
+
 	if deps.RenderPage == nil || deps.CSRFToken == nil ||
 		deps.RenderPagination == nil || deps.PageOffset == nil {
 		return fmt.Errorf("store: SetDeps not called (BaseData/Paginate/PageOffset required) — wire it in cmd/main.go before core.Boot")
@@ -213,6 +242,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 		store:   NewPGStore(db),
 		points:  c.Points,
 		granter: granter,
+		credit:  credit,
+		halves:  halves,
 		invites: invites,
 		perks:   perks,
 		flair:   flair,

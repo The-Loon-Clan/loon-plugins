@@ -1,0 +1,34 @@
+{{/* Charity — /p/charity. */}}
+{{if .Msg}}<div class="notice notice--success"><span>{{.Msg}}</span></div>{{end}}
+{{if .Err}}<div class="notice notice--warning"><span>{{.Err}}</span></div>{{end}}
+
+<p class="text-muted">
+    Charity goes directly to those in need, and it is absolutely up to you who
+    benefits from your generosity: pick the ratio band, pick the points, and give.
+    Recipients have downloaded at least <strong>{{.FloorGB}} GB</strong> &mdash; need,
+    not inactivity &mdash; and your gift is split evenly among everyone in the band,
+    poorest first. Anonymous in both directions.
+</p>
+
+{{if .Available}}
+<form method="post" action="/p/charity/give" style="display:flex;gap:0.75rem;align-items:end;flex-wrap:wrap">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+    <label class="form__label" for="charity-ratio">Give to ratios up to
+        <select id="charity-ratio" name="ratio" class="form__input">
+            {{range .Ratios}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+    </label>
+    <label class="form__label" for="charity-amount">Points ({{.Min}}&ndash;{{.Max}})
+        <input id="charity-amount" name="amount" class="form__input" inputmode="numeric" size="8" placeholder="{{.Min}}">
+    </label>
+    <button class="button button--primary button--sm" type="submit">Charity giving!</button>
+</form>
+{{else}}
+<p class="notice notice--warning"><span>Charity is unavailable on this site &mdash; there are no member figures to find need with.</span></p>
+{{end}}
+
+{{if .Gifts}}
+<p class="text-muted small mt-3 m-0">
+    So far: <strong>{{.Gifts}}</strong> gifts have moved <strong>{{.PointsMoved}}</strong> points.
+</p>
+{{end}}

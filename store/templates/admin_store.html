@@ -28,11 +28,24 @@
                                 <label class="form-label" style="font-size:0.85rem;">Reward</label>
                                 <select name="reward_type" class="form-select form-select-sm">
                                     <option value="rank">Rank</option>
+                                    <option value="invite">Invites</option>
+                                    <option value="perk">Perk token</option>
+                                    <option value="flair">Flair</option>
+                                    <option value="upload_gb">GB uploaded</option>
+                                    <option value="download_gb">GB downloaded (wipe)</option>
                                 </select>
                             </div>
                             <div class="col-sm-2">
-                                <label class="form-label" style="font-size:0.85rem;">Rank ID</label>
-                                <input type="number" name="reward_ref" class="form-control form-control-sm" min="1" placeholder="see /admin/p/groups">
+                                <label class="form-label" style="font-size:0.85rem;">Flavour</label>
+                                <select name="flavour" class="form-select form-select-sm">
+                                    <option value="both">Both</option>
+                                    <option value="tracker">Tracker</option>
+                                    <option value="indexer">Indexer</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-2">
+                                <label class="form-label" style="font-size:0.85rem;">Ref</label>
+                                <input type="text" name="reward_ref" class="form-control form-control-sm" placeholder="rank id / count / kind / GB">
                             </div>
                             <div class="col-sm-2">
                                 <label class="form-label" style="font-size:0.85rem;">Days</label>
@@ -118,13 +131,26 @@
                                     </div>
                                     <div>
                                         <label style="font-size:0.72rem;">Reward</label>
-                                        <select name="reward_type" class="form-select form-select-sm" style="width:80px;">
+                                        <select name="reward_type" class="form-select form-select-sm" style="width:110px;">
                                             <option value="rank" {{if eq .RewardType "rank"}}selected{{end}}>Rank</option>
+                                            <option value="invite" {{if eq .RewardType "invite"}}selected{{end}}>Invites</option>
+                                            <option value="perk" {{if eq .RewardType "perk"}}selected{{end}}>Perk token</option>
+                                            <option value="flair" {{if eq .RewardType "flair"}}selected{{end}}>Flair</option>
+                                            <option value="upload_gb" {{if eq .RewardType "upload_gb"}}selected{{end}}>GB up</option>
+                                            <option value="download_gb" {{if eq .RewardType "download_gb"}}selected{{end}}>GB down</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label style="font-size:0.72rem;">Rank ID</label>
-                                        <input type="number" name="reward_ref" class="form-control form-control-sm" value="{{.RewardRef}}" style="width:70px;">
+                                        <label style="font-size:0.72rem;">Flavour</label>
+                                        <select name="flavour" class="form-select form-select-sm" style="width:90px;">
+                                            <option value="both" {{if eq .Flavour "both"}}selected{{end}}>Both</option>
+                                            <option value="tracker" {{if eq .Flavour "tracker"}}selected{{end}}>Tracker</option>
+                                            <option value="indexer" {{if eq .Flavour "indexer"}}selected{{end}}>Indexer</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.72rem;">Ref</label>
+                                        <input type="text" name="reward_ref" class="form-control form-control-sm" value="{{.RewardRef}}" style="width:70px;">
                                     </div>
                                     <div>
                                         <label style="font-size:0.72rem;">Days</label>

@@ -220,18 +220,49 @@ func (s *PGStore) Totals(ctx context.Context, userID int64) (Totals, error) {
 	var t Totals
 	// Summed over user_stats rather than read from a counter, so there is no
 	// second place to drift. Seeding/leeching are derived from left_bytes and
-	// recency: "seeding" means nothing left and seen lately.
+	// recency: "seeding" means nothing left and seen lately. Purchased credit
+	// (stat_credits) folds in here: bought upload adds, forgiven download
+	// subtracts, and GREATEST keeps forgiveness from going negative.
 	err := s.get(ctx, &t, `
-		SELECT coalesce(sum(uploaded),0)   AS uploaded,
-		       coalesce(sum(downloaded),0) AS downloaded,
-		       count(*) FILTER (WHERE left_bytes = 0 AND last_seen > now() - interval '1 hour') AS seeding,
-		       count(*) FILTER (WHERE left_bytes > 0 AND last_seen > now() - interval '1 hour') AS leeching,
-		       count(*) FILTER (WHERE completed) AS snatched
-		  FROM user_stats WHERE user_id = $1`, userID)
+		SELECT s.up + c.up               AS uploaded,
+		       GREATEST(s.down - c.down, 0) AS downloaded,
+		       s.seeding, s.leeching, s.snatched
+		  FROM (SELECT coalesce(sum(uploaded),0)   AS up,
+		               coalesce(sum(downloaded),0) AS down,
+		               count(*) FILTER (WHERE left_bytes = 0 AND last_seen > now() - interval '1 hour') AS seeding,
+		               count(*) FILTER (WHERE left_bytes > 0 AND last_seen > now() - interval '1 hour') AS leeching,
+		               count(*) FILTER (WHERE completed) AS snatched
+		          FROM user_stats WHERE user_id = $1) s,
+		       (SELECT coalesce(max(uploaded),0)   AS up,
+		               coalesce(max(downloaded),0) AS down
+		          FROM stat_credits WHERE user_id = $1) c`, userID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return Totals{}, fmt.Errorf("totals: %w", err)
 	}
 	return t, nil
+}
+
+// CreditUpload adds purchased upload to the member's accounting
+// (pluginapi.TrackerCredit).
+func (s *PGStore) CreditUpload(ctx context.Context, userID int64, bytes int64) error {
+	if bytes <= 0 {
+		return nil
+	}
+	return s.exec(ctx, `
+		INSERT INTO stat_credits (user_id, uploaded) VALUES ($1, $2)
+		ON CONFLICT (user_id) DO UPDATE SET uploaded = stat_credits.uploaded + $2`,
+		userID, bytes)
+}
+
+// CreditDownload forgives downloaded bytes; readers clamp at zero.
+func (s *PGStore) CreditDownload(ctx context.Context, userID int64, bytes int64) error {
+	if bytes <= 0 {
+		return nil
+	}
+	return s.exec(ctx, `
+		INSERT INTO stat_credits (user_id, downloaded) VALUES ($1, $2)
+		ON CONFLICT (user_id) DO UPDATE SET downloaded = stat_credits.downloaded + $2`,
+		userID, bytes)
 }
 
 func (s *PGStore) ListUserStats(ctx context.Context, userID int64, limit int) ([]*UserStat, error) {

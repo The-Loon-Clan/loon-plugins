@@ -35,13 +35,47 @@ type Handlers struct {
 	// economy is legitimate, and only perk items need it.
 	perks pluginapi.PerkGranter
 	flair pluginapi.FlairGranter
-	errs  core.ErrorReporter
+	// credit may be nil on the same terms: only the GB items need the
+	// tracker's pluginapi.TrackerCredit, and a site without a running
+	// tracker legitimately has none.
+	credit pluginapi.TrackerCredit
+	// halves reports which site flavours are on (indexer, tracker) — the
+	// host's store.flavour seam. Nil means "no flavour machinery": every
+	// item shows, which is every pre-flavour host.
+	halves func() (indexer, tracker bool)
+	errs   core.ErrorReporter
+}
+
+// itemAvailable reports whether an item's flavour half is on.
+func (h *Handlers) itemAvailable(it *Item) bool {
+	if h.halves == nil {
+		return true
+	}
+	indexer, tracker := h.halves()
+	switch it.Flavour {
+	case "tracker":
+		return tracker
+	case "indexer":
+		return indexer
+	}
+	return true
 }
 
 // StorePage lists purchasable items and the viewer's balance.
 func (h *Handlers) StorePage(c *gin.Context) {
 	ctx := c.Request.Context()
 	items, err := h.store.ListItems(ctx, true)
+	if err == nil {
+		// Hide what this site's flavour cannot honour — a GB-of-upload item
+		// with no tracker would take points for a number nothing displays.
+		kept := items[:0]
+		for _, it := range items {
+			if h.itemAvailable(it) {
+				kept = append(kept, it)
+			}
+		}
+		items = kept
+	}
 	if err != nil {
 		h.errs.Report(ctx, "store/list", err)
 	}
@@ -127,7 +161,9 @@ func (h *Handlers) BuyItem(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/store?error=item+not+found")
 		return
 	}
-	if !item.Active {
+	if !item.Active || !h.itemAvailable(item) {
+		// The flavour check matches the listing's: an item the shop hides
+		// must refuse a hand-crafted POST too, or the filter is decoration.
 		c.Redirect(http.StatusFound, "/store?error=item+unavailable")
 		return
 	}
@@ -263,6 +299,28 @@ func (h *Handlers) grantReward(ctx context.Context, userID int, item *Item) (str
 			return "", fmt.Errorf("grant perk %q: %w", item.RewardRef, err)
 		}
 		return item.RewardRef + " token", nil
+	case RewardUpload, RewardDownload:
+		// The tracker's transfer credit. Same terms as perks: an absent
+		// capability fails THIS purchase and the caller unwinds the points.
+		if h.credit == nil {
+			return "", fmt.Errorf("credit item %d: no %s registered on this host",
+				item.ID, pluginapi.TrackerCreditName)
+		}
+		gb, err := strconv.Atoi(item.RewardRef)
+		if err != nil || gb <= 0 {
+			return "", fmt.Errorf("credit item %d has invalid reward_ref %q (whole GB)", item.ID, item.RewardRef)
+		}
+		bytes := int64(gb) << 30
+		if RewardType(item.RewardType) == RewardUpload {
+			if err := h.credit.CreditUpload(ctx, int64(userID), bytes); err != nil {
+				return "", fmt.Errorf("credit upload: %w", err)
+			}
+			return fmt.Sprintf("%d GB added to your uploaded", gb), nil
+		}
+		if err := h.credit.CreditDownload(ctx, int64(userID), bytes); err != nil {
+			return "", fmt.Errorf("credit download: %w", err)
+		}
+		return fmt.Sprintf("%d GB wiped from your downloaded", gb), nil
 	case RewardFlair:
 		// Same terms as perks: an absent capability fails THIS purchase and
 		// the caller unwinds the points. reward_ref is the flair id and gets
@@ -362,6 +420,7 @@ func itemFromForm(c *gin.Context) *Item {
 		Stock:       stock,
 		Active:      active == "on" || active == "1" || active == "true",
 		SortOrder:   so,
+		Flavour:     strings.TrimSpace(c.PostForm("flavour")),
 	}
 }
 
@@ -374,6 +433,16 @@ func validItem(it *Item) error {
 	}
 	if it.PointsCost <= 0 {
 		return errors.New("points cost must be positive")
+	}
+	// Flavour: empty means both (the pre-flavour default); anything else
+	// must be one of the three, or the shop's filter has a row it cannot
+	// classify.
+	switch it.Flavour {
+	case "":
+		it.Flavour = "both"
+	case "both", "tracker", "indexer":
+	default:
+		return fmt.Errorf("unknown flavour %q (both, tracker or indexer)", it.Flavour)
 	}
 	switch RewardType(it.RewardType) {
 	case RewardRank:
@@ -395,6 +464,24 @@ func validItem(it *Item) error {
 			if n, err := strconv.Atoi(it.RewardRef); err == nil && n <= 0 {
 				return errors.New("invite reward count must be positive")
 			}
+		}
+		return nil
+	case RewardPerk:
+		// The kind gets no fallback (see grantReward): the perks plugin
+		// rejects unknowns at buy time, but an empty ref is knowably wrong
+		// NOW, and now is when the admin is looking at the form.
+		if it.RewardRef == "" {
+			return errors.New("perk reward needs the perk kind in reward ref")
+		}
+		return nil
+	case RewardFlair:
+		if it.RewardRef == "" {
+			return errors.New("flair reward needs the flair id in reward ref")
+		}
+		return nil
+	case RewardUpload, RewardDownload:
+		if n, err := strconv.Atoi(it.RewardRef); err != nil || n <= 0 {
+			return errors.New("credit reward needs whole GB in reward ref")
 		}
 		return nil
 	default:

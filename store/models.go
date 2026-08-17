@@ -29,22 +29,34 @@ const (
 	// ("supporter", "vip", ...). RewardDays is unused — a flair is worn until
 	// replaced, not until a date. Invokes pluginapi.FlairGranter.
 	RewardFlair RewardType = "flair"
+
+	// RewardUpload credits purchased upload: RewardRef = whole GB (as
+	// string). Needs the tracker's pluginapi.TrackerCredit; absent, the
+	// purchase fails and the points come back.
+	RewardUpload RewardType = "upload_gb"
+	// RewardDownload FORGIVES downloaded GB: RewardRef = whole GB. Readers
+	// clamp at zero, so over-buying is generosity rather than a negative.
+	RewardDownload RewardType = "download_gb"
 )
 
 // Item is a purchasable catalog entry priced in points. PointsCost is
 // int to line up with the core PointsService (Deduct takes n int).
 type Item struct {
-	ID          int       `db:"id"`
-	Name        string    `db:"name"`
-	Description string    `db:"description"`
-	PointsCost  int       `db:"points_cost"`
-	RewardType  string    `db:"reward_type"`
-	RewardRef   string    `db:"reward_ref"`
-	RewardDays  int       `db:"reward_days"`
-	Stock       int       `db:"stock"` // remaining count; -1 = unlimited
-	Active      bool      `db:"active"`
-	SortOrder   int       `db:"sort_order"`
-	CreatedAt   time.Time `db:"created_at"`
+	ID          int    `db:"id"`
+	Name        string `db:"name"`
+	Description string `db:"description"`
+	PointsCost  int    `db:"points_cost"`
+	RewardType  string `db:"reward_type"`
+	RewardRef   string `db:"reward_ref"`
+	RewardDays  int    `db:"reward_days"`
+	Stock       int    `db:"stock"` // remaining count; -1 = unlimited
+	Active      bool   `db:"active"`
+	SortOrder   int    `db:"sort_order"`
+	// Flavour is which half of the site sells this: "tracker", "indexer" or
+	// "both" (the default). The shop hides — and purchase refuses — items
+	// whose half is off, read through the store.flavour host seam.
+	Flavour   string    `db:"flavour"`
+	CreatedAt time.Time `db:"created_at"`
 }
 
 // InStock reports whether the item can still be bought.

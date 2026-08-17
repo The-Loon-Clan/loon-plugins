@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 	"github.com/the-loon-clan/loon/core"
 )
 
@@ -147,6 +148,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.store, p.cheat = pg, pg
 	p.peers = NewPeerStore(c.Redis.Client())
 	p.h = NewHandlers(p.store, p.peers, NewGate(c), c.Auth, p.cfg.SiteURL)
+
+	// Transfer credit for other plugins to sell (pluginapi.TrackerCredit —
+	// the points store's GB items). Registered only on a RUNNING tracker:
+	// selling upload credit on a site whose tracker idles would take points
+	// for a number nothing displays.
+	if err := c.Register(pluginapi.TrackerCreditName, pluginapi.TrackerCredit(pg)); err != nil {
+		return fmt.Errorf("tracker: register credit: %w", err)
+	}
 
 	// Cheat detection (cheat_job.go). Registered even when the rules are off:
 	// the sampling still runs so that switching detection on starts working at
