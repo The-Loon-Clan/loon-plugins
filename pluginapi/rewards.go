@@ -73,6 +73,48 @@ type InviteGranter interface {
 	GrantInvites(ctx context.Context, userID, n int) (label string, err error)
 }
 
+// RewardBySlugGranterName is the Core extension-registry key under which the
+// rewards plugin publishes its RewardBySlugGranter.
+const RewardBySlugGranterName = "rewards.granter.byslug"
+
+// RewardBySlugGranter creates one grant of a named one_off reward — the
+// capability the achievements plugin uses to PAY an achievement without
+// importing rewards.
+//
+// This seam is what made splitting achievements out of rewards possible. The
+// two used to share a schema so a completion and its grant could land in one
+// transaction; across plugins that transaction cannot exist, so the contract
+// is IDEMPOTENCE instead: the engine's UNIQUE (reward, user, reference)
+// arbitrates, granted=false reports "already held", and a caller that crashed
+// between its own commit and this call simply calls again. At-least-once plus
+// idempotent equals exactly-once where it matters.
+//
+// reference is the caller's dedup key — the achievements plugin passes the
+// achievement slug, so two achievements paying the SAME reward are two
+// independent grants rather than a race for one. That retires the old rule
+// that every achievement must own its reward.
+type RewardBySlugGranter interface {
+	// GrantOneOff grants the named enabled one_off reward to userID under
+	// reference. granted=false with nil err means the member already holds
+	// it. An unknown, disabled, payout-less or non-one_off reward is an error.
+	GrantOneOff(ctx context.Context, userID int64, slug, reference string) (granted bool, err error)
+}
+
+// AchievementGranterName is the Core extension-registry key under which the
+// achievements plugin publishes its AchievementGranter.
+const AchievementGranterName = "achievements.granter"
+
+// AchievementGranter marks an achievement earned directly — the reverse
+// crossing, used by a REWARD whose payout line is "an achievement" (payout
+// kind "achievement") and by admin tooling. It marks the badge held and does
+// NOT run the achievement's own reward: a reward paying an achievement that
+// pays a reward is a loop nobody configured on purpose.
+type AchievementGranter interface {
+	// GrantAchievement completes slug for userID if not already held.
+	// Granting a held achievement is a no-op, not an error.
+	GrantAchievement(ctx context.Context, userID int64, slug string) error
+}
+
 // FlairGranterName is the Core extension-registry key under which the
 // pointstore plugin publishes its FlairGranter.
 const FlairGranterName = "pointstore.granter"
