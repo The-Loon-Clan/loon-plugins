@@ -59,11 +59,6 @@ type adminVM struct {
 	// what it fires, so the field stays free-text via a datalist; the plugin
 	// cannot know a surface it was never told about.
 	Triggers []string
-
-	// Achievements and the pickers its create form needs. Loaded through the
-	// Store interface, so this page renders against the MemStore in tests.
-	Achievements  []achievementVM
-	MetricOptions []string
 }
 
 func (p *Plugin) registerViews(c *core.Core) error {
@@ -74,7 +69,7 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	// tables -- the comment that used to sit here explained why it should:
 	// "Events are not reward-specific ... it also keeps each page to one job:
 	// Events is WHEN, Rewards is WHAT." This page is the WHAT.
-	return c.RegisterView(core.View{
+	if err := c.RegisterView(core.View{
 		Slug: "rewards", Title: "Rewards", Slot: core.SlotAdminPage,
 		Description: "What is earnable, what it pays, and what has actually been granted.",
 		Nav:         core.NavHint{Group: "Operations"},
@@ -85,6 +80,23 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			"reward-create": p.actionCreateReward,
 			"reward-toggle": p.actionToggleReward,
 			"test-grant":    p.actionTestGrant,
+		},
+	}); err != nil {
+		return err
+	}
+	// Achievements get their OWN page. They lived as the last section of the
+	// rewards page, below three tables about a different concept — an operator
+	// looking for "where do I define an achievement" had to already know it
+	// was filed under Rewards and then scroll past all of them. A definition
+	// page is a destination, and the hub lists it by name now.
+	return c.RegisterView(core.View{
+		Slug: "achievements", Title: "Achievements", Slot: core.SlotAdminPage,
+		Description: "Define what can be earned: criterion, value, and what the badge looks like.",
+		Nav:         core.NavHint{Group: "Operations"},
+		Render: func(gc *gin.Context) (template.HTML, error) {
+			return p.renderAchievementsPage(gc.Request.Context(), gc.Query("msg"), gc.Query("err"))
+		},
+		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			// Create and enable are SEPARATE actions on purpose: enabling
 			// backfills the achievement to everyone already past the threshold,
 			// so one click must not both define and award it.
@@ -153,13 +165,6 @@ func (p *Plugin) renderPage(ctx context.Context, tmpl string, msg, errMsg string
 		return "", err
 	}
 	vm.Triggers = p.triggerOptions(ctx, vm.Rewards)
-	// Non-fatal for the same reason the events picker is: the page's first job is
-	// to show state, and a rewards table that vanishes because the achievements
-	// read failed is worse than an achievements section that says nothing.
-	if defs, err := p.store.ListAchievementDefs(ctx); err == nil {
-		vm.Achievements = achievementRows(defs, vm.Rewards)
-	}
-	vm.MetricOptions = p.metricOptions()
 	// Deliberately not fatal: a validator that can take the page down with it
 	// is worse than no validator, and the page's first job is to show state.
 	if vm.Findings, err = p.Validate(ctx); err != nil {

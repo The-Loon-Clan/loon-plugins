@@ -93,6 +93,11 @@ type Achievement struct {
 	Times  int
 	State  AchievementState
 	Hidden bool
+	// Icon and ImagePath are the operator-chosen look (migration 006). Both
+	// may be empty, in which case the host draws its own state icon — the
+	// pre-006 behaviour, kept as the default rather than a special case.
+	Icon      string
+	ImagePath string
 	// EarnedAt is when the completion was recorded. Zero unless earned, so a
 	// caller can print an em dash rather than the epoch.
 	EarnedAt time.Time
@@ -114,6 +119,8 @@ type achievementRow struct {
 	Metric      string         `db:"metric"`
 	Threshold   int64          `db:"threshold"`
 	Hidden      bool           `db:"hidden"`
+	Icon        string         `db:"icon"`
+	ImagePath   string         `db:"image_path"`
 	Progress    sql.NullInt64  `db:"progress"`
 	Times       sql.NullInt32  `db:"times"`
 	CompletedAt sql.NullTime   `db:"completed_at"`
@@ -124,6 +131,7 @@ func (r achievementRow) achievement() Achievement {
 	a := Achievement{
 		ID: r.ID, Slug: r.Slug, Name: r.Name, Description: r.Description,
 		Metric: r.Metric, Threshold: r.Threshold, Hidden: r.Hidden,
+		Icon: r.Icon, ImagePath: r.ImagePath,
 		Progress: r.Progress.Int64, Times: int(r.Times.Int32),
 		State: AchievementLocked,
 	}
@@ -156,6 +164,7 @@ func (s *PGStore) Achievements(ctx context.Context, userID int64) ([]Achievement
 	var rows []achievementRow
 	err := s.sel(ctx, &rows, `
 		SELECT a.id, a.slug, a.name, a.description, a.metric, a.threshold, a.hidden,
+		       a.icon, a.image_path,
 		       ua.progress, ua.times, ua.completed_at,
 		       g.state AS grant_state
 		  FROM achievements a
@@ -191,9 +200,13 @@ type AchievementDef struct {
 	Metric       string     `db:"metric"`
 	Threshold    int64      `db:"threshold"`
 	Trigger      string     `db:"trigger"`
-	Ordinal      int        `db:"ordinal"`
-	Hidden       bool       `db:"hidden"`
-	Enabled      bool       `db:"enabled"`
+	// Icon is a host sprite symbol; ImagePath an uploaded badge image's URL.
+	// Empty means the host picks, which is what every pre-006 row did.
+	Icon      string `db:"icon"`
+	ImagePath string `db:"image_path"`
+	Ordinal   int    `db:"ordinal"`
+	Hidden    bool   `db:"hidden"`
+	Enabled   bool   `db:"enabled"`
 }
 
 // AchievementDefsByTrigger returns the enabled achievements a surface can
@@ -203,7 +216,7 @@ func (s *PGStore) AchievementDefsByTrigger(ctx context.Context, trigger string) 
 	var defs []AchievementDef
 	err := s.sel(ctx, &defs, `
 		SELECT id, slug, name, description, reward_id, metric, threshold,
-		       trigger, ordinal, hidden, enabled, backfilled_at
+		       trigger, icon, image_path, ordinal, hidden, enabled, backfilled_at
 		  FROM achievements
 		 WHERE enabled AND trigger = $1
 		 ORDER BY ordinal, name`, trigger)
@@ -216,7 +229,7 @@ func (s *PGStore) AchievementDefsByMetric(ctx context.Context, metric string) ([
 	var defs []AchievementDef
 	err := s.sel(ctx, &defs, `
 		SELECT id, slug, name, description, reward_id, metric, threshold,
-		       trigger, ordinal, hidden, enabled, backfilled_at
+		       trigger, icon, image_path, ordinal, hidden, enabled, backfilled_at
 		  FROM achievements
 		 WHERE enabled AND metric = $1
 		 ORDER BY threshold`, metric)
@@ -229,7 +242,7 @@ func (s *PGStore) ListAchievementDefs(ctx context.Context) ([]AchievementDef, er
 	var defs []AchievementDef
 	err := s.sel(ctx, &defs, `
 		SELECT id, slug, name, description, reward_id, metric, threshold,
-		       trigger, ordinal, hidden, enabled, backfilled_at
+		       trigger, icon, image_path, ordinal, hidden, enabled, backfilled_at
 		  FROM achievements
 		 ORDER BY ordinal, name`)
 	return defs, err

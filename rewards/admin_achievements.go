@@ -37,6 +37,10 @@ type NewAchievement struct {
 	Trigger     string
 	Ordinal     int
 	Hidden      bool
+	// The look. Icon is a sprite symbol name; ImagePath the uploaded badge's
+	// URL. Optional — empty defers to the host's state icons.
+	Icon      string
+	ImagePath string
 }
 
 // CreateAchievement validates and inserts one, DISABLED.
@@ -105,11 +109,11 @@ func (s *PGStore) CreateAchievement(ctx context.Context, a NewAchievement) (int6
 	var id int64
 	err = s.get(ctx, &id, `
 		INSERT INTO achievements
-		    (slug, name, description, reward_id, metric, threshold, trigger, ordinal, hidden, enabled)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE)
+		    (slug, name, description, reward_id, metric, threshold, trigger, icon, image_path, ordinal, hidden, enabled)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, FALSE)
 		RETURNING id`,
 		a.Slug, a.Name, a.Description, a.RewardID, a.Metric, a.Threshold,
-		a.Trigger, a.Ordinal, a.Hidden)
+		a.Trigger, a.Icon, a.ImagePath, a.Ordinal, a.Hidden)
 	if uniqueViolation(err) {
 		return 0, fmt.Errorf("an achievement with slug %q already exists", a.Slug)
 	}

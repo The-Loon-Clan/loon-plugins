@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/the-loon-clan/loon/blob"
 	"github.com/the-loon-clan/loon/core"
 	"github.com/the-loon-clan/loon/schedule"
 
@@ -75,6 +76,12 @@ type Plugin struct {
 	// Snapshotted for the same reason units are: the registry is written
 	// during boot and read on a worker tick.
 	metrics map[string]MetricSource
+	// files stores badge images; nil when no host registered rewards.files,
+	// which hides the upload control rather than rendering it broken.
+	files blob.Store
+	// iconOptions is the host's sprite vocabulary (rewards.icons), for the
+	// definition form's default-icon picker. Empty means free text.
+	iconOptions []string
 
 	// events answers which scheduled events exist and which are open. Looked up
 	// off the extension registry, so nil on a host with no events plugin —
@@ -215,6 +222,22 @@ func (p *Plugin) Provision(c *core.Core) error {
 			// Said out loud: a silent seed is indistinguishable from a
 			// migration that did not run.
 			log.Printf("rewards: seeded %d source(s) into an empty catalogue", n)
+		}
+	}
+
+	// The two optional host extras for the achievements definition page.
+	// Soft on purpose: a host without uploads still defines achievements, it
+	// just cannot give them images.
+	if v, ok := c.Lookup("rewards.files"); ok {
+		if fs, ok := v.(blob.Store); ok {
+			p.files = fs
+		} else {
+			return fmt.Errorf("rewards: %q is %T, want blob.Store", "rewards.files", v)
+		}
+	}
+	if v, ok := c.Lookup("rewards.icons"); ok {
+		if icons, ok := v.([]string); ok {
+			p.iconOptions = icons
 		}
 	}
 

@@ -1,0 +1,142 @@
+{{define "achievements_admin.html"}}
+{{/* The achievements DEFINITION page — its own admin destination, no longer
+     the last section of the rewards page.
+
+     Host design vocabulary (panelV2, data-table, notice, button), unlike its
+     Bootstrap-era predecessor: this page was born after the checklist, so it
+     starts on the right side of systemic gap #1 instead of joining it.
+
+     Field notes for whoever extends this:
+       - "Value" is the threshold — the number the metric must reach.
+       - Title and Description are TEXT today. When the i18n message catalogue
+         lands they become localization-slug dropdowns; the columns and this
+         form are the seam it will slot into, and inventing a dropdown now
+         with no catalogue behind it would be config that cannot work.
+       - "Select an existing image" needs blob.Store to grow listing; until
+         then upload is the only path and this comment is the register. */}}
+
+{{if .Msg}}<p class="notice notice--success">{{.Msg}}</p>{{end}}
+{{if .Err}}<p class="notice notice--danger">{{.Err}}</p>{{end}}
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">Defined achievements</h2>
+        <div class="panel__actions"><span class="panel__grouping">{{len .Achievements}}</span></div>
+    </header>
+    <div class="panel__body panel__body--flush">
+        <div class="data-table-wrapper">
+            <table class="data-table">
+                <caption class="visually-hidden">Every defined achievement, its criterion, and what it pays</caption>
+                <thead>
+                    <tr>
+                        <th>Slug</th><th>Title</th><th>Metric</th>
+                        <th class="data-table__num">Value</th>
+                        <th>Look</th><th>Pays</th><th>State</th><th>Backfilled</th><th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {{range .Achievements}}
+                    <tr>
+                        <td><code>{{.Slug}}</code>{{if .Hidden}} <span class="tag">hidden</span>{{end}}</td>
+                        <td>{{.Name}}</td>
+                        <td><code>{{.Metric}}</code></td>
+                        <td class="data-table__num">{{.Threshold}}</td>
+                        <td>
+                            {{if .ImagePath}}<img src="{{.ImagePath}}" alt="" width="24" height="24" style="border-radius:4px;vertical-align:middle">
+                            {{else if .Icon}}<code>{{.Icon}}</code>
+                            {{else}}<span class="text-muted small">host default</span>{{end}}
+                        </td>
+                        <td>
+                            <code>{{.RewardSlug}}</code>
+                            {{if not .Payable}}<div class="text-muted small">{{.Why}}</div>{{end}}
+                        </td>
+                        <td>{{if .Enabled}}<span class="tag tag--success">enabled</span>{{else}}<span class="tag">disabled</span>{{end}}</td>
+                        <td class="text-muted small">{{if .BackfilledAt}}{{ts .BackfilledAt}}{{else}}&mdash; not scored yet{{end}}</td>
+                        <td class="data-table__nowrap">
+                            <form method="post" action="/admin/p/achievements/achievement-toggle">
+                                <input type="hidden" name="id" value="{{.ID}}">
+                                <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
+                                <button class="button button--outlined button--sm"
+                                        {{if not .Enabled}}title="Enabling awards this to everyone already past the value, silently, on the next job tick."{{end}}>
+                                    {{if .Enabled}}Disable{{else}}Enable{{end}}
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                {{else}}
+                    <tr><td colspan="9" class="text-muted">No achievements defined yet — the form below creates the first.</td></tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">Define an achievement</h2>
+    </header>
+    <div class="panel__body">
+        <form method="post" action="/admin/p/achievements/achievement-create"
+              enctype="multipart/form-data" class="stack">
+            <div class="form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem">
+                <label class="form__label">Slug
+                    <input name="slug" class="form__input" placeholder="centurion" required>
+                </label>
+                <label class="form__label">Title
+                    <input name="name" class="form__input" placeholder="Centurion">
+                </label>
+                <label class="form__label">Value
+                    <input name="threshold" type="number" min="1" class="form__input" value="100" required>
+                </label>
+                <label class="form__label">Metric
+                    <select name="metric" class="form__input" required>
+                        <option value="">&mdash; pick one &mdash;</option>
+                        {{range .MetricOptions}}<option value="{{.}}">{{.}}</option>{{end}}
+                    </select>
+                </label>
+                <label class="form__label">Pays reward
+                    <select name="reward_id" class="form__input" required>
+                        <option value="">&mdash; pick one &mdash;</option>
+                        {{range .OneOffRewards}}<option value="{{.ID}}">{{.Slug}}</option>{{end}}
+                    </select>
+                </label>
+                <label class="form__label">Default icon
+                    {{if .IconOptions}}
+                    <select name="icon" class="form__input">
+                        <option value="">&mdash; host default &mdash;</option>
+                        {{range .IconOptions}}<option value="{{.}}">{{.}}</option>{{end}}
+                    </select>
+                    {{else}}
+                    <input name="icon" class="form__input" placeholder="star">
+                    {{end}}
+                </label>
+                {{if .CanUpload}}
+                <label class="form__label">Badge image
+                    <input name="image" type="file" accept="image/*" class="form__input">
+                </label>
+                {{end}}
+                <label class="form__label">Order
+                    <input name="ordinal" type="number" class="form__input" placeholder="0">
+                </label>
+            </div>
+            <label class="form__label" style="display:block;margin-top:0.5rem">Description
+                <input name="description" class="form__input" placeholder="What earns it, in the member's words">
+            </label>
+            <label class="form__label" style="display:flex;gap:0.4rem;align-items:center;margin-top:0.5rem">
+                <input type="checkbox" name="hidden" value="1"> Hidden until earned
+            </label>
+            <div style="margin-top:0.75rem">
+                <button class="button button--primary button--sm">Create — disabled</button>
+            </div>
+            <p class="text-muted small" style="margin:0.5rem 0 0">
+                Created <strong>disabled</strong>: enabling awards it to everyone already past
+                the value, silently, on the next job tick — check the number first.
+                The image wins over the icon when both are set; neither means the host
+                draws its own. Title and description become localization-slug pickers
+                when the message catalogue lands.
+            </p>
+        </form>
+    </div>
+</section>
+{{end}}
