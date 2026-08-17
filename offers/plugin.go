@@ -79,6 +79,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// Every path here is unchanged from the host version. Agents are deployed
 	// in the wild and do not redeploy when we refactor.
 	api := engine.Group("/api/offers")
+	// A body ceiling for the whole agent API. The largest legitimate payload is
+	// a register batch (capped at 2000 offers, ~a few hundred KB); 8 MiB is well
+	// clear of any real agent yet bounds the endpoints that only count-cap their
+	// arrays after decoding — Heartbeat count-caps nothing at all, so this is its
+	// only bound. Sized generously on purpose: agents run in the wild and a cap
+	// that rejects a real payload is a silent outage we cannot push a fix for.
+	api.Use(maxBody(8 << 20))
 	api.POST("/hash-check", p.handlers.HashCheck)
 	api.POST("/register", p.handlers.Register)
 	api.POST("/heartbeat", p.handlers.Heartbeat)
@@ -100,6 +107,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// Member surfaces.
 	pub := engine.Group("/offers")
 	pub.Use(c.Auth.Authenticate()...)
+	// Member surfaces carry small bodies (a request is a few fields + up to 200
+	// file names). 512 KiB bounds every route in the group; UserCreateRequest
+	// still sets its own tighter 256 KiB, which wins by nesting.
+	pub.Use(maxBody(512 << 10))
 	pub.POST("/request", p.handlers.UserCreateRequest)
 	// Withdrawing a stake is the other half of escrow: points left the
 	// balance, so there has to be a way back that is not "wait forever".
