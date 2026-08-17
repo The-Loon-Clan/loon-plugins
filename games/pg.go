@@ -10,7 +10,9 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// PGStore is the Postgres store over the dedicated "games" schema.
+// PGStore is the Postgres store over the dedicated "games" schema. Tables
+// are schema-qualified in every statement (the store plugin's convention)
+// because this holds the RAW pool, whose search_path is the host's.
 type PGStore struct{ db *sqlx.DB }
 
 func NewPGStore(db *sqlx.DB) *PGStore { return &PGStore{db: db} }
@@ -44,7 +46,7 @@ func defaults() Config {
 // a typo in the admin form must not brick both games.
 func (s *PGStore) Settings(ctx context.Context) (Config, error) {
 	cfg := defaults()
-	rows, err := s.db.QueryContext(ctx, `SELECT key, value FROM settings`)
+	rows, err := s.db.QueryContext(ctx, `SELECT key, value FROM games.settings`)
 	if err != nil {
 		return cfg, err
 	}
@@ -87,7 +89,7 @@ func setInt64(dst *int64, v string) {
 // SaveSetting writes one knob.
 func (s *PGStore) SaveSetting(ctx context.Context, key, value string) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO settings (key, value) VALUES ($1, $2)
+		INSERT INTO games.settings (key, value) VALUES ($1, $2)
 		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, key, value)
 	return err
 }
@@ -111,7 +113,7 @@ func (s *PGStore) OpenCycle(ctx context.Context, target int64) (Cycle, error) {
 	var c Cycle
 	err := s.db.GetContext(ctx, &c, `
 		SELECT id, target, total, winner_user_id, winner_points, ended_at, started_at
-		  FROM pot_cycles WHERE ended_at IS NULL ORDER BY id LIMIT 1`)
+		  FROM games.pot_cycles WHERE ended_at IS NULL ORDER BY id LIMIT 1`)
 	if err == nil {
 		return c, nil
 	}
@@ -119,12 +121,12 @@ func (s *PGStore) OpenCycle(ctx context.Context, target int64) (Cycle, error) {
 		return c, err
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO pot_cycles (target) VALUES ($1)`, target); err != nil {
+		`INSERT INTO games.pot_cycles (target) VALUES ($1)`, target); err != nil {
 		return c, err
 	}
 	err = s.db.GetContext(ctx, &c, `
 		SELECT id, target, total, winner_user_id, winner_points, ended_at, started_at
-		  FROM pot_cycles WHERE ended_at IS NULL ORDER BY id LIMIT 1`)
+		  FROM games.pot_cycles WHERE ended_at IS NULL ORDER BY id LIMIT 1`)
 	return c, err
 }
 
@@ -133,7 +135,7 @@ func (s *PGStore) LastClosed(ctx context.Context) (Cycle, bool, error) {
 	var c Cycle
 	err := s.db.GetContext(ctx, &c, `
 		SELECT id, target, total, winner_user_id, winner_points, ended_at, started_at
-		  FROM pot_cycles WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 1`)
+		  FROM games.pot_cycles WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 1`)
 	if errors.Is(err, sql.ErrNoRows) {
 		return c, false, nil
 	}
@@ -144,7 +146,7 @@ func (s *PGStore) LastClosed(ctx context.Context) (Cycle, bool, error) {
 func (s *PGStore) DonatedToday(ctx context.Context, cycleID, userID int64) (int64, error) {
 	var n int64
 	err := s.db.GetContext(ctx, &n, `
-		SELECT coalesce(sum(amount), 0) FROM pot_donations
+		SELECT coalesce(sum(amount), 0) FROM games.pot_donations
 		 WHERE cycle_id = $1 AND user_id = $2 AND day = CURRENT_DATE`, cycleID, userID)
 	return n, err
 }
@@ -153,7 +155,7 @@ func (s *PGStore) DonatedToday(ctx context.Context, cycleID, userID int64) (int6
 func (s *PGStore) UserCycleTotal(ctx context.Context, cycleID, userID int64) (int64, error) {
 	var n int64
 	err := s.db.GetContext(ctx, &n, `
-		SELECT coalesce(sum(amount), 0) FROM pot_donations
+		SELECT coalesce(sum(amount), 0) FROM games.pot_donations
 		 WHERE cycle_id = $1 AND user_id = $2`, cycleID, userID)
 	return n, err
 }
@@ -162,15 +164,15 @@ func (s *PGStore) UserCycleTotal(ctx context.Context, cycleID, userID int64) (in
 // caller's close check reads the same write it just made.
 func (s *PGStore) AddDonation(ctx context.Context, cycleID, userID, amount int64) (int64, error) {
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO pot_donations (cycle_id, user_id, day, amount)
+		INSERT INTO games.pot_donations (cycle_id, user_id, day, amount)
 		VALUES ($1, $2, CURRENT_DATE, $3)
 		ON CONFLICT (cycle_id, user_id, day) DO UPDATE
-		   SET amount = pot_donations.amount + $3`, cycleID, userID, amount); err != nil {
+		   SET amount = games.pot_donations.amount + $3`, cycleID, userID, amount); err != nil {
 		return 0, err
 	}
 	var total int64
 	err := s.db.GetContext(ctx, &total, `
-		UPDATE pot_cycles SET total = total + $2 WHERE id = $1 RETURNING total`,
+		UPDATE games.pot_cycles SET total = total + $2 WHERE id = $1 RETURNING total`,
 		cycleID, amount)
 	if err != nil {
 		return 0, fmt.Errorf("bump cycle total: %w", err)
@@ -183,7 +185,7 @@ func (s *PGStore) AddDonation(ctx context.Context, cycleID, userID, amount int64
 // exactly one gets true and runs the draw.
 func (s *PGStore) CloseCycle(ctx context.Context, cycleID int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx, `
-		UPDATE pot_cycles SET ended_at = now() WHERE id = $1 AND ended_at IS NULL`, cycleID)
+		UPDATE games.pot_cycles SET ended_at = now() WHERE id = $1 AND ended_at IS NULL`, cycleID)
 	if err != nil {
 		return false, err
 	}
@@ -194,7 +196,7 @@ func (s *PGStore) CloseCycle(ctx context.Context, cycleID int64) (bool, error) {
 // RecordWinner stamps who the draw picked and what they took.
 func (s *PGStore) RecordWinner(ctx context.Context, cycleID, winner, points int64) error {
 	_, err := s.db.ExecContext(ctx, `
-		UPDATE pot_cycles SET winner_user_id = $2, winner_points = $3 WHERE id = $1`,
+		UPDATE games.pot_cycles SET winner_user_id = $2, winner_points = $3 WHERE id = $1`,
 		cycleID, winner, points)
 	return err
 }
@@ -203,7 +205,7 @@ func (s *PGStore) RecordWinner(ctx context.Context, cycleID, winner, points int6
 // weights and the consolation pass in one read.
 func (s *PGStore) ContributorTotals(ctx context.Context, cycleID int64) (map[int64]int64, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT user_id, sum(amount) FROM pot_donations
+		SELECT user_id, sum(amount) FROM games.pot_donations
 		 WHERE cycle_id = $1 GROUP BY user_id`, cycleID)
 	if err != nil {
 		return nil, err
@@ -224,7 +226,7 @@ func (s *PGStore) ContributorTotals(ctx context.Context, cycleID int64) (map[int
 func (s *PGStore) RecordCharity(ctx context.Context, donorID, amount int64, ratioMax float64, recipients int) (int64, error) {
 	var id int64
 	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO charity_gifts (donor_id, amount, ratio_max, recipients)
+		INSERT INTO games.charity_gifts (donor_id, amount, ratio_max, recipients)
 		VALUES ($1, $2, $3, $4) RETURNING id`,
 		donorID, amount, ratioMax, recipients).Scan(&id)
 	return id, err
@@ -233,6 +235,6 @@ func (s *PGStore) RecordCharity(ctx context.Context, donorID, amount int64, rati
 // CharityTotals is the page's small honesty figures: gifts and points moved.
 func (s *PGStore) CharityTotals(ctx context.Context) (gifts int64, points int64, err error) {
 	err = s.db.QueryRowContext(ctx,
-		`SELECT count(*), coalesce(sum(amount), 0) FROM charity_gifts`).Scan(&gifts, &points)
+		`SELECT count(*), coalesce(sum(amount), 0) FROM games.charity_gifts`).Scan(&gifts, &points)
 	return gifts, points, err
 }
