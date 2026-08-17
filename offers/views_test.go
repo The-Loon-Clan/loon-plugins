@@ -219,6 +219,47 @@ func TestOfferDetailPageRendersEveryRequestState(t *testing.T) {
 	}
 }
 
+// File scoping (site migration 321): a requestable multi-file offer renders
+// pick boxes; a live request renders its scope and NO pick boxes, because a
+// joiner backs the request as-is.
+func TestOfferDetailFilePicking(t *testing.T) {
+	b := sampleBucket()
+	files := []OfferedFile{
+		{Name: "One Piece - 0783.mkv", SizeBytes: 900 << 20},
+		{Name: "One Piece - 0784.mkv", SizeBytes: 900 << 20},
+	}
+
+	fresh := render(t, "offer_detail.html", gin.H{
+		"Bucket": &b, "Files": files,
+		"Request": (*RequestState)(nil), "Backers": []RequestBacker{},
+		"RequestLive": false, "Delivered": false,
+		"Health": "", "CanReRequest": false,
+	})
+	if strings.Count(fresh, `class="of-file-pick"`) != 2 {
+		t.Error("a requestable multi-file offer should render one pick box per file")
+	}
+	if !strings.Contains(fresh, "Tick files to request only part of this offer") {
+		t.Error("the picker hint is missing")
+	}
+
+	live := render(t, "offer_detail.html", gin.H{
+		"Bucket": &b, "Files": files,
+		"Request": &RequestState{
+			RequestID: 2, Status: "open", PoolPoints: 0, BackerCount: 1,
+			FileFilter: []string{"One Piece - 0783.mkv"},
+		},
+		"Backers":     []RequestBacker{{UserID: 2, Username: "kirisame"}},
+		"RequestLive": true, "Delivered": false,
+		"Health": "", "CanReRequest": false,
+	})
+	if !strings.Contains(live, "Scoped to 1 of the offered files") {
+		t.Error("a scoped live request should show its file scope")
+	}
+	if strings.Contains(live, `class="of-file-pick"`) {
+		t.Error("a live request must not offer pick boxes — joiners back it as-is")
+	}
+}
+
 // The fulfilled tab: delivered buckets leave the open list and link their
 // release; the tab strip carries the count; and the open tab, searched empty,
 // says so against the query.

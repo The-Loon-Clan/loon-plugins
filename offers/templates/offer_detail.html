@@ -95,6 +95,14 @@
                         {{range $i, $b := .Backers}}{{if $i}}, {{end}}{{$b.Username}}{{if $b.Points}} ({{$b.Points}} pts){{end}}{{end}}
                     </div>
                     {{end}}
+                    {{if .Request.FileFilter}}
+                    <details class="od-note" style="margin-top:.25rem;">
+                        <summary style="cursor:pointer;">Scoped to {{len .Request.FileFilter}} of the offered files</summary>
+                        <div style="margin-top:.3rem;font-family:var(--bs-font-monospace,monospace);font-size:.78rem;">
+                            {{range .Request.FileFilter}}<div>{{.}}</div>{{end}}
+                        </div>
+                    </details>
+                    {{end}}
                 </div>
                 {{if ne .Request.Status "claimed"}}
                 <div style="display:flex;gap:6px;align-items:center;">
@@ -122,10 +130,28 @@
 
         <div class="od-card">
             <h2>What is being offered</h2>
+            {{/* File picking is only offered where a NEW request (or a
+                 re-request) can be filed — joining a live request inherits
+                 its scope, so ticking boxes there would lie. */}}
+            {{$canScope := or .CanReRequest (and (not .Delivered) (not .RequestLive))}}
+            {{if and $canScope (gt (len .Files) 1)}}
+            <div class="od-note" style="margin-bottom:.5rem;">
+                Tick files to request only part of this offer — say, the episodes the
+                catalog is missing. Leave everything unticked to request it all.
+                <span class="of-pick-count" style="color:var(--blue);"></span>
+            </div>
+            {{end}}
             {{if .Files}}
                 {{range .Files}}
                 <div class="od-file">
-                    <div class="od-fname">{{.Name}}</div>
+                    <div class="od-fname">
+                        {{if and $canScope (gt (len $.Files) 1)}}
+                        <label style="display:flex;gap:.5rem;align-items:baseline;cursor:pointer;margin:0;">
+                            <input type="checkbox" class="of-file-pick" value="{{.Name}}" style="flex-shrink:0;">
+                            <span>{{.Name}}</span>
+                        </label>
+                        {{else}}{{.Name}}{{end}}
+                    </div>
                     <div class="od-meta">
                         {{formatSize .SizeBytes}}
                         {{if .Duration}} &middot; {{.Duration}}{{end}}
@@ -172,6 +198,23 @@
     </div>
 
     <script>
+    // Picked files scope the request. The counter keeps the choice visible
+    // from the action area, since the file list can be long.
+    function ofPickedFiles() {
+        return Array.prototype.map.call(
+            document.querySelectorAll('.of-file-pick:checked'),
+            function (cb) { return cb.value; });
+    }
+    (function () {
+        var counter = document.querySelector('.of-pick-count');
+        if (!counter) return;
+        document.querySelectorAll('.of-file-pick').forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                var n = ofPickedFiles().length;
+                counter.textContent = n ? n + ' file' + (n === 1 ? '' : 's') + ' selected — the request will cover only these.' : '';
+            });
+        });
+    })();
     document.querySelectorAll('.of-request').forEach(function (btn) {
         btn.addEventListener('click', function () {
             // The points field sits beside the button; a missing one means 0.
@@ -182,7 +225,7 @@
             fetch('/offers/request', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRF-Token': '{{.CSRFToken}}'},
-                body: JSON.stringify({bucket_id: parseInt(btn.dataset.bucketId, 10), points: points, notes: ''})
+                body: JSON.stringify({bucket_id: parseInt(btn.dataset.bucketId, 10), points: points, notes: '', files: ofPickedFiles()})
             }).then(function (r) { return r.json(); }).then(function (d) {
                 if (d && d.ok) {
                     btn.textContent = (d.joined ? 'Joined request #' : 'Requested #') + d.request_id +

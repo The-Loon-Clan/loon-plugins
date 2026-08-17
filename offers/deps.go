@@ -359,7 +359,11 @@ type Deps struct {
 	// notes is the member's free text, which the offerer reads before
 	// deciding to take it -- the only prose on the whole exchange, so it
 	// crosses rather than being dropped.
-	CreateOrJoinRequest func(ctx context.Context, bucketID, userID, points int, notes string) (requestID int, joined bool, err error)
+	// files scopes a NEW request to named files inside a folder bucket —
+	// nil/empty asks for the whole bucket, as before. The host validates
+	// names against the bucket's inventory; joining a live request ignores
+	// the selection (one live request per bucket, its scope already set).
+	CreateOrJoinRequest func(ctx context.Context, bucketID, userID, points int, notes string, files []string) (requestID int, joined bool, err error)
 	// WithdrawBacking removes one member's stake and reports what to refund.
 	// The last backer leaving cancels the request.
 	WithdrawBacking func(ctx context.Context, reqID, userID int) (refund int, cancelled bool, err error)
@@ -432,6 +436,10 @@ type RequestState struct {
 	DeliveredAt *time.Time
 	PoolPoints  int
 	BackerCount int
+	// FileFilter is the request's file scope: empty means the whole
+	// bucket, names mean only those files. Display-only here — the scope
+	// is set at creation and joiners inherit it.
+	FileFilter []string
 }
 
 // ExpiredClaim is one request the sweeper reopened, and who was waiting on it.

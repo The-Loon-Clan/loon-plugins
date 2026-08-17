@@ -85,7 +85,7 @@ func newEscrowWorld(t *testing.T, createErr error, joined bool) *escrowWorld {
 			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "internal"})
 		},
 		LogError: func(ctx context.Context, op string, err error) {},
-		CreateOrJoinRequest: func(ctx context.Context, bucketID, userID, points int, notes string) (int, bool, error) {
+		CreateOrJoinRequest: func(ctx context.Context, bucketID, userID, points int, notes string, files []string) (int, bool, error) {
 			w.created++
 			if createErr != nil {
 				return 0, false, createErr

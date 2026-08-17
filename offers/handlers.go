@@ -416,6 +416,10 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 		BucketID int    `json:"bucket_id"`
 		Points   int    `json:"points"`
 		Notes    string `json:"notes"`
+		// Files scopes the request to named files inside a folder offer —
+		// empty asks for everything, as before. The host validates the
+		// names against the bucket's inventory.
+		Files []string `json:"files"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.BucketID <= 0 {
 		deps.JSONError(c, http.StatusBadRequest, "bucket_id required")
@@ -424,6 +428,16 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 	if body.Points < 0 {
 		deps.JSONError(c, http.StatusBadRequest, "points cannot be negative")
 		return
+	}
+	if len(body.Files) > 200 {
+		deps.JSONError(c, http.StatusBadRequest, "too many files selected (max 200)")
+		return
+	}
+	for _, f := range body.Files {
+		if len(f) > 512 {
+			deps.JSONError(c, http.StatusBadRequest, "file name too long")
+			return
+		}
 	}
 	ctx := c.Request.Context()
 
@@ -447,7 +461,7 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 		}
 	}
 
-	id, joined, err := deps.CreateOrJoinRequest(ctx, body.BucketID, user.ID, body.Points, body.Notes)
+	id, joined, err := deps.CreateOrJoinRequest(ctx, body.BucketID, user.ID, body.Points, body.Notes, body.Files)
 	if err != nil {
 		// Give it back. A member charged for a request that does not exist has
 		// no way to notice and no way to ask.
