@@ -196,20 +196,29 @@ func TestHelpDonateRendersTheRecentDonorTimestamp(t *testing.T) {
 	}
 }
 
-// Submit-time CSRF on these two pages is the host chrome's csrf-js, which
-// injects a _csrf input into every form as it is submitted; the markup
-// itself carries only two inline tokens (the claim form's csrf_token, the
-// btcpay-health form's _csrf). This test pins the form inventory and those
-// two inline tokens — a form count change means a new POST surface that
-// needs the csrf-js note re-checked, and a lost inline token means the
-// health-check form 403s even with JS disabled tooling.
+// This test pins the POST-form inventory and their inline tokens. A form
+// count change means a new POST surface to check, and a lost token means the
+// form 403s.
+//
+// The claim form's token was `name="csrf_token"` until the anonymity work —
+// a field name NO middleware reads, so on any host gating the route the claim
+// 403'd regardless of the token's value, and this test was PINNING the broken
+// name as correct. It pins _csrf now, the name the host middleware compares.
 func TestPostFormsAndInlineCSRFTokens(t *testing.T) {
 	out := testRenderDonate(t, false, "help_donate.html", donatePageFixture())
 	if forms := strings.Count(out, `method="POST"`); forms != 1 {
 		t.Errorf("help_donate renders %d POST forms, want 1 (the package claim)", forms)
 	}
-	if !strings.Contains(out, `name="csrf_token" value="test-csrf"`) {
-		t.Error("the claim form lost its inline csrf_token input")
+	if !strings.Contains(out, `name="_csrf" value="test-csrf"`) {
+		t.Error("the claim form lost its inline _csrf input")
+	}
+	// The anonymity controls: the choice must exist BEFORE payment, because
+	// after settlement there is nobody to ask.
+	if !strings.Contains(out, `name="anonymous"`) {
+		t.Error("the claim form lost the don't-list-me checkbox")
+	}
+	if !strings.Contains(out, `name="donor_label"`) {
+		t.Error("the claim form lost the shown-as field")
 	}
 
 	out = testRenderDonate(t, true, "admin_donate.html", adminDonateFixture())
