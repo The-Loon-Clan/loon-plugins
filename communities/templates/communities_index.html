@@ -7,40 +7,55 @@
 {{define "communities_index.html"}}
     <style>
         .c-page { padding: 1.4rem 1rem 3rem; }
-        .c-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:0.95rem; }
+        /* One card per row: the banner IS the card. The card is a thin frame
+           of surface around the image; every word sits ON the banner over a
+           left-weighted scrim, so any artwork stays legible without asking
+           uploaders to leave dead space for text. */
+        .c-list { display:flex; flex-direction:column; gap:1rem; max-width: 1100px; margin: 0 auto; }
         .c-card {
             background: var(--bg-surface);
             border: 1px solid var(--border);
             border-radius: 14px;
-            overflow: hidden;
+            padding: 0.6rem;
+            display: block;
             text-decoration: none;
             color: inherit;
-            display:flex; flex-direction:column;
             transition: border-color 0.15s ease, transform 0.15s ease;
         }
         .c-card:hover { border-color: var(--blue); transform: translateY(-2px); }
         .c-banner {
-            height: 80px; background: linear-gradient(135deg, rgba(91,138,245,0.35), rgba(168,85,247,0.25));
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            min-height: 190px;
+            padding: 1.1rem 1.4rem;
+            display: flex; flex-direction: column; justify-content: space-between; gap: 1.4rem;
+            background: linear-gradient(135deg, rgba(91,138,245,0.35), rgba(168,85,247,0.25));
             background-size: cover; background-position: center;
         }
-        .c-body { padding: 0.85rem 1rem 1rem; }
-        .c-row { display:flex; align-items:center; gap:0.65rem; margin-top:-22px; margin-bottom:0.55rem; }
-        .c-icon {
-            width: 44px; height: 44px; border-radius: 10px;
-            border: 2px solid var(--bg-surface);
-            background: var(--bg-elevated);
-            color: var(--blue);
-            display:inline-flex; align-items:center; justify-content:center;
-            font-weight:800; font-size: 1.05rem;
-            flex-shrink:0;
+        /* The scrim: strongest where the text lives, gone by mid-image. A
+           separate layer rather than a text-shadow alone, because a shadow
+           cannot rescue white text over a white sky. */
+        .c-banner::before {
+            content: ""; position: absolute; inset: 0;
+            background: linear-gradient(90deg, rgba(8,10,16,0.72), rgba(8,10,16,0.35) 45%, rgba(8,10,16,0.05) 75%);
         }
-        .c-icon img { width:100%; height:100%; object-fit:cover; border-radius:8px; }
-        .c-name { font-size: 1.02rem; font-weight: 700; line-height: 1.2; color: var(--text-primary); margin: 0; }
-        .c-slug { font-size: 0.72rem; color: var(--text-muted); }
-        .c-desc { font-size: 0.82rem; color: var(--text-muted); margin: 0.25rem 0 0.7rem; line-height: 1.45; min-height: 2.4em; }
-        .c-meta { display:flex; gap:0.85rem; font-size: 0.74rem; color: var(--text-muted); }
-        .c-meta strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+        .c-banner > * { position: relative; }
+        .c-name {
+            margin: 0; font-size: 1.55rem; font-weight: 800; line-height: 1.15;
+            color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.75);
+            max-width: 32ch;
+        }
+        .c-info { color: #fff; text-shadow: 0 1px 5px rgba(0,0,0,0.8); max-width: 60ch; }
+        .c-meta { font-size: 0.78rem; opacity: 0.92; }
+        .c-meta strong { font-variant-numeric: tabular-nums; }
+        .c-desc { font-size: 0.86rem; line-height: 1.45; margin-top: 0.3rem; opacity: 0.95; }
+        .c-slug { font-size: 0.72rem; opacity: 0.75; }
         .c-empty { text-align:center; padding: 3rem 1rem; color: var(--text-muted); font-size: 0.9rem; }
+        @media (max-width: 640px) {
+            .c-banner { min-height: 150px; padding: 0.9rem 1rem; }
+            .c-name { font-size: 1.2rem; }
+        }
     </style>
     <div class="container page c-page">
         <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
@@ -56,22 +71,17 @@
         </div>
 
         {{if .Communities}}
-        <div class="c-grid">
+        <div class="c-list">
             {{range .Communities}}
             <a class="c-card" href="/c/{{.Slug}}">
-                <div class="c-banner" {{if .BannerURL}}style="background-image:url('{{.BannerURL}}');background-position:center {{.BannerPosition}}%;"{{end}}></div>
-                <div class="c-body">
-                    <div class="c-row">
-                        <span class="c-icon">{{if .IconURL}}<img src="{{.IconURL}}" alt="">{{else}}{{initial .Name}}{{end}}</span>
-                        <div>
-                            <h3 class="c-name">{{.Name}}</h3>
-                            <div class="c-slug">/c/{{.Slug}}</div>
-                        </div>
-                    </div>
-                    {{if .Description}}<div class="c-desc">{{.Description}}</div>{{else}}<div class="c-desc">&mdash;</div>{{end}}
-                    <div class="c-meta">
-                        <span><strong>{{.SubscriberCount}}</strong> members</span>
-                        <span><strong>{{.ThreadCount}}</strong> threads</span>
+                {{/* BannerPosition keeps working: the uploader's focal point
+                     matters MORE now that the banner is the whole card. */}}
+                <div class="c-banner" {{if .BannerURL}}style="background-image:url('{{.BannerURL}}');background-position:center {{.BannerPosition}}%;"{{end}}>
+                    <h2 class="c-name">{{.Name}}</h2>
+                    <div class="c-info">
+                        <div class="c-meta"><strong>{{.SubscriberCount}}</strong> members &middot; <strong>{{.ThreadCount}}</strong> threads</div>
+                        {{if .Description}}<div class="c-desc">{{.Description}}</div>{{end}}
+                        <div class="c-slug">/c/{{.Slug}}</div>
                     </div>
                 </div>
             </a>
