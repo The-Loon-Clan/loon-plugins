@@ -127,6 +127,13 @@ func TestListPageRenders(t *testing.T) {
 	if !strings.Contains(feed, "Feed Item") {
 		t.Error("feed tab did not render the feed item")
 	}
+	// The status filter's derived options (the host's ListFeedItems
+	// translates these sentinels into the open-request join).
+	for _, want := range []string{`value="not_queued"`, `value="queued"`} {
+		if !strings.Contains(feed, want) {
+			t.Errorf("feed status filter missing option %s", want)
+		}
+	}
 }
 
 func TestDetailPageRenders(t *testing.T) {

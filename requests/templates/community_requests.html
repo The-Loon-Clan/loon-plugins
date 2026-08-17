@@ -373,6 +373,12 @@
                     <span style="color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Status</span>
                     <select name="status" class="form-select form-select-sm" style="width:auto;font-size:0.78rem;" onchange="this.form.submit()">
                         <option value="" {{if eq .FeedStatus ""}}selected{{end}}>All</option>
+                        {{/* queued / not_queued filter the state the row's
+                             BUTTON shows (an open request exists), not the
+                             feed_items.status column the options below match.
+                             The host's ListFeedItems knows both sentinels. */}}
+                        <option value="not_queued" {{if eq .FeedStatus "not_queued"}}selected{{end}}>Hide queued</option>
+                        <option value="queued" {{if eq .FeedStatus "queued"}}selected{{end}}>Queued only</option>
                         <option value="request_created" {{if eq .FeedStatus "request_created"}}selected{{end}}>Auto-requested</option>
                         <option value="skipped_old" {{if eq .FeedStatus "skipped_old"}}selected{{end}}>Skipped — old</option>
                         <option value="skipped_dup_hash" {{if eq .FeedStatus "skipped_dup_hash"}}selected{{end}}>Skipped — dup hash</option>
