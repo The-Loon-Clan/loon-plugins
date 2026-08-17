@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -708,6 +709,16 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 	if lastPage < 1 {
 		lastPage = 1
 	}
+	// The host's pagination partial — same buttons as /browse. Every link
+	// carries the active filters; QueryEscape because q is member input.
+	baseURL := "/offers?tab=" + url.QueryEscape(tab) + "&type=" + url.QueryEscape(entityType)
+	if sizeBucket != "" {
+		baseURL += "&size=" + url.QueryEscape(sizeBucket)
+	}
+	if query != "" {
+		baseURL += "&q=" + url.QueryEscape(query)
+	}
+	baseURL += "&"
 
 	// No sidebar fetches: the leaderboard moved to the host's stats page,
 	// where it counts PUBLIC work only — this page's "Top deliverers" panel
@@ -724,10 +735,7 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 		"Groups":         groups,
 		"FulfilledTotal": fulfilledTotal,
 		"Total":          total,
-		"Page":           pageNum,
-		"LastPage":       lastPage,
-		"PrevPage":       pageNum - 1,
-		"NextPage":       pageNum + 1,
+		"Pagination":     deps.RenderPagination(pageNum, lastPage, baseURL),
 	})
 }
 

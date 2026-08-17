@@ -1,6 +1,7 @@
 package offers
 
 import (
+	"html/template"
 	"strings"
 	"testing"
 	"time"
@@ -59,13 +60,13 @@ func render(t *testing.T, name string, data gin.H) string {
 }
 
 // listingData is the offers.html handler contract: every key OffersPage
-// always passes, overridable per test. The pager's gt/lt comparisons error
-// on missing keys where eq merely mismatches, so fixtures must be complete.
+// always passes, overridable per test. The pager is host-rendered HTML now
+// (deps.RenderPagination), handed over pre-built like the requests feed's.
 func listingData(extra gin.H) gin.H {
 	base := gin.H{
 		"EntityType": EntityAnime, "SizeBucket": "", "Query": "", "Tab": "open",
 		"Groups": []BucketGroup{}, "FulfilledTotal": 0,
-		"Total": 0, "Page": 1, "LastPage": 1, "PrevPage": 0, "NextPage": 2,
+		"Total": 0, "Pagination": template.HTML(`<nav id="pg"></nav>`),
 	}
 	for k, v := range extra {
 		base[k] = v
@@ -99,6 +100,7 @@ func TestOffersPageRenders(t *testing.T) {
 		"[VCB-Studio] Yamada-kun [01][Ma10p_1080p].mkv",
 		"[VCB-Studio] Yamada-kun [Menu01].png",
 		"1080p", "account-settings#offers", "/stats",
+		`<nav id="pg">`, // the host-rendered pager must be placed
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("offers page missing %q", want)

@@ -267,6 +267,10 @@ type APIUser struct {
 type Deps struct {
 	// ── page chrome ──
 	RenderPage  func(c *gin.Context, title string, body template.HTML)
+	// RenderPagination returns the HOST's pagination partial, so /offers
+	// pages with the same numbered buttons as /browse instead of a
+	// hand-rolled Newer/Older pair. baseURL must end in '?' or '&'.
+	RenderPagination func(page, totalPages int, baseURL string) template.HTML
 	RenderError func(c *gin.Context, code int, msg string)
 	// CSRFToken for the admin tracker form. Host-owned because the token is
 	// minted and validated by host middleware.
@@ -483,6 +487,7 @@ func (d *Deps) okAPI() bool {
 func (d *Deps) okWeb() bool {
 	return d.okAPI() &&
 		d.RenderPage != nil && d.RenderError != nil && d.CSRFToken != nil &&
+		d.RenderPagination != nil &&
 		d.Viewer != nil &&
 		d.RecentBucketGroups != nil && d.Leaderboard != nil && d.RecentDeliveries != nil &&
 		d.TrackerStats != nil && d.AdminRequests != nil && d.AdminStatusCounts != nil &&

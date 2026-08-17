@@ -166,22 +166,9 @@
 
                 {{/* Pager, per shelf: each tab pages over its own population
                      (the split happens in the host's query), and every link
-                     carries the active filters. */}}
-                {{if gt .LastPage 1}}
-                <div class="d-flex justify-content-between align-items-center mt-3" style="font-size:0.82rem;">
-                    <span>
-                        {{if gt .Page 1}}
-                        <a class="btn btn-sm btn-outline-secondary" href="/offers?tab={{.Tab}}&type={{.EntityType}}&size={{.SizeBucket}}&q={{.Query}}&page={{.PrevPage}}">&larr; Newer</a>
-                        {{end}}
-                    </span>
-                    <span style="color:var(--text-muted);">Page {{.Page}} of {{.LastPage}}</span>
-                    <span>
-                        {{if lt .Page .LastPage}}
-                        <a class="btn btn-sm btn-outline-secondary" href="/offers?tab={{.Tab}}&type={{.EntityType}}&size={{.SizeBucket}}&q={{.Query}}&page={{.NextPage}}">Older &rarr;</a>
-                        {{end}}
-                    </span>
-                </div>
-                {{end}}
+                     carries the active filters. The buttons are the HOST's
+                     pagination partial — the same control /browse uses. */}}
+                {{.Pagination}}
             </div>
 
 
