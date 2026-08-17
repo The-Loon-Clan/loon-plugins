@@ -5,9 +5,11 @@
            so the grid stays put when the right pane changes. */
         .inbox-layout {
             display: grid;
-            grid-template-columns: 360px minmax(0, 1fr);
+            grid-template-columns: 340px minmax(0, 1fr);
             gap: 1rem;
-            align-items: start;
+            /* Stretch (the grid default), not start: the list and the pane
+               are one surface split in two, and the short-card-beside-tall-
+               pane look was half of what made the page read as scattered. */
             min-height: 560px;
         }
         @media (max-width: 820px) {
@@ -30,7 +32,15 @@
             border: 1px solid var(--border);
             border-radius: 14px;
             padding: 0.85rem;
+            /* A column, so the row list is the part that grows and scrolls
+               while search and the summary stay put — the same shape the
+               right pane already has. max-height matches .ib-pane because
+               the two are halves of one surface. */
+            display: flex;
+            flex-direction: column;
+            max-height: 80vh;
         }
+        #ib-row-list { flex: 1; overflow-y: auto; min-height: 0; }
         .ib-list-search {
             position: relative;
             margin-bottom: 0.7rem;
@@ -214,6 +224,8 @@
         }
         .ib-empty .ib-empty-icon {
             font-size: 2.5rem;
+            width: 2.5rem;
+            height: 2.5rem;
             opacity: 0.6;
             margin-bottom: 0.5rem;
         }
@@ -262,7 +274,13 @@
         .ib-compose input[type="text"]:focus { outline: none; border-color: var(--blue); }
     </style>
 
-    <div class="container mt-4 page">
+    {{/* No .container here, and it is the whole spacing fix. The fragment
+         already sits inside the host panel's padded body; Bootstrap's
+         .container capped the grid at a fixed width, centred the remainder
+         and stacked mt-4 on top of the panel's own padding — which is why
+         the two panes floated in the middle of the page with dead space on
+         every side. The grid fills the panel now. */}}
+    <div class="inbox-shell">
 
         <div class="inbox-layout">
 
@@ -275,8 +293,8 @@
                 <div class="ib-list-summary">
                     <span>{{len .Items}} conversation{{if ne (len .Items) 1}}s{{end}}</span>
                     {{if .CanSendDM}}
-                    <a href="/inbox?compose=1" class="btn btn-primary btn-sm" style="font-size:0.74rem;">
-                        ✏️ Compose
+                    <a href="/inbox?compose=1" class="button button--primary button--sm">
+                        <svg class="icon icon--sm" aria-hidden="true"><use href="#plus"></use></svg>Compose
                     </a>
                     {{end}}
                 </div>
@@ -325,10 +343,10 @@
             <main class="ib-pane">
 
                 {{if .ComposeOk}}
-                <div class="alert alert-success py-2 m-3 mb-0" style="font-size:0.85rem;">Message sent.</div>
+                <p class="notice notice--success m-3 mb-0">Message sent.</p>
                 {{end}}
                 {{if .ComposeError}}
-                <div class="alert alert-danger py-2 m-3 mb-0" style="font-size:0.85rem;">{{.ComposeError}}</div>
+                <p class="notice notice--danger m-3 mb-0">{{.ComposeError}}</p>
                 {{end}}
 
                 {{if .ComposeMode}}
@@ -336,10 +354,10 @@
                     {{if .CanSendDM}}
                     <div class="ib-pane-head">
                         <div>
-                            <strong>✏️ New Message</strong>
+                            <strong>New message</strong>
                             <div class="ib-pane-sub">Compose a new conversation</div>
                         </div>
-                        <a href="/inbox" class="btn btn-outline-secondary btn-sm">Cancel</a>
+                        <a href="/inbox" class="button button--outlined button--sm">Cancel</a>
                     </div>
                     {{/* The CSRF field was missing here from 2026-05-21 until the
                          lift: the site gate rejects a POST without it, so starting
@@ -348,26 +366,28 @@
                     <form method="POST" action="/inbox/dm/send" class="ib-compose" style="display:contents;">
                         <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                         <div class="ib-pane-body">
-                            <label for="ib-compose-to">To <span style="color:var(--bs-danger);">*</span></label>
+                            <label for="ib-compose-to">To <span style="color:var(--danger);">*</span></label>
                             <input type="text" name="recipient" id="ib-compose-to"
                                    placeholder="Enter username"
                                    value="{{.PrefillRecipient}}"
                                    autocomplete="off" required>
-                            <label>Message <span style="color:var(--bs-danger);">*</span></label>
+                            <label>Message <span style="color:var(--danger);">*</span></label>
                             {{.EditorHTML}}
                         </div>
                         <div class="ib-pane-foot">
-                            <a href="/inbox" class="btn btn-link" style="color:var(--text-muted);">✕ Cancel</a>
-                            <button type="submit" class="btn btn-primary btn-sm">📤 Send Message</button>
+                            <a href="/inbox" class="button button--text button--sm">Cancel</a>
+                            <button type="submit" class="button button--primary button--sm">
+                                <svg class="icon icon--sm" aria-hidden="true"><use href="#send"></use></svg>Send message
+                            </button>
                         </div>
                     </form>
                     {{else}}
                     <div class="ib-empty">
-                        <div class="ib-empty-icon">🔒</div>
+                        <svg class="icon ib-empty-icon" aria-hidden="true"><use href="#lock"></use></svg>
                         <h2>DMs require a paid rank</h2>
                         <p>Composing a new conversation requires a moderator role or an active paid rank.
                            You can still receive messages from anyone who can send.</p>
-                        <a href="/help/donate" class="btn btn-outline-primary btn-sm">View ranks</a>
+                        <a href="/help/donate" class="button button--outlined button--sm">View ranks</a>
                     </div>
                     {{end}}
                 {{else if .ActiveThreadID}}
@@ -382,20 +402,20 @@
                             <form method="POST" action="/inbox/dm/unblock" class="d-inline">
                                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                                 <input type="hidden" name="user_id" value="{{.ActiveCpID}}">
-                                <button type="submit" class="btn btn-outline-secondary btn-sm">Unblock</button>
+                                <button type="submit" class="button button--outlined button--sm">Unblock</button>
                             </form>
                             {{else}}
                             <form method="POST" action="/inbox/dm/block" class="d-inline"
                                   onsubmit="return confirm('Block this user? Neither side will be able to send DMs to the other until unblocked.');">
                                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                                 <input type="hidden" name="user_id" value="{{.ActiveCpID}}">
-                                <button type="submit" class="btn btn-outline-warning btn-sm">Block</button>
+                                <button type="submit" class="button button--outlined button--sm">Block</button>
                             </form>
                             {{end}}
                             <form method="POST" action="/inbox/dm/{{.ActiveThreadID}}/delete" class="d-inline"
                                   onsubmit="return confirm('Hide this conversation from your inbox? Receiving a new message will bring it back.');">
                                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                                <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                                <button type="submit" class="button button--danger button--outlined button--sm">Delete</button>
                             </form>
                         </div>
                     </div>
@@ -418,7 +438,7 @@
                         {{.EditorHTML}}
                         <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.74rem;color:var(--text-muted);">
                             <span>Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to send</span>
-                            <button type="submit" class="btn btn-primary btn-sm">Send</button>
+                            <button type="submit" class="button button--primary button--sm">Send</button>
                         </div>
                     </form>
                     {{else if .ActiveBlocked}}
@@ -436,7 +456,7 @@
                         <form method="POST" action="/inbox/{{.ActiveMessage.ID}}/dismiss" class="d-inline"
                               onsubmit="return confirm('Dismiss this message?');">
                             <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                            <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                            <button type="submit" class="button button--danger button--outlined button--sm">Delete</button>
                         </form>
                     </div>
                     <div class="ib-pane-body" style="color:var(--text-primary);font-size:0.92rem;line-height:1.55;">
@@ -445,11 +465,13 @@
                 {{else}}
                     {{/* ── Empty state — default landing ── */}}
                     <div class="ib-empty">
-                        <div class="ib-empty-icon">💬</div>
+                        <svg class="icon ib-empty-icon" aria-hidden="true"><use href="#comment"></use></svg>
                         <h2>Select a conversation</h2>
                         <p>Choose a conversation from the list to view messages.</p>
                         {{if .CanSendDM}}
-                        <a href="/inbox?compose=1" class="btn btn-primary">✏️ Compose New Message</a>
+                        <a href="/inbox?compose=1" class="button button--primary">
+                            <svg class="icon" aria-hidden="true"><use href="#plus"></use></svg>Compose a message
+                        </a>
                         {{end}}
                     </div>
                 {{end}}
