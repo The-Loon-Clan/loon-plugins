@@ -1149,7 +1149,9 @@
                     // full sanitized HTML so users can read release notes
                     // before submitting (release group, encoder details,
                     // etc.). description_html has already been run through
-                    // sanitize.Wiki on the server, so it is safe to drop
+                    // sanitize.Scraped on the server (the strict untrusted-
+                    // third-party policy: inline formatting + scheme-restricted
+                    // links only, no style/img/layout), so it is safe to drop
                     // into innerHTML here.
                     if (d.description_html) {
                         var summaryText = (d.description_text || '').slice(0, 200);
