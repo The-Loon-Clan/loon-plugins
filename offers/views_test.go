@@ -58,12 +58,26 @@ func render(t *testing.T, name string, data gin.H) string {
 	return s
 }
 
+// listingData is the offers.html handler contract: every key OffersPage
+// always passes, overridable per test. The pager's gt/lt comparisons error
+// on missing keys where eq merely mismatches, so fixtures must be complete.
+func listingData(extra gin.H) gin.H {
+	base := gin.H{
+		"EntityType": EntityAnime, "SizeBucket": "", "Query": "", "Tab": "open",
+		"Buckets": []Bucket{}, "Fulfilled": []Bucket{}, "FulfilledTotal": 0,
+		"Total": 0, "Page": 1, "LastPage": 1, "PrevPage": 0, "NextPage": 2,
+	}
+	for k, v := range extra {
+		base[k] = v
+	}
+	return base
+}
+
 func TestOffersPageRenders(t *testing.T) {
-	got := render(t, "offers.html", gin.H{
-		"EntityType": EntityAnime,
-		"SizeBucket": "",
-		"Buckets":    []Bucket{sampleBucket(), sampleBucket()},
-	})
+	got := render(t, "offers.html", listingData(gin.H{
+		"Buckets": []Bucket{sampleBucket(), sampleBucket()},
+		"Total":   2,
+	}))
 	// The community sidebar is gone: the leaderboard moved to the host's
 	// stats page (public work only), so this page renders the listing and a
 	// register hint and nothing ranks anyone.
@@ -177,11 +191,9 @@ func TestOffersFulfilledTabRenders(t *testing.T) {
 	nzbID := int64(176112514)
 	b.Fulfilled, b.DeliveredNzbID, b.Title = true, &nzbID, "Spirited Away"
 
-	got := render(t, "offers.html", gin.H{
-		"EntityType": EntityAnime, "SizeBucket": "", "Query": "", "Tab": "fulfilled",
-		"Buckets": []Bucket{}, "Fulfilled": []Bucket{b}, "FulfilledTotal": 1,
-		"Leaders": []Leader{}, "Recent": []Fulfillment{}, "Trackers": []TrackerStat{},
-	})
+	got := render(t, "offers.html", listingData(gin.H{
+		"Tab": "fulfilled", "Fulfilled": []Bucket{b}, "FulfilledTotal": 1, "Total": 1,
+	}))
 	for _, want := range []string{"Spirited Away", "/release/176112514", "view the release", `tab-count">1`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("fulfilled tab missing %q", want)
@@ -191,11 +203,7 @@ func TestOffersFulfilledTabRenders(t *testing.T) {
 		t.Error("fulfilled tab renders a Request button — the bytes are already on Usenet")
 	}
 
-	open := render(t, "offers.html", gin.H{
-		"EntityType": EntityAnime, "SizeBucket": "", "Query": "frieren", "Tab": "open",
-		"Buckets": []Bucket{}, "Fulfilled": []Bucket{}, "FulfilledTotal": 0,
-		"Leaders": []Leader{}, "Recent": []Fulfillment{}, "Trackers": []TrackerStat{},
-	})
+	open := render(t, "offers.html", listingData(gin.H{"Query": "frieren"}))
 	if !strings.Contains(open, "frieren") {
 		t.Error("empty search result does not echo the query")
 	}
@@ -207,11 +215,7 @@ func TestOffersListingShowsTheStakedPool(t *testing.T) {
 	b := sampleBucket()
 	b.BackerCount = 2
 	b.PoolPoints = 1000
-	got := render(t, "offers.html", gin.H{
-		"EntityType": EntityAnime, "SizeBucket": "",
-		"Buckets": []Bucket{b}, "Leaders": []Leader{},
-		"Recent": []Fulfillment{}, "Trackers": []TrackerStat{},
-	})
+	got := render(t, "offers.html", listingData(gin.H{"Buckets": []Bucket{b}, "Total": 1}))
 	if !strings.Contains(got, "1000 pts staked") {
 		t.Error("listing does not show the staked pool")
 	}
@@ -220,11 +224,7 @@ func TestOffersListingShowsTheStakedPool(t *testing.T) {
 // The empty state is what an operator sees on a fresh install, and a range
 // over nothing is where a missing {{else}} shows up.
 func TestPagesRenderEmpty(t *testing.T) {
-	render(t, "offers.html", gin.H{
-		"EntityType": EntityAnime, "SizeBucket": "",
-		"Buckets": []Bucket{}, "Leaders": []Leader{},
-		"Recent": []Fulfillment{}, "Trackers": []TrackerStat{},
-	})
+	render(t, "offers.html", listingData(nil))
 	render(t, "admin_offers.html", gin.H{
 		"Recent": []AdminRequest{}, "StatusCounts": []StatusCount{},
 		"Leaders": []Leader{}, "Trackers": []TrackerStat{},

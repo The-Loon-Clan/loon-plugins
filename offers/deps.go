@@ -67,6 +67,10 @@ type Bucket struct {
 	// the release's articles die. DeliveredNzbID is where the tab links.
 	Fulfilled      bool
 	DeliveredNzbID *int64
+	// FileCount is how many files back the bucket — the fact that tells
+	// two lookalike rows apart when neither filename parsed a resolution:
+	// "12 files" and "1 file" are different things to request.
+	FileCount int
 }
 
 // OfferedFile is one staged file behind a bucket, as the detail page shows it.
@@ -284,7 +288,10 @@ type Deps struct {
 	// ── reads for the pages ──
 	// query filters by catalogue title, /browse-style — the host resolves
 	// it against its own metadata, since the plugin has none to search.
-	RecentBuckets func(ctx context.Context, entityType, sizeBucket, query string, limit int) ([]Bucket, error)
+	// shelf is 'open' or 'fulfilled': the tabs paginate over their OWN
+	// populations, so the split happens in the host's query, not by
+	// dividing a fetched page. Returns the page plus the shelf's total.
+	RecentBuckets func(ctx context.Context, entityType, sizeBucket, query, shelf string, limit, offset int) ([]Bucket, int, error)
 	// BucketDetail is one bucket plus the staged files behind it — the offer
 	// detail page. Files carry the agent's probe (codecs, duration, audio and
 	// subtitle tracks) so the page can describe a release nobody uploaded.

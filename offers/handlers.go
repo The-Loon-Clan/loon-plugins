@@ -659,25 +659,51 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 	sizeBucket := c.Query("size")
 	query := strings.TrimSpace(c.Query("q"))
 	tab := c.DefaultQuery("tab", "open")
+	if tab != "fulfilled" {
+		tab = "open"
+	}
+	pageNum, _ := strconv.Atoi(c.Query("page"))
+	if pageNum < 1 {
+		pageNum = 1
+	}
+	const pageSize = 50
 
-	all, err := deps.RecentBuckets(ctx, entityType, sizeBucket, query, 100)
+	// Each tab paginates over its OWN population — the shelf split happens
+	// in the host's query. Delivered-and-still-healthy buckets live on the
+	// fulfilled tab (in the open list they read as "nobody has this yet",
+	// the opposite of the truth) and return the moment the delivered
+	// release's articles die.
+	rows, total, err := deps.RecentBuckets(ctx, entityType, sizeBucket, query, tab,
+		pageSize, (pageNum-1)*pageSize)
 	if err != nil {
 		deps.LogError(ctx, "offer/page-buckets", err)
 	}
-	// Delivered-and-still-healthy buckets get their own tab, following the
-	// community/requests pattern: an already-fulfilled bucket sitting in the
-	// open list reads as "nobody has this yet" — the opposite of the truth.
-	// The host flips Fulfilled back off the moment the delivered release's
-	// articles die, and the bucket returns here as requestable.
-	var open, fulfilled []Bucket
-	for _, b := range all {
-		if b.Fulfilled {
-			fulfilled = append(fulfilled, b)
-		} else {
-			open = append(open, b)
-		}
+	// The other tab's count for its badge: a count-shaped call (smallest
+	// page, first offset), not a second full page.
+	otherTab := "fulfilled"
+	if tab == "fulfilled" {
+		otherTab = "open"
 	}
-	attachBackerStats(ctx, open)
+	_, otherTotal, oerr := deps.RecentBuckets(ctx, entityType, sizeBucket, query, otherTab, 1, 0)
+	if oerr != nil {
+		deps.LogError(ctx, "offer/page-buckets-count", oerr)
+	}
+	fulfilledTotal := otherTotal
+	if tab == "fulfilled" {
+		fulfilledTotal = total
+	}
+
+	var open, fulfilled []Bucket
+	if tab == "fulfilled" {
+		fulfilled = rows
+	} else {
+		open = rows
+		attachBackerStats(ctx, open)
+	}
+	lastPage := (total + pageSize - 1) / pageSize
+	if lastPage < 1 {
+		lastPage = 1
+	}
 
 	// No sidebar fetches: the leaderboard moved to the host's stats page,
 	// where it counts PUBLIC work only — this page's "Top deliverers" panel
@@ -693,7 +719,12 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 		"Tab":            tab,
 		"Buckets":        open,
 		"Fulfilled":      fulfilled,
-		"FulfilledTotal": len(fulfilled),
+		"FulfilledTotal": fulfilledTotal,
+		"Total":          total,
+		"Page":           pageNum,
+		"LastPage":       lastPage,
+		"PrevPage":       pageNum - 1,
+		"NextPage":       pageNum + 1,
 	})
 }
 

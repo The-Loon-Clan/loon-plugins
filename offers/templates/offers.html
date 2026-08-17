@@ -86,7 +86,7 @@
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <span>Fulfilled offers</span>
-                        <span style="color:var(--text-muted);font-size:0.85rem;">{{len .Fulfilled}} bucket{{if ne (len .Fulfilled) 1}}s{{end}}</span>
+                        <span style="color:var(--text-muted);font-size:0.85rem;">{{.Total}} bucket{{if ne .Total 1}}s{{end}}</span>
                     </div>
                     <table class="table mb-0">
                         <thead>
@@ -147,7 +147,9 @@
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <span>Offers</span>
-                        <span style="color:var(--text-muted);font-size:0.85rem;">{{len .Buckets}} bucket{{if ne (len .Buckets) 1}}s{{end}}</span>
+                        {{/* The SHELF total, not the page length — "50 buckets"
+                             on every page of 2,536 hid the other 2,486. */}}
+                        <span style="color:var(--text-muted);font-size:0.85rem;">{{.Total}} bucket{{if ne .Total 1}}s{{end}}</span>
                     </div>
                     <table class="table mb-0">
                         <thead>
@@ -187,6 +189,10 @@
                                                 {{if .HasPrivate}}<span class="of-pill of-pill-priv">private</span>{{end}}
                                                 {{if .HasPublic}}<span class="of-pill of-pill-pub">public</span>{{end}}
                                                 {{if .HasPersonal}}<span class="of-pill of-pill-per">personal</span>{{end}}
+                                                {{/* The disambiguator for lookalike rows: when a
+                                                     filename parsed no resolution or source, "12
+                                                     files" vs "1 file" is the visible difference. */}}
+                                                {{if .FileCount}} · {{.FileCount}} file{{if ne .FileCount 1}}s{{end}}{{end}}
                                             </div>
                                         </div>
                                     </div>
@@ -238,6 +244,25 @@
                 </div>
                 {{end}}
                 {{end}}{{/* end tab switch */}}
+
+                {{/* Pager, per shelf: each tab pages over its own population
+                     (the split happens in the host's query), and every link
+                     carries the active filters. */}}
+                {{if gt .LastPage 1}}
+                <div class="d-flex justify-content-between align-items-center mt-3" style="font-size:0.82rem;">
+                    <span>
+                        {{if gt .Page 1}}
+                        <a class="btn btn-sm btn-outline-secondary" href="/offers?tab={{.Tab}}&type={{.EntityType}}&size={{.SizeBucket}}&q={{.Query}}&page={{.PrevPage}}">&larr; Newer</a>
+                        {{end}}
+                    </span>
+                    <span style="color:var(--text-muted);">Page {{.Page}} of {{.LastPage}}</span>
+                    <span>
+                        {{if lt .Page .LastPage}}
+                        <a class="btn btn-sm btn-outline-secondary" href="/offers?tab={{.Tab}}&type={{.EntityType}}&size={{.SizeBucket}}&q={{.Query}}&page={{.NextPage}}">Older &rarr;</a>
+                        {{end}}
+                    </span>
+                </div>
+                {{end}}
             </div>
 
 
