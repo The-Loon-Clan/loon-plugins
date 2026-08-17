@@ -125,6 +125,7 @@ var deps Deps
 func SetDeps(d Deps) { deps = d }
 
 type Plugin struct {
+	core     *core.Core
 	handlers *Handlers
 }
 
@@ -142,6 +143,7 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
+	p.core = c
 	db := c.Storage.DB()
 	if db == nil {
 		return fmt.Errorf("store: Core.Storage.DB() is nil")
@@ -208,19 +210,6 @@ func (p *Plugin) Provision(c *core.Core) error {
 		}
 	}
 
-	// The tracker's transfer credit, on the invites/perks terms: absent is a
-	// legitimate host (no tracker, or an idle one), wrong-typed is a wiring
-	// bug.
-	var credit pluginapi.TrackerCredit
-	if svc, ok := c.Lookup(pluginapi.TrackerCreditName); ok {
-		g, ok := svc.(pluginapi.TrackerCredit)
-		if !ok {
-			return fmt.Errorf("store: %q is %T, not pluginapi.TrackerCredit",
-				pluginapi.TrackerCreditName, svc)
-		}
-		credit = g
-	}
-
 	// Which site flavours are on, for hiding items whose half is off. A host
 	// registers func() (indexer, tracker bool) under store.flavour; absent
 	// means every item shows.
@@ -242,7 +231,6 @@ func (p *Plugin) Provision(c *core.Core) error {
 		store:   NewPGStore(db),
 		points:  c.Points,
 		granter: granter,
-		credit:  credit,
 		halves:  halves,
 		invites: invites,
 		perks:   perks,
@@ -273,5 +261,20 @@ func (p *Plugin) Provision(c *core.Core) error {
 	return nil
 }
 
-func (p *Plugin) Start(ctx context.Context) error { return nil }
-func (p *Plugin) Stop(ctx context.Context) error  { return nil }
+// Start looks up the tracker's transfer credit — in Start, not Provision,
+// because the tracker is a sibling whose registration order is nobody's
+// promise (the games plugin learned this the same afternoon). Absent is a
+// legitimate host (no tracker, or an idle one) and fails only credit-item
+// purchases; wrong-typed is a wiring bug and fails loudly.
+func (p *Plugin) Start(ctx context.Context) error {
+	if svc, ok := p.core.Lookup(pluginapi.TrackerCreditName); ok {
+		g, ok := svc.(pluginapi.TrackerCredit)
+		if !ok {
+			return fmt.Errorf("store: %q is %T, not pluginapi.TrackerCredit",
+				pluginapi.TrackerCreditName, svc)
+		}
+		p.handlers.credit = g
+	}
+	return nil
+}
+func (p *Plugin) Stop(ctx context.Context) error { return nil }
