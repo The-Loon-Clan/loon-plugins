@@ -39,6 +39,15 @@ const AchievementsExtension = "rewards.achievements"
 // registering "uploads" does not need to learn a second convention.
 const MetricSourcePrefix = "rewards.metrics."
 
+// CSRFExtension is the registry key under which the HOST supplies its
+// per-session CSRF token func (func(*gin.Context) string), for the claim
+// card's form. A host concern, like every other CSRF seam in this tree — the
+// plugin must never mint its own, or the token it embeds is not the one the
+// host's middleware checks. Registered before Boot; absent means the card's
+// form posts tokenless, which the tokenless-form probe proved the host
+// middleware refuses with 403 — so wiring this is what makes the card WORK.
+const CSRFExtension = "rewards.csrf"
+
 // MetricSource supplies the current value of one achievement metric.
 //
 // Same contract as UnitSource, and for the same reason: reading every member

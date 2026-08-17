@@ -1,21 +1,73 @@
 {{define "claim_card.html"}}
-<div class="card mb-3">
+<div class="card mb-3" id="rw-claim-card">
   <div class="card-header"><strong>Rewards to claim</strong></div>
   <div class="card-body">
-    {{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
-    {{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
+    <p class="notice notice--success rw-claim-flash{{if not .Msg}} d-none{{end}}" data-flash="ok">{{.Msg}}</p>
+    <p class="notice notice--danger rw-claim-flash{{if not .Err}} d-none{{end}}" data-flash="err">{{.Err}}</p>
     {{range .Grants}}
-      <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+      <div class="d-flex justify-content-between align-items-center py-2 border-bottom rw-claim-row">
         <div>
           <strong>{{.Pays}}</strong>
           {{if .Expires}}<div class="text-muted small">claim before {{.Expires}}</div>{{end}}
         </div>
-        <form method="post" action="/plugin/rewards/claim" class="ms-3">
+        {{/* The token is rendered, not injected: a tokenless POST to this
+             action is refused 403 by the host middleware before any handler
+             runs — probed, not assumed — so without the rewards.csrf seam
+             this button silently did nothing for every member. */}}
+        <form method="post" action="/plugin/rewards/claim" class="ms-3 rw-claim-form">
+          <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
           <input type="hidden" name="grant_id" value="{{.ID}}">
-          <button class="btn btn-sm btn-primary" type="submit">Claim</button>
+          <button class="button button--primary button--sm" type="submit">Claim</button>
         </form>
       </div>
     {{end}}
   </div>
 </div>
+<script>
+(function () {
+  // Async claim, the daily-reward widget's pattern: the form still works with
+  // JavaScript off (and then returns to THIS page — the handler follows the
+  // Referer), but with it the row disappears in place and nobody is teleported
+  // to the front page mid-read.
+  var card = document.getElementById('rw-claim-card');
+  if (!card) return;
+  function flash(kind, text) {
+    card.querySelectorAll('.rw-claim-flash').forEach(function (el) {
+      var mine = el.getAttribute('data-flash') === kind;
+      el.classList.toggle('d-none', !mine);
+      if (mine) el.textContent = text;
+    });
+  }
+  card.querySelectorAll('.rw-claim-form').forEach(function (form) {
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var btn = form.querySelector('button');
+      btn.disabled = true;
+      fetch(form.action, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'fetch' },
+        body: new FormData(form),
+        credentials: 'same-origin'
+      }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+        .then(function (res) {
+          if (res.ok && res.body.claimed) {
+            var row = form.closest('.rw-claim-row');
+            if (row) row.remove();
+            flash('ok', res.body.msg || 'Reward claimed');
+            if (!card.querySelector('.rw-claim-row')) {
+              // The last one: the card's remaining content IS the flash, so it
+              // reads "claimed" rather than an empty box with a green line.
+              var head = card.querySelector('.card-header strong');
+              if (head) head.textContent = 'All rewards claimed';
+            }
+          } else {
+            flash('err', (res.body && res.body.err) || 'Could not claim right now.');
+            btn.disabled = false;
+          }
+        })
+        .catch(function () { flash('err', 'Could not claim right now.'); btn.disabled = false; });
+    });
+  });
+})();
+</script>
 {{end}}

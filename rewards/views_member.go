@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -21,9 +22,10 @@ import (
 // offered to someone who appears once a year.
 
 type claimVM struct {
-	Grants []claimRow
-	Msg    string
-	Err    string
+	Grants    []claimRow
+	Msg       string
+	Err       string
+	CSRFToken string
 }
 
 type claimRow struct {
@@ -63,7 +65,7 @@ func (p *Plugin) renderClaimCard(gc *gin.Context) (template.HTML, error) {
 		return "", nil
 	}
 
-	vm := claimVM{Msg: gc.Query("claimed"), Err: gc.Query("claim_err")}
+	vm := claimVM{Msg: gc.Query("claimed"), Err: gc.Query("claim_err"), CSRFToken: p.csrfToken(gc)}
 	for _, g := range grants {
 		row := claimRow{ID: g.ID, Pays: describePayouts(g.Payouts)}
 		if g.ExpiresAt != nil {
@@ -104,14 +106,47 @@ func describePayouts(ps []Payout) string {
 // that is not theirs, and refuses it identically to a grant that does not
 // exist so the endpoint cannot be walked to discover valid ids.
 func (p *Plugin) memberClaim(gc *gin.Context) {
+	// Two dialects, like the daily reward's claim: JSON for the card's fetch
+	// (X-Requested-With: fetch), a redirect for a plain form POST. finish is
+	// the single exit so the two cannot drift.
+	//
+	// The redirect goes BACK WHERE THE FORM WAS, not to "/". The old handler
+	// hardcoded the home page, so claiming from /rewards teleported the member
+	// to the front page with ?claimed=reward+claimed in the bar — which is how
+	// this was reported. The Referer is the member's own browser echoing the
+	// page they were on; only its PATH is used, so it cannot redirect off-site.
+	finish := func(status int, ok bool, msg string) {
+		if gc.GetHeader("X-Requested-With") == "fetch" {
+			key := "err"
+			if ok {
+				key = "msg"
+			}
+			gc.JSON(status, gin.H{"claimed": ok, key: msg})
+			return
+		}
+		back := "/"
+		if ref, err := url.Parse(gc.GetHeader("Referer")); err == nil && strings.HasPrefix(ref.Path, "/") {
+			back = ref.Path
+		}
+		key := "claim_err"
+		if ok {
+			key = "claimed"
+		}
+		gc.Redirect(http.StatusSeeOther, back+"?"+key+"="+url.QueryEscape(msg))
+	}
+
 	u, ok := p.core.Auth.CurrentUser(gc)
 	if !ok || u == nil {
+		if gc.GetHeader("X-Requested-With") == "fetch" {
+			gc.JSON(http.StatusUnauthorized, gin.H{"err": "sign in to claim"})
+			return
+		}
 		gc.Redirect(http.StatusSeeOther, "/login")
 		return
 	}
 	grantID, err := strconv.ParseInt(gc.PostForm("grant_id"), 10, 64)
 	if err != nil {
-		gc.Redirect(http.StatusSeeOther, "/?claim_err=bad+request")
+		finish(http.StatusBadRequest, false, "bad request")
 		return
 	}
 	if err := p.engine.ClaimGrant(gc.Request.Context(), int64(u.ID), grantID); err != nil {
@@ -119,8 +154,20 @@ func (p *Plugin) memberClaim(gc *gin.Context) {
 		// difference between "not yours" and "already claimed" is useful to an
 		// operator and useful to an attacker.
 		log.Printf("rewards: claim refused for user %d grant %d: %v", int64(u.ID), grantID, err)
-		gc.Redirect(http.StatusSeeOther, "/?claim_err=that+reward+is+no+longer+available")
+		finish(http.StatusConflict, false, "that reward is no longer available")
 		return
 	}
-	gc.Redirect(http.StatusSeeOther, "/?claimed=reward+claimed")
+	finish(http.StatusOK, true, "Reward claimed")
+}
+
+// csrfToken reads the host's token func off the registry, or "" when no host
+// registered one — the form then posts tokenless and the host middleware
+// answers, which is the pre-seam behaviour rather than a new failure.
+func (p *Plugin) csrfToken(gc *gin.Context) string {
+	if v, ok := p.core.Lookup(CSRFExtension); ok {
+		if fn, ok := v.(func(*gin.Context) string); ok {
+			return fn(gc)
+		}
+	}
+	return ""
 }
