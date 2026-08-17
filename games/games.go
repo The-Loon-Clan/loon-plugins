@@ -83,10 +83,18 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.tmpl = t
 
+	return p.registerViews(c)
+}
+
+// Start looks up the sibling capabilities. In Start rather than Provision —
+// the achievements lesson: Boot runs every plugin's Provision before any
+// Start, so this sees the rewards registration whatever the boot order,
+// without a hard Requires edge a rewards-less host cannot satisfy.
+func (p *Plugin) Start(ctx context.Context) error {
 	// The consolation-reward granter, softly: a host without the rewards
 	// plugin still gets a working pot — the winner is points through
 	// core.Points — it just has nothing to hand the other contributors.
-	if v, ok := c.Lookup(pluginapi.RewardBySlugGranterName); ok {
+	if v, ok := p.core.Lookup(pluginapi.RewardBySlugGranterName); ok {
 		if g, ok := v.(pluginapi.RewardBySlugGranter); ok {
 			p.granter = g
 		} else {
@@ -99,7 +107,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	// The member figures, softly: charity NEEDS them (it is how need is
 	// found), so without the seam that page says so instead of guessing.
-	if v, ok := c.Lookup(pluginapi.RankStatsName); ok {
+	if v, ok := p.core.Lookup(pluginapi.RankStatsName); ok {
 		if s, ok := v.(pluginapi.RankStats); ok {
 			p.stats = s
 		} else {
@@ -109,13 +117,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 		log.Printf("games: %q not registered — charity is unavailable (no member figures to find need with)",
 			pluginapi.RankStatsName)
 	}
-
-	return p.registerViews(c)
+	return nil
 }
 
-// Start/Stop: no background work — both games run inside requests.
-func (p *Plugin) Start(ctx context.Context) error { return nil }
-func (p *Plugin) Stop(ctx context.Context) error  { return nil }
+func (p *Plugin) Stop(ctx context.Context) error { return nil }
 
 func (p *Plugin) csrfToken(gc *gin.Context) string {
 	if v, ok := p.core.Lookup(CSRFExtension); ok {
