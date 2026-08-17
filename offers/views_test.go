@@ -173,6 +173,38 @@ func TestOfferDetailPageRendersEveryRequestState(t *testing.T) {
 	}
 }
 
+// The fulfilled tab: delivered buckets leave the open list and link their
+// release; the tab strip carries the count; and the open tab, searched empty,
+// says so against the query.
+func TestOffersFulfilledTabRenders(t *testing.T) {
+	b := sampleBucket()
+	nzbID := int64(176112514)
+	b.Fulfilled, b.DeliveredNzbID, b.Title = true, &nzbID, "Spirited Away"
+
+	got := render(t, "offers.html", gin.H{
+		"EntityType": EntityAnime, "SizeBucket": "", "Query": "", "Tab": "fulfilled",
+		"Buckets": []Bucket{}, "Fulfilled": []Bucket{b}, "FulfilledTotal": 1,
+		"Leaders": []Leader{}, "Recent": []Fulfillment{}, "Trackers": []TrackerStat{},
+	})
+	for _, want := range []string{"Spirited Away", "/release/176112514", "view the release", `tab-count">1`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("fulfilled tab missing %q", want)
+		}
+	}
+	if strings.Contains(got, "data-bucket-id") {
+		t.Error("fulfilled tab renders a Request button — the bytes are already on Usenet")
+	}
+
+	open := render(t, "offers.html", gin.H{
+		"EntityType": EntityAnime, "SizeBucket": "", "Query": "frieren", "Tab": "open",
+		"Buckets": []Bucket{}, "Fulfilled": []Bucket{}, "FulfilledTotal": 0,
+		"Leaders": []Leader{}, "Recent": []Fulfillment{}, "Trackers": []TrackerStat{},
+	})
+	if !strings.Contains(open, "frieren") {
+		t.Error("empty search result does not echo the query")
+	}
+}
+
 // The listing's demand column: the staked pool renders beside the count. A
 // 1000-point pool showing as "free" is the confusion this pins against.
 func TestOffersListingShowsTheStakedPool(t *testing.T) {

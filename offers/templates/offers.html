@@ -97,6 +97,12 @@
             {{/* ── Left column: filter + offer-bucket list ── */}}
             <div>
                 <form method="GET" action="/offers" class="d-flex flex-wrap gap-2 align-items-end mb-3">
+                    {{if eq .Tab "fulfilled"}}<input type="hidden" name="tab" value="fulfilled">{{end}}
+                    <div style="flex:1;min-width:180px;">
+                        <label class="form-label small mb-1">Search</label>
+                        <input type="search" name="q" value="{{.Query}}" class="form-control form-control-sm"
+                               placeholder="Search offers by title &mdash; e.g. Frieren">
+                    </div>
                     <div>
                         <label class="form-label small mb-1">Type</label>
                         <select name="type" class="form-select form-select-sm">
@@ -121,6 +127,80 @@
                     <button type="submit" class="btn btn-primary btn-sm">Apply</button>
                 </form>
 
+                {{/* Tab strip, community/requests-style: fulfilled buckets
+                     leave the open list — a delivered bucket sitting there
+                     reads as "nobody has this yet", the opposite of the
+                     truth — and return the moment the delivered release's
+                     articles die. */}}
+                <ul class="nav tabs mb-3">
+                    <li class="nav-item">
+                        <a class="nav-link {{if ne .Tab "fulfilled"}}active{{end}}" href="/offers">Offers</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{if eq .Tab "fulfilled"}}active{{end}}" href="/offers?tab=fulfilled"
+                           title="Buckets whose request was delivered and whose release is still retrievable — they reopen automatically if the release dies">Fulfilled{{with .FulfilledTotal}} <span class="tab-count">{{.}}</span>{{end}}</a>
+                    </li>
+                </ul>
+
+                {{if eq .Tab "fulfilled"}}
+                {{/* ── Fulfilled tab ── delivered and still retrievable.
+                     No Request button here: the bytes are already on
+                     Usenet, and the release link is the whole point. */}}
+                {{if .Fulfilled}}
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Fulfilled offers</span>
+                        <span style="color:var(--text-muted);font-size:0.85rem;">{{len .Fulfilled}} bucket{{if ne (len .Fulfilled) 1}}s{{end}}</span>
+                    </div>
+                    <table class="table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th style="width:130px;">Tags</th>
+                                <th style="width:90px;">Size</th>
+                                <th style="width:200px;">Delivered</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {{range .Fulfilled}}
+                            <tr>
+                                <td>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        {{if .Picture}}
+                                        <span class="nzb-thumb" data-cover="{{.Picture}}" data-fallback="{{.PictureFallback}}"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
+                                              onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}"></span>
+                                        {{end}}
+                                        <div style="min-width:0;">
+                                            {{if .EntityID}}
+                                            <a href="/{{.EntityType}}/{{deref .EntityID}}" style="color:var(--text-primary);text-decoration:none;">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{deref .EntityID}}{{end}}</a>
+                                            {{else}}
+                                            <span style="color:var(--text-primary);">{{.EntityType}}</span>
+                                            {{end}}
+                                            {{if .SeasonNum}}<span class="badge bg-secondary bg-opacity-50" style="font-size:0.6rem;margin-left:3px;vertical-align:middle;">S{{deref .SeasonNum}}{{if .EpisodeNum}} E{{deref .EpisodeNum}}{{end}}</span>{{end}}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td style="font-size:0.82rem;">
+                                    {{if .Resolution}}<span class="badge" style="background:rgba(var(--bs-primary-rgb),0.2);color:var(--bs-primary);">{{.Resolution}}</span>{{end}}
+                                    {{if .SourceTag}}<span class="badge" style="background:rgba(var(--bs-success-rgb),0.15);color:var(--bs-success);">{{.SourceTag}}</span>{{end}}
+                                </td>
+                                <td style="font-size:0.82rem;color:var(--text-muted);">{{.SizeBucket}}</td>
+                                <td style="font-size:0.82rem;">
+                                    {{if .DeliveredNzbID}}<a href="/release/{{.DeliveredNzbID}}" style="color:#4ade80;text-decoration:none;">view the release &rarr;</a>
+                                    <div style="color:var(--text-muted);font-size:0.7rem;">reopens here if the release dies</div>{{end}}
+                                </td>
+                            </tr>
+                        {{end}}
+                        </tbody>
+                    </table>
+                </div>
+                {{else}}
+                <div style="color:var(--text-muted);text-align:center;padding:3rem 1rem;border:1px dashed var(--border);border-radius:12px;">
+                    Nothing fulfilled yet{{if .Query}} for this search{{end}}. Delivered offers land here, and move back to the open list if their release dies.
+                </div>
+                {{end}}
+
+                {{else}}
                 {{/* Rendered as a table with a cover thumbnail, mirroring /browse and the
                      requests page. Offers ARE releases as far as a member is concerned, so
                      they should scan the same way; the previous card list was a second
@@ -218,9 +298,10 @@
                 </div>
                 {{else}}
                 <div style="color:var(--text-muted);text-align:center;padding:3rem 1rem;border:1px dashed var(--border);border-radius:12px;">
-                    No offers yet for this filter. Once offerers register their sources you'll see buckets here.
+                    No offers {{if .Query}}match &ldquo;{{.Query}}&rdquo;{{else}}yet for this filter. Once offerers register their sources you'll see buckets here{{end}}.
                 </div>
                 {{end}}
+                {{end}}{{/* end tab switch */}}
             </div>
 
             {{/* ── Right column: community panel ── */}}

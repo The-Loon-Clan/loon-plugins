@@ -59,6 +59,14 @@ type Bucket struct {
 	// debited, paid to whoever delivers. Rendered beside the count, because a
 	// bounty the listing cannot show is a bounty that motivates nobody.
 	PoolPoints int
+	// Fulfilled says this bucket's most relevant request is delivered and
+	// the delivered release is still retrievable — the host computes it,
+	// since health vocabulary is the host's. Fulfilled buckets move to
+	// their own tab (a delivered bucket in the open list reads as "nobody
+	// has this yet", the opposite of the truth) and come back the moment
+	// the release's articles die. DeliveredNzbID is where the tab links.
+	Fulfilled      bool
+	DeliveredNzbID *int64
 }
 
 // OfferedFile is one staged file behind a bucket, as the detail page shows it.
@@ -274,7 +282,9 @@ type Deps struct {
 	LogError func(ctx context.Context, op string, err error)
 
 	// ── reads for the pages ──
-	RecentBuckets func(ctx context.Context, entityType, sizeBucket string, limit int) ([]Bucket, error)
+	// query filters by catalogue title, /browse-style — the host resolves
+	// it against its own metadata, since the plugin has none to search.
+	RecentBuckets func(ctx context.Context, entityType, sizeBucket, query string, limit int) ([]Bucket, error)
 	// BucketDetail is one bucket plus the staged files behind it — the offer
 	// detail page. Files carry the agent's probe (codecs, duration, audio and
 	// subtitle tracks) so the page can describe a release nobody uploaded.

@@ -657,12 +657,27 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 		entityType = EntityAnime
 	}
 	sizeBucket := c.Query("size")
+	query := strings.TrimSpace(c.Query("q"))
+	tab := c.DefaultQuery("tab", "open")
 
-	buckets, err := deps.RecentBuckets(ctx, entityType, sizeBucket, 100)
+	all, err := deps.RecentBuckets(ctx, entityType, sizeBucket, query, 100)
 	if err != nil {
 		deps.LogError(ctx, "offer/page-buckets", err)
 	}
-	attachBackerStats(ctx, buckets)
+	// Delivered-and-still-healthy buckets get their own tab, following the
+	// community/requests pattern: an already-fulfilled bucket sitting in the
+	// open list reads as "nobody has this yet" — the opposite of the truth.
+	// The host flips Fulfilled back off the moment the delivered release's
+	// articles die, and the bucket returns here as requestable.
+	var open, fulfilled []Bucket
+	for _, b := range all {
+		if b.Fulfilled {
+			fulfilled = append(fulfilled, b)
+		} else {
+			open = append(open, b)
+		}
+	}
+	attachBackerStats(ctx, open)
 	leaders, err := deps.Leaderboard(ctx, 25)
 	if err != nil {
 		deps.LogError(ctx, "offer/page-leaders", err)
@@ -677,14 +692,18 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 	}
 
 	page(c, "Offers", "offers.html", gin.H{
-		"PageTitle":  "Offers",
-		"ActiveNav":  "community",
-		"EntityType": entityType,
-		"SizeBucket": sizeBucket,
-		"Buckets":    buckets,
-		"Leaders":    leaders,
-		"Recent":     recent,
-		"Trackers":   trackers,
+		"PageTitle":      "Offers",
+		"ActiveNav":      "community",
+		"EntityType":     entityType,
+		"SizeBucket":     sizeBucket,
+		"Query":          query,
+		"Tab":            tab,
+		"Buckets":        open,
+		"Fulfilled":      fulfilled,
+		"FulfilledTotal": len(fulfilled),
+		"Leaders":        leaders,
+		"Recent":         recent,
+		"Trackers":       trackers,
 	})
 }
 
