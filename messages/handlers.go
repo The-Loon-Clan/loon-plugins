@@ -190,6 +190,10 @@ func (h *Handlers) Inbox(c *gin.Context) {
 
 func (h *Handlers) MarkRead(c *gin.Context) {
 	user := h.currentUser(c)
+	if user == nil {
+		jsonError(c, http.StatusUnauthorized, "login required")
+		return
+	}
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -204,6 +208,10 @@ func (h *Handlers) MarkRead(c *gin.Context) {
 
 func (h *Handlers) DismissMessage(c *gin.Context) {
 	user := h.currentUser(c)
+	if user == nil {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
