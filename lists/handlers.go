@@ -216,7 +216,11 @@ func (h *Handlers) RemoveFromList(c *gin.Context) {
 // ReleaseLists shows all lists containing a release.
 func (h *Handlers) ReleaseLists(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	nzb, ls, err := deps.ListsForNzb(c.Request.Context(), id)
+	// Anonymous (viewerID 0) sees only public lists; a member also sees their
+	// own. The visibility gate lives in the store so this page — reachable
+	// anonymously on a public site — cannot surface a stranger's private list.
+	viewerID, _, _ := deps.Viewer(c)
+	nzb, ls, err := deps.ListsForNzb(c.Request.Context(), id, viewerID)
 	if err != nil || nzb == nil {
 		c.String(http.StatusNotFound, "not found")
 		return

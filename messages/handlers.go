@@ -365,6 +365,15 @@ func (h *Handlers) SendDM(c *gin.Context) {
 		} else {
 			recipientID = t.UserLoID
 		}
+		// Blocks are symmetric ("after A blocks B, neither may DM the other"),
+		// but a block almost always follows an existing conversation — so the
+		// check has to guard the REPLY branch, not only new-thread creation
+		// below. Without it either party replies into the pre-existing thread
+		// and the block is decorative.
+		if blocked, _ := h.store.IsDMBlocked(ctx, user.ID, recipientID); blocked {
+			c.Redirect(http.StatusFound, "/inbox?err=Cannot+send+(blocked)")
+			return
+		}
 	} else {
 		recipName := strings.TrimSpace(c.PostForm("recipient"))
 		if recipName == "" {
@@ -434,6 +443,16 @@ func (h *Handlers) MarkDMRead(c *gin.Context) {
 	tid, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || tid <= 0 {
 		jsonError(c, http.StatusBadRequest, "bad id")
+		return
+	}
+	// Membership gate, matching the view path (GetDMThreadForUser collapses
+	// not-found and not-participant into one nil so a caller cannot probe which
+	// thread ids exist). Without it MarkDMThreadRead's UPDATE — filtered only by
+	// sender_id <> viewer — marks ANY thread's messages read and returns the
+	// unread count, letting any member zero another pair's badges and count
+	// their unread mail.
+	if t, _ := h.store.GetDMThreadForUser(c.Request.Context(), tid, user.ID); t == nil {
+		jsonError(c, http.StatusNotFound, "not found")
 		return
 	}
 	n, err := h.store.MarkDMThreadRead(c.Request.Context(), tid, user.ID)

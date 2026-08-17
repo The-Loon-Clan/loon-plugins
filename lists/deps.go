@@ -101,7 +101,7 @@ type Deps struct {
 	ByID        func(ctx context.Context, listID int) (*List, error)
 	Items       func(ctx context.Context, listID int) ([]Item, error)
 	IsFollowing func(ctx context.Context, userID, listID int) (bool, error)
-	ListsForNzb func(ctx context.Context, nzbID int64) (*NzbRef, []List, error)
+	ListsForNzb func(ctx context.Context, nzbID int64, viewerID int) (*NzbRef, []List, error)
 
 	// Discovery returns the three axes of the public grid. The plugin merges
 	// and dedupes them; the host just fetches.
