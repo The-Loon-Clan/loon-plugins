@@ -407,6 +407,12 @@ func (h *Handlers) FailRequest(c *gin.Context) {
 // POST /offers/request — body: {"bucket_id": N, "points": 0, "notes": ""}
 // Creates an open request. Returns the new id.
 func (h *Handlers) UserCreateRequest(c *gin.Context) {
+	// A right-sized cap for this endpoint: bucket_id + points + a note + up to
+	// 200 file names at 512 bytes each is ~110 KB; 256 KB leaves headroom. The
+	// body is decoded into memory before the count/length checks below run, so
+	// the cap has to come first, ahead of ShouldBindJSON. The host also carries
+	// a 256 MiB global backstop, but a member-facing endpoint deserves its own.
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 256<<10)
 	user := deps.Viewer(c)
 	if user == nil {
 		deps.JSONError(c, http.StatusUnauthorized, "login required")
@@ -438,6 +444,13 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 			deps.JSONError(c, http.StatusBadRequest, "file name too long")
 			return
 		}
+	}
+	// Reject an oversized note rather than truncate it: a byte-slice on a UTF-8
+	// string can split a multibyte rune and manufacture invalid bytes the
+	// database then rejects. 2000 bytes is generous for a request note.
+	if len(body.Notes) > 2000 {
+		deps.JSONError(c, http.StatusBadRequest, "note too long (max 2000 characters)")
+		return
 	}
 	ctx := c.Request.Context()
 
