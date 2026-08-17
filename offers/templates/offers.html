@@ -1,27 +1,7 @@
 {{define "offers.html"}}
     <style>
         .of-page { margin: 0 auto; padding: 1.5rem 1rem 4rem; }
-        .of-grid {
-            display: grid;
-            grid-template-columns: 1.7fr 1fr;
-            gap: 1.25rem;
-        }
-        @media (max-width: 1000px) { .of-grid { grid-template-columns: 1fr; } }
-
-        /* Search-side cards (left column) */
-        .of-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 0.9rem 1.1rem;
-            margin-bottom: 0.6rem;
-            display: flex;
-            align-items: center;
-            gap: 0.85rem;
-        }
-        .of-card .of-title { font-weight: 600; color: var(--text-primary); font-size: 0.95rem; }
-        .of-card .of-hint  { color: var(--text-muted); font-size: 0.72rem; margin-top: 0.1rem; }
-        .of-card .of-meta  { color: var(--text-muted); font-size: 0.78rem; margin-top: 0.15rem; }
+        .of-hint  { color: var(--text-muted); font-size: 0.72rem; margin-top: 0.1rem; }
         .of-pill {
             display: inline-block;
             font-size: 0.66rem;
@@ -32,54 +12,6 @@
         .of-pill-priv { background: rgba(96,165,250,0.15); color:#60a5fa; }
         .of-pill-pub  { background: rgba(74,222,128,0.15); color:#4ade80; }
         .of-pill-per  { background: rgba(168,85,247,0.15); color:#c084fc; }
-        .of-count {
-            margin-left: auto;
-            text-align: right;
-            font-size: 0.85rem;
-        }
-        .of-count strong { font-size: 1.05rem; color: var(--text-primary); }
-
-        /* Community panel (right column) */
-        .oc-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1rem 1.2rem;
-            margin-bottom: 1.1rem;
-        }
-        .oc-card h2 {
-            font-size: 0.92rem;
-            font-weight: 700;
-            margin: 0 0 0.65rem 0;
-            color: var(--text-primary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        .oc-row {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.85rem;
-        }
-        .oc-row:last-child { border-bottom: none; }
-        .oc-rank { font-size: 0.78rem; color: var(--text-muted); width: 1.5rem; text-align: right; }
-        .oc-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
-        .oc-avatar-fallback {
-            width: 30px; height: 30px; border-radius: 50%;
-            background: #3a7bd5; color: #fff;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 0.78rem; font-weight: 700;
-            flex-shrink: 0;
-        }
-        .oc-name { flex: 1; min-width: 0; }
-        .oc-name a { color: var(--text-primary); font-weight: 600; text-decoration: none; }
-        .oc-name a:hover { color: var(--blue); text-decoration: underline; }
-        .oc-name-sub { color: var(--text-muted); font-size: 0.72rem; }
-        .oc-stat-right { text-align: right; font-size: 0.76rem; color: var(--text-muted); white-space: nowrap; }
-        .oc-stat-right strong { color: var(--text-primary); font-size: 0.92rem; display: block; }
-        .oc-recent-meta { color: var(--text-muted); font-size: 0.72rem; }
     </style>
 
     <div class="container page of-page">
@@ -93,9 +25,13 @@
             </div>
         </div>
 
-        <div class="of-grid">
-            {{/* ── Left column: filter + offer-bucket list ── */}}
-            <div>
+        {{/* Single column: the community sidebar (top deliverers, recent
+             fulfillments, tracker stats) is gone. The leaderboard moved to
+             the host's /stats page where it counts PUBLIC work only — the
+             panel here ranked members whose every delivery was anonymous,
+             outing them by arithmetic — and the rest was furniture beside
+             the listing, which is the page. */}}
+        <div>
                 <form method="GET" action="/offers" class="d-flex flex-wrap gap-2 align-items-end mb-3">
                     {{if eq .Tab "fulfilled"}}<input type="hidden" name="tab" value="fulfilled">{{end}}
                     <div style="flex:1;min-width:180px;">
@@ -304,99 +240,12 @@
                 {{end}}{{/* end tab switch */}}
             </div>
 
-            {{/* ── Right column: community panel ── */}}
-            <div>
-                <div class="oc-card">
-                    <h2>Top deliverers</h2>
-                    {{if .Leaders}}
-                        {{range $i, $u := .Leaders}}
-                        <div class="oc-row">
-                            <div class="oc-rank">{{add $i 1}}.</div>
-                            {{if $u.AvatarPath}}
-                            <img src="{{$u.AvatarPath}}" alt="{{$u.Username}}" class="oc-avatar">
-                            {{else}}
-                            <div class="oc-avatar-fallback">{{initial $u.Username}}</div>
-                            {{end}}
-                            <div class="oc-name">
-                                <a href="/u/{{$u.Username}}">{{$u.Username}}</a>
-                                <div class="oc-name-sub">{{$u.OfferCount}} active offer{{if ne $u.OfferCount 1}}s{{end}}</div>
-                            </div>
-                            <div class="oc-stat-right">
-                                <strong>{{$u.FulfilledCount}}</strong>
-                                {{if gt $u.FailedCount 0}}{{$u.FailedCount}} failed{{else}}deliveries{{end}}
-                            </div>
-                        </div>
-                        {{end}}
-                    {{else}}
-                        <div style="color:var(--text-muted);font-size:0.82rem;">
-                            No deliveries yet. <a href="/account-settings#offers" style="color:var(--blue);">Register sources</a> to contribute.
-                        </div>
-                    {{end}}
-                </div>
 
-                <div class="oc-card">
-                    <h2>Recent fulfillments</h2>
-                    {{if .Recent}}
-                        {{range .Recent}}
-                        <div class="oc-row">
-                            <div style="flex:1;min-width:0;">
-                                <div style="font-weight:600;color:var(--text-primary);font-size:0.85rem;">
-                                    {{if .Title}}{{.Title}}{{else}}{{.EntityType}}{{end}}
-                                    {{if .EntityID}}<a href="/{{.EntityType}}/{{.EntityID}}" style="color:var(--blue);text-decoration:none;">#{{.EntityID}}</a>{{end}}
-                                    {{if .SeasonNum}}· S{{.SeasonNum}}{{end}}{{if .EpisodeNum}}E{{.EpisodeNum}}{{end}}
-                                </div>
-                                <div class="oc-recent-meta">
-                                    {{if .Resolution}}{{.Resolution}} · {{end}}
-                                    {{if .SourceTag}}{{.SourceTag}} · {{end}}
-                                    {{.SizeBucket}}
-                                </div>
-                            </div>
-                            <div class="oc-stat-right">
-                                {{if .NzbID}}<a href="/release/{{.NzbID}}" style="color:var(--blue);text-decoration:none;font-size:0.74rem;">view →</a>{{else}}<span style="font-size:0.72rem;color:var(--text-muted);">(no nzb)</span>{{end}}
-                                <div style="font-size:0.7rem;color:var(--text-muted);">{{.DeliveredAt.Format "Jan 2 15:04"}}</div>
-                            </div>
-                        </div>
-                        {{end}}
-                    {{else}}
-                        <div style="color:var(--text-muted);font-size:0.82rem;">Nothing delivered yet.</div>
-                    {{end}}
-                </div>
-
-                <div class="oc-card">
-                    <h2>Active trackers</h2>
-                    {{if .Trackers}}
-                        {{range .Trackers}}
-                        <div class="oc-row">
-                            <div style="flex:1;min-width:0;">
-                                <div style="font-weight:600;color:var(--text-primary);font-size:0.85rem;">{{.TrackerName}}</div>
-                                <div class="oc-recent-meta">
-                                    {{if eq .TrackerVisibility "private"}}<span class="of-pill of-pill-priv">private</span>{{end}}
-                                    {{if eq .TrackerVisibility "public"}}<span class="of-pill of-pill-pub">public</span>{{end}}
-                                    {{if eq .TrackerVisibility "personal"}}<span class="of-pill of-pill-per">personal</span>{{end}}
-                                    {{.UserCount}} user{{if ne .UserCount 1}}s{{end}} · {{.OfferCount}} offer{{if ne .OfferCount 1}}s{{end}}
-                                </div>
-                            </div>
-                            <div class="oc-stat-right">
-                                <strong>{{.DeliveriesWeek}}</strong>
-                                7d
-                            </div>
-                        </div>
-                        {{end}}
-                    {{else}}
-                        <div style="color:var(--text-muted);font-size:0.82rem;">No tracker activity yet.</div>
-                    {{end}}
-                </div>
-
-                <div class="oc-card">
-                    <h2>Want to contribute?</h2>
-                    <div style="font-size:0.82rem;color:var(--text-muted);">
-                        Register a source — tracker access or a local folder — on
-                        <a href="/account-settings#offers" style="color:var(--blue);">/account-settings</a>.
-                        Your tracker identity stays anonymous on every public surface;
-                        only your fulfillment counter is visible.
-                    </div>
-                </div>
-            </div>
+        <div style="color:var(--text-muted);font-size:0.78rem;margin-top:0.9rem;">
+            Want to contribute? Register a source — tracker access or a local folder — on
+            <a href="/account-settings#offers" style="color:var(--blue);">account settings</a>.
+            Source identities stay anonymous; public leaderboards live on the
+            <a href="/stats" style="color:var(--blue);">stats page</a> and count only publicly-published work.
         </div>
     </div>
 

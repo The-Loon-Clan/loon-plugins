@@ -63,22 +63,18 @@ func TestOffersPageRenders(t *testing.T) {
 		"EntityType": EntityAnime,
 		"SizeBucket": "",
 		"Buckets":    []Bucket{sampleBucket(), sampleBucket()},
-		"Leaders": []Leader{{
-			UserID: 1, Username: "kirisame", OfferCount: 9,
-			FulfilledCount: 7, FailedCount: 1, LastFulfilledAt: ts("2026-08-06T12:00:00Z"),
-		}},
-		"Recent": []Fulfillment{{
-			RequestID: 3, BucketID: 5, DeliveredAt: time.Now(),
-			EntityType: EntityAnime, Resolution: "1080p", SourceTag: "web-dl", SizeBucket: "<1GB",
-		}},
-		"Trackers": []TrackerStat{{
-			TrackerID: 1, TrackerName: "AnimeBytes", TrackerVisibility: VisibilityPrivate,
-			OfferCount: 12, UserCount: 4, DeliveriesWeek: 2,
-		}},
 	})
-	for _, want := range []string{"kirisame", "AnimeBytes", "1080p"} {
+	// The community sidebar is gone: the leaderboard moved to the host's
+	// stats page (public work only), so this page renders the listing and a
+	// register hint and nothing ranks anyone.
+	for _, want := range []string{"1080p", "account-settings#offers", "/stats"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("offers page missing %q", want)
+		}
+	}
+	for _, gone := range []string{"Top deliverers", "Recent fulfillments", "Active trackers"} {
+		if strings.Contains(got, gone) {
+			t.Errorf("offers page still renders the removed %q panel", gone)
 		}
 	}
 }

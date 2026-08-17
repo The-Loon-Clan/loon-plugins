@@ -678,19 +678,12 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 		}
 	}
 	attachBackerStats(ctx, open)
-	leaders, err := deps.Leaderboard(ctx, 25)
-	if err != nil {
-		deps.LogError(ctx, "offer/page-leaders", err)
-	}
-	recent, err := deps.RecentDeliveries(ctx, 20)
-	if err != nil {
-		deps.LogError(ctx, "offer/page-recent", err)
-	}
-	trackers, err := deps.TrackerStats(ctx)
-	if err != nil {
-		deps.LogError(ctx, "offer/page-trackers", err)
-	}
 
+	// No sidebar fetches: the leaderboard moved to the host's stats page,
+	// where it counts PUBLIC work only — this page's "Top deliverers" panel
+	// ranked members whose every delivery was anonymous, outing them by
+	// arithmetic. Recent-deliveries and tracker panels went with it; the
+	// listing is the page.
 	page(c, "Offers", "offers.html", gin.H{
 		"PageTitle":      "Offers",
 		"ActiveNav":      "community",
@@ -701,9 +694,6 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 		"Buckets":        open,
 		"Fulfilled":      fulfilled,
 		"FulfilledTotal": len(fulfilled),
-		"Leaders":        leaders,
-		"Recent":         recent,
-		"Trackers":       trackers,
 	})
 }
 
