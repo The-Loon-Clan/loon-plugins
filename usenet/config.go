@@ -27,6 +27,15 @@ const (
 // (edited on the host's /admin/settings page) override them at job run time
 // via withOverrides.
 type Config struct {
+	// Enabled, ABSENT, is true — the opposite default from the tracker, and
+	// deliberately so: a tracker answers announces the moment it is reachable
+	// and must be asked for, while an indexer that vanished because an
+	// operator upgraded and never added a key would be a catalogue going
+	// quietly stale. A pointer so absence is distinguishable from an explicit
+	// false, which is a torrent-flavour host saying it means it: nothing
+	// crawls, no pages mount, no jobs register.
+	Enabled *bool `json:"enabled"`
+
 	Server ServerConfig `json:"server"`
 	// RetentionDays is CRAWL DEPTH: how far back to fetch and backfill. It does
 	// NOT delete anything.

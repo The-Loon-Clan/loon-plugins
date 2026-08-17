@@ -15,6 +15,7 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
+	"log"
 	"sync"
 	"time"
 
@@ -183,6 +184,19 @@ func (p *Plugin) Metadata() core.Metadata {
 func (p *Plugin) Provision(c *core.Core) error {
 	p.core = c
 
+	// Config FIRST, because enabled is in it: a disabled indexer must not
+	// declare events, create schema or register anything — the host's usenet
+	// lookups are all optional, and absence is how they learn it is off.
+	if err := c.Config.PluginInto("usenet", &p.cfg); err != nil {
+		return fmt.Errorf("usenet: config: %w", err)
+	}
+	p.cfg.applyDefaults()
+	if p.cfg.Enabled != nil && !*p.cfg.Enabled {
+		log.Printf("usenet: plugins.usenet.enabled is false — the indexer is OFF. " +
+			"Nothing crawls, no usenet pages mount, no jobs register.")
+		return nil
+	}
+
 	// Announce assembled releases. A SYSTEM event -- the crawler did this, not
 	// a member -- so nothing can score an achievement on it, which core
 	// enforces rather than leaves to good sense.
@@ -191,10 +205,6 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	pg := NewPGStore(c.Storage.SchemaDB("usenet"))
 	p.st = pg
-	if err := c.Config.PluginInto("usenet", &p.cfg); err != nil {
-		return fmt.Errorf("usenet: config: %w", err)
-	}
-	p.cfg.applyDefaults()
 	p.fleet = newProviderFleet()
 	p.tel = newTelemetry()
 	p.duty = newDutyTracker()
