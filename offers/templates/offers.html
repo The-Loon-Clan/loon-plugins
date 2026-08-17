@@ -12,6 +12,12 @@
         .of-pill-priv { background: rgba(96,165,250,0.15); color:#60a5fa; }
         .of-pill-pub  { background: rgba(74,222,128,0.15); color:#4ade80; }
         .of-pill-per  { background: rgba(168,85,247,0.15); color:#c084fc; }
+        /* The disclosure chevron on collapsed show-cards. The native marker
+           is hidden (list-style:none on the summary + the webkit rule here)
+           so the header reads as a card, not a bullet list. */
+        .of-group summary::-webkit-details-marker { display: none; }
+        .of-chevron { color: var(--text-muted); font-size: 0.9rem; transition: transform 0.15s ease; }
+        .of-group[open] .of-chevron { transform: rotate(90deg); }
     </style>
 
     <div class="container page of-page">
@@ -85,17 +91,25 @@
                      variant is the identity they actually read. */}}
                 {{if .Groups}}
                 {{range .Groups}}
-                <div class="card mb-3">
-                    <div class="card-header" style="display:flex;align-items:center;gap:10px;">
+                {{/* <details>: the page defaults to a compact list of SHOWS,
+                     and the variant rows reveal on click — native disclosure,
+                     keyboard included, no script. Single-variant shows stay
+                     open: there is nothing to hide behind a click, and every
+                     request would otherwise cost one. */}}
+                <details class="card mb-2 of-group" {{if eq (len .Buckets) 1}}open{{end}}>
+                    <summary class="card-header" style="display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;">
                         {{if .Picture}}
                         <span class="nzb-thumb" data-cover="{{.Picture}}" data-fallback="{{.PictureFallback}}"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
                               onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}"></span>
                         {{end}}
                         <div style="min-width:0;flex:1;">
-                            <a href="/{{.EntityType}}/{{.EntityID}}" style="color:var(--text-primary);text-decoration:none;font-weight:600;">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{.EntityID}}{{end}}</a>
+                            {{/* stopPropagation so the title stays a LINK to the
+                                 catalogue page; the rest of the header toggles. */}}
+                            <a href="/{{.EntityType}}/{{.EntityID}}" onclick="event.stopPropagation()" style="color:var(--text-primary);text-decoration:none;font-weight:600;">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{.EntityID}}{{end}}</a>
                             <div class="of-hint">{{.EntityType}} #{{.EntityID}} &middot; {{len .Buckets}} variant{{if ne (len .Buckets) 1}}s{{end}}{{if .TotalFiles}} &middot; {{.TotalFiles}} file{{if ne .TotalFiles 1}}s{{end}}{{end}}</div>
                         </div>
-                    </div>
+                        <span class="of-chevron" aria-hidden="true">&#9656;</span>
+                    </summary>
                     <table class="table mb-0">
                         <tbody>
                         {{range .Buckets}}
@@ -142,7 +156,7 @@
                         {{end}}
                         </tbody>
                     </table>
-                </div>
+                </details>
                 {{end}}
                 {{else}}
                 <div style="color:var(--text-muted);text-align:center;padding:3rem 1rem;border:1px dashed var(--border);border-radius:12px;">
