@@ -490,30 +490,36 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 	deps.JSONOK(c, gin.H{"request_id": id, "joined": joined})
 }
 
-// attachBackerStats fills in the demand behind each bucket's live request —
-// backer count AND the staked pool. ONE query for the whole page — the stats
-// are decoration on a listing of a hundred rows, and a per-row lookup would
-// be a hundred statements.
+// attachGroupBackerStats fills in the demand behind every bucket on the page
+// — backer count AND the staked pool. ONE query for the whole page — the
+// stats are decoration, and a per-row lookup would be a statement per row.
 //
 // Best-effort: a page that shows offers without demand stats is the page we
 // had yesterday, and losing it is not worth failing the render over.
-func attachBackerStats(ctx context.Context, rows []Bucket) {
-	if len(rows) == 0 || deps.BackerStats == nil {
+func attachGroupBackerStats(ctx context.Context, groups []BucketGroup) {
+	if len(groups) == 0 || deps.BackerStats == nil {
 		return
 	}
-	ids := make([]int, 0, len(rows))
-	for _, b := range rows {
-		ids = append(ids, b.BucketID)
+	var ids []int
+	for _, g := range groups {
+		for _, b := range g.Buckets {
+			ids = append(ids, b.BucketID)
+		}
+	}
+	if len(ids) == 0 {
+		return
 	}
 	stats, err := deps.BackerStats(ctx, ids)
 	if err != nil {
 		deps.LogError(ctx, "offer/backer-counts", err)
 		return
 	}
-	for i := range rows {
-		st := stats[rows[i].BucketID]
-		rows[i].BackerCount = st.Count
-		rows[i].PoolPoints = st.Pool
+	for gi := range groups {
+		for bi := range groups[gi].Buckets {
+			st := stats[groups[gi].Buckets[bi].BucketID]
+			groups[gi].Buckets[bi].BackerCount = st.Count
+			groups[gi].Buckets[bi].PoolPoints = st.Pool
+		}
 	}
 }
 
@@ -666,14 +672,16 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 	if pageNum < 1 {
 		pageNum = 1
 	}
-	const pageSize = 50
+	// Entities per page, not buckets: the group is the unit a member scans,
+	// and paging by bucket cut a show's variants across page boundaries.
+	const pageSize = 25
 
 	// Each tab paginates over its OWN population — the shelf split happens
 	// in the host's query. Delivered-and-still-healthy buckets live on the
 	// fulfilled tab (in the open list they read as "nobody has this yet",
 	// the opposite of the truth) and return the moment the delivered
 	// release's articles die.
-	rows, total, err := deps.RecentBuckets(ctx, entityType, sizeBucket, query, tab,
+	groups, total, err := deps.RecentBucketGroups(ctx, entityType, sizeBucket, query, tab,
 		pageSize, (pageNum-1)*pageSize)
 	if err != nil {
 		deps.LogError(ctx, "offer/page-buckets", err)
@@ -684,7 +692,7 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 	if tab == "fulfilled" {
 		otherTab = "open"
 	}
-	_, otherTotal, oerr := deps.RecentBuckets(ctx, entityType, sizeBucket, query, otherTab, 1, 0)
+	_, otherTotal, oerr := deps.RecentBucketGroups(ctx, entityType, sizeBucket, query, otherTab, 1, 0)
 	if oerr != nil {
 		deps.LogError(ctx, "offer/page-buckets-count", oerr)
 	}
@@ -693,12 +701,8 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 		fulfilledTotal = total
 	}
 
-	var open, fulfilled []Bucket
-	if tab == "fulfilled" {
-		fulfilled = rows
-	} else {
-		open = rows
-		attachBackerStats(ctx, open)
+	if tab != "fulfilled" {
+		attachGroupBackerStats(ctx, groups)
 	}
 	lastPage := (total + pageSize - 1) / pageSize
 	if lastPage < 1 {
@@ -717,8 +721,7 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 		"SizeBucket":     sizeBucket,
 		"Query":          query,
 		"Tab":            tab,
-		"Buckets":        open,
-		"Fulfilled":      fulfilled,
+		"Groups":         groups,
 		"FulfilledTotal": fulfilledTotal,
 		"Total":          total,
 		"Page":           pageNum,

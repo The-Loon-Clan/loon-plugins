@@ -78,154 +78,58 @@
                     </li>
                 </ul>
 
-                {{if eq .Tab "fulfilled"}}
-                {{/* ── Fulfilled tab ── delivered and still retrievable.
-                     No Request button here: the bytes are already on
-                     Usenet, and the release link is the whole point. */}}
-                {{if .Fulfilled}}
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>Fulfilled offers</span>
-                        <span style="color:var(--text-muted);font-size:0.85rem;">{{.Total}} bucket{{if ne .Total 1}}s{{end}}</span>
-                    </div>
-                    <table class="table mb-0">
-                        <thead>
-                            <tr>
-                                <th>Title</th>
-                                <th style="width:130px;">Tags</th>
-                                <th style="width:90px;">Size</th>
-                                <th style="width:200px;">Delivered</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        {{range .Fulfilled}}
-                            <tr>
-                                <td>
-                                    <div style="display:flex;align-items:center;gap:8px;">
-                                        {{if .Picture}}
-                                        <span class="nzb-thumb" data-cover="{{.Picture}}" data-fallback="{{.PictureFallback}}"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
-                                              onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}"></span>
-                                        {{end}}
-                                        <div style="min-width:0;">
-                                            {{if .EntityID}}
-                                            <a href="/{{.EntityType}}/{{deref .EntityID}}" style="color:var(--text-primary);text-decoration:none;">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{deref .EntityID}}{{end}}</a>
-                                            {{else}}
-                                            <span style="color:var(--text-primary);">{{.EntityType}}</span>
-                                            {{end}}
-                                            {{if .SeasonNum}}<span class="badge bg-secondary bg-opacity-50" style="font-size:0.6rem;margin-left:3px;vertical-align:middle;">S{{deref .SeasonNum}}{{if .EpisodeNum}} E{{deref .EpisodeNum}}{{end}}</span>{{end}}
-                                        </div>
-                                    </div>
-                                </td>
-                                <td style="font-size:0.82rem;">
-                                    {{if .Resolution}}<span class="badge" style="background:rgba(var(--bs-primary-rgb),0.2);color:var(--bs-primary);">{{.Resolution}}</span>{{end}}
-                                    {{if .SourceTag}}<span class="badge" style="background:rgba(var(--bs-success-rgb),0.15);color:var(--bs-success);">{{.SourceTag}}</span>{{end}}
-                                </td>
-                                <td style="font-size:0.82rem;color:var(--text-muted);">{{.SizeBucket}}</td>
-                                <td style="font-size:0.82rem;">
-                                    {{if .DeliveredNzbID}}<a href="/release/{{.DeliveredNzbID}}" style="color:#4ade80;text-decoration:none;">view the release &rarr;</a>
-                                    <div style="color:var(--text-muted);font-size:0.7rem;">reopens here if the release dies</div>{{end}}
-                                </td>
-                            </tr>
+                {{/* ── Grouped listing ── one card per SHOW, its variant
+                     buckets as rows inside. Twenty variants of one show as
+                     twenty flat rows was noise, and three bare same-title
+                     rows told a requester nothing — the SAMPLE FILENAME per
+                     variant is the identity they actually read. */}}
+                {{if .Groups}}
+                {{range .Groups}}
+                <div class="card mb-3">
+                    <div class="card-header" style="display:flex;align-items:center;gap:10px;">
+                        {{if .Picture}}
+                        <span class="nzb-thumb" data-cover="{{.Picture}}" data-fallback="{{.PictureFallback}}"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
+                              onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}"></span>
                         {{end}}
-                        </tbody>
-                    </table>
-                </div>
-                {{else}}
-                <div style="color:var(--text-muted);text-align:center;padding:3rem 1rem;border:1px dashed var(--border);border-radius:12px;">
-                    Nothing fulfilled yet{{if .Query}} for this search{{end}}. Delivered offers land here, and move back to the open list if their release dies.
-                </div>
-                {{end}}
-
-                {{else}}
-                {{/* Rendered as a table with a cover thumbnail, mirroring /browse and the
-                     requests page. Offers ARE releases as far as a member is concerned, so
-                     they should scan the same way; the previous card list was a second
-                     visual language for the same kind of row. Classes are the site's own
-                     (.nzb-thumb, .table) and live in theme.css, which plugin pages already
-                     load — so this inherits the site's styling instead of copying it. */}}
-                {{if .Buckets}}
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>Offers</span>
-                        {{/* The SHELF total, not the page length — "50 buckets"
-                             on every page of 2,536 hid the other 2,486. */}}
-                        <span style="color:var(--text-muted);font-size:0.85rem;">{{.Total}} bucket{{if ne .Total 1}}s{{end}}</span>
+                        <div style="min-width:0;flex:1;">
+                            <a href="/{{.EntityType}}/{{.EntityID}}" style="color:var(--text-primary);text-decoration:none;font-weight:600;">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{.EntityID}}{{end}}</a>
+                            <div class="of-hint">{{.EntityType}} #{{.EntityID}} &middot; {{len .Buckets}} variant{{if ne (len .Buckets) 1}}s{{end}}{{if .TotalFiles}} &middot; {{.TotalFiles}} file{{if ne .TotalFiles 1}}s{{end}}{{end}}</div>
+                        </div>
                     </div>
                     <table class="table mb-0">
-                        <thead>
-                            <tr>
-                                <th>Title</th>
-                                <th style="width:130px;">Tags</th>
-                                <th style="width:90px;">Size</th>
-                                <th style="width:80px;">Offers</th>
-                                <th style="width:80px;">Wanted</th>
-                                <th style="width:80px;">Points</th>
-                                <th style="width:180px;"></th>
-                            </tr>
-                        </thead>
                         <tbody>
                         {{range .Buckets}}
                             <tr>
-                                <td>
-                                    <div style="display:flex;align-items:center;gap:8px;">
-                                        {{if .Picture}}
-                                        {{/* data-cover is REQUIRED, not decorative: the site's cover-preview
-                                             JS binds to .nzb-thumb and reads it WITHOUT a nil guard, so a thumb
-                                             missing it renders an empty grey preview card on hover. The title's
-                                             hover card does guard (it checks data-release first), which is why
-                                             only this one misbehaved. */}}
-                                        <span class="nzb-thumb" data-cover="{{.Picture}}" data-fallback="{{.PictureFallback}}"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
-                                              onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}"></span>
-                                        {{end}}
-                                        <div style="min-width:0;">
-                                            {{if .EntityID}}
-                                            <a href="/{{.EntityType}}/{{deref .EntityID}}" style="color:var(--text-primary);text-decoration:none;">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{deref .EntityID}}{{end}}</a>
-                                            {{else}}
-                                            <span style="color:var(--text-primary);">{{.EntityType}}</span>
-                                            {{end}}
-                                            {{if .SeasonNum}}<span class="badge bg-secondary bg-opacity-50" style="font-size:0.6rem;margin-left:3px;vertical-align:middle;">S{{deref .SeasonNum}}{{if .EpisodeNum}} E{{deref .EpisodeNum}}{{end}}</span>{{end}}
-                                            <div class="of-hint">
-                                                {{.EntityType}}{{if .EntityID}} #{{deref .EntityID}}{{end}}
-                                                {{if .HasPrivate}}<span class="of-pill of-pill-priv">private</span>{{end}}
-                                                {{if .HasPublic}}<span class="of-pill of-pill-pub">public</span>{{end}}
-                                                {{if .HasPersonal}}<span class="of-pill of-pill-per">personal</span>{{end}}
-                                                {{/* The disambiguator for lookalike rows: when a
-                                                     filename parsed no resolution or source, "12
-                                                     files" vs "1 file" is the visible difference. */}}
-                                                {{if .FileCount}} · {{.FileCount}} file{{if ne .FileCount 1}}s{{end}}{{end}}
-                                            </div>
-                                        </div>
+                                <td style="min-width:0;">
+                                    {{/* The variant's identity: a representative
+                                         filename. "[VCB-Studio] ... [01][Ma10p_1080p]"
+                                         says season, group and quality where the
+                                         parsed tags often say nothing. */}}
+                                    {{if .SampleFile}}<div style="font-family:var(--font-mono, ui-monospace, monospace);font-size:0.74rem;color:var(--text-primary);word-break:break-all;" title="{{.SampleFile}}">{{.SampleFile}}</div>{{end}}
+                                    <div class="of-hint">
+                                        {{if .SeasonNum}}S{{deref .SeasonNum}}{{if .EpisodeNum}}E{{deref .EpisodeNum}}{{end}} &middot; {{end}}{{if .FileCount}}{{.FileCount}} file{{if ne .FileCount 1}}s{{end}} &middot; {{end}}{{.SizeBucket}}
+                                        {{if .HasPrivate}}<span class="of-pill of-pill-priv">private</span>{{end}}
+                                        {{if .HasPublic}}<span class="of-pill of-pill-pub">public</span>{{end}}
+                                        {{if .HasPersonal}}<span class="of-pill of-pill-per">personal</span>{{end}}
                                     </div>
                                 </td>
-                                <td style="font-size:0.82rem;">
+                                <td style="width:120px;font-size:0.82rem;">
                                     {{if .Resolution}}<span class="badge" style="background:rgba(var(--bs-primary-rgb),0.2);color:var(--bs-primary);">{{.Resolution}}</span>{{end}}
                                     {{if .SourceTag}}<span class="badge" style="background:rgba(var(--bs-success-rgb),0.15);color:var(--bs-success);">{{.SourceTag}}</span>{{end}}
                                 </td>
-                                <td style="font-size:0.82rem;color:var(--text-muted);">{{.SizeBucket}}</td>
-                                <td style="font-size:0.82rem;color:var(--text-muted);">
-                                    <strong style="color:var(--text-primary);">{{.ActiveOfferCount}}</strong>{{if ne .ActiveOfferCount .OfferCount}} / {{.OfferCount}}{{end}}
+                                {{if eq $.Tab "fulfilled"}}
+                                <td style="width:200px;font-size:0.82rem;">
+                                    {{if .DeliveredNzbID}}<a href="/release/{{.DeliveredNzbID}}" style="color:#4ade80;text-decoration:none;">view the release &rarr;</a>
+                                    <div style="color:var(--text-muted);font-size:0.7rem;">reopens here if the release dies</div>{{end}}
                                 </td>
-                                {{/* Demand. Zero renders as a dash rather than
-                                     "0 wanting" — an empty column reads as
-                                     "nobody yet", a zero reads as a broken
-                                     counter. The staked pool renders WITH the
-                                     count: it is escrow already debited, and a
-                                     1000-point bounty the row showed as "free"
-                                     motivated exactly nobody. */}}
-                                <td style="font-size:0.82rem;color:var(--text-muted);">
+                                {{else}}
+                                <td style="width:110px;font-size:0.82rem;color:var(--text-muted);">
                                     {{if .BackerCount}}<strong style="color:var(--bs-warning);">{{.BackerCount}}</strong> wanting{{if .PoolPoints}}<div style="font-size:0.74rem;color:var(--bs-warning);">{{.PoolPoints}} pts staked</div>{{end}}{{else}}&mdash;{{end}}
                                 </td>
-                                <td style="font-size:0.82rem;color:var(--text-muted);">{{if .MinPoints}}{{.MinPoints}}{{else}}free{{end}}</td>
-                                <td>
-                                    {{/* Points are OPTIONAL and default to zero, so the
-                                         one-click path is unchanged for anyone who does
-                                         not care. What they buy is priority: an offerer
-                                         choosing between requests can see which one
-                                         somebody actually staked something on.
-
-                                         The stake is debited on submit, not promised —
-                                         so the input is capped at what the member holds
-                                         and the server refuses the rest. */}}
+                                <td style="width:170px;">
+                                    {{/* Points are OPTIONAL and default to zero; the
+                                         stake is debited on submit — see the detail
+                                         page. */}}
                                     <div style="display:flex;gap:4px;align-items:center;">
                                         <input type="number" class="form-control form-control-sm of-points"
                                                min="0" step="1" value="0" title="Points to stake — debited now, paid to whoever delivers, returned if you withdraw"
@@ -233,17 +137,18 @@
                                         <button type="button" class="btn btn-primary btn-sm of-request" data-bucket-id="{{.BucketID}}">{{if .BackerCount}}Join{{else}}Request{{end}}</button>
                                     </div>
                                 </td>
+                                {{end}}
                             </tr>
                         {{end}}
                         </tbody>
                     </table>
                 </div>
+                {{end}}
                 {{else}}
                 <div style="color:var(--text-muted);text-align:center;padding:3rem 1rem;border:1px dashed var(--border);border-radius:12px;">
-                    No offers {{if .Query}}match &ldquo;{{.Query}}&rdquo;{{else}}yet for this filter. Once offerers register their sources you'll see buckets here{{end}}.
+                    {{if eq .Tab "fulfilled"}}Nothing fulfilled yet{{if .Query}} for &ldquo;{{.Query}}&rdquo;{{end}}. Delivered offers land here, and move back to the open list if their release dies.{{else}}No offers {{if .Query}}match &ldquo;{{.Query}}&rdquo;{{else}}yet for this filter. Once offerers register their sources you'll see buckets here{{end}}.{{end}}
                 </div>
                 {{end}}
-                {{end}}{{/* end tab switch */}}
 
                 {{/* Pager, per shelf: each tab pages over its own population
                      (the split happens in the host's query), and every link

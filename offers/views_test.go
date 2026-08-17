@@ -64,7 +64,7 @@ func render(t *testing.T, name string, data gin.H) string {
 func listingData(extra gin.H) gin.H {
 	base := gin.H{
 		"EntityType": EntityAnime, "SizeBucket": "", "Query": "", "Tab": "open",
-		"Buckets": []Bucket{}, "Fulfilled": []Bucket{}, "FulfilledTotal": 0,
+		"Groups": []BucketGroup{}, "FulfilledTotal": 0,
 		"Total": 0, "Page": 1, "LastPage": 1, "PrevPage": 0, "NextPage": 2,
 	}
 	for k, v := range extra {
@@ -73,18 +73,39 @@ func listingData(extra gin.H) gin.H {
 	return base
 }
 
+// groupOf wraps buckets in one show-group, the listing's unit.
+func groupOf(title string, buckets ...Bucket) []BucketGroup {
+	g := BucketGroup{EntityType: EntityAnime, EntityID: 1, Title: title, Buckets: buckets}
+	for _, b := range buckets {
+		g.TotalFiles += b.FileCount
+	}
+	return []BucketGroup{g}
+}
+
 func TestOffersPageRenders(t *testing.T) {
+	a := sampleBucket()
+	a.FileCount, a.SampleFile = 14, "[VCB-Studio] Yamada-kun [01][Ma10p_1080p].mkv"
+	b := sampleBucket()
+	b.BucketID, b.Resolution, b.FileCount, b.SampleFile = 6, "", 6, "[VCB-Studio] Yamada-kun [Menu01].png"
 	got := render(t, "offers.html", listingData(gin.H{
-		"Buckets": []Bucket{sampleBucket(), sampleBucket()},
-		"Total":   2,
+		"Groups": groupOf("Yamada and the Seven Witches", a, b),
+		"Total":  1,
 	}))
-	// The community sidebar is gone: the leaderboard moved to the host's
-	// stats page (public work only), so this page renders the listing and a
-	// register hint and nothing ranks anyone.
-	for _, want := range []string{"1080p", "account-settings#offers", "/stats"} {
+	// One card per SHOW; the variant rows carry the sample filename — the
+	// identity a requester reads when the parsed tags say nothing. And the
+	// community sidebar stays gone (the leaderboard lives on /stats now).
+	for _, want := range []string{
+		"Yamada and the Seven Witches", "2 variants", "20 files",
+		"[VCB-Studio] Yamada-kun [01][Ma10p_1080p].mkv",
+		"[VCB-Studio] Yamada-kun [Menu01].png",
+		"1080p", "account-settings#offers", "/stats",
+	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("offers page missing %q", want)
 		}
+	}
+	if got := strings.Count(got, "Yamada and the Seven Witches"); got != 1 {
+		t.Errorf("the show's title renders %d times — variants must group under ONE card", got)
 	}
 	for _, gone := range []string{"Top deliverers", "Recent fulfillments", "Active trackers"} {
 		if strings.Contains(got, gone) {
@@ -189,10 +210,11 @@ func TestOfferDetailPageRendersEveryRequestState(t *testing.T) {
 func TestOffersFulfilledTabRenders(t *testing.T) {
 	b := sampleBucket()
 	nzbID := int64(176112514)
-	b.Fulfilled, b.DeliveredNzbID, b.Title = true, &nzbID, "Spirited Away"
+	b.Fulfilled, b.DeliveredNzbID = true, &nzbID
 
 	got := render(t, "offers.html", listingData(gin.H{
-		"Tab": "fulfilled", "Fulfilled": []Bucket{b}, "FulfilledTotal": 1, "Total": 1,
+		"Tab": "fulfilled", "Groups": groupOf("Spirited Away", b),
+		"FulfilledTotal": 1, "Total": 1,
 	}))
 	for _, want := range []string{"Spirited Away", "/release/176112514", "view the release", `tab-count">1`} {
 		if !strings.Contains(got, want) {
@@ -215,7 +237,7 @@ func TestOffersListingShowsTheStakedPool(t *testing.T) {
 	b := sampleBucket()
 	b.BackerCount = 2
 	b.PoolPoints = 1000
-	got := render(t, "offers.html", listingData(gin.H{"Buckets": []Bucket{b}, "Total": 1}))
+	got := render(t, "offers.html", listingData(gin.H{"Groups": groupOf("Lady Lady!!", b), "Total": 1}))
 	if !strings.Contains(got, "1000 pts staked") {
 		t.Error("listing does not show the staked pool")
 	}

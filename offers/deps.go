@@ -71,6 +71,24 @@ type Bucket struct {
 	// two lookalike rows apart when neither filename parsed a resolution:
 	// "12 files" and "1 file" are different things to request.
 	FileCount int
+	// SampleFile is one representative filename. It is the identity a
+	// requester actually reads: three same-show buckets rendered as bare
+	// title rows told nobody that one was the 1080p episodes, one the
+	// 720p OADs, and one a folder of menu PNGs.
+	SampleFile string
+}
+
+// BucketGroup is one SHOW on the listing: its identity resolved host-side,
+// and every qualifying variant bucket under it. Twenty variants of one show
+// as twenty flat rows was noise; the group is the unit a member scans.
+type BucketGroup struct {
+	EntityType      string
+	EntityID        int
+	Title           string
+	Picture         string
+	PictureFallback string
+	Buckets         []Bucket
+	TotalFiles      int
 }
 
 // OfferedFile is one staged file behind a bucket, as the detail page shows it.
@@ -286,12 +304,14 @@ type Deps struct {
 	LogError func(ctx context.Context, op string, err error)
 
 	// ── reads for the pages ──
+	// RecentBucketGroups is the listing: a page of SHOWS (limit/offset
+	// count entities, not buckets), each carrying every qualifying variant.
 	// query filters by catalogue title, /browse-style — the host resolves
 	// it against its own metadata, since the plugin has none to search.
 	// shelf is 'open' or 'fulfilled': the tabs paginate over their OWN
 	// populations, so the split happens in the host's query, not by
 	// dividing a fetched page. Returns the page plus the shelf's total.
-	RecentBuckets func(ctx context.Context, entityType, sizeBucket, query, shelf string, limit, offset int) ([]Bucket, int, error)
+	RecentBucketGroups func(ctx context.Context, entityType, sizeBucket, query, shelf string, limit, offset int) ([]BucketGroup, int, error)
 	// BucketDetail is one bucket plus the staged files behind it — the offer
 	// detail page. Files carry the agent's probe (codecs, duration, audio and
 	// subtitle tracks) so the page can describe a release nobody uploaded.
@@ -464,7 +484,7 @@ func (d *Deps) okWeb() bool {
 	return d.okAPI() &&
 		d.RenderPage != nil && d.RenderError != nil && d.CSRFToken != nil &&
 		d.Viewer != nil &&
-		d.RecentBuckets != nil && d.Leaderboard != nil && d.RecentDeliveries != nil &&
+		d.RecentBucketGroups != nil && d.Leaderboard != nil && d.RecentDeliveries != nil &&
 		d.TrackerStats != nil && d.AdminRequests != nil && d.AdminStatusCounts != nil &&
 		d.CreateOrJoinRequest != nil && d.WithdrawBacking != nil &&
 		d.RequestBackers != nil && d.BackerStats != nil &&
