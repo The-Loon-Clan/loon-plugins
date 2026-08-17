@@ -114,6 +114,11 @@
         </select></div>
       <div class="col-md-1"><label class="form-label small mb-0">Points</label>
         <input name="points" class="form-control form-control-sm" placeholder="1"></div>
+      {{/* The medal payout line. The create action has read this field since
+           the payout kinds were declared; the form simply never offered it —
+           a whole payout kind reachable only by hand-crafted POST. */}}
+      <div class="col-md-1"><label class="form-label small mb-0">Medal</label>
+        <input name="medal" class="form-control form-control-sm" placeholder="slug"></div>
       <div class="col-md-1"><label class="form-label small mb-0">Expires</label>
         <input name="expires_after" class="form-control form-control-sm" placeholder="never"></div>
       <div class="col-md-1"><button class="btn btn-sm btn-primary w-100">Create</button></div>

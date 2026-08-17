@@ -33,6 +33,7 @@
                                     <option value="flair">Flair</option>
                                     <option value="upload_gb">GB uploaded</option>
                                     <option value="download_gb">GB downloaded (wipe)</option>
+                                    <option value="medal">Medal</option>
                                 </select>
                             </div>
                             <div class="col-sm-2">
@@ -138,6 +139,7 @@
                                             <option value="flair" {{if eq .RewardType "flair"}}selected{{end}}>Flair</option>
                                             <option value="upload_gb" {{if eq .RewardType "upload_gb"}}selected{{end}}>GB up</option>
                                             <option value="download_gb" {{if eq .RewardType "download_gb"}}selected{{end}}>GB down</option>
+                                            <option value="medal" {{if eq .RewardType "medal"}}selected{{end}}>Medal</option>
                                         </select>
                                     </div>
                                     <div>

@@ -39,6 +39,8 @@ type Handlers struct {
 	// tracker's pluginapi.TrackerCredit, and a site without a running
 	// tracker legitimately has none.
 	credit pluginapi.TrackerCredit
+	// medals may be nil on the same terms again: only medal items need it.
+	medals pluginapi.MedalGranter
 	// halves reports which site flavours are on (indexer, tracker) — the
 	// host's store.flavour seam. Nil means "no flavour machinery": every
 	// item shows, which is every pre-flavour host.
@@ -299,6 +301,18 @@ func (h *Handlers) grantReward(ctx context.Context, userID int, item *Item) (str
 			return "", fmt.Errorf("grant perk %q: %w", item.RewardRef, err)
 		}
 		return item.RewardRef + " token", nil
+	case RewardMedalGrant:
+		if h.medals == nil {
+			return "", fmt.Errorf("medal item %d: no %s registered on this host",
+				item.ID, pluginapi.MedalGranterName)
+		}
+		if item.RewardRef == "" {
+			return "", fmt.Errorf("medal item %d has no reward_ref (the medal slug)", item.ID)
+		}
+		if err := h.medals.GrantMedal(ctx, int64(userID), item.RewardRef); err != nil {
+			return "", fmt.Errorf("grant medal %q: %w", item.RewardRef, err)
+		}
+		return item.RewardRef + " medal", nil
 	case RewardUpload, RewardDownload:
 		// The tracker's transfer credit. Same terms as perks: an absent
 		// capability fails THIS purchase and the caller unwinds the points.
@@ -482,6 +496,11 @@ func validItem(it *Item) error {
 	case RewardUpload, RewardDownload:
 		if n, err := strconv.Atoi(it.RewardRef); err != nil || n <= 0 {
 			return errors.New("credit reward needs whole GB in reward ref")
+		}
+		return nil
+	case RewardMedalGrant:
+		if it.RewardRef == "" {
+			return errors.New("medal reward needs the medal slug in reward ref")
 		}
 		return nil
 	default:

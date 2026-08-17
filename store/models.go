@@ -37,6 +37,13 @@ const (
 	// RewardDownload FORGIVES downloaded GB: RewardRef = whole GB. Readers
 	// clamp at zero, so over-buying is generosity rather than a negative.
 	RewardDownload RewardType = "download_gb"
+
+	// RewardMedalGrant hands over a medal: RewardRef = the medal slug.
+	// Grants are idempotent (the granter's contract), so re-buying an owned
+	// medal spends the points for nothing — the medals page's own shop
+	// refuses that; this type exists so bundles and store-first sites can
+	// sell medals beside everything else.
+	RewardMedalGrant RewardType = "medal"
 )
 
 // Item is a purchasable catalog entry priced in points. PointsCost is

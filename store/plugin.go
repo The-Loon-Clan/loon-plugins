@@ -275,6 +275,14 @@ func (p *Plugin) Start(ctx context.Context) error {
 		}
 		p.handlers.credit = g
 	}
+	if svc, ok := p.core.Lookup(pluginapi.MedalGranterName); ok {
+		g, ok := svc.(pluginapi.MedalGranter)
+		if !ok {
+			return fmt.Errorf("store: %q is %T, not pluginapi.MedalGranter",
+				pluginapi.MedalGranterName, svc)
+		}
+		p.handlers.medals = g
+	}
 	return nil
 }
 func (p *Plugin) Stop(ctx context.Context) error { return nil }
