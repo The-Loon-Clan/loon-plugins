@@ -29,7 +29,9 @@ type Store interface {
 	CreateRoadmapItem(ctx context.Context, r *RoadmapItem) (int64, error)
 	UpdateRoadmapItem(ctx context.Context, r *RoadmapItem) error
 	DeleteRoadmapItem(ctx context.Context, id int64) error
-	ListChangelogEntries(ctx context.Context, limit, offset int) ([]*ChangelogEntry, int, error)
+	// category selects a shelf: "" is the site changelog (everything except
+	// agent release notes), "agent" is only those, "all" is the admin view.
+	ListChangelogEntries(ctx context.Context, category string, limit, offset int) ([]*ChangelogEntry, int, error)
 	CreateChangelogEntry(ctx context.Context, e *ChangelogEntry) (int64, error)
 	UpdateChangelogEntry(ctx context.Context, e *ChangelogEntry) error
 	DeleteChangelogEntry(ctx context.Context, id int64) error

@@ -82,124 +82,8 @@
         .cat-security { background: var(--pink-tint);   color: var(--pink);   }
         .cat-infra    { background: var(--slate-tint);  color: var(--slate);  }
         .cat-docs     { background: var(--warn-tint);   color: var(--warn);   }
+        .cat-agent    { background: var(--orange-tint); color: var(--orange); }
 
-        /* View-mode toggle (List | Graph) — sits in the header strip
-           on each tab. Same affordance as the cover toggle on
-           /browse and /release-group. */
-        .view-toggle {
-            display: inline-flex; gap: 0;
-            border: 1px solid var(--border); border-radius: 0.35rem;
-            overflow: hidden;
-        }
-        .view-toggle button {
-            background: transparent; color: var(--text-muted);
-            border: none; padding: 0.25rem 0.6rem;
-            font-size: 0.78rem; cursor: pointer;
-        }
-        .view-toggle button.active {
-            background: var(--bg-elevated); color: var(--text-primary);
-        }
-        .view-toggle button:not(.active):hover { color: var(--text-primary); }
-
-        /* Graph view — Cytoscape canvas with side panel as an
-           absolute-positioned overlay in the canvas corner. The wrap
-           breaks out of the page's 880px column to give the graph
-           plenty of room: classic "full-bleed" trick using viewport
-           units. 50% here resolves against the parent (.site-container),
-           so margin-left collapses to -(viewport - 880)/2 — exactly
-           what we need to extend back to the viewport edges. */
-        .graph-wrap {
-            position: relative;
-            margin-left: calc(-50vw + 50%);
-            margin-right: calc(-50vw + 50%);
-            width: 100vw;
-            padding: 0 1.5rem;
-            box-sizing: border-box;
-        }
-        .graph-canvas {
-            position: relative;
-            background: var(--bg-base);
-            border: 1px solid var(--border);
-            border-radius: 0.4rem;
-            height: 78vh;
-            min-height: 560px;
-            overflow: hidden;
-        }
-        .graph-canvas .cy-host { position: absolute; inset: 0; }
-        .graph-empty {
-            position: absolute; inset: 0;
-            display: flex; align-items: center; justify-content: center;
-            color: var(--text-muted); font-size: 0.85rem;
-            text-align: center; padding: 1rem;
-        }
-        /* Side panel as a floating card pinned to the canvas's
-           top-right corner. Translucent background + backdrop-filter
-           so the graph still shows through behind it. */
-        .graph-side {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            width: 320px;
-            max-height: calc(100% - 24px);
-            overflow-y: auto;
-            background: rgba(20, 22, 28, 0.92);
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
-            border: 1px solid var(--border);
-            border-radius: 0.4rem;
-            padding: 0.75rem;
-            font-size: 0.82rem;
-            z-index: 5;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-        }
-        .graph-side h6 {
-            font-size: 0.78rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-muted);
-            margin-bottom: 0.35rem;
-        }
-        .graph-side .side-title {
-            font-size: 0.95rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 0.25rem;
-        }
-        .graph-side .side-meta {
-            font-size: 0.72rem; color: var(--text-muted);
-            margin-bottom: 0.6rem;
-        }
-        .graph-side .side-item {
-            display: block;
-            padding: 0.35rem 0;
-            border-bottom: 1px dotted var(--border);
-            text-decoration: none;
-        }
-        .graph-side .side-item:last-child { border-bottom: none; }
-        .graph-side .side-item-title { color: var(--text-primary); }
-        .graph-side .side-item-meta { font-size: 0.7rem; color: var(--text-muted); }
-        .graph-side .side-close {
-            position: absolute; top: 6px; right: 8px;
-            background: none; border: none;
-            color: var(--text-muted); cursor: pointer;
-            font-size: 1rem; line-height: 1; padding: 4px;
-        }
-        .graph-side .side-close:hover { color: var(--text-primary); }
-        @media (max-width: 720px) {
-            .graph-wrap {
-                margin-left: -1rem;
-                margin-right: -1rem;
-                width: auto;
-            }
-            .graph-side {
-                width: calc(100% - 24px);
-                max-height: 45%;
-            }
-            .graph-canvas {
-                height: 70vh;
-                min-height: 480px;
-            }
-        }
     </style>
 
     <div class="container mt-4 page">
@@ -211,458 +95,108 @@
             </p>
         </div>
 
-        <ul class="nav tabs mb-3" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {{if eq .ActiveTab "roadmap"}}active{{end}}"
-                        id="tab-roadmap" data-bs-toggle="tab" data-bs-target="#pane-roadmap"
-                        type="button" role="tab" aria-controls="pane-roadmap"
-                        aria-selected="{{if eq .ActiveTab "roadmap"}}true{{else}}false{{end}}">
+        {{/* Server-side tabs, matching /offers and /community/requests:
+             each is a link and the handler loads the active shelf. The old
+             bootstrap client tabs made sense when both datasets shipped in
+             one response — with three shelves that would triple the query
+             work for two panes nobody is looking at. The Cytoscape graph
+             view that used to hang off these tabs was retired 2026-08-17
+             as decoration (the full editor graph still lives at /flow). */}}
+        <ul class="nav tabs mb-3">
+            <li class="nav-item">
+                <a class="nav-link {{if eq .ActiveTab "roadmap"}}active{{end}}" href="/help/roadmap">
                     Roadmap
                     <span class="tab-count">{{add (len .InFlight) (len .Backlog)}}</span>
-                </button>
+                </a>
             </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {{if eq .ActiveTab "changelog"}}active{{end}}"
-                        id="tab-changelog" data-bs-toggle="tab" data-bs-target="#pane-changelog"
-                        type="button" role="tab" aria-controls="pane-changelog"
-                        aria-selected="{{if eq .ActiveTab "changelog"}}true{{else}}false{{end}}">
+            <li class="nav-item">
+                <a class="nav-link {{if eq .ActiveTab "changelog"}}active{{end}}" href="/help/roadmap?tab=changelog">
                     Changelog
-                    <span class="tab-count">{{.Total}}</span>
-                </button>
+                    <span class="tab-count">{{.SiteTotal}}</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{if eq .ActiveTab "agent"}}active{{end}}" href="/help/roadmap?tab=agent">
+                    Agent
+                    <span class="tab-count">{{.AgentTotal}}</span>
+                </a>
             </li>
         </ul>
 
-        <div class="tab-content">
-            <div class="tab-pane fade {{if eq .ActiveTab "roadmap"}}show active{{end}}"
-                 id="pane-roadmap" role="tabpanel" aria-labelledby="tab-roadmap">
+        {{if eq .ActiveTab "roadmap"}}
 
-                <div class="d-flex justify-content-end mb-2">
-                    <div class="view-toggle" data-view-toggle="roadmap">
-                        <button type="button" data-view="list" class="active">List</button>
-                        <button type="button" data-view="graph">Graph</button>
-                    </div>
+        <div class="rc-section">
+            <div class="rc-section-head">🟡 In Flight ({{len .InFlight}})</div>
+            {{range .InFlight}}
+            <div class="roadmap-entry">
+                <span class="roadmap-marker in_flight">●</span>
+                <div>
+                    <div class="roadmap-title">{{.Title}}</div>
+                    <div class="roadmap-desc">{{.Description}}</div>
                 </div>
-
-                <div data-view-pane="roadmap-list">
-
-                <div class="rc-section">
-                    <div class="rc-section-head">🟡 In Flight ({{len .InFlight}})</div>
-                    {{range .InFlight}}
-                    <div class="roadmap-entry">
-                        <span class="roadmap-marker in_flight">●</span>
-                        <div>
-                            <div class="roadmap-title">{{.Title}}</div>
-                            <div class="roadmap-desc">{{.Description}}</div>
-                        </div>
-                        <span>{{if .FlowNodeID}}<a href="/flow/proposals#node-{{deref64 .FlowNodeID}}" style="font-size:0.72rem;color:var(--blue);text-decoration:none;">Proposal &rarr;</a>{{end}}</span>
-                    </div>
-                    {{else}}
-                    <div class="roadmap-desc">Nothing actively in progress right now.</div>
-                    {{end}}
-                </div>
-
-                <div class="rc-section">
-                    <div class="rc-section-head">⚪ Backlog ({{len .Backlog}})</div>
-                    {{range .Backlog}}
-                    <div class="roadmap-entry">
-                        <span class="roadmap-marker backlog">○</span>
-                        <div>
-                            <div class="roadmap-title">{{.Title}}</div>
-                            <div class="roadmap-desc">{{.Description}}</div>
-                        </div>
-                        <span>{{if .FlowNodeID}}<a href="/flow/proposals#node-{{deref64 .FlowNodeID}}" style="font-size:0.72rem;color:var(--blue);text-decoration:none;">Proposal &rarr;</a>{{end}}</span>
-                    </div>
-                    {{else}}
-                    <div class="roadmap-desc">Backlog is clear.</div>
-                    {{end}}
-                </div>
-
-                <p style="font-size:0.78rem;color:var(--text-muted);margin-top:1.5rem;">
-                    Want to suggest something? Drop a thread in the
-                    <a href="/community/forums" style="color:var(--blue);">forums</a>
-                    or open a feature request via <a href="/flow/proposals" style="color:var(--blue);">/flow/proposals</a>.
-                </p>
-
-                </div>{{/* end roadmap-list */}}
-
-                <div data-view-pane="roadmap-graph" style="display:none;">
-                    <div class="graph-wrap">
-                        <div class="graph-canvas">
-                            <div id="graph-cy-roadmap" class="cy-host"></div>
-                            <div id="graph-empty-roadmap" class="graph-empty" style="display:none;">
-                                Loading graph&hellip;
-                            </div>
-                            <div id="graph-side-roadmap" class="graph-side">
-                                <div style="color:var(--text-muted);font-size:0.82rem;">
-                                    Click a node to see the roadmap items and changelog
-                                    entries linked to it.
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <p style="font-size:0.72rem;color:var(--text-muted);margin-top:0.6rem;padding:0 1.5rem;">
-                        Coloured nodes have at least one linked roadmap item or changelog
-                        entry; grey nodes are unlinked. The full graph (with editor controls)
-                        lives at <a href="/flow" style="color:var(--blue);">/flow</a>.
-                    </p>
-                </div>
+                <span>{{if .FlowNodeID}}<a href="/flow/proposals#node-{{deref64 .FlowNodeID}}" style="font-size:0.72rem;color:var(--blue);text-decoration:none;">Proposal &rarr;</a>{{end}}</span>
             </div>
+            {{else}}
+            <div class="roadmap-desc">Nothing actively in progress right now.</div>
+            {{end}}
+        </div>
 
-            <div class="tab-pane fade {{if eq .ActiveTab "changelog"}}show active{{end}}"
-                 id="pane-changelog" role="tabpanel" aria-labelledby="tab-changelog">
-
-                <div class="d-flex justify-content-end mb-2">
-                    <div class="view-toggle" data-view-toggle="changelog">
-                        <button type="button" data-view="list" class="active">List</button>
-                        <button type="button" data-view="graph">Graph</button>
-                    </div>
+        <div class="rc-section">
+            <div class="rc-section-head">⚪ Backlog ({{len .Backlog}})</div>
+            {{range .Backlog}}
+            <div class="roadmap-entry">
+                <span class="roadmap-marker backlog">○</span>
+                <div>
+                    <div class="roadmap-title">{{.Title}}</div>
+                    <div class="roadmap-desc">{{.Description}}</div>
                 </div>
+                <span>{{if .FlowNodeID}}<a href="/flow/proposals#node-{{deref64 .FlowNodeID}}" style="font-size:0.72rem;color:var(--blue);text-decoration:none;">Proposal &rarr;</a>{{end}}</span>
+            </div>
+            {{else}}
+            <div class="roadmap-desc">Backlog is clear.</div>
+            {{end}}
+        </div>
 
-                <div data-view-pane="changelog-list">
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:1.5rem;">
+            Want to suggest something? Drop a thread in the
+            <a href="/community/forums" style="color:var(--blue);">forums</a>
+            or open a feature request via <a href="/flow/proposals" style="color:var(--blue);">/flow/proposals</a>.
+        </p>
 
-                {{if .Buckets}}
-                {{range .Buckets}}
-                <div class="changelog-bucket-head">{{.Date}}</div>
-                {{range .Entries}}
-                <div class="changelog-entry">
-                    <div>
-                        <span class="cat-badge cat-{{.Category}}">{{.Category}}</span>
-                    </div>
-                    <div>
-                        <div class="changelog-title">
-                            {{.Title}}
-                            {{if .FlowNodeID}}<a href="/flow/proposals#node-{{deref64 .FlowNodeID}}" style="font-size:0.72rem;color:var(--blue);text-decoration:none;margin-left:0.5rem;">Proposal &rarr;</a>{{end}}
-                        </div>
-                        {{if .Description}}<div class="changelog-desc">{{.Description}}</div>{{end}}
-                    </div>
+        {{else}}
+
+        {{if .Buckets}}
+        {{range .Buckets}}
+        <div class="changelog-bucket-head">{{.Date}}</div>
+        {{range .Entries}}
+        <div class="changelog-entry">
+            <div>
+                <span class="cat-badge cat-{{.Category}}">{{.Category}}</span>
+            </div>
+            <div>
+                <div class="changelog-title">
+                    {{.Title}}
+                    {{if .FlowNodeID}}<a href="/flow/proposals#node-{{deref64 .FlowNodeID}}" style="font-size:0.72rem;color:var(--blue);text-decoration:none;margin-left:0.5rem;">Proposal &rarr;</a>{{end}}
                 </div>
-                {{end}}
-                {{end}}
-                {{else}}
-                <div class="changelog-desc">No changelog entries yet.</div>
-                {{end}}
-
-                {{if gt .TotalPages 1}}
-                <div class="d-flex justify-content-between align-items-center mt-3" style="font-size:0.85rem;">
-                    <span style="color:var(--text-muted);">Page {{.Page}} of {{.TotalPages}}</span>
-                    <div>
-                        {{if gt .Page 1}}<a href="?tab=changelog&amp;page={{sub (int64 .Page) 1}}" class="btn btn-sm btn-outline-secondary py-0">&laquo; Prev</a>{{end}}
-                        {{if lt .Page .TotalPages}}<a href="?tab=changelog&amp;page={{inc .Page}}" class="btn btn-sm btn-outline-secondary py-0">Next &raquo;</a>{{end}}
-                    </div>
-                </div>
-                {{end}}
-
-                </div>{{/* end changelog-list */}}
-
-                <div data-view-pane="changelog-graph" style="display:none;">
-                    <div class="graph-wrap">
-                        <div class="graph-canvas">
-                            <div id="graph-cy-changelog" class="cy-host"></div>
-                            <div id="graph-empty-changelog" class="graph-empty" style="display:none;">
-                                Loading graph&hellip;
-                            </div>
-                            <div id="graph-side-changelog" class="graph-side">
-                                <div style="color:var(--text-muted);font-size:0.82rem;">
-                                    Click a node to see the changelog entries linked to it.
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <p style="font-size:0.72rem;color:var(--text-muted);margin-top:0.6rem;padding:0 1.5rem;">
-                        Same graph as the Roadmap tab — each node carries a count
-                        badge (roadmap / changelog). Node colour reflects the dominant
-                        link type.
-                    </p>
-                </div>
+                {{if .Description}}<div class="changelog-desc">{{.Description}}</div>{{end}}
             </div>
         </div>
+        {{end}}
+        {{end}}
+        {{else}}
+        <div class="changelog-desc">{{if eq .ActiveTab "agent"}}No agent release notes yet.{{else}}No changelog entries yet.{{end}}</div>
+        {{end}}
+
+        {{if gt .TotalPages 1}}
+        <div class="d-flex justify-content-between align-items-center mt-3" style="font-size:0.85rem;">
+            <span style="color:var(--text-muted);">Page {{.Page}} of {{.TotalPages}}</span>
+            <div>
+                {{if gt .Page 1}}<a href="?tab={{.ActiveTab}}&amp;page={{sub (int64 .Page) 1}}" class="btn btn-sm btn-outline-secondary py-0">&laquo; Prev</a>{{end}}
+                {{if lt .Page .TotalPages}}<a href="?tab={{.ActiveTab}}&amp;page={{inc .Page}}" class="btn btn-sm btn-outline-secondary py-0">Next &raquo;</a>{{end}}
+            </div>
+        </div>
+        {{end}}
+
+        {{end}}
     </div>
-
-    <script src="https://unpkg.com/cytoscape@3.30.1/dist/cytoscape.min.js"
-            onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/cytoscape@3.30.1/dist/cytoscape.min.js';s.async=false;document.head.appendChild(s);"></script>
-    <script>
-        // Sync the active tab into the URL (?tab=...) without reloading so
-        // pagination, refresh, and copy-link all preserve the user's view.
-        document.querySelectorAll('.tabs .nav-link').forEach(btn => {
-            btn.addEventListener('shown.bs.tab', ev => {
-                const target = ev.target.id === 'tab-changelog' ? 'changelog' : 'roadmap';
-                const url = new URL(window.location.href);
-                url.searchParams.set('tab', target);
-                if (target === 'roadmap') url.searchParams.delete('page');
-                window.history.replaceState(null, '', url.toString());
-            });
-        });
-    </script>
-    <script>
-    (function(){
-        // Shared graph payload — fetched once, rendered into whichever
-        // tab the user opens first. Subsequent toggles reuse the cached
-        // copy.
-        let graphData = null;
-        let graphError = null;
-        let cyInstances = {};
-
-        function escHTML(s){
-            return String(s == null ? '' : s)
-                .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-                .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        }
-
-        function loadGraph(){
-            if (graphData || graphError) return Promise.resolve();
-            return fetch('/help/roadmap/graph.json', {credentials:'same-origin'})
-                .then(r => r.ok ? r.json() : Promise.reject(r.status))
-                .then(d => { graphData = d; })
-                .catch(e => { graphError = e; });
-        }
-
-        function renderEmpty(host, msg){
-            const empty = document.getElementById(host.id.replace('graph-cy-','graph-empty-'));
-            if (empty){ empty.textContent = msg; empty.style.display = 'flex'; }
-        }
-
-        // Pull the brand palette out of tokens.css once so node
-        // colours match the rest of the site without hardcoding hex
-        // values. Falls back to sensible defaults if a token is
-        // missing (e.g. the CSS hasn't loaded yet).
-        const PALETTE = (() => {
-            const css = getComputedStyle(document.documentElement);
-            const read = (name, fallback) =>
-                (css.getPropertyValue(name).trim() || fallback);
-            return {
-                // Threedom Palette mapping (PALETTES.md). Roadmap = blue
-                // (forward-looking/primary), Changelog = green (shipped/
-                // success — matches the rest of the site's "done" colour),
-                // Mixed = orange (Squash, "attention/energy" for nodes
-                // that touch both surfaces), Unlinked = slate (clearly
-                // visible muted, not the near-invisible --bg-elevated
-                // that blended into the page).
-                muted:      read('--slate',         '#94a3b8'),
-                blue:       read('--blue',          '#5b8af5'),
-                green:      read('--green',         '#22c55e'),
-                orange:     read('--orange',        '#d6750b'),
-                border:     read('--border',        '#2a2d37'),
-                textPri:    read('--text-primary',  '#e2e4ec'),
-                textMuted:  read('--text-muted',    '#6b7485'),
-                // Cytoscape doesn't read CSS vars from its style
-                // objects, so the edge line/arrow get a manual rgba
-                // built from the --slate token's rgb (148,163,184).
-                edgeRgba:   'rgba(148,163,184,0.4)',
-            };
-        })();
-
-        function colourFor(n){
-            // Threedom mapping — blue = roadmap, green = changelog,
-            // orange = mixed (both roadmap + changelog link), slate =
-            // unlinked. Slate is far more visible than the prior
-            // --bg-elevated fallback so the site topology reads
-            // clearly even where no content references the node yet.
-            const r = n.roadmap_count|0, c = n.changelog_count|0;
-            if (r === 0 && c === 0)           return PALETTE.muted;
-            if (c > 0 && r === 0)             return PALETTE.green;
-            if (r > 0 && c === 0)             return PALETTE.blue;
-            return PALETTE.orange;
-        }
-
-        function nodeSize(n){
-            // Bigger = more linked. Caps at 60px. Unlinked nodes get
-            // a small fixed size so the linked ones pop visually.
-            const total = (n.roadmap_count|0) + (n.changelog_count|0);
-            if (total === 0) return 18;
-            return Math.min(60, 22 + total * 4);
-        }
-
-        function borderFor(n){
-            const r = n.roadmap_count|0, c = n.changelog_count|0;
-            return (r === 0 && c === 0) ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.2)';
-        }
-
-        function initCy(hostID, sideID){
-            if (typeof cytoscape !== 'function'){
-                renderEmpty(document.getElementById(hostID), 'Graph library failed to load — check your network.');
-                return null;
-            }
-            if (!graphData || !graphData.nodes || graphData.nodes.length === 0){
-                renderEmpty(document.getElementById(hostID), 'No flow-graph nodes yet — visit /flow to create some.');
-                return null;
-            }
-            if ((graphData.total_links|0) === 0){
-                renderEmpty(document.getElementById(hostID), 'No linked nodes yet — edit indexer-site/web/definitions/roadmap.json or changelog.json with system_ids[], then run webdef-sync.');
-                return null;
-            }
-            const elements = [];
-            graphData.nodes.forEach(n => {
-                elements.push({
-                    data: {
-                        id: 'n'+n.id, nodeID: n.id,
-                        label: n.label || ('#'+n.id),
-                        colour: colourFor(n),
-                        border: borderFor(n),
-                        size: nodeSize(n),
-                        badge: (n.roadmap_count + n.changelog_count),
-                    },
-                });
-            });
-            graphData.edges.forEach(e => {
-                elements.push({ data: { id: 'e'+e.id, source: 'n'+e.source_id, target: 'n'+e.target_id } });
-            });
-            const cy = cytoscape({
-                container: document.getElementById(hostID),
-                wheelSensitivity: 0.2, minZoom: 0.3, maxZoom: 2.5,
-                elements: elements,
-                style: [
-                    { selector: 'node', style: {
-                        'background-color': 'data(colour)',
-                        'label': 'data(label)',
-                        'color': PALETTE.textPri,
-                        'font-size': '11px', 'font-weight': 600,
-                        'text-valign': 'bottom', 'text-halign': 'center',
-                        'text-margin-y': 4,
-                        'text-wrap': 'wrap', 'text-max-width': 140,
-                        'width': 'data(size)', 'height': 'data(size)',
-                        'border-width': 1, 'border-color': 'data(border)',
-                    }},
-                    { selector: 'node[badge = 0]', style: {
-                        'color': PALETTE.textMuted,
-                        'font-size': '10px',
-                    }},
-                    { selector: 'node:selected', style: {
-                        'border-width': 3, 'border-color': '#fff',
-                    }},
-                    { selector: 'edge', style: {
-                        'width': 1, 'line-color': PALETTE.edgeRgba,
-                        'curve-style': 'bezier',
-                        'target-arrow-shape': 'triangle',
-                        'target-arrow-color': PALETTE.edgeRgba,
-                        'arrow-scale': 0.7,
-                    }},
-                ],
-                layout: { name: 'cose', animate: false, padding: 30, fit: true, nodeRepulsion: 8000, idealEdgeLength: 90 },
-            });
-            cy.on('tap', 'node', evt => {
-                const id = evt.target.data('nodeID');
-                loadNodeDetail(id, sideID);
-            });
-            return cy;
-        }
-
-        function loadNodeDetail(id, sideID){
-            const side = document.getElementById(sideID);
-            side.innerHTML = '<div style="color:var(--text-muted);">Loading&hellip;</div>';
-            fetch('/help/roadmap/graph-node/'+encodeURIComponent(id), {credentials:'same-origin'})
-                .then(r => r.ok ? r.json() : Promise.reject(r.status))
-                .then(d => renderNodeDetail(d, side))
-                .catch(() => { side.innerHTML = '<div style="color:var(--bs-danger);">Failed to load node.</div>'; });
-        }
-
-        function renderNodeDetail(d, side){
-            const roadmap = (d.roadmap || []).map(r => {
-                const status = r.status ? '<span class="side-item-meta">'+escHTML(r.status)+'</span>' : '';
-                return '<a class="side-item" href="/flow/proposals#node-'+d.id+'">'
-                    + '<div class="side-item-title">'+escHTML(r.title)+'</div>'
-                    + status + '</a>';
-            }).join('');
-            const changelog = (d.changelog || []).map(e => {
-                return '<a class="side-item" href="/help/roadmap?tab=changelog">'
-                    + '<div class="side-item-title">'+escHTML(e.title)+'</div>'
-                    + '<div class="side-item-meta">'+escHTML(e.category)+' &middot; '+escHTML(e.released_at)+'</div>'
-                    + '</a>';
-            }).join('');
-            const desc = d.description ? '<div class="side-meta">'+escHTML(d.description)+'</div>' : '';
-            const roadmapSec = roadmap
-                ? '<h6 style="margin-top:0.8rem;">Roadmap ('+(d.roadmap||[]).length+')</h6>'+roadmap
-                : '<h6 style="margin-top:0.8rem;">Roadmap</h6><div style="color:var(--text-muted);font-size:0.78rem;">No roadmap items linked.</div>';
-            const changelogSec = changelog
-                ? '<h6 style="margin-top:0.8rem;">Changelog ('+(d.changelog||[]).length+')</h6>'+changelog
-                : '<h6 style="margin-top:0.8rem;">Changelog</h6><div style="color:var(--text-muted);font-size:0.78rem;">No changelog entries linked.</div>';
-            side.innerHTML =
-                '<button class="side-close" type="button" aria-label="Close" data-side-close>&times;</button>'
-                + '<div class="side-title">'+escHTML(d.label || ('#'+d.id))+'</div>'
-                + '<div class="side-meta">'+escHTML(d.kind||'')+(d.status?' &middot; '+escHTML(d.status):'')+'</div>'
-                + desc
-                + roadmapSec
-                + changelogSec
-                + '<div style="margin-top:0.8rem;"><a href="/flow/proposals#node-'+d.id+'" style="color:var(--blue);font-size:0.78rem;">Open in proposals &rarr;</a></div>';
-            const btn = side.querySelector('[data-side-close]');
-            if (btn) btn.addEventListener('click', () => { side.innerHTML = sideEmptyHTML(); });
-        }
-
-        function sideEmptyHTML(){
-            return '<div style="color:var(--text-muted);font-size:0.82rem;">'
-                + 'Click a node to see the roadmap items and changelog entries linked to it.'
-                + '</div>';
-        }
-
-        function ensureGraphFor(tab){
-            const hostID = 'graph-cy-' + tab;
-            const sideID = 'graph-side-' + tab;
-            if (cyInstances[tab]) {
-                // Pane was hidden while sized — give the browser one
-                // frame to reflow before we ask cytoscape to remeasure.
-                requestAnimationFrame(() => {
-                    cyInstances[tab].resize();
-                    cyInstances[tab].fit(null, 40);
-                });
-                return;
-            }
-            renderEmpty(document.getElementById(hostID), 'Loading graph…');
-            loadGraph().then(() => {
-                if (graphError){ renderEmpty(document.getElementById(hostID), 'Failed to load graph.'); return; }
-                // Init AFTER the pane is visible + laid out, so the
-                // container has the right pixel dimensions.
-                requestAnimationFrame(() => {
-                    const cy = initCy(hostID, sideID);
-                    if (cy) {
-                        cyInstances[tab] = cy;
-                        document.getElementById(hostID.replace('graph-cy-','graph-empty-')).style.display = 'none';
-                    }
-                });
-            });
-        }
-
-        // Reflow open graphs on window resize so the full-bleed canvas
-        // stays sized correctly when the user resizes the browser.
-        let resizeTimer = null;
-        window.addEventListener('resize', () => {
-            if (resizeTimer) clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(() => {
-                Object.values(cyInstances).forEach(cy => {
-                    try { cy.resize(); cy.fit(null, 40); } catch(e){}
-                });
-            }, 120);
-        });
-
-        // Wire each view-toggle group.
-        document.querySelectorAll('.view-toggle').forEach(group => {
-            const tab = group.getAttribute('data-view-toggle'); // "roadmap" or "changelog"
-            group.querySelectorAll('button').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const view = btn.getAttribute('data-view');
-                    group.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
-                    const listPane  = document.querySelector('[data-view-pane="'+tab+'-list"]');
-                    const graphPane = document.querySelector('[data-view-pane="'+tab+'-graph"]');
-                    if (view === 'graph'){
-                        if (listPane)  listPane.style.display  = 'none';
-                        if (graphPane) graphPane.style.display = '';
-                        ensureGraphFor(tab);
-                    } else {
-                        if (listPane)  listPane.style.display  = '';
-                        if (graphPane) graphPane.style.display = 'none';
-                    }
-                    // Persist user choice so tab switches preserve the
-                    // graph/list intent without surprising them.
-                    try { localStorage.setItem('rc_view_'+tab, view); } catch(e){}
-                });
-            });
-            // Restore last-used view on load.
-            try {
-                const saved = localStorage.getItem('rc_view_'+tab);
-                if (saved === 'graph'){
-                    const target = group.querySelector('button[data-view="graph"]');
-                    if (target) target.click();
-                }
-            } catch(e){}
-        });
-    })();
-    </script>
 {{end}}

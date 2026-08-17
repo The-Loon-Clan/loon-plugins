@@ -92,17 +92,35 @@ func (r *PGStore) DeleteRoadmapItem(ctx context.Context, id int64) error {
 
 // ListChangelogEntries returns the newest entries first. limit/
 // offset for pagination on the public page; offset=0 limit=0
-// returns all (for admin export).
-func (r *PGStore) ListChangelogEntries(ctx context.Context, limit, offset int) ([]*ChangelogEntry, int, error) {
+// returns all (for admin export). category is the shelf: "" = the
+// site changelog (everything but agent release notes), "agent" =
+// only those, "all" = no filter.
+func (r *PGStore) ListChangelogEntries(ctx context.Context, category string, limit, offset int) ([]*ChangelogEntry, int, error) {
+	where, args := "", []any{}
+	switch category {
+	case "all":
+		// no filter
+	case "":
+		where = ` WHERE category <> 'agent'`
+	default:
+		where = ` WHERE category = $1`
+		args = append(args, category)
+	}
 	var total int
-	if err := r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM changelog_entries`); err != nil {
+	// sqllint:allow where is one of three literal fragments above; the one value flows through $1.
+	if err := r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM changelog_entries`+where, args...); err != nil {
 		return nil, 0, err
 	}
-	q := `SELECT ` + ChangelogCols + ` FROM changelog_entries
+	// sqllint:allow same three literal fragments; pagination values are parameterized.
+	q := `SELECT ` + ChangelogCols + ` FROM changelog_entries` + where + `
 	      ORDER BY released_at DESC, id DESC`
-	args := []any{}
 	if limit > 0 {
-		q += ` LIMIT $1 OFFSET $2`
+		// Placeholder numbers depend on whether the shelf bound a value.
+		if len(args) == 1 {
+			q += ` LIMIT $2 OFFSET $3`
+		} else {
+			q += ` LIMIT $1 OFFSET $2`
+		}
 		args = append(args, limit, offset)
 	}
 	var rows []*ChangelogEntry

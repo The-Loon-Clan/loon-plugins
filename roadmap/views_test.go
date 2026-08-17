@@ -96,14 +96,38 @@ func TestPagesRender(t *testing.T) {
 		t.Error("mockup detail missing the comment")
 	}
 
-	out = testRender(t, "help_roadmap.html", gin.H{
-		"PageTitle": "Roadmap", "ActiveNav": "support", "ActiveTab": "roadmap",
-		"InFlight": []*RoadmapItem{{ID: 1, Title: "Ship the tracker", Status: RoadmapStatusInFlight}},
-		"Backlog":  []*RoadmapItem{{ID: 2, Title: "Passkeys", Status: RoadmapStatusBacklog}},
-		"Buckets":  nil, "Total": 0, "Page": 1, "TotalPages": 1,
-	})
+	roadmapData := func(tab string) gin.H {
+		return gin.H{
+			"PageTitle": "Roadmap", "ActiveNav": "support", "ActiveTab": tab,
+			"InFlight": []*RoadmapItem{{ID: 1, Title: "Ship the tracker", Status: RoadmapStatusInFlight}},
+			"Backlog":  []*RoadmapItem{{ID: 2, Title: "Passkeys", Status: RoadmapStatusBacklog}},
+			"Buckets":  nil, "Total": 0, "SiteTotal": 3, "AgentTotal": 2,
+			"Page": 1, "TotalPages": 1,
+		}
+	}
+	out = testRender(t, "help_roadmap.html", roadmapData("roadmap"))
 	if !strings.Contains(out, "Ship the tracker") {
 		t.Error("roadmap page missing the item")
+	}
+	// Three server-side tabs, no graph: the Cytoscape view was retired
+	// 2026-08-17 and agent release notes got their own shelf.
+	for _, want := range []string{`href="/help/roadmap?tab=changelog"`, `href="/help/roadmap?tab=agent"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("roadmap tabs missing %q", want)
+		}
+	}
+	for _, gone := range []string{"cytoscape", "graph-wrap", "view-toggle", "data-bs-toggle"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("roadmap page still carries the retired %q", gone)
+		}
+	}
+	// The agent tab renders the shared changelog list with its own empty text.
+	out = testRender(t, "help_roadmap.html", roadmapData("agent"))
+	if !strings.Contains(out, "No agent release notes yet.") {
+		t.Error("agent tab missing its empty state")
+	}
+	if strings.Contains(out, "Ship the tracker") {
+		t.Error("agent tab still renders the roadmap list")
 	}
 
 	out = testRender(t, "admin_roadmap.html", gin.H{

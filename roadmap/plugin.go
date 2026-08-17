@@ -83,8 +83,6 @@ func (p *Plugin) Provision(c *core.Core) error {
 	pub := engine.Group("/help")
 	pub.Use(c.Auth.Optional()...)
 	pub.GET("/roadmap", p.handlers.RoadmapPage)
-	pub.GET("/roadmap/graph.json", p.handlers.RoadmapGraphJSON)
-	pub.GET("/roadmap/graph-node/:id", p.handlers.RoadmapGraphNodeJSON)
 	pub.GET("/changelog", p.handlers.ChangelogPage)
 
 	// The flow canvas follows the site's default access policy.

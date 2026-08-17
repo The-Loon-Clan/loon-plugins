@@ -53,9 +53,34 @@ func (h *Handlers) RoadmapPage(c *gin.Context) {
 		page = 1
 	}
 	offset := (page - 1) * pageSize
-	entries, total, err := h.store.ListChangelogEntries(ctx, pageSize, offset)
+
+	// Two changelog shelves: the site's own entries and the agent's release
+	// notes ("" excludes agent, "agent" is only agent). The active tab's
+	// shelf gets the real page; the other shelf gets a count-shaped call so
+	// its tab badge is honest without fetching a page nobody is looking at.
+	activeTab := "roadmap"
+	shelf := ""
+	switch c.Query("tab") {
+	case "changelog":
+		activeTab = "changelog"
+	case "agent":
+		activeTab, shelf = "agent", "agent"
+	}
+	entries, total, err := h.store.ListChangelogEntries(ctx, shelf, pageSize, offset)
 	if err != nil {
 		h.errs.Report(ctx, "help/changelog-list", err)
+	}
+	otherShelf := "agent"
+	if shelf == "agent" {
+		otherShelf = ""
+	}
+	_, otherTotal, oerr := h.store.ListChangelogEntries(ctx, otherShelf, 1, 0)
+	if oerr != nil {
+		h.errs.Report(ctx, "help/changelog-count", oerr)
+	}
+	siteTotal, agentTotal := total, otherTotal
+	if shelf == "agent" {
+		siteTotal, agentTotal = otherTotal, total
 	}
 
 	// Bucket changelog by released_at so the template renders one date
@@ -80,11 +105,6 @@ func (h *Handlers) RoadmapPage(c *gin.Context) {
 		totalPages = 1
 	}
 
-	activeTab := "roadmap"
-	if c.Query("tab") == "changelog" {
-		activeTab = "changelog"
-	}
-
 	h.render(c, http.StatusOK, "Roadmap & Changelog", "help_roadmap.html", gin.H{
 		"PageTitle":  "Roadmap & Changelog",
 		"ActiveNav":  "support",
@@ -93,6 +113,8 @@ func (h *Handlers) RoadmapPage(c *gin.Context) {
 		"Backlog":    backlog,
 		"Buckets":    buckets,
 		"Total":      total,
+		"SiteTotal":  siteTotal,
+		"AgentTotal": agentTotal,
 		"Page":       page,
 		"TotalPages": totalPages,
 	})
@@ -108,161 +130,6 @@ func (h *Handlers) ChangelogPage(c *gin.Context) {
 		target += "&page=" + p
 	}
 	c.Redirect(http.StatusMovedPermanently, target)
-}
-
-// RoadmapGraphJSON powers the "Graph" view toggle on
-// /help/roadmap. The page renders Cytoscape against this payload
-// and draws every alive flow node that's linked to at least one
-// roadmap item OR changelog entry, plus the edges between those
-// nodes. Per-node `roadmap` / `changelog` counts drive the badge
-// + size scaling so users can spot the most-active areas of the
-// graph at a glance.
-//
-// Public — same audience as the parent page. No PII in the
-// payload; labels and counts only.
-func (h *Handlers) RoadmapGraphJSON(c *gin.Context) {
-	ctx := c.Request.Context()
-	g, err := h.flow.GetFlowGraph(ctx)
-	if err != nil {
-		h.errs.HandlerError(c, "help/roadmap-graph", err)
-		return
-	}
-	counts, err := h.store.GetFlowNodeLinkCounts(ctx)
-	if err != nil {
-		h.errs.HandlerError(c, "help/roadmap-graph-counts", err)
-		return
-	}
-	countMap := make(map[int64][2]int, len(counts))
-	for _, r := range counts {
-		countMap[r.NodeID] = [2]int{r.RoadmapCount, r.ChangelogCount}
-	}
-	type gNode struct {
-		ID             int64   `json:"id"`
-		Label          string  `json:"label"`
-		Kind           string  `json:"kind"`
-		Status         string  `json:"status"`
-		Tag            string  `json:"tag"`
-		X              float64 `json:"x"`
-		Y              float64 `json:"y"`
-		RoadmapCount   int     `json:"roadmap_count"`
-		ChangelogCount int     `json:"changelog_count"`
-	}
-	type gEdge struct {
-		ID       int64 `json:"id"`
-		SourceID int64 `json:"source_id"`
-		TargetID int64 `json:"target_id"`
-	}
-	// Return the FULL alive graph — every node, every edge — and
-	// attach per-node counts. Unlinked nodes get rendered in a muted
-	// style by the frontend, so the user can see the site topology
-	// as a whole instead of a disconnected island of linked nodes.
-	// "No linked nodes yet" is computed across the entire set, not
-	// per-node.
-	nodes := make([]gNode, 0, len(g.Nodes))
-	totalLinks := 0
-	for _, n := range g.Nodes {
-		cnt := countMap[n.ID] // zero value [0,0] when unlinked
-		nodes = append(nodes, gNode{
-			ID: n.ID, Label: n.Label, Kind: n.Kind,
-			Status: n.Status, Tag: n.Tag,
-			X: n.X, Y: n.Y,
-			RoadmapCount: cnt[0], ChangelogCount: cnt[1],
-		})
-		totalLinks += cnt[0] + cnt[1]
-	}
-	edges := make([]gEdge, 0, len(g.Edges))
-	for _, e := range g.Edges {
-		edges = append(edges, gEdge{ID: e.ID, SourceID: e.SourceID, TargetID: e.TargetID})
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"ok":          true,
-		"nodes":       nodes,
-		"edges":       edges,
-		"total_links": totalLinks,
-	})
-}
-
-// RoadmapGraphNodeJSON powers the side-panel when a user clicks
-// a node in the Graph view. Returns the linked roadmap items +
-// changelog entries for that node so the panel can render two
-// cross-link sections without a second round-trip.
-func (h *Handlers) RoadmapGraphNodeJSON(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	// Canonical/seed flow nodes carry NEGATIVE ids (the /flow editor
-	// allocates them that way to keep the wiki/proposal range positive).
-	// Only reject id == 0 or a malformed param — both signs are valid.
-	if err != nil || id == 0 {
-		jsonError(c, http.StatusBadRequest, "invalid id")
-		return
-	}
-	ctx := c.Request.Context()
-	node, err := h.flow.GetFlowNode(ctx, id)
-	if err != nil || node == nil || node.DeletedAt != nil {
-		jsonError(c, http.StatusNotFound, "not found")
-		return
-	}
-	// Only the canonical site-map nodes are intended for public
-	// surfacing. User-proposed nodes (kind="user-proposal",
-	// kind="comment", kind="mockup") and any proposal-as-edit row
-	// (parent_node_id set) belong to the /flow editor's workflow
-	// and may carry in-flight draft content. Hide their bodies on
-	// this public surface — clicking a graph node that isn't a
-	// site-system shows just a "not yet published" placeholder.
-	publicKinds := map[string]bool{"system": true, "default": true, "": true}
-	if !publicKinds[node.Kind] || node.ParentNodeID != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"ok":          true,
-			"id":          node.ID,
-			"label":       node.Label,
-			"description": "",
-			"kind":        node.Kind,
-			"tag":         node.Tag,
-			"status":      node.Status,
-			"roadmap":     []any{},
-			"changelog":   []any{},
-			"hidden":      true,
-		})
-		return
-	}
-	type lRoadmap struct {
-		ID     int64  `json:"id"`
-		Title  string `json:"title"`
-		Status string `json:"status"`
-	}
-	type lChangelog struct {
-		ID         int64  `json:"id"`
-		Title      string `json:"title"`
-		Category   string `json:"category"`
-		ReleasedAt string `json:"released_at"`
-	}
-	var roadmap []lRoadmap
-	if items, err := h.store.ListRoadmapItemsByFlowNode(ctx, id); err == nil {
-		for _, r := range items {
-			roadmap = append(roadmap, lRoadmap{ID: r.ID, Title: r.Title, Status: r.Status})
-		}
-	}
-	var changelog []lChangelog
-	if entries, err := h.store.ListChangelogEntriesByFlowNode(ctx, id); err == nil {
-		for _, e := range entries {
-			changelog = append(changelog, lChangelog{
-				ID:         e.ID,
-				Title:      e.Title,
-				Category:   e.Category,
-				ReleasedAt: e.ReleasedAt.Format("2006-01-02"),
-			})
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"ok":          true,
-		"id":          node.ID,
-		"label":       node.Label,
-		"description": node.Description,
-		"kind":        node.Kind,
-		"tag":         node.Tag,
-		"status":      node.Status,
-		"roadmap":     roadmap,
-		"changelog":   changelog,
-	})
 }
 
 // ─── Admin CRUD for roadmap ───────────────────────────────────────
@@ -390,7 +257,7 @@ func (h *Handlers) AdminChangelogPage(c *gin.Context) {
 		page = 1
 	}
 	offset := (page - 1) * pageSize
-	entries, total, err := h.store.ListChangelogEntries(c.Request.Context(), pageSize, offset)
+	entries, total, err := h.store.ListChangelogEntries(c.Request.Context(), "all", pageSize, offset)
 	if err != nil {
 		h.errs.Report(c.Request.Context(), "admin/changelog-list", err)
 	}
@@ -432,7 +299,8 @@ func (h *Handlers) AdminChangelogSave(c *gin.Context) {
 	switch category {
 	case ChangelogCategoryFeature, ChangelogCategoryFix,
 		ChangelogCategoryPerf, ChangelogCategorySecurity,
-		ChangelogCategoryInfra, ChangelogCategoryDocs:
+		ChangelogCategoryInfra, ChangelogCategoryDocs,
+		ChangelogCategoryAgent:
 		// valid
 	default:
 		category = ChangelogCategoryFeature

@@ -62,6 +62,11 @@ const (
 	ChangelogCategorySecurity = "security"
 	ChangelogCategoryInfra    = "infra"
 	ChangelogCategoryDocs     = "docs"
+	// ChangelogCategoryAgent marks agent release notes — shown on their own
+	// tab of /help/roadmap rather than mixed into the site changelog. Needs
+	// the host's changelog_entries category CHECK to allow it (site
+	// migration 322 on the origin deployment).
+	ChangelogCategoryAgent = "agent"
 )
 
 // ── The flow domain, moved wholesale from the host ──────────────────────────
