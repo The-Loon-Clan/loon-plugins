@@ -53,26 +53,22 @@ func TestTicketVisibleTo(t *testing.T) {
 	const owner = 42
 	tests := []struct {
 		name     string
-		public   bool
 		ownerID  int
 		viewerID int
 		isAdmin  bool
 		want     bool
 	}{
-		{"owner sees own private", false, owner, owner, false, true},
-		{"admin sees others' private", false, owner, 7, true, true},
-		{"stranger blocked on private", false, owner, 7, false, false},
-		{"stranger sees public", true, owner, 7, false, true},
-		{"owner sees own public", true, owner, owner, false, true},
-		{"admin sees public too", true, owner, 7, true, true},
-		{"admin owns it, private", false, owner, owner, true, true},
+		{"owner sees own ticket", owner, owner, false, true},
+		{"admin sees others' tickets", owner, 7, true, true},
+		{"stranger blocked", owner, 7, false, false},
+		{"admin owns it", owner, owner, true, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tk := &SupportTicket{UserID: tc.ownerID, Public: tc.public}
+			tk := &SupportTicket{UserID: tc.ownerID}
 			if got := ticketVisibleTo(tk, tc.viewerID, tc.isAdmin); got != tc.want {
-				t.Errorf("ticketVisibleTo(public=%v, owner=%d, viewer=%d, admin=%v) = %v, want %v",
-					tc.public, tc.ownerID, tc.viewerID, tc.isAdmin, got, tc.want)
+				t.Errorf("ticketVisibleTo(owner=%d, viewer=%d, admin=%v) = %v, want %v",
+					tc.ownerID, tc.viewerID, tc.isAdmin, got, tc.want)
 			}
 		})
 	}

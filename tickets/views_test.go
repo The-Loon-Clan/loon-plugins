@@ -63,10 +63,11 @@ func TestSupportPageRenders(t *testing.T) {
 	}
 }
 
-// The owner check moved off the host's page data onto the plugin's own
-// ViewerID. These are the two branches that matters: the owner sees the
-// control, a stranger does not.
-func TestTicketPageOwnerGate(t *testing.T) {
+// The owner-only visibility toggle is GONE (the public-tickets experiment was
+// retired 2026-08-16) — owner, stranger and anonymous now render the same
+// page, and none of them may see the old toggle. Who can LOAD the page at all
+// is ticketVisibleTo's job, tested in tickets_test.go.
+func TestTicketPageHasNoVisibilityToggle(t *testing.T) {
 	data := func(viewer int) map[string]any {
 		return map[string]any{
 			"Ticket": sampleTicket(), "Replies": []*TicketReply{},
@@ -74,30 +75,25 @@ func TestTicketPageOwnerGate(t *testing.T) {
 			"ViewerID":   viewer,
 		}
 	}
-	owner := render1(t, "support_ticket.html", data(42))
-	stranger := render1(t, "support_ticket.html", data(999))
-	if len(owner) <= len(stranger) {
-		t.Errorf("the owner should see more than a stranger (owner %d bytes, stranger %d) — "+
-			"the gate reads ViewerID, and a broken one renders identically for both",
-			len(owner), len(stranger))
+	for _, viewer := range []int{42, 999, 0} {
+		got := render1(t, "support_ticket.html", data(viewer))
+		if strings.Contains(got, "/visibility") || strings.Contains(got, "Make public") {
+			t.Errorf("viewer %d still sees the retired visibility toggle", viewer)
+		}
 	}
-	// Anonymous must be treated as "not the owner", not as a panic.
-	render1(t, "support_ticket.html", data(0))
 }
 
-func TestPublicAndAdminListsRender(t *testing.T) {
-	for _, name := range []string{"support_public.html", "admin_tickets.html"} {
-		got := render1(t, name, map[string]any{
-			"Tickets":        []*SupportTicket{sampleTicket()},
-			"Total":          1,
-			"PaginationHTML": template.HTML(`<nav id="pg"></nav>`),
-		})
-		if !strings.Contains(got, `<nav id="pg">`) {
-			t.Errorf("%s did not place the host-rendered pager", name)
-		}
-		if !strings.Contains(got, "cannot download") {
-			t.Errorf("%s missing the ticket", name)
-		}
+func TestAdminListRenders(t *testing.T) {
+	got := render1(t, "admin_tickets.html", map[string]any{
+		"Tickets":        []*SupportTicket{sampleTicket()},
+		"Total":          1,
+		"PaginationHTML": template.HTML(`<nav id="pg"></nav>`),
+	})
+	if !strings.Contains(got, `<nav id="pg">`) {
+		t.Error("admin_tickets.html did not place the host-rendered pager")
+	}
+	if !strings.Contains(got, "cannot download") {
+		t.Error("admin_tickets.html missing the ticket")
 	}
 }
 
@@ -106,10 +102,8 @@ func TestPublicAndAdminListsRender(t *testing.T) {
 func TestTicketPagesRenderEmpty(t *testing.T) {
 	render1(t, "support.html", map[string]any{
 		"Tickets": []*SupportTicket{}, "EditorHTML": template.HTML("")})
-	for _, name := range []string{"support_public.html", "admin_tickets.html"} {
-		render1(t, name, map[string]any{
-			"Tickets": []*SupportTicket{}, "Total": 0, "PaginationHTML": template.HTML("")})
-	}
+	render1(t, "admin_tickets.html", map[string]any{
+		"Tickets": []*SupportTicket{}, "Total": 0, "PaginationHTML": template.HTML("")})
 }
 
 // The legacy contract must keep working, because loon-demo-site still uses it

@@ -23,8 +23,9 @@ CREATE TABLE IF NOT EXISTS support_tickets (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Added by host migration 207: opt-in public visibility for a ticket.
-ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS public BOOLEAN NOT NULL DEFAULT FALSE;
+-- (Host migration 207 once added an opt-in `public` BOOLEAN here; the feature
+-- was retired 2026-08-16. Hosts that ran 207 keep the column, dead — the
+-- plugin no longer reads it. Fresh installs never get it.)
 
 -- Host migration 44.
 CREATE TABLE IF NOT EXISTS ticket_replies (
@@ -38,7 +39,6 @@ CREATE TABLE IF NOT EXISTS ticket_replies (
 );
 
 CREATE INDEX IF NOT EXISTS idx_support_tickets_created ON support_tickets(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_support_tickets_public_recent ON support_tickets(updated_at DESC) WHERE public = TRUE;
 CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status);
 CREATE INDEX IF NOT EXISTS idx_support_tickets_updated ON support_tickets(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_support_tickets_user_id ON support_tickets(user_id);

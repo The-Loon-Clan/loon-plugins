@@ -38,34 +38,11 @@
                     {{else}}<span class="badge bg-primary ms-2">Normal</span>{{end}}
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    {{if .Ticket.Public}}<span class="badge bg-info" title="Public — readable by anyone signed in">🌐 Public</span>{{end}}
                     {{if eq .Ticket.Status "open"}}<span class="badge bg-warning text-dark">Open</span>
                     {{else if eq .Ticket.Status "in_progress"}}<span class="badge bg-info text-dark">In Progress</span>
                     {{else}}<span class="badge bg-success">Closed</span>{{end}}
                 </div>
             </div>
-            {{/* Owner-only visibility toggle (migration 207). The
-                 ticket owner can flip public/private at any time;
-                 admins manage status separately below. */}}
-            {{if and $.ViewerID (eq $.ViewerID .Ticket.UserID)}}
-            <div class="card-footer d-flex align-items-center gap-2" style="font-size:0.82rem;background:var(--bg-elevated);">
-                <span style="color:var(--text-muted);">Visibility:</span>
-                <form method="POST" action="/support/{{.Ticket.ID}}/visibility" class="d-flex align-items-center gap-2">
-                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                    {{if .Ticket.Public}}
-                    <span style="color:var(--blue);">🌐 Public</span>
-                    <span style="color:var(--text-muted);font-size:0.75rem;">— anyone signed in can read this ticket. Replies are still owner + admin only.</span>
-                    <input type="hidden" name="public" value="0">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary py-0" style="font-size:0.78rem;">Make private</button>
-                    {{else}}
-                    <span style="color:var(--text-muted);">🔒 Private</span>
-                    <span style="color:var(--text-muted);font-size:0.75rem;">— only you and admins can read this ticket.</span>
-                    <input type="hidden" name="public" value="1">
-                    <button type="submit" class="btn btn-sm btn-outline-info py-0" style="font-size:0.78rem;">Make public</button>
-                    {{end}}
-                </form>
-            </div>
-            {{end}}
             {{if .IsAdmin}}
             <div class="card-footer d-flex align-items-center gap-2 flex-wrap" style="font-size:0.82rem;">
                 <span style="color:var(--text-muted);">Status:</span>

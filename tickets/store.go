@@ -5,9 +5,9 @@ import (
 )
 
 // SupportTicketRepository owns support_tickets + ticket_replies —
-// the user-side report → admin-triage flow at /support, including
-// the owner-toggleable publicity flag (migration 207) and the
-// /support/public feed it drives. Phase 3 extraction.
+// the user-side report → admin-triage flow at /support. Phase 3
+// extraction. (The opt-in publicity flag and /support/public feed
+// were retired 2026-08-16; the column stays behind, unread.)
 type Store interface {
 	CreateTicket(ctx context.Context, userID int, username, subject, body, priority string) (*SupportTicket, error)
 	GetTickets(ctx context.Context, status string, limit, offset int) ([]*SupportTicket, int, error)
@@ -22,8 +22,6 @@ type Store interface {
 	// awaiting staff.
 	ReopenTicketOnMemberReply(ctx context.Context, id int64) (bool, error)
 	DeleteTicket(ctx context.Context, id int64) error
-	SetTicketPublic(ctx context.Context, ticketID int64, userID int, public bool) error
-	ListPublicTickets(ctx context.Context, limit, offset int) ([]*SupportTicket, int, error)
 	GetTicketReplies(ctx context.Context, ticketID int64) ([]*TicketReply, error)
 	CreateTicketReply(ctx context.Context, ticketID int64, userID int, username, body string, isAdmin bool) (*TicketReply, error)
 }

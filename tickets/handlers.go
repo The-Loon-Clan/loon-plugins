@@ -1,5 +1,5 @@
 // Package tickets is the support-ticket system — user submission,
-// replies, opt-in public visibility, and admin triage. Twelfth
+// replies, and admin triage. Twelfth
 // pkg/core plugin, carved from the handlers.go / admin_handler.go
 // god-files. The staff notification fan-out (OnNewTicket /
 // OnTicketReply, which also email admins) stays on the host
@@ -100,8 +100,6 @@ func (h *Handlers) TicketDetail(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	ticket, err := h.store.GetTicketByID(ctx, id)
-	// Visibility — public tickets are readable by anyone signed in;
-	// private tickets remain owner-and-admin only. Migration 207.
 	visible := err == nil && ticketVisibleTo(ticket, user.ID, user.Admin)
 	if !visible {
 		c.String(http.StatusNotFound, "ticket not found")
@@ -128,57 +126,6 @@ func (h *Handlers) TicketDetail(c *gin.Context) {
 		"Replies":    replies,
 		"OwnerRole":  ownerRole,
 		"ViewerRole": viewerRole,
-	})
-}
-
-// SetTicketVisibility — owner-only toggle for the public flag.
-// POST /support/:id/visibility?public=1 makes the ticket world-readable;
-// public=0 takes it back private. Migration 207.
-//
-// Replies stay owner-and-admin only even on public tickets — public
-// means "others can read" not "others can chime in." A future iteration
-// could add a follow / me-too signal, but this keeps the social
-// surface narrow while we learn whether opt-in publicity helps at all.
-func (h *Handlers) SetTicketVisibility(c *gin.Context) {
-	user := deps.Viewer(c)
-	if user == nil {
-		c.Redirect(http.StatusFound, "/login")
-		return
-	}
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.String(http.StatusBadRequest, "invalid id")
-		return
-	}
-	public := c.PostForm("public") == "1"
-	if err := h.store.SetTicketPublic(c.Request.Context(), id, user.ID, public); err != nil {
-		h.errs.HandlerError(c, "ticket/visibility", err)
-		return
-	}
-	c.Redirect(http.StatusFound, fmt.Sprintf("/support/%d", id))
-}
-
-// PublicTickets renders /support/public — the opt-in public ticket
-// feed. Anyone signed in can read; ticket body + replies appear on
-// click-through via the existing TicketDetail handler. Replies are
-// still restricted to owner + admin.
-func (h *Handlers) PublicTickets(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if page < 1 {
-		page = 1
-	}
-	const pageSize = 30 // mirrors host
-	offset := (page - 1) * pageSize
-	tickets, total, err := h.store.ListPublicTickets(c.Request.Context(), pageSize, offset)
-	if err != nil {
-		h.errs.HandlerError(c, "ticket/public-list", err)
-		return
-	}
-	pagination := deps.RenderPagination(page, pageSize, total, "/support/public?")
-	render(c, http.StatusOK, "Public tickets", "support_public.html", gin.H{
-		"Tickets":    tickets,
-		"Total":      total,
-		"Pagination": pagination,
 	})
 }
 
@@ -324,11 +271,11 @@ func clampSubject(s string) string {
 	return s
 }
 
-// ticketVisibleTo is the read-access predicate for a single ticket: the owner
-// and any admin always see it; everyone else only once the owner has opted it
-// public (migration 207). Callers guard the fetch error separately.
+// ticketVisibleTo — owner and admin only. The opt-in public-visibility
+// experiment (host migration 207, retired 2026-08-16) briefly widened this;
+// the `public` column it read still exists in old databases but is dead.
 func ticketVisibleTo(t *SupportTicket, viewerID int, isAdmin bool) bool {
-	return t.Public || t.UserID == viewerID || isAdmin
+	return t.UserID == viewerID || isAdmin
 }
 
 // roleData resolves role styling for the ticket detail chrome, falling back to

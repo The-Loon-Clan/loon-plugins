@@ -19,7 +19,7 @@ func (p *Plugin) Metadata() core.Metadata {
 	return core.Metadata{
 		Name:        "tickets",
 		Version:     "1.0.0",
-		Description: "Support tickets — submission, replies, opt-in public visibility, admin triage.",
+		Description: "Support tickets — submission, replies, admin triage.",
 	}
 }
 
@@ -53,11 +53,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 	g := engine.Group("/support")
 	g.Use(c.Auth.Authenticate()...)
 	g.GET("", p.handlers.SupportPage)
-	g.GET("/public", p.handlers.PublicTickets)
 	g.POST("", p.handlers.SubmitTicket)
 	g.GET("/:id", p.handlers.TicketDetail)
 	g.POST("/:id/reply", p.handlers.ReplyTicket)
-	g.POST("/:id/visibility", p.handlers.SetTicketVisibility)
 
 	adm := engine.Group("/admin/tickets")
 	adm.Use(c.Auth.RequireUser(core.RoleMod)...)

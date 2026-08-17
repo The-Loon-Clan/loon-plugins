@@ -1,15 +1,16 @@
 # tickets plugin
 
-Support tickets. A member opens one, staff reply, and the author may opt a
-ticket into being publicly readable so an answer helps the next person with the
-same question.
+Support tickets. A member opens one, staff reply. Tickets are readable by
+their owner and staff only. (An opt-in public-visibility experiment ran here
+until 2026-08-16; it was retired — nobody used it — and old databases keep a
+dead `public` column the plugin no longer reads.)
 
 Users see it at `/support`; staff triage at `/admin/tickets`.
 
 ## Surface
 
 - **authed** — `GET /support`, `POST /support`, `GET /support/:id`,
-  `POST /support/:id/reply`, `POST /support/:id/public`
+  `POST /support/:id/reply`
 - **staff** — `GET /admin/tickets`, `POST /admin/tickets/:id/status`,
   `POST /admin/tickets/:id/note`
 
@@ -21,10 +22,9 @@ is no background work.
 Two host-owned tables: `support_tickets` and `ticket_replies`.
 
 The plugin owns neither. On the origin site they arrived as host migrations 41
-and 44 (with `public` added by 207) and stayed in the public schema through the
-extraction — relocating live tables is a data migration, and this port moved
-code. `schema.sql` documents both, plus the six indexes, for a host that lacks
-them.
+and 44 and stayed in the public schema through the extraction — relocating
+live tables is a data migration, and this port moved code. `schema.sql`
+documents both, plus the indexes, for a host that lacks them.
 
 ## Dependencies
 
