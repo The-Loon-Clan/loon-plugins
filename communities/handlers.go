@@ -605,13 +605,14 @@ func (h *Handlers) modCheck(c *gin.Context, slug string) (*Community, error) {
 // PinThread — POST /c/:slug/thread/:id/pin (mod).
 func (h *Handlers) PinThread(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
-	if _, err := h.modCheck(c, slug); err != nil {
+	comm, err := h.modCheck(c, slug)
+	if err != nil {
 		c.String(http.StatusForbidden, "not a moderator")
 		return
 	}
 	threadID, _ := strconv.Atoi(c.Param("id"))
 	pinned := c.PostForm("pin") != "0"
-	if err := h.store.SetCommunityThreadPinned(c.Request.Context(), threadID, pinned); err != nil {
+	if err := h.store.SetCommunityThreadPinned(c.Request.Context(), threadID, comm.ID, pinned); err != nil {
 		h.errs.HandlerError(c, "community/pin", err)
 		return
 	}
@@ -621,13 +622,14 @@ func (h *Handlers) PinThread(c *gin.Context) {
 // LockThread — POST /c/:slug/thread/:id/lock (mod).
 func (h *Handlers) LockThread(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
-	if _, err := h.modCheck(c, slug); err != nil {
+	comm, err := h.modCheck(c, slug)
+	if err != nil {
 		c.String(http.StatusForbidden, "not a moderator")
 		return
 	}
 	threadID, _ := strconv.Atoi(c.Param("id"))
 	locked := c.PostForm("lock") != "0"
-	if err := h.store.SetCommunityThreadLocked(c.Request.Context(), threadID, locked); err != nil {
+	if err := h.store.SetCommunityThreadLocked(c.Request.Context(), threadID, comm.ID, locked); err != nil {
 		h.errs.HandlerError(c, "community/lock", err)
 		return
 	}
@@ -639,13 +641,14 @@ func (h *Handlers) LockThread(c *gin.Context) {
 // can restore it.
 func (h *Handlers) RemoveThread(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
-	if _, err := h.modCheck(c, slug); err != nil {
+	comm, err := h.modCheck(c, slug)
+	if err != nil {
 		c.String(http.StatusForbidden, "not a moderator")
 		return
 	}
 	threadID, _ := strconv.Atoi(c.Param("id"))
 	reason := strings.TrimSpace(c.PostForm("reason"))
-	if err := h.store.RemoveCommunityThread(c.Request.Context(), threadID, h.viewerID(c), reason); err != nil {
+	if err := h.store.RemoveCommunityThread(c.Request.Context(), threadID, comm.ID, h.viewerID(c), reason); err != nil {
 		h.errs.HandlerError(c, "community/remove-thread", err)
 		return
 	}
@@ -655,7 +658,8 @@ func (h *Handlers) RemoveThread(c *gin.Context) {
 // RemovePost — POST /c/:slug/thread/:id/post/:pid/remove (mod).
 func (h *Handlers) RemovePost(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
-	if _, err := h.modCheck(c, slug); err != nil {
+	comm, err := h.modCheck(c, slug)
+	if err != nil {
 		c.String(http.StatusForbidden, "not a moderator")
 		return
 	}
@@ -666,7 +670,7 @@ func (h *Handlers) RemovePost(c *gin.Context) {
 		return
 	}
 	reason := strings.TrimSpace(c.PostForm("reason"))
-	if err := h.store.RemoveCommunityPost(c.Request.Context(), postID, h.viewerID(c), reason); err != nil {
+	if err := h.store.RemoveCommunityPost(c.Request.Context(), postID, comm.ID, h.viewerID(c), reason); err != nil {
 		h.errs.HandlerError(c, "community/remove-post", err)
 		return
 	}

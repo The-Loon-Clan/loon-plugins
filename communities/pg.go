@@ -337,29 +337,37 @@ func (r *PGStore) GetCommunityThread(ctx context.Context, threadID int) (*Commun
 	return &t, nil
 }
 
-func (r *PGStore) SetCommunityThreadPinned(ctx context.Context, threadID int, pinned bool) error {
+func (r *PGStore) SetCommunityThreadPinned(ctx context.Context, threadID, communityID int, pinned bool) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE community_threads SET pinned = $2, updated_at = NOW() WHERE id = $1`,
-		threadID, pinned)
+		`UPDATE community_threads SET pinned = $2, updated_at = NOW() WHERE id = $1 AND community_id = $3`,
+		threadID, pinned, communityID)
 	return err
 }
 
-func (r *PGStore) SetCommunityThreadLocked(ctx context.Context, threadID int, locked bool) error {
+func (r *PGStore) SetCommunityThreadLocked(ctx context.Context, threadID, communityID int, locked bool) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE community_threads SET locked = $2, updated_at = NOW() WHERE id = $1`,
-		threadID, locked)
+		`UPDATE community_threads SET locked = $2, updated_at = NOW() WHERE id = $1 AND community_id = $3`,
+		threadID, locked, communityID)
 	return err
 }
 
-func (r *PGStore) RemoveCommunityThread(ctx context.Context, threadID, byUserID int, reason string) error {
-	if len(reason) > 256 {
-		reason = reason[:256]
-	}
+func (r *PGStore) RemoveCommunityThread(ctx context.Context, threadID, communityID, byUserID int, reason string) error {
+	reason = clampReason(reason)
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE community_threads
 		   SET removed_at = NOW(), removed_by = $2, removed_reason = $3, updated_at = NOW()
-		 WHERE id = $1`, threadID, byUserID, reason)
+		 WHERE id = $1 AND community_id = $4`, threadID, byUserID, reason, communityID)
 	return err
+}
+
+// clampReason caps a mod-supplied removal reason at 256 runes. Rune-based, not
+// byte-based: reason[:256] on a UTF-8 string can split a multibyte rune and
+// store invalid bytes Postgres rejects (the pgSafeText lesson).
+func clampReason(reason string) string {
+	if rs := []rune(reason); len(rs) > 256 {
+		return string(rs[:256])
+	}
+	return reason
 }
 
 // ── Posts ──────────────────────────────────────────────────────────
@@ -441,14 +449,17 @@ func (r *PGStore) UpdateCommunityPost(ctx context.Context, postID int64, userID 
 	return nil
 }
 
-func (r *PGStore) RemoveCommunityPost(ctx context.Context, postID int64, byUserID int, reason string) error {
-	if len(reason) > 256 {
-		reason = reason[:256]
-	}
+func (r *PGStore) RemoveCommunityPost(ctx context.Context, postID int64, communityID, byUserID int, reason string) error {
+	reason = clampReason(reason)
+	// Scope through the post's thread — community_posts has no community_id of
+	// its own, so a foreign post id whose thread lives in another community
+	// updates zero rows.
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE community_posts
 		   SET removed_at = NOW(), removed_by = $2, removed_reason = $3
-		 WHERE id = $1`, postID, byUserID, reason)
+		 WHERE id = $1
+		   AND thread_id IN (SELECT id FROM community_threads WHERE community_id = $4)`,
+		postID, byUserID, reason, communityID)
 	return err
 }
 

@@ -161,14 +161,21 @@ type Store interface {
 	// per the viewer's role.
 	GetCommunityThread(ctx context.Context, threadID int) (*CommunityThread, error)
 
-	SetCommunityThreadPinned(ctx context.Context, threadID int, pinned bool) error
-	SetCommunityThreadLocked(ctx context.Context, threadID int, locked bool) error
-	RemoveCommunityThread(ctx context.Context, threadID, byUserID int, reason string) error
+	// The three thread-moderation writes take communityID and scope the row to
+	// it: any member can create a community and moderate it, so a handler that
+	// only checked "you moderate the community in the URL" while updating by a
+	// bare thread id let a mod of one community act on threads in every other.
+	// The community predicate makes a foreign thread id a no-op.
+	SetCommunityThreadPinned(ctx context.Context, threadID, communityID int, pinned bool) error
+	SetCommunityThreadLocked(ctx context.Context, threadID, communityID int, locked bool) error
+	RemoveCommunityThread(ctx context.Context, threadID, communityID, byUserID int, reason string) error
 
 	// ── Posts ─────────────────────────────────────────────────────
 
 	CreateCommunityPost(ctx context.Context, threadID, userID int, body string, quotedPostID *int64) (*CommunityPost, error)
 	ListCommunityPosts(ctx context.Context, threadID, limit, offset int) ([]*CommunityPost, int, error)
 	UpdateCommunityPost(ctx context.Context, postID int64, userID int, body string) error
-	RemoveCommunityPost(ctx context.Context, postID int64, byUserID int, reason string) error
+	// communityID scopes the removal through the post's thread — same
+	// cross-community guard as the thread writes above.
+	RemoveCommunityPost(ctx context.Context, postID int64, communityID, byUserID int, reason string) error
 }
