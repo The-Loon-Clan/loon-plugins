@@ -56,64 +56,71 @@ func sampleRecent() *RecentPost {
 		CreatedByUsername: "kirisame", ViewCount: 3}
 }
 
-func topicsAndPosts() (topics []*Topic, posts []*Post, byTopic map[int][]*Post) {
+func topicsAndPosts() (topics []*Topic, posts []*Post) {
 	topics = []*Topic{sampleTopic()}
 	posts = []*Post{samplePost()}
-	byTopic = map[int][]*Post{1: posts}
 	return
 }
 
 // The three icon defines were nested inside the page in the host file, where
 // that parses because there is no outer wrapper. Wrapping the page for the
 // plugin forced them out to siblings; this is what proves they still resolve.
+// The negative assertions pin the 2026-08-17 declutter: no explorer rail, no
+// right-rail cards, no banner hero — one column and a compact header.
 func TestWikiIndexRendersWithItsIcons(t *testing.T) {
-	topics, _, byTopic := topicsAndPosts()
+	topics, _ := topicsAndPosts()
 	got := render1(t, "wiki.html", map[string]any{
 		"Topics": topics, "RecentPosts": []*RecentPost{sampleRecent()},
 		"PopularPosts": []*RecentPost{sampleRecent()},
-		"PostsByTopic": byTopic,
-		"WikiStats":    wikiLandingStats{Topics: 1, Articles: 1, Contributors: 1, Views: 3},
 	})
-	for _, want := range []string{"Getting Started", "First Steps", "Recent Updates", "Wiki Stats", "<svg"} {
+	for _, want := range []string{"Getting Started", "First Steps", "Recent Updates", "Popular Articles", "<svg"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("wiki index missing %q", want)
+		}
+	}
+	for _, gone := range []string{"wiki-shell", "wiki-rail", "wiki-hero", "Wiki Explorer", "Wiki Stats"} {
+		if strings.Contains(got, gone) {
+			t.Errorf("wiki index still carries the retired %q", gone)
 		}
 	}
 }
 
 // The same page in its recent-changes mode, which is a different branch.
 func TestWikiRecentOnlyView(t *testing.T) {
-	topics, _, byTopic := topicsAndPosts()
+	topics, _ := topicsAndPosts()
 	render1(t, "wiki.html", map[string]any{
-		"Topics": topics, "RecentPosts": []*RecentPost{sampleRecent()}, "PostsByTopic": byTopic,
-		"WikiStats":      wikiLandingStats{Topics: 1, Articles: 1},
-		"RecentOnlyView": true, "ActiveNav": "wiki",
+		"Topics": topics, "RecentPosts": []*RecentPost{sampleRecent()},
+		"RecentOnlyView": true,
 	})
 }
 
 func TestWikiTopicAndPostRender(t *testing.T) {
-	topics, posts, byTopic := topicsAndPosts()
+	_, posts := topicsAndPosts()
 	topic := render1(t, "wiki_topic.html", map[string]any{
 		"Topic": sampleTopic(), "Posts": posts,
-		"AllTopics": topics, "PostsByTopic": byTopic,
 	})
 	if !strings.Contains(topic, "Getting Started") {
 		t.Error("topic page missing its title")
 	}
+	if strings.Contains(topic, "folder-toggle") {
+		t.Error("topic page still carries the retired explorer sidebar")
+	}
 	post := render1(t, "wiki_post.html", map[string]any{
-		"Topic": sampleTopic(), "Post": samplePost(), "Posts": posts,
-		"AllTopics": topics, "PostsByTopic": byTopic,
+		"Topic": sampleTopic(), "Post": samplePost(),
 		"RenderedContent": template.HTML("<p>hello</p>"),
 	})
 	if !strings.Contains(post, "<p>hello</p>") {
 		t.Error("post page did not place the rendered markdown")
 	}
+	if strings.Contains(post, "folder-toggle") {
+		t.Error("post page still carries the retired explorer sidebar")
+	}
 }
 
 func TestWikiAdminPagesRender(t *testing.T) {
-	topics, _, byTopic := topicsAndPosts()
+	topics, posts := topicsAndPosts()
 	render1(t, "admin_wiki.html", map[string]any{
-		"Topics": topics, "PostsByTopic": byTopic,
+		"Topics": topics, "PostsByTopic": map[int][]*Post{1: posts},
 	})
 	// Both admin forms render twice each in the handlers — once for create,
 	// once for edit — and the edit branch is the one carrying a record.
@@ -131,8 +138,7 @@ func TestWikiAdminPagesRender(t *testing.T) {
 // where a missing {{else}} surfaces.
 func TestWikiPagesRenderEmpty(t *testing.T) {
 	render1(t, "wiki.html", map[string]any{
-		"Topics": []*Topic{}, "RecentPosts": []*RecentPost{}, "PopularPosts": []*RecentPost{},
-		"PostsByTopic": map[int][]*Post{}, "WikiStats": wikiLandingStats{}})
+		"Topics": []*Topic{}, "RecentPosts": []*RecentPost{}, "PopularPosts": []*RecentPost{}})
 	render1(t, "admin_wiki.html", map[string]any{
 		"Topics": []*Topic{}, "PostsByTopic": map[int][]*Post{}})
 }
@@ -147,8 +153,8 @@ func TestWikiPagesRenderEmpty(t *testing.T) {
 // check that catches this class.
 func TestEveryWikiPostFormCarriesTheCSRFField(t *testing.T) {
 	for name, data := range map[string]map[string]any{
-		"admin_wiki.html": {"Topics": func() []*Topic { ts, _, _ := topicsAndPosts(); return ts }(),
-			"PostsByTopic": func() map[int][]*Post { _, _, bt := topicsAndPosts(); return bt }(),
+		"admin_wiki.html": {"Topics": []*Topic{sampleTopic()},
+			"PostsByTopic": map[int][]*Post{1: {samplePost()}},
 			"CSRFToken":    "test-csrf"},
 		"admin_wiki_topic_form.html": {"Action": "/admin/wiki/topics/1", "Icons": TopicIcons,
 			"Topic": sampleTopic(), "CSRFToken": "test-csrf"},

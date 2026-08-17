@@ -57,14 +57,15 @@ func TestWikiTopicIcon_ExplicitIconOverridesTheSlug(t *testing.T) {
 	}
 }
 
-// An explicit colour must reach both surfaces — the left rail and the grid
-// tile — and the tile must tint its background to match rather than keeping
-// the default blue behind a custom-coloured glyph.
-func TestWikiTopicIcon_ExplicitColourStylesBothSurfaces(t *testing.T) {
+// An explicit colour must reach the grid tile — the one icon surface left
+// after the 2026-08-17 declutter removed the explorer rail — and the tile
+// must tint its background to match rather than keeping the default blue
+// behind a custom-coloured glyph.
+func TestWikiTopicIcon_ExplicitColourStylesTheGridTile(t *testing.T) {
 	out := renderWikiIndex(t, []*Topic{{Slug: "guides", Name: "Guides", Color: "#ff8800"}})
 
-	if n := strings.Count(out, "color:#ff8800"); n < 2 {
-		t.Errorf("colour appeared %d times, want it on both the rail and the grid tile", n)
+	if !strings.Contains(out, "color:#ff8800") {
+		t.Error("the chosen colour did not reach the grid tile")
 	}
 	if !strings.Contains(out, "color-mix(in srgb, #ff8800 18%, transparent)") {
 		t.Error("the grid tile did not tint its background from the chosen colour")

@@ -1,219 +1,13 @@
 {{define "wiki_post.html"}}
     <style>
-        /* Mirror the landing + topic shells so the article view feels
-           like a deepening into the same surface, not a separate page. */
-        .wiki-page { margin: 0 auto; padding: 1.6rem 1rem 3rem; }
-        .wiki-hero {
-            background: linear-gradient(135deg, rgba(91,138,245,0.10), rgba(168,85,247,0.06) 60%, var(--bg-surface));
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 1.5rem 1.75rem;
-            margin-bottom: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 1.25rem;
-            flex-wrap: wrap;
-        }
-        .wiki-hero .hero-icon {
-            width: 46px; height: 46px;
-            display: inline-flex; align-items: center; justify-content: center;
-            background: var(--blue-tint);
-            color: var(--blue);
-            border-radius: 12px;
-            font-size: 1.5rem;
-            flex-shrink: 0;
-        }
-        .wiki-hero h1 {
-            margin: 0;
-            font-size: 1.85rem;
-            font-weight: 800;
-            color: var(--text-primary);
-            letter-spacing: -0.01em;
-            line-height: 1.05;
-        }
-        .wiki-hero .hero-tagline {
-            margin: 0.2rem 0 0;
-            color: var(--text-muted);
-            font-size: 0.92rem;
-        }
+        /* One column, prose width. The explorer sidebar (every folder's
+           full page tree, pre-rendered per view) was retired 2026-08-17
+           with the landing page's rails — the breadcrumb already answers
+           "where am I", and the topic page answers "what else is here".
+           An article page is for reading the article. */
+        .wiki-page { margin: 0 auto; padding: 1.4rem 1rem 3rem; }
 
-        .wiki-layout {
-            display: grid;
-            grid-template-columns: 260px minmax(0, 1fr);
-            gap: 1.25rem;
-            align-items: start;
-        }
-        @media (max-width: 900px) {
-            /* minmax(0, 1fr) — bare 1fr resolves to minmax(auto, 1fr)
-               and lets a child's min-content (a wide code block, a
-               long heading) inflate the column past the viewport. */
-            .wiki-layout { grid-template-columns: minmax(0, 1fr); }
-        }
-
-        /* Sidebar — Wiki Explorer (same shape as topic page) */
-        .wiki-side {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 1rem 1.1rem;
-        }
-        .wiki-side .eyebrow {
-            font-size: 0.66rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--blue);
-            font-weight: 700;
-        }
-        .wiki-side h2 {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin: 0.15rem 0 0.7rem;
-        }
-        .wiki-side-pills {
-            display: flex;
-            gap: 0.4rem;
-            flex-wrap: wrap;
-            margin-bottom: 0.9rem;
-        }
-        .wiki-side-pill {
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: 0.18rem 0.6rem;
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            font-weight: 600;
-        }
-        .wiki-side-pill strong { color: var(--text-primary); margin-right: 0.25rem; }
-        .wiki-side-list { list-style: none; padding: 0; margin: 0; }
-        .wiki-side-list li { margin-bottom: 0.15rem; }
-        .wiki-side-list a {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            text-decoration: none;
-            padding: 0.45rem 0.6rem;
-            border-radius: 8px;
-            color: var(--text-primary);
-            transition: background-color 0.15s ease;
-        }
-        .wiki-side-list a:hover { background: var(--bg-elevated); }
-        .wiki-side-list .is-active > a {
-            background: var(--bg-elevated);
-            color: var(--blue);
-        }
-        .wiki-side-list .is-active > a .side-name { color: var(--text-primary); }
-        .wiki-side-list .side-icon {
-            width: 30px; height: 30px;
-            background: var(--bg-elevated);
-            border-radius: 7px;
-            display: inline-flex; align-items: center; justify-content: center;
-            color: var(--blue);
-            flex-shrink: 0;
-            overflow: hidden;
-        }
-        .wiki-side-list .side-icon img {
-            width: 100%; height: 100%;
-            object-fit: cover;
-            border-radius: 7px;
-        }
-        .wiki-side-list .side-name {
-            font-size: 0.88rem;
-            font-weight: 600;
-            flex: 1;
-            min-width: 0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .wiki-side-list .side-count {
-            font-size: 0.72rem;
-            color: var(--text-muted);
-        }
-        .wiki-side-sublist {
-            list-style: none;
-            padding: 0.15rem 0 0.5rem 0.6rem;
-            margin: 0 0 0.25rem 0.95rem;
-            border-left: 1px solid var(--border);
-        }
-        .wiki-side-sublist a {
-            padding: 0.25rem 0.55rem;
-            font-size: 0.82rem;
-            color: var(--text-muted);
-            border-radius: 6px;
-        }
-        .wiki-side-sublist a::before {
-            content: "📄";
-            margin-right: 0.35rem;
-            font-size: 0.78rem;
-        }
-        .wiki-side-sublist a:hover { color: var(--text-primary); background: var(--bg-elevated); }
-
-        /* Sidebar column wrapper — keeps the back-link flush with
-           the top of the column so it aligns with the breadcrumb. */
-        .wiki-side-col {
-            position: sticky;
-            top: 1rem;
-            align-self: start;
-        }
-
-        /* Back-link sits OUTSIDE the card, at Y=0 of the column. */
-        .wiki-back-link {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            text-decoration: none;
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            font-weight: 700;
-            margin: 0 0 0.6rem;
-            padding: 0;
-            transition: color 0.12s ease;
-        }
-        .wiki-back-link:hover { color: var(--text-primary); }
-        .wiki-back-link .back-arrow { font-size: 1rem; color: var(--blue); }
-
-        /* Folder toggle button — click the row to min/max children. */
-        .folder-toggle {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            width: 100%;
-            background: none;
-            border: none;
-            text-align: left;
-            padding: 0.45rem 0.6rem;
-            border-radius: 8px;
-            color: var(--text-primary);
-            cursor: pointer;
-            font: inherit;
-            transition: background-color 0.12s ease;
-        }
-        .folder-toggle:hover { background: var(--bg-elevated); }
-        .folder-toggle .chev {
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            margin-left: auto;
-            transition: color 0.12s ease;
-        }
-        .wiki-folder.is-active > .folder-toggle { background: var(--bg-elevated); }
-        .wiki-folder.is-active > .folder-toggle .side-name { color: var(--blue); }
-        .wiki-folder.is-open > .folder-toggle .chev,
-        .wiki-folder.is-active > .folder-toggle .chev { color: var(--blue); }
-        /* Current article — highlighted with a left accent + brighter
-           text so a reader can see "you are here" in the nav. */
-        .wiki-side-sublist .is-current a {
-            color: var(--blue);
-            background: var(--blue-tint-soft);
-            font-weight: 700;
-            border-left: 2px solid var(--blue);
-            padding-left: calc(0.55rem - 2px);
-        }
-
-        /* Article header strip — breadcrumb + title + meta. Replaces
-           the old wiki-page-header style with a denser top-of-article
-           look that matches the topic-page overview card spacing. */
+        /* Article header strip — breadcrumb + title + actions. */
         .article-header {
             display: flex;
             justify-content: space-between;
@@ -331,97 +125,34 @@
         }
     </style>
 
-    <div class="container page wiki-page">
+    {{/* page-narrow, not page: an article is prose, and the ~880px
+         column is the site's reading width. */}}
+    <div class="container page-narrow wiki-page">
 
-        <div class="wiki-layout">
-
-            {{/* Sidebar with the current category expanded and the
-                 current article highlighted via .is-current. */}}
-            <aside class="wiki-side-col">
-                <a href="/wiki" class="wiki-back-link">
-                    <span class="back-arrow">←</span> Wiki Explorer
-                </a>
-                <div class="wiki-side">
-                {{$totalPosts := 0}}{{range .AllTopics}}{{$totalPosts = (add $totalPosts .PostCount)}}{{end}}
-                <div class="wiki-side-pills">
-                    <span class="wiki-side-pill"><strong>{{len .AllTopics}}</strong>Folders</span>
-                    <span class="wiki-side-pill"><strong>{{$totalPosts}}</strong>pages</span>
+        <div class="article-header">
+            <div style="flex:1;min-width:0;">
+                <div class="breadcrumb-line">
+                    <a href="/wiki">Wiki</a>
+                    <span style="color:var(--text-muted);"> / </span>
+                    <a href="/wiki/{{.Topic.Slug}}">{{.Topic.Name}}</a>
                 </div>
-                <ul class="wiki-side-list">
-                    {{range $t := .AllTopics}}
-                    <li class="wiki-folder {{if eq $t.ID $.Topic.ID}}is-active is-open{{end}}" data-folder-id="{{$t.ID}}">
-                        <button type="button" class="folder-toggle" aria-expanded="{{if eq $t.ID $.Topic.ID}}true{{else}}false{{end}}">
-                            <span class="side-icon">{{if eq $t.Slug "amenzb"}}<img src="/static/posters/ame.png" alt="ameNZB">{{else}}📁{{end}}</span>
-                            <span class="side-name">{{$t.Name}}</span>
-                            <span class="side-count">{{$t.PostCount}}</span>
-                            <span class="chev">{{if eq $t.ID $.Topic.ID}}▾{{else}}▸{{end}}</span>
-                        </button>
-                        <ul class="wiki-side-sublist" {{if ne $t.ID $.Topic.ID}}style="display:none;"{{end}}>
-                            {{if eq $t.ID $.Topic.ID}}
-                            {{range $.Posts}}
-                            <li {{if eq .ID $.Post.ID}}class="is-current"{{end}}>
-                                <a href="/wiki/{{$.Topic.Slug}}/{{.Slug}}">{{.Title}}</a>
-                            </li>
-                            {{end}}
-                            {{else}}
-                            {{range index $.PostsByTopic $t.ID}}
-                            <li><a href="/wiki/{{$t.Slug}}/{{.Slug}}">{{.Title}}</a></li>
-                            {{else}}
-                            <li><span style="font-size:0.78rem;color:var(--text-muted);padding:0.25rem 0.55rem;display:block;">No pages yet.</span></li>
-                            {{end}}
-                            {{end}}
-                        </ul>
-                    </li>
-                    {{end}}
-                </ul>
-                </div>{{/* /.wiki-side card */}}
-            </aside>
-
-            {{/* Main — breadcrumb + article body. */}}
-            <div>
-                <div class="article-header">
-                    <div style="flex:1;min-width:0;">
-                        <div class="breadcrumb-line">
-                            <a href="/wiki">Wiki</a>
-                            <span style="color:var(--text-muted);"> / </span>
-                            <a href="/wiki/{{.Topic.Slug}}">{{.Topic.Name}}</a>
-                        </div>
-                        <h1>{{.Post.Title}}</h1>
-                    </div>
-                    {{if .IsAdmin}}
-                    <div class="article-actions">
-                        <a href="/admin/wiki/posts/{{.Post.ID}}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
-                    </div>
-                    {{end}}
-                </div>
-
-                <article class="wiki-post-card">
-                    <div class="wiki-content">{{.RenderedContent}}</div>
-                    <div class="wiki-post-meta">
-                        Created {{.Post.CreatedAt.Format "Jan 02, 2006"}}
-                        {{if not (eq (.Post.UpdatedAt.Format "Jan 02, 2006") (.Post.CreatedAt.Format "Jan 02, 2006"))}}
-                        &middot; Updated {{.Post.UpdatedAt.Format "Jan 02, 2006"}}
-                        {{end}}
-                    </div>
-                </article>
+                <h1>{{.Post.Title}}</h1>
             </div>
+            {{if .IsAdmin}}
+            <div class="article-actions">
+                <a href="/admin/wiki/posts/{{.Post.ID}}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+            </div>
+            {{end}}
         </div>
-    </div>
 
-    <script>
-        // Folder toggle in the Wiki Explorer sidebar. Click the row
-        // to min/max its children list.
-        document.querySelectorAll('.folder-toggle').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const li = btn.closest('.wiki-folder');
-                if (!li) return;
-                const sub = li.querySelector('.wiki-side-sublist');
-                const open = li.classList.toggle('is-open');
-                if (sub) sub.style.display = open ? '' : 'none';
-                btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-                const chev = btn.querySelector('.chev');
-                if (chev) chev.textContent = open ? '▾' : '▸';
-            });
-        });
-    </script>
+        <article class="wiki-post-card">
+            <div class="wiki-content">{{.RenderedContent}}</div>
+            <div class="wiki-post-meta">
+                Created {{.Post.CreatedAt.Format "Jan 02, 2006"}}
+                {{if not (eq (.Post.UpdatedAt.Format "Jan 02, 2006") (.Post.CreatedAt.Format "Jan 02, 2006"))}}
+                &middot; Updated {{.Post.UpdatedAt.Format "Jan 02, 2006"}}
+                {{end}}
+            </div>
+        </article>
+    </div>
 {{end}}

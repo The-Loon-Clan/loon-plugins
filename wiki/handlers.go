@@ -71,56 +71,9 @@ func makeSlug(s string) string {
 
 // Public handlers
 
-// postsByTopicMap loads every wiki post and folds them into a map
-// keyed by topic_id, so the sidebar can pre-render the full
-// collapsed tree for client-side toggling. Returns an empty map on
-// error — the sidebar gracefully shows just folder rows. The store
-// method blanks the content column so this stays a slim payload.
-func (h *Handlers) postsByTopicMap(c *gin.Context) map[int][]*Post {
-	all, err := h.store.AllPosts(c.Request.Context())
-	if err != nil {
-		return map[int][]*Post{}
-	}
-	out := make(map[int][]*Post, 16)
-	for _, p := range all {
-		out[p.TopicID] = append(out[p.TopicID], p)
-	}
-	return out
-}
-
-// wikiLandingStats is the compact, live summary shown in the landing page's
-// right rail. It is derived from the same lightweight AllPosts projection used
-// by the explorer, so rendering the layout does not add another database query.
-type wikiLandingStats struct {
-	Topics       int
-	Articles     int
-	Contributors int
-	Views        int64
-}
-
-func buildWikiLandingStats(topics []*Topic, postsByTopic map[int][]*Post) wikiLandingStats {
-	stats := wikiLandingStats{Topics: len(topics)}
-	contributors := make(map[int]struct{})
-	for _, posts := range postsByTopic {
-		stats.Articles += len(posts)
-		for _, post := range posts {
-			stats.Views += post.ViewCount
-			if post.CreatedBy > 0 {
-				contributors[post.CreatedBy] = struct{}{}
-			}
-		}
-	}
-	stats.Contributors = len(contributors)
-
-	// AllPosts is best-effort on this page. If that projection fails, retain a
-	// truthful article total from the per-topic COUNT returned by Topics.
-	if stats.Articles == 0 {
-		for _, topic := range topics {
-			stats.Articles += topic.PostCount
-		}
-	}
-	return stats
-}
+// (postsByTopicMap and the landing-stats builder lived here until the
+// 2026-08-17 declutter: they fed the explorer sidebar tree and the
+// right-rail stats card, both retired with their layouts.)
 
 func (h *Handlers) Index(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -134,13 +87,10 @@ func (h *Handlers) Index(c *gin.Context) {
 	// extras. Empty slices render an empty panel naturally.
 	recentPosts, _ := h.store.RecentPosts(ctx, 10)
 	popularPosts, _ := h.store.PopularPosts(ctx, 5)
-	postsByTopic := h.postsByTopicMap(c)
 	render(c, http.StatusOK, "Wiki", "wiki.html", gin.H{
 		"Topics":       topics,
 		"RecentPosts":  recentPosts,
 		"PopularPosts": popularPosts,
-		"PostsByTopic": postsByTopic,
-		"WikiStats":    buildWikiLandingStats(topics, postsByTopic),
 	})
 }
 
@@ -153,14 +103,10 @@ func (h *Handlers) RecentChanges(c *gin.Context) {
 	// 50 caps the page at one screenful and matches the in-flight
 	// edit feed conventions elsewhere on the site.
 	recentPosts, _ := h.store.RecentPosts(ctx, 50)
-	postsByTopic := h.postsByTopicMap(c)
 	render(c, http.StatusOK, "Wiki", "wiki.html", gin.H{
 		"Topics":         topics,
 		"RecentPosts":    recentPosts,
-		"PostsByTopic":   postsByTopic,
-		"WikiStats":      buildWikiLandingStats(topics, postsByTopic),
 		"RecentOnlyView": true,
-		"ActiveNav":      "recent",
 	})
 }
 
@@ -189,17 +135,9 @@ func (h *Handlers) Topic(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "failed to get wiki posts")
 		return
 	}
-	// AllTopics drives the left sidebar so the topic page mirrors the
-	// landing layout — clicking a category in the sidebar from a topic
-	// page stays in the same shell (hero + sidebar + main grid)
-	// instead of jumping to a stripped-down topic view. Failure here is
-	// non-fatal; the topic page still renders without the sidebar list.
-	allTopics, _ := h.store.Topics(ctx)
 	render(c, http.StatusOK, "Wiki", "wiki_topic.html", gin.H{
-		"Topic":        topic,
-		"Posts":        posts,
-		"AllTopics":    allTopics,
-		"PostsByTopic": h.postsByTopicMap(c),
+		"Topic": topic,
+		"Posts": posts,
 	})
 }
 
@@ -224,20 +162,10 @@ func (h *Handlers) Post(c *gin.Context) {
 	// grows, and the column lives in wiki_posts so any drift is
 	// trivially reset via UPDATE.
 	_ = h.store.IncrementPostView(ctx, post.ID)
-	// AllTopics + Posts power the same hero+sidebar shell as the landing
-	// and topic pages — the article-view page renders inside the same
-	// surface with the current topic expanded and the current article
-	// highlighted. Both lookups are best-effort; failure means the
-	// sidebar comes up empty but the article body still renders.
-	allTopics, _ := h.store.Topics(ctx)
-	siblingPosts, _ := h.store.PostsByTopic(ctx, topic.ID)
 	render(c, http.StatusOK, "Wiki", "wiki_post.html", gin.H{
 		"Topic":           topic,
 		"Post":            post,
 		"RenderedContent": h.renderContent(ctx, post.Content),
-		"AllTopics":       allTopics,
-		"Posts":           siblingPosts,
-		"PostsByTopic":    h.postsByTopicMap(c),
 	})
 }
 
