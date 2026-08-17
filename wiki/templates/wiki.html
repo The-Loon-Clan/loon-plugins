@@ -19,7 +19,7 @@
             flex-wrap: wrap;
             margin-bottom: 1.4rem;
         }
-        .wiki-head h1 {
+        .wiki-head h2 {
             font-size: 1.45rem;
             font-weight: 800;
             color: var(--text-primary);
@@ -347,7 +347,9 @@
              Replaces the 260px banner hero and both rails. */}}
         <div class="wiki-head">
             <div>
-                <h1>ameNZB Wiki</h1>
+                {{/* h2, not h1: this fragment renders inside site_page.html,
+                     whose panel heading is already the page's one h1. */}}
+                <h2>ameNZB Wiki</h2>
                 <p class="wiki-tagline">Guides, tools and references for ameNZB and Usenet.</p>
             </div>
             <div class="wiki-head-side">

@@ -26,7 +26,7 @@
             text-decoration: none;
         }
         .article-header .breadcrumb-line a:hover { text-decoration: underline; }
-        .article-header h1 {
+        .article-header h2 {
             font-size: 1.7rem;
             font-weight: 800;
             margin: 0;
@@ -136,7 +136,9 @@
                     <span style="color:var(--text-muted);"> / </span>
                     <a href="/wiki/{{.Topic.Slug}}">{{.Topic.Name}}</a>
                 </div>
-                <h1>{{.Post.Title}}</h1>
+                {{/* h2, not h1 — same rule as wiki.html's header: the host
+                     chrome already gave this page its h1. */}}
+                <h2>{{.Post.Title}}</h2>
             </div>
             {{if .IsAdmin}}
             <div class="article-actions">
