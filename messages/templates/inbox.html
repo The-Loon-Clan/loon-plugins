@@ -340,7 +340,15 @@
             </aside>
 
             {{/* ── Right pane: empty | conversation | announcement | compose ── */}}
-            <main class="ib-pane">
+            {{/* A <section>, NOT <main>. The fragment lands inside the host page,
+                 which already has the document's one <main> — a second is
+                 invalid HTML, and worse, the host's page-gutter rule
+                 (layout.css: main { margin: 0 var(--gutter) }) applied to it,
+                 which is exactly the mystery margin that kept this pane from
+                 filling its grid column after the .container wrapper was
+                 already gone. An element name was the last piece of the odd
+                 spacing. */}}
+            <section class="ib-pane">
 
                 {{if .ComposeOk}}
                 <p class="notice notice--success m-3 mb-0">Message sent.</p>
@@ -475,7 +483,7 @@
                         {{end}}
                     </div>
                 {{end}}
-            </main>
+            </section>
         </div>
     </div>
 
