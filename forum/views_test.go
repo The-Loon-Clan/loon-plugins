@@ -328,3 +328,47 @@ func TestLegacyContractIsStillAccepted(t *testing.T) {
 		t.Error("a host that wired no Markdown was accepted; forum posts are user-authored")
 	}
 }
+
+// A reader who finishes the last post on page 2 should reach page 3 from
+// where they are. The pager used to exist only in the toolbar above the
+// posts, so the way forward was to scroll back past everything you had
+// just read — on a full page of long posts, several viewports of it.
+func TestThreadPagerSitsBelowThePostsAsWellAsAbove(t *testing.T) {
+	got := render1(t, "community_thread.html", threadData(42, false))
+
+	if n := strings.Count(got, `<nav id="pg">`); n != 2 {
+		t.Errorf("the thread page rendered the pager %d time(s), want 2 (above and below the posts)", n)
+	}
+
+	// Position, not just presence: the second one has to fall after the
+	// post list closes, or it is the same pager counted twice.
+	posts := strings.Index(got, `class="post-list forum-post-list"`)
+	bottom := strings.Index(got, "forum-post-toolbar-bottom")
+	if posts < 0 {
+		t.Fatal("the post list is missing")
+	}
+	if bottom < 0 {
+		t.Fatal("the bottom pager toolbar is missing")
+	}
+	if bottom < posts {
+		t.Error("the bottom pager rendered above the post list")
+	}
+	// It belongs before the reply box: the pager is how you leave the
+	// page, the reply box is how you add to it.
+	if reply := strings.Index(got, `id="reply-form"`); reply >= 0 && bottom > reply {
+		t.Error("the bottom pager rendered after the reply form")
+	}
+}
+
+// A single-page thread has nothing to page to, and the host passes an
+// empty string for it. The bottom toolbar must collapse rather than
+// render an empty bar under every short thread on the site.
+func TestThreadOmitsTheBottomPagerOnASinglePage(t *testing.T) {
+	d := threadData(42, false)
+	d["PaginationHTML"] = template.HTML("")
+	got := render1(t, "community_thread.html", d)
+
+	if strings.Contains(got, "forum-post-toolbar-bottom") {
+		t.Error("a single-page thread still rendered the bottom pager toolbar")
+	}
+}

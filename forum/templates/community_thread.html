@@ -203,6 +203,21 @@
             {{end}}
             </div>
 
+            {{/* The same pager again, below the posts. A reader reaches
+                 the next page from where the last post left them, not by
+                 scrolling back past everything they just read — and on a
+                 full page of long posts that is the whole viewport
+                 several times over. Same markup and classes as the top
+                 toolbar so the two render identically; the host supplies
+                 the paginator, so an empty string here (single page)
+                 collapses to nothing and the toolbar is skipped. */}}
+            {{if .PaginationHTML}}
+            <div class="forum-post-toolbar forum-post-toolbar-bottom">
+                <span>{{.Total}} posts in this conversation</span>
+                <div class="forum-post-pagination">{{.PaginationHTML}}</div>
+            </div>
+            {{end}}
+
             {{if not .Thread.Locked}}
             <section class="reply-card reply-form forum-reply-card" id="reply-form" aria-labelledby="forum-reply-title">
                 <div class="reply-header" id="forum-reply-title">Post a Reply</div>
