@@ -269,14 +269,20 @@ func (h *Handlers) TorrentPage(c *gin.Context) {
 	// Lowercased and length-checked before it reaches the store: the hash is a
 	// path segment, and a page that 500s on a typo is a page a crawler can
 	// fill the error log with.
+	//
+	// A hash that is not one, or names nothing, sends the reader to the LIST
+	// rather than answering with a page. It is where they were going next
+	// anyway — a stale bookmark or a torrent since removed is not an error
+	// they can act on — and a bare-text 404 in the middle of a themed site
+	// reads as the site being broken rather than as the torrent being gone.
 	hash := strings.ToLower(strings.TrimSpace(c.Param("info_hash")))
 	if len(hash) != 40 {
-		c.String(http.StatusNotFound, "no such torrent")
+		c.Redirect(http.StatusFound, "/tracker")
 		return
 	}
 	t, err := h.store.Torrent(ctx, hash)
 	if err != nil || t == nil {
-		c.String(http.StatusNotFound, "no such torrent")
+		c.Redirect(http.StatusFound, "/tracker")
 		return
 	}
 	pk, err := h.passkeyFor(ctx, userID)
