@@ -208,10 +208,12 @@
                  scrolling back past everything they just read — and on a
                  full page of long posts that is the whole viewport
                  several times over. Same markup and classes as the top
-                 toolbar so the two render identically; the host supplies
-                 the paginator, so an empty string here (single page)
-                 collapses to nothing and the toolbar is skipped. */}}
-            {{if .PaginationHTML}}
+                 toolbar so the two render identically. Gated on the page
+                 COUNT, not on the pager markup: the host's paginator
+                 returns a non-empty nav even for a single page, so
+                 testing the string put a second toolbar under every
+                 short thread on the site with nothing to page to. */}}
+            {{if gt .TotalPages 1}}
             <div class="forum-post-toolbar forum-post-toolbar-bottom">
                 <span>{{.Total}} posts in this conversation</span>
                 <div class="forum-post-pagination">{{.PaginationHTML}}</div>

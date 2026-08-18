@@ -334,7 +334,9 @@ func TestLegacyContractIsStillAccepted(t *testing.T) {
 // posts, so the way forward was to scroll back past everything you had
 // just read — on a full page of long posts, several viewports of it.
 func TestThreadPagerSitsBelowThePostsAsWellAsAbove(t *testing.T) {
-	got := render1(t, "community_thread.html", threadData(42, false))
+	d := threadData(42, false)
+	d["TotalPages"] = 3
+	got := render1(t, "community_thread.html", d)
 
 	if n := strings.Count(got, `<nav id="pg">`); n != 2 {
 		t.Errorf("the thread page rendered the pager %d time(s), want 2 (above and below the posts)", n)
@@ -360,12 +362,16 @@ func TestThreadPagerSitsBelowThePostsAsWellAsAbove(t *testing.T) {
 	}
 }
 
-// A single-page thread has nothing to page to, and the host passes an
-// empty string for it. The bottom toolbar must collapse rather than
-// render an empty bar under every short thread on the site.
+// A single-page thread has nothing to page to. The guard is on the page
+// COUNT rather than on the pager markup, because the host's paginator
+// returns a non-empty nav even for one page — gating on the string put a
+// redundant toolbar under every short thread in production.
 func TestThreadOmitsTheBottomPagerOnASinglePage(t *testing.T) {
 	d := threadData(42, false)
-	d["PaginationHTML"] = template.HTML("")
+	d["TotalPages"] = 1
+	// Deliberately NOT empty: this is what the host actually passes for a
+	// single-page thread, and it is what the previous guard tripped over.
+	d["PaginationHTML"] = template.HTML(`<nav id="pg"></nav>`)
 	got := render1(t, "community_thread.html", d)
 
 	if strings.Contains(got, "forum-post-toolbar-bottom") {
