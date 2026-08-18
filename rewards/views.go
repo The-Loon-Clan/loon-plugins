@@ -123,6 +123,32 @@ func (p *Plugin) parseTemplates() error {
 			return d.String()
 		},
 		"str": derefStr,
+		// The three the EDIT form needs: the same values the row displays, in
+		// the shape the inputs take. Without them an edit would render blank
+		// fields over real data, and saving would replace a medal payout with
+		// nothing because the box looked empty.
+		"durform": func(d *time.Duration) string {
+			if d == nil {
+				return ""
+			}
+			return d.String()
+		},
+		"payoutamount": func(ps []Payout, kind string) string {
+			for _, p := range ps {
+				if string(p.Kind) == kind && p.Amount > 0 {
+					return strconv.Itoa(p.Amount)
+				}
+			}
+			return ""
+		},
+		"payouttarget": func(ps []Payout, kind string) string {
+			for _, p := range ps {
+				if string(p.Kind) == kind {
+					return p.Target
+				}
+			}
+			return ""
+		},
 		"payouts": func(ps []Payout) string {
 			if len(ps) == 0 {
 				// Worth shouting about: this reward will be refused at grant
@@ -229,30 +255,31 @@ const (
 	rewardsPage = "/admin/p/rewards"
 )
 
-func (p *Plugin) actionCreateReward(gc *gin.Context) (template.HTML, error) {
-	ctx := gc.Request.Context()
-	slug := strings.TrimSpace(gc.PostForm("slug"))
-	if slug == "" {
-		return p.redirect(gc, rewardsPage, "", "slug is required")
-	}
+// rewardFromForm reads a reward definition off the admin form.
+//
+// Shared by create and update, because the validation is the definition: an
+// edit can break a reward exactly as thoroughly as a create can — a recurring
+// one that loses its scheduled event, a payout list emptied to nothing — and a
+// form that only checks on the way in is one an edit walks straight past.
+//
+// Returns a member-facing refusal rather than redirecting, so the two callers
+// keep their own success messages.
+func (p *Plugin) rewardFromForm(gc *gin.Context, slug string, enabled bool) (r Reward, refusal string) {
 	kind := Kind(gc.PostForm("kind"))
 	switch kind {
 	case KindOneOff, KindRecurring, KindPerUnit:
 	default:
-		return p.redirect(gc, rewardsPage, "", "unknown kind")
+		return r, "unknown kind"
 	}
 	delivery := Delivery(gc.PostForm("delivery"))
 	if delivery != DeliveryAuto && delivery != DeliveryClaim {
-		return p.redirect(gc, rewardsPage, "", "unknown delivery")
+		return r, "unknown delivery"
 	}
 
-	r := Reward{
+	r = Reward{
 		Slug: slug, Name: strings.TrimSpace(gc.PostForm("name")), Kind: kind,
 		Trigger: strings.TrimSpace(gc.PostForm("trigger")), Delivery: delivery,
-		// Deliberately created DISABLED. A reward that starts paying the
-		// moment it is typed leaves no chance to check the payout line first,
-		// and un-paying is not a thing.
-		Enabled: false,
+		Enabled: enabled,
 	}
 	// A slug from the events plugin's dropdown, not an id. Existence is checked
 	// against the capability rather than assumed: a typo'd slug would otherwise
@@ -262,19 +289,19 @@ func (p *Plugin) actionCreateReward(gc *gin.Context) (template.HTML, error) {
 	if r.EventSlug != "" && p.events != nil {
 		_, known, err := p.events.Event(gc.Request.Context(), r.EventSlug)
 		if err != nil {
-			return p.redirect(gc, rewardsPage, "", "could not check the scheduled event: "+err.Error())
+			return r, "could not check the scheduled event: " + err.Error()
 		}
 		if !known {
-			return p.redirect(gc, rewardsPage, "", "no scheduled event called "+r.EventSlug)
+			return r, "no scheduled event called " + r.EventSlug
 		}
 	}
 	if kind == KindRecurring && r.EventSlug == "" {
-		return p.redirect(gc, rewardsPage, "", "a recurring reward needs a scheduled event — that is its reset")
+		return r, "a recurring reward needs a scheduled event — that is its reset"
 	}
 	if raw := strings.TrimSpace(gc.PostForm("expires_after")); raw != "" {
 		d, err := time.ParseDuration(raw)
 		if err != nil || d <= 0 {
-			return p.redirect(gc, rewardsPage, "", "expiry must be a positive Go duration like 720h")
+			return r, "expiry must be a positive Go duration like 720h"
 		}
 		r.ExpiresAfter = &d
 	}
@@ -293,13 +320,55 @@ func (p *Plugin) actionCreateReward(gc *gin.Context) (template.HTML, error) {
 		r.Payouts = append(r.Payouts, Payout{Kind: PayoutLootbox, Target: target})
 	}
 	if len(r.Payouts) == 0 {
-		return p.redirect(gc, rewardsPage, "", "a reward with no payout lines would grant nothing")
+		return r, "a reward with no payout lines would grant nothing"
 	}
 
+	return r, ""
+}
+
+func (p *Plugin) actionCreateReward(gc *gin.Context) (template.HTML, error) {
+	ctx := gc.Request.Context()
+	slug := strings.TrimSpace(gc.PostForm("slug"))
+	if slug == "" {
+		return p.redirect(gc, rewardsPage, "", "slug is required")
+	}
+	// Deliberately created DISABLED. A reward that starts paying the moment it
+	// is typed leaves no chance to check the payout line first, and un-paying
+	// is not a thing.
+	r, refusal := p.rewardFromForm(gc, slug, false)
+	if refusal != "" {
+		return p.redirect(gc, rewardsPage, "", refusal)
+	}
 	if _, err := p.admin.CreateReward(ctx, r); err != nil {
 		return p.redirect(gc, rewardsPage, "", err.Error())
 	}
 	return p.redirect(gc, rewardsPage, "reward+"+slug+"+created+(disabled)", "")
+}
+
+// actionUpdateReward edits a definition, payout lines included.
+//
+// The page could create and toggle and nothing else, so a wrong payout or a
+// mistyped trigger could only be fixed in SQL — and there is no delete either,
+// which made every mistake permanent. Grants already made are untouched: they
+// froze their payout lines at grant time precisely so an edit cannot rewrite
+// what a member was already promised.
+func (p *Plugin) actionUpdateReward(gc *gin.Context) (template.HTML, error) {
+	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
+	if id <= 0 {
+		return p.redirect(gc, rewardsPage, "", "no such reward")
+	}
+	slug := strings.TrimSpace(gc.PostForm("slug"))
+	// Enabled is not on the edit form — toggling is its own action, and a save
+	// that silently re-enabled a reward an operator had switched off would be
+	// the worst kind of surprise. Carried through as it stands.
+	r, refusal := p.rewardFromForm(gc, slug, gc.PostForm("was_enabled") == "1")
+	if refusal != "" {
+		return p.redirect(gc, rewardsPage, "", refusal)
+	}
+	if err := p.admin.UpdateReward(gc.Request.Context(), id, r); err != nil {
+		return p.redirect(gc, rewardsPage, "", err.Error())
+	}
+	return p.redirect(gc, rewardsPage, "reward+"+slug+"+saved", "")
 }
 
 func (p *Plugin) actionToggleReward(gc *gin.Context) (template.HTML, error) {

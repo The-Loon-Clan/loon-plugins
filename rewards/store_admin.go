@@ -43,6 +43,10 @@ type AdminStore interface {
 	// that should always be zero if the expiry sweep is running.
 	CountStalePending(ctx context.Context, now time.Time) (int, error)
 	CreateReward(ctx context.Context, r Reward) (int64, error)
+	// UpdateReward overwrites a reward's own fields and REPLACES its payout
+	// lines. The slug is not among them — it is what every granter, trigger
+	// and store item names.
+	UpdateReward(ctx context.Context, id int64, r Reward) error
 	SetRewardEnabled(ctx context.Context, rewardID int64, enabled bool) error
 
 	// ── lootboxes (lootbox.go) ─────────────────────────────────────────────
@@ -204,4 +208,59 @@ func (s *PGStore) AddLootboxEntry(ctx context.Context, e LootboxEntry) error {
 func (s *PGStore) RemoveLootboxEntry(ctx context.Context, id int64) error {
 	_, err := s.exec(ctx, `DELETE FROM lootbox_entries WHERE id = $1`, id)
 	return err
+}
+
+// UpdateReward overwrites a reward's own fields and replaces its payout lines.
+//
+// Replacing rather than merging, because the create form builds the whole set
+// from one submit and an edit form does the same: a merge would need per-line
+// ids on the form, and "what does this reward pay" is a list an operator reads
+// whole. Both happen in one transaction — a reward that briefly has no payouts
+// is one that briefly pays nothing while looking healthy.
+//
+// GRANTS ARE NOT TOUCHED. A grant freezes its payout lines into
+// reward_grant_payouts at grant time precisely so that editing the definition
+// cannot rewrite history: what a member was already promised stays promised,
+// and this changes what FUTURE grants pay.
+//
+// The SLUG is deliberately not settable — every granter, trigger and store item
+// names it, and renaming would detach them all silently.
+func (s *PGStore) UpdateReward(ctx context.Context, id int64, r Reward) error {
+	if id <= 0 {
+		return fmt.Errorf("no such reward")
+	}
+	if len(r.Payouts) == 0 {
+		return fmt.Errorf("a reward with no payout lines would grant nothing")
+	}
+	var secs *float64
+	if r.ExpiresAfter != nil {
+		v := r.ExpiresAfter.Seconds()
+		secs = &v
+	}
+	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx, `
+			UPDATE rewards
+			   SET name = $2, kind = $3, scheduled_event_slug = $4, trigger = $5,
+			       expires_after = ($6::float8 || ' seconds')::interval, delivery = $7
+			 WHERE id = $1`,
+			id, r.Name, string(r.Kind), nullSlug(r.EventSlug), r.Trigger, secs, string(r.Delivery))
+		if err != nil {
+			return fmt.Errorf("update reward: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("no such reward")
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM reward_payouts WHERE reward_id = $1`, id); err != nil {
+			return fmt.Errorf("clear payouts: %w", err)
+		}
+		for i, p := range r.Payouts {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO reward_payouts (reward_id, kind, target, amount, ordinal)
+				VALUES ($1,$2,NULLIF($3,''),$4,$5)`,
+				id, string(p.Kind), p.Target, p.Amount, i); err != nil {
+				return fmt.Errorf("payout %s: %w", p.Kind, err)
+			}
+		}
+		return nil
+	})
 }

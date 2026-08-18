@@ -66,6 +66,71 @@
             </form>
           </td>
         </tr>
+        {{/* The edit row. This page could create and toggle and nothing else,
+             so a wrong payout or a mistyped trigger could only be fixed in
+             SQL — and there is no delete either, which made every mistake
+             permanent.
+
+             Payout lines are REPLACED by what this form carries, which is why
+             they are prefilled: a save that dropped the medal line because the
+             box was empty would be the same silent wipe the events form had.
+             Grants already made are untouched — they froze their lines at
+             grant time. */}}
+        <tr>
+          <td colspan="9" class="pt-0">
+            <details>
+              <summary class="text-muted small">Edit {{.Slug}}</summary>
+              <form method="post" action="/admin/p/rewards/reward-update" class="row g-2 align-items-end mt-1">
+                <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                <input type="hidden" name="id" value="{{.ID}}">
+                <input type="hidden" name="slug" value="{{.Slug}}">
+                {{/* Enabled is toggled by its own button, never by a save. */}}
+                <input type="hidden" name="was_enabled" value="{{if .Enabled}}1{{else}}0{{end}}">
+                <div class="col-md-2"><label class="form-label small mb-0">Name</label>
+                  <input name="name" class="form-control form-control-sm" value="{{.Name}}"></div>
+                <div class="col-md-2"><label class="form-label small mb-0">Kind</label>
+                  <select name="kind" class="form-select form-select-sm">
+                    {{$k := .Kind}}
+                    <option value="one_off" {{if eq $k "one_off"}}selected{{end}}>one_off</option>
+                    <option value="recurring" {{if eq $k "recurring"}}selected{{end}}>recurring</option>
+                    <option value="per_unit" {{if eq $k "per_unit"}}selected{{end}}>per_unit</option>
+                  </select></div>
+                <div class="col-md-2"><label class="form-label small mb-0">Event</label>
+                  <select name="scheduled_event_slug" class="form-select form-select-sm">
+                    {{$e := .EventSlug}}
+                    <option value="">&mdash; none &mdash;</option>
+                    {{range $.ScheduledEvents}}<option value="{{.Slug}}" {{if eq .Slug $e}}selected{{end}}>{{.Slug}}</option>{{end}}
+                  </select></div>
+                <div class="col-md-2"><label class="form-label small mb-0">Trigger</label>
+                  <input name="trigger" class="form-control form-control-sm" value="{{.Trigger}}" list="trigger-options"></div>
+                <div class="col-md-2"><label class="form-label small mb-0">Delivery</label>
+                  <select name="delivery" class="form-select form-select-sm">
+                    {{$d := .Delivery}}
+                    <option value="auto" {{if eq $d "auto"}}selected{{end}}>auto</option>
+                    <option value="claim" {{if eq $d "claim"}}selected{{end}}>claim</option>
+                  </select></div>
+                <div class="col-md-2"><label class="form-label small mb-0">Expires</label>
+                  <input name="expires_after" class="form-control form-control-sm" value="{{durform .ExpiresAfter}}" placeholder="never"></div>
+
+                <div class="col-md-2"><label class="form-label small mb-0">Points</label>
+                  <input name="points" class="form-control form-control-sm" value="{{payoutamount .Payouts "points"}}"></div>
+                <div class="col-md-2"><label class="form-label small mb-0">Medal</label>
+                  <input name="medal" class="form-control form-control-sm" value="{{payouttarget .Payouts "medal"}}"></div>
+                <div class="col-md-3"><label class="form-label small mb-0">Lootbox</label>
+                  <select name="lootbox" class="form-select form-select-sm">
+                    {{$b := payouttarget .Payouts "lootbox"}}
+                    <option value="">&mdash; none &mdash;</option>
+                    {{range $.Boxes}}<option value="{{.}}" {{if eq . $b}}selected{{end}}>{{.}}</option>{{end}}
+                  </select></div>
+                <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Save changes</button></div>
+                <div class="col-12"><span class="text-muted small">
+                  Payout lines are replaced by what this form carries. Grants already
+                  made keep what they froze.
+                </span></div>
+              </form>
+            </details>
+          </td>
+        </tr>
       {{else}}
         <tr><td colspan="9" class="text-muted">No rewards yet.</td></tr>
       {{end}}
