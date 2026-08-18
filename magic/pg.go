@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/jmoiron/sqlx"
@@ -251,4 +252,82 @@ func (s *PGStore) ByTorrent(ctx context.Context, infoHash string) ([]Magic, erro
 		 WHERE info_hash = $1
 		 ORDER BY id DESC LIMIT 50`, infoHash)
 	return out, err
+}
+
+// ── the buff-def editor ─────────────────────────────────────────────────────
+//
+// The six classics arrive through EnsureBuffDefs, which touches nothing that
+// exists — so an operator's edits survive a restart, and a seventh promotion
+// was previously a SQL statement because there was nothing else to add one
+// with. These four are that missing surface.
+
+// AllBuffDefs lists every def, enabled or not — the admin view, where BuffDefs
+// lists only what a caster may pick.
+func (s *PGStore) AllBuffDefs(ctx context.Context) ([]BuffDef, error) {
+	var out []BuffDef
+	err := s.db.SelectContext(ctx, &out,
+		`SELECT id, slug, name, up_ratio, down_ratio, ordinal, enabled
+		   FROM magic.buff_defs ORDER BY ordinal, id`)
+	return out, err
+}
+
+// CreateBuffDef adds one. The ratio rules are the schema's too — one is the
+// message an operator reads, the other is the guarantee.
+func (s *PGStore) CreateBuffDef(ctx context.Context, d BuffDef) error {
+	if err := validBuff(d); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO magic.buff_defs (slug, name, up_ratio, down_ratio, ordinal, enabled)
+		VALUES ($1, $2, $3, $4, $5, TRUE)`,
+		d.Slug, d.Name, d.UpRatio, d.DownRatio, d.Ordinal)
+	return err
+}
+
+// UpdateBuffDef edits one by id. The SLUG is not settable: a cast records the
+// ratios it was made with, but the def's slug is what the cast form posts, and
+// renaming it under a member mid-session is a refusal they cannot read.
+func (s *PGStore) UpdateBuffDef(ctx context.Context, id int64, d BuffDef) error {
+	if id <= 0 {
+		return fmt.Errorf("no such multiplier")
+	}
+	if err := validBuff(d); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE magic.buff_defs SET name = $2, up_ratio = $3, down_ratio = $4, ordinal = $5
+		 WHERE id = $1`, id, d.Name, d.UpRatio, d.DownRatio, d.Ordinal)
+	return err
+}
+
+// SetBuffDefEnabled hides a def from the cast form without deleting it.
+//
+// Disabling rather than deleting is the honest lever for a classic: casts
+// already made keep working — they carry their own ratios — and an operator
+// who removes "2× Free" for a season can put it back without retyping it.
+func (s *PGStore) SetBuffDefEnabled(ctx context.Context, id int64, on bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE magic.buff_defs SET enabled = $2 WHERE id = $1`, id, on)
+	return err
+}
+
+// DeleteBuffDef removes one outright. Existing casts are unaffected: a magic
+// row records the ratios it was cast with, not a reference to the def.
+func (s *PGStore) DeleteBuffDef(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM magic.buff_defs WHERE id = $1`, id)
+	return err
+}
+
+// validBuff holds the two rules that make a multiplier mean something.
+func validBuff(d BuffDef) error {
+	switch {
+	case d.Name == "":
+		return fmt.Errorf("a name is required — a caster picks by name, not by slug")
+	case d.UpRatio < 0 || d.DownRatio < 0:
+		return fmt.Errorf("ratios cannot be negative")
+	case d.UpRatio == 1 && d.DownRatio == 1:
+		// Not pedantry: this is a promotion that promotes nothing, and it
+		// would sit in the cast form charging points for no effect.
+		return fmt.Errorf("1× up and 1× down is no promotion at all")
+	}
+	return nil
 }

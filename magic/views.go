@@ -32,8 +32,8 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		// Still routed, still linkable, and still the page that shows a
 		// member's level and their casts; it simply is not a destination the
 		// site advertises browsing to.
-		Nav: core.NavHint{Menu: core.NavHidden},
-		Render:  p.renderMagic,
+		Nav:    core.NavHint{Menu: core.NavHidden},
+		Render: p.renderMagic,
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			"cast":      p.actionCast,
 			"terminate": p.actionTerminate,
@@ -45,7 +45,11 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		Slug: "magic", Title: "Magic", Slot: core.SlotAdminSettings,
 		Render: func(gc *gin.Context) (template.HTML, error) { return p.renderSettings(gc) },
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
-			"save": p.actionSaveSettings,
+			"save":        p.actionSaveSettings,
+			"buff-create": p.actionCreateBuff,
+			"buff-update": p.actionUpdateBuff,
+			"buff-toggle": p.actionToggleBuff,
+			"buff-delete": p.actionDeleteBuff,
 		},
 	})
 }
@@ -285,9 +289,20 @@ func (p *Plugin) renderSettings(gc *gin.Context) (template.HTML, error) {
 		return "", err
 	}
 	var buf bytes.Buffer
+	// The multiplier catalogue, edited on the same page as the prices that
+	// scale it. It had no editor at all: the six classics arrived through
+	// EnsureBuffDefs and a seventh needed a SQL statement.
+	defs, derr := p.st.AllBuffDefs(gc.Request.Context())
+	if derr != nil {
+		// Non-fatal: the prices above are still worth showing, and an empty
+		// catalogue panel is a visible symptom where a 500 hides everything.
+		defs = nil
+	}
 	if err := p.tmpl.ExecuteTemplate(&buf, "magic_settings.html", map[string]any{
 		"Config":    cfg,
+		"Buffs":     defs,
 		"Msg":       gc.Query("msg"),
+		"Err":       gc.Query("err"),
 		"CSRFToken": p.csrfToken(gc),
 	}); err != nil {
 		return "", err
@@ -307,3 +322,70 @@ func (p *Plugin) actionSaveSettings(gc *gin.Context) (template.HTML, error) {
 	gc.Redirect(http.StatusSeeOther, "/admin/settings/magic?msg="+url.QueryEscape("saved"))
 	return "", nil
 }
+
+// ── the multiplier catalogue ────────────────────────────────────────────
+//
+// The six classics are ensured by slug at Start and never overwritten, so an
+// operator's edits survive a restart. What was missing was any way to make the
+// seventh, or to change the ratios of the six: those were SQL statements.
+
+// buffFromForm reads a definition off either form.
+func buffFromForm(gc *gin.Context) BuffDef {
+	d := BuffDef{
+		Slug: strings.TrimSpace(gc.PostForm("slug")),
+		Name: strings.TrimSpace(gc.PostForm("name")),
+	}
+	d.UpRatio, _ = strconv.ParseFloat(strings.TrimSpace(gc.PostForm("up_ratio")), 64)
+	d.DownRatio, _ = strconv.ParseFloat(strings.TrimSpace(gc.PostForm("down_ratio")), 64)
+	d.Ordinal, _ = strconv.Atoi(strings.TrimSpace(gc.PostForm("ordinal")))
+	return d
+}
+
+func (p *Plugin) settingsRedirect(gc *gin.Context, msg, errMsg string) (template.HTML, error) {
+	q := "?msg=" + url.QueryEscape(msg)
+	if errMsg != "" {
+		q = "?err=" + url.QueryEscape(errMsg)
+	}
+	gc.Redirect(http.StatusSeeOther, "/admin/settings/magic"+q)
+	return "", nil
+}
+
+func (p *Plugin) actionCreateBuff(gc *gin.Context) (template.HTML, error) {
+	d := buffFromForm(gc)
+	if !slugPattern.MatchString(d.Slug) {
+		return p.settingsRedirect(gc, "", "slugs are lowercase with dashes")
+	}
+	if err := p.st.CreateBuffDef(gc.Request.Context(), d); err != nil {
+		return p.settingsRedirect(gc, "", err.Error())
+	}
+	return p.settingsRedirect(gc, "added "+d.Slug, "")
+}
+
+func (p *Plugin) actionUpdateBuff(gc *gin.Context) (template.HTML, error) {
+	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
+	if err := p.st.UpdateBuffDef(gc.Request.Context(), id, buffFromForm(gc)); err != nil {
+		return p.settingsRedirect(gc, "", err.Error())
+	}
+	return p.settingsRedirect(gc, "saved", "")
+}
+
+func (p *Plugin) actionToggleBuff(gc *gin.Context) (template.HTML, error) {
+	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
+	on := gc.PostForm("on") == "1"
+	if err := p.st.SetBuffDefEnabled(gc.Request.Context(), id, on); err != nil {
+		return p.settingsRedirect(gc, "", err.Error())
+	}
+	return p.settingsRedirect(gc, "saved", "")
+}
+
+func (p *Plugin) actionDeleteBuff(gc *gin.Context) (template.HTML, error) {
+	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
+	if err := p.st.DeleteBuffDef(gc.Request.Context(), id); err != nil {
+		return p.settingsRedirect(gc, "", err.Error())
+	}
+	return p.settingsRedirect(gc, "removed", "")
+}
+
+// slugPattern is the shape a new multiplier's slug must have — the same one
+// every catalogue in this tree uses, and the same one the schema would accept.
+var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)

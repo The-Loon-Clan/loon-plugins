@@ -30,3 +30,122 @@
         (magic.buff_defs) and the six classics are re-ensured every boot.
     </p>
 </form>
+
+{{/* ── the multiplier catalogue ──────────────────────────────────────────
+
+     The six classics arrive through EnsureBuffDefs, which inserts what is
+     missing by slug and touches nothing that exists — so edits made here
+     survive a restart, and a seventh promotion no longer needs SQL, which is
+     what it needed before this panel existed.
+
+     Disable rather than delete is the honest lever for a classic: casts
+     already made carry their own ratios and keep working either way, and an
+     operator who drops "2× Free" for a season can put it back without
+     retyping it. */}}
+<section class="panelV2 mt-4">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#star"></use></svg>
+            Multipliers
+        </h2>
+        <div class="panel__actions"><span class="panel__action">{{len .Buffs}}</span></div>
+    </header>
+    <div class="panel__body panel__body--flush">
+        {{if .Buffs}}
+        <div class="data-table-wrapper">
+            <table class="data-table">
+                <caption class="visually-hidden">Every multiplier a cast can use, its ratios and whether it is offered</caption>
+                <thead>
+                    <tr><th>Order</th><th>Name</th><th>Slug</th><th>Up</th><th>Down</th><th>State</th><th></th></tr>
+                </thead>
+                <tbody>
+                {{$csrf := .CSRFToken}}
+                {{range .Buffs}}
+                    <tr>
+                        <td>{{.Ordinal}}</td>
+                        <td>{{.Name}}</td>
+                        <td><code>{{.Slug}}</code></td>
+                        <td>{{.UpRatio}}&times;</td>
+                        <td>{{.DownRatio}}&times;</td>
+                        <td>{{if .Enabled}}<span class="tag tag--success">offered</span>{{else}}<span class="tag">hidden</span>{{end}}</td>
+                        <td class="text-end">
+                            <form method="post" action="/admin/settings/magic/buff-toggle" style="display:inline">
+                                <input type="hidden" name="_csrf" value="{{$csrf}}">
+                                <input type="hidden" name="id" value="{{.ID}}">
+                                <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
+                                <button class="button button--sm" type="submit">{{if .Enabled}}Hide{{else}}Offer{{end}}</button>
+                            </form>
+                            <form method="post" action="/admin/settings/magic/buff-delete" style="display:inline"
+                                  onsubmit="return confirm('Remove {{.Slug}}? Casts already made keep their own ratios and are unaffected.');">
+                                <input type="hidden" name="_csrf" value="{{$csrf}}">
+                                <input type="hidden" name="id" value="{{.ID}}">
+                                <button class="button button--sm" type="submit">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="7" style="padding-top:0">
+                            <details>
+                                <summary class="text-muted small">Edit {{.Name}}</summary>
+                                <form method="post" action="/admin/settings/magic/buff-update" class="mt-2">
+                                    <input type="hidden" name="_csrf" value="{{$csrf}}">
+                                    <input type="hidden" name="id" value="{{.ID}}">
+                                    {{/* The slug is not editable: it is what the cast form posts,
+                                         and renaming it under a member mid-session is a refusal
+                                         they cannot read. */}}
+                                    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:end">
+                                        <label class="form__label" for="bd-name-{{.ID}}">Name
+                                            <input id="bd-name-{{.ID}}" name="name" class="form__input" value="{{.Name}}">
+                                        </label>
+                                        <label class="form__label" for="bd-up-{{.ID}}">Upload &times;
+                                            <input id="bd-up-{{.ID}}" name="up_ratio" class="form__input" value="{{.UpRatio}}" size="6">
+                                        </label>
+                                        <label class="form__label" for="bd-down-{{.ID}}">Download &times;
+                                            <input id="bd-down-{{.ID}}" name="down_ratio" class="form__input" value="{{.DownRatio}}" size="6">
+                                        </label>
+                                        <label class="form__label" for="bd-ord-{{.ID}}">Order
+                                            <input id="bd-ord-{{.ID}}" name="ordinal" class="form__input" inputmode="numeric" value="{{.Ordinal}}" size="5">
+                                        </label>
+                                        <button class="button button--primary button--sm" type="submit">Save changes</button>
+                                    </div>
+                                </form>
+                            </details>
+                        </td>
+                    </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{else}}
+        <div class="p-3 text-muted" style="font-size:0.85rem;">
+            No multipliers yet &mdash; the six classics are inserted at start-up.
+        </div>
+        {{end}}
+
+        <form method="post" action="/admin/settings/magic/buff-create" class="p-3">
+            <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+            <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:end">
+                <label class="form__label" for="bd-slug">Slug
+                    <input id="bd-slug" name="slug" class="form__input" placeholder="triple-up" pattern="[a-z0-9]+(-[a-z0-9]+)*">
+                </label>
+                <label class="form__label" for="bd-new-name">Name
+                    <input id="bd-new-name" name="name" class="form__input" placeholder="3&times; Upload">
+                </label>
+                <label class="form__label" for="bd-new-up">Upload &times;
+                    <input id="bd-new-up" name="up_ratio" class="form__input" value="1" size="6">
+                </label>
+                <label class="form__label" for="bd-new-down">Download &times;
+                    <input id="bd-new-down" name="down_ratio" class="form__input" value="1" size="6">
+                </label>
+                <label class="form__label" for="bd-new-ord">Order
+                    <input id="bd-new-ord" name="ordinal" class="form__input" inputmode="numeric" value="0" size="5">
+                </label>
+                <button class="button button--primary button--sm" type="submit">Add multiplier</button>
+            </div>
+            <p class="text-muted small mt-2 m-0">
+                Ratios are credit multipliers: <code>1&times; up / 0&times; down</code> is free leech.
+                1&times;/1&times; is refused &mdash; it charges points for no effect.
+            </p>
+        </form>
+    </div>
+</section>
