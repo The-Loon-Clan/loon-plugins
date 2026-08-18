@@ -40,6 +40,11 @@ const (
 	PayoutMedal       PayoutKind = "medal"
 	PayoutAchievement PayoutKind = "achievement"
 	PayoutUsernameFX  PayoutKind = "username_fx"
+	// PayoutLootbox opens a box: Target is the box slug, one of its entries is
+	// drawn by weight, and the reward that entry names is granted. Handled by
+	// this plugin rather than by a host registration — the box, the draw and
+	// the reward it lands on are all rewards' own furniture (lootbox.go).
+	PayoutLootbox PayoutKind = "lootbox"
 )
 
 // GrantState tracks a grant from offered to settled.

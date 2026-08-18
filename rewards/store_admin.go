@@ -44,6 +44,25 @@ type AdminStore interface {
 	CountStalePending(ctx context.Context, now time.Time) (int, error)
 	CreateReward(ctx context.Context, r Reward) (int64, error)
 	SetRewardEnabled(ctx context.Context, rewardID int64, enabled bool) error
+
+	// ── lootboxes (lootbox.go) ─────────────────────────────────────────────
+	//
+	// A box has no row of its own, so there is no create or delete for one:
+	// adding the first entry makes a box exist and removing the last unmakes
+	// it, which is the only definition that cannot go out of step with its
+	// contents.
+
+	// LootboxSlugs lists every box that has entries, for a picker.
+	LootboxSlugs(ctx context.Context) ([]string, error)
+	// LootboxEntries reads one box in display order, reward names joined on.
+	LootboxEntries(ctx context.Context, boxSlug string) ([]LootboxEntry, error)
+	// AddLootboxEntry adds or re-weights one prize. Upsert on (box, reward),
+	// because the schema's UNIQUE says a repeat is a weight rather than a
+	// second line, and an admin who adds the same prize twice means the
+	// second number.
+	AddLootboxEntry(ctx context.Context, e LootboxEntry) error
+	// RemoveLootboxEntry drops one line by id.
+	RemoveLootboxEntry(ctx context.Context, id int64) error
 }
 
 var _ AdminStore = (*PGStore)(nil)
@@ -146,4 +165,43 @@ func nullSlug(slug string) any {
 		return nil
 	}
 	return slug
+}
+
+// ── lootboxes ───────────────────────────────────────────────────────────────
+
+func (s *PGStore) LootboxSlugs(ctx context.Context) ([]string, error) {
+	var out []string
+	err := s.sel(ctx, &out,
+		`SELECT DISTINCT box_slug FROM lootbox_entries ORDER BY box_slug`)
+	return out, err
+}
+
+// LootboxEntries joins the reward's slug and name on, because every surface
+// that lists a box lists what is IN it, and an id is not something an operator
+// or a member can read.
+func (s *PGStore) LootboxEntries(ctx context.Context, boxSlug string) ([]LootboxEntry, error) {
+	var out []LootboxEntry
+	err := s.sel(ctx, &out, `
+		SELECT e.id, e.box_slug, e.reward_id, e.weight, e.ordinal,
+		       r.slug AS reward_slug, r.name AS reward_name
+		  FROM lootbox_entries e
+		  JOIN rewards r ON r.id = e.reward_id
+		 WHERE e.box_slug = $1
+		 ORDER BY e.ordinal, e.id`, boxSlug)
+	return out, err
+}
+
+func (s *PGStore) AddLootboxEntry(ctx context.Context, e LootboxEntry) error {
+	_, err := s.exec(ctx, `
+		INSERT INTO lootbox_entries (box_slug, reward_id, weight, ordinal)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (box_slug, reward_id)
+		DO UPDATE SET weight = EXCLUDED.weight, ordinal = EXCLUDED.ordinal`,
+		e.BoxSlug, e.RewardID, e.Weight, e.Ordinal)
+	return err
+}
+
+func (s *PGStore) RemoveLootboxEntry(ctx context.Context, id int64) error {
+	_, err := s.exec(ctx, `DELETE FROM lootbox_entries WHERE id = $1`, id)
+	return err
 }

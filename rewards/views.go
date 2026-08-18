@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,6 +38,23 @@ type adminVM struct {
 	Now     time.Time
 	Msg     string
 	Err     string
+
+	// Lootboxes: the slugs that exist, the box being edited, and its lines.
+	// A box has no row of its own — it IS its slug — so "which box" is a
+	// query parameter rather than a selected id, and the editor is open on
+	// whichever one ?box= names.
+	// CSRFToken for every form on this page. It was ABSENT, and so were the
+	// tokens: five POST forms carrying none, against a host whose CSRF
+	// middleware gates every POST globally — so toggling a reward, creating
+	// one and test-granting all answered 403 for every operator who tried.
+	// The access audit cannot see this class (it probes WITH a valid token by
+	// design), which is why the template test below counts tokens per form.
+	CSRFToken string
+
+	Boxes      []string
+	PickedBox  string
+	BoxEntries []LootboxEntry
+	BoxTotal   int
 
 	// The event whose windows are being authored, when one is selected.
 	// Zero means the windows panel is collapsed.
@@ -76,12 +94,15 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		Description: "What is earnable, what it pays, and what has actually been granted.",
 		Nav:         core.NavHint{Group: "Operations"},
 		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.renderPage(gc.Request.Context(), "rewards_admin.html", gc.Query("msg"), gc.Query("err"))
+			return p.renderPageBox(gc.Request.Context(), "rewards_admin.html",
+				gc.Query("msg"), gc.Query("err"), gc.Query("box"), p.csrfToken(gc))
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
-			"reward-create": p.actionCreateReward,
-			"reward-toggle": p.actionToggleReward,
-			"test-grant":    p.actionTestGrant,
+			"reward-create":  p.actionCreateReward,
+			"reward-toggle":  p.actionToggleReward,
+			"test-grant":     p.actionTestGrant,
+			"lootbox-add":    p.actionLootboxAdd,
+			"lootbox-remove": p.actionLootboxRemove,
 		},
 	})
 }
@@ -127,8 +148,16 @@ func (p *Plugin) parseTemplates() error {
 }
 
 func (p *Plugin) renderPage(ctx context.Context, tmpl string, msg, errMsg string) (template.HTML, error) {
+	return p.renderPageBox(ctx, tmpl, msg, errMsg, "", "")
+}
+
+// renderPageBox is renderPage with a lootbox open in the editor. Separate
+// entry point rather than a parameter on every caller: three of the four
+// callers have no box to open, and threading an empty string through them
+// would say nothing.
+func (p *Plugin) renderPageBox(ctx context.Context, tmpl, msg, errMsg, box, csrf string) (template.HTML, error) {
 	now := time.Now()
-	vm := adminVM{Now: now, Msg: msg, Err: errMsg}
+	vm := adminVM{Now: now, Msg: msg, Err: errMsg, CSRFToken: csrf}
 	if p.events != nil {
 		// Non-fatal: a page that cannot list events is still worth rendering,
 		// and the picker degrading to "none" is a visible symptom where a 500
@@ -145,10 +174,24 @@ func (p *Plugin) renderPage(ctx context.Context, tmpl string, msg, errMsg string
 		return "", err
 	}
 	vm.Triggers = p.triggerOptions(ctx, vm.Rewards)
+	// Lootboxes. Non-fatal like the pickers above: a box list that cannot be
+	// read should cost its own panel, not the page.
+	if boxes, berr := p.admin.LootboxSlugs(ctx); berr == nil {
+		vm.Boxes = boxes
+	}
 	// Deliberately not fatal: a validator that can take the page down with it
 	// is worse than no validator, and the page's first job is to show state.
 	if vm.Findings, err = p.Validate(ctx); err != nil {
 		vm.Findings = []Finding{{SeverityWarn, "validator", "could not run: " + err.Error(), ""}}
+	}
+	// The box under edit, when one was named. Its entries carry the reward
+	// names, so the table reads as prizes rather than as ids.
+	if box != "" {
+		vm.PickedBox = box
+		if entries, eerr := p.admin.LootboxEntries(ctx, box); eerr == nil {
+			vm.BoxEntries = entries
+			vm.BoxTotal = LootboxTotalWeight(entries)
+		}
 	}
 	var sb strings.Builder
 	if err := p.tmpl.ExecuteTemplate(&sb, tmpl, vm); err != nil {
@@ -349,4 +392,56 @@ func knownTriggers(rewards []Reward) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ── lootbox editing ─────────────────────────────────────────────────────────
+
+// lootboxSlug is the shape a box slug must have — the same one the schema's
+// CHECK enforces, so the form refuses what the table would refuse anyway. Both
+// exist on purpose: one is the message, the other is the guarantee.
+var lootboxSlug = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// actionLootboxAdd puts a prize in a box, or re-weights one already there.
+//
+// Creating a box IS adding its first entry: the box has no row of its own, so
+// there is no "create box" to do first and no way to end up with an empty one.
+func (p *Plugin) actionLootboxAdd(gc *gin.Context) (template.HTML, error) {
+	box := strings.TrimSpace(gc.PostForm("box"))
+	if !lootboxSlug.MatchString(box) {
+		return p.redirect(gc, rewardsPage, "", "box+names+are+lowercase+with+dashes")
+	}
+	rewardID, err := strconv.ParseInt(gc.PostForm("reward_id"), 10, 64)
+	if err != nil || rewardID <= 0 {
+		return p.redirect(gc, rewardsPage, "", "pick+a+reward+for+the+box")
+	}
+	// Weight defaults to 1 rather than 0: zero is refused by the schema, and an
+	// operator who left the field alone meant "the same chance as the others",
+	// not "never".
+	weight := 1
+	if n, err := strconv.Atoi(strings.TrimSpace(gc.PostForm("weight"))); err == nil && n > 0 {
+		weight = n
+	}
+	ordinal, _ := strconv.Atoi(strings.TrimSpace(gc.PostForm("ordinal")))
+	if err := p.admin.AddLootboxEntry(gc.Request.Context(), LootboxEntry{
+		BoxSlug: box, RewardID: rewardID, Weight: weight, Ordinal: ordinal,
+	}); err != nil {
+		return p.redirect(gc, rewardsPage, "", err.Error())
+	}
+	// Back to the box that was just edited, not to the top of the page: an
+	// operator building a box adds several lines in a row.
+	return p.redirect(gc, rewardsPage+"?box="+url.QueryEscape(box), "box+updated", "")
+}
+
+// actionLootboxRemove drops one line. Removing the last one unmakes the box,
+// which is the only definition of "delete a box" that cannot leave one behind
+// with nothing in it.
+func (p *Plugin) actionLootboxRemove(gc *gin.Context) (template.HTML, error) {
+	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
+	box := strings.TrimSpace(gc.PostForm("box"))
+	if id > 0 {
+		if err := p.admin.RemoveLootboxEntry(gc.Request.Context(), id); err != nil {
+			return p.redirect(gc, rewardsPage, "", err.Error())
+		}
+	}
+	return p.redirect(gc, rewardsPage+"?box="+url.QueryEscape(box), "box+updated", "")
 }

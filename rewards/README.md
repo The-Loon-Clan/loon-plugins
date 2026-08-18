@@ -12,6 +12,40 @@ answered "have I already paid this?" differently — a ledger high-water mark, a
 anniversary-day match plus a NOT EXISTS, and a bespoke table — and every new
 rule re-answered it. Getting it wrong pays somebody twice.
 
+
+## Lootboxes
+
+A **lootbox** is a named, weighted set of rewards; opening it draws one and
+grants it. Built at **Admin → Rewards**, and paid out like anything else — a
+payout of kind `lootbox` whose target is the box name — so an achievement, a
+scheduled event, the pot's consolation or a store item can hand one over
+without any of them learning what a box is.
+
+- **One table, no box row.** `lootbox_entries (box_slug, reward_id, weight,
+  ordinal)`. The box IS its slug: adding the first prize makes it exist,
+  removing the last unmakes it. A header table would let a box exist with
+  nothing in it — a box that draws nothing and reports no error.
+- **Weights are relative within a box**, so 50/30/20 and 5/3/2 are the same
+  odds. Zero is refused by the schema: an entry that can never be drawn is a
+  mistake worth reporting, and disabling one is deleting it. The admin table
+  shows the resulting **chance** to one decimal, because "how likely is this"
+  is the question and the weight column does not answer it.
+- **`reward_id` is a real FK, ON DELETE CASCADE.** A deleted reward takes its
+  entries with it rather than leaving a box that draws a prize which no longer
+  exists — a dangling id fails at the moment a member opens the box, which is
+  the worst possible moment to find out.
+- **The draw is `crypto/rand`**, walking entries sorted by id so row order
+  cannot become a bias. A failed entropy read pays the FIRST entry rather than
+  failing the open: the member has already paid for the box, and the fallback
+  must not be the rare one. `pickByWeight` is split out and tested
+  exhaustively over the range — a probabilistic test of a random draw proves
+  nothing about the odds.
+- The prize is granted through the same `GrantOneOff` every other giver uses,
+  referenced `lootbox:<payout id>`, so a retry cannot double-pay.
+
+Visuals are deliberately absent for now: the box is data, and what it looks
+like when it opens is a separate decision.
+
 ## Surface
 
 Two admin pages under Operations, because events are not reward-specific — a

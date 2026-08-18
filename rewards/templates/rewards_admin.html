@@ -53,11 +53,13 @@
           <td>{{dur .ExpiresAfter}}</td>
           <td class="text-nowrap">
             <form method="post" action="/admin/p/rewards/reward-toggle" class="d-inline">
+              <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="id" value="{{.ID}}">
               <input type="hidden" name="enabled" value="{{if .Enabled}}0{{else}}1{{end}}">
               <button class="btn btn-sm btn-outline-secondary">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
             </form>
             <form method="post" action="/admin/p/rewards/test-grant" class="d-inline">
+              <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="id" value="{{.ID}}">
               <button class="btn btn-sm btn-outline-warning"{{if not .Enabled}} disabled{{end}}
                       title="Grants this reward to YOU, right now, on your own balance. Enable the reward first &mdash; a claim goes through the real path, which refuses a disabled reward.">Test on me</button>
@@ -72,6 +74,7 @@
   </div>
   <div class="card-body border-top">
     <form method="post" action="/admin/p/rewards/reward-create" class="row g-2 align-items-end">
+              <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
       <div class="col-md-2"><label class="form-label small mb-0">Slug</label>
         <input name="slug" class="form-control form-control-sm" placeholder="test-login" required></div>
       <div class="col-md-2"><label class="form-label small mb-0">Kind</label>
@@ -174,6 +177,102 @@
       {{end}}
       </tbody>
     </table>
+  </div>
+</div>
+
+{{/* ── lootboxes ─────────────────────────────────────────────────────────
+
+     A box is a named, weighted set of rewards; opening it draws one. It has
+     no row of its own — the box IS its slug — so there is no create button
+     and no delete: adding the first prize makes a box exist, removing the
+     last unmakes it. That is the only definition that cannot go out of step
+     with what is in it.
+
+     A box is handed over like anything else, through a payout of kind
+     `lootbox` targeting the slug, so an achievement, an event or a store
+     item can give one without learning what a box is. */}}
+<div class="panelV2 mt-4">
+  <header class="panel__header">
+    <h2 class="panel__heading">
+      <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#folder"></use></svg>
+      Lootboxes
+    </h2>
+    {{if .Boxes}}
+    <div class="panel__actions">
+      {{range .Boxes}}<a class="panel__action" href="?box={{.}}">{{.}}</a>{{end}}
+    </div>
+    {{end}}
+  </header>
+  <div class="panel__body">
+    <p class="text-muted small mt-0">
+      Pay one out with a payout of kind <code>lootbox</code> whose target is the
+      box name. Weights are relative within a box &mdash; 50/30/20 and 5/3/2 are
+      the same odds.
+    </p>
+
+    {{if .PickedBox}}
+    <h3 class="h6">{{.PickedBox}}</h3>
+    {{if .BoxEntries}}
+    <div class="data-table-wrapper">
+      <table class="data-table">
+        <caption class="visually-hidden">What is in the {{.PickedBox}} box, and how likely each prize is</caption>
+        <thead>
+          <tr><th>Order</th><th>Prize</th><th class="text-end">Weight</th><th class="text-end">Chance</th><th></th></tr>
+        </thead>
+        <tbody>
+        {{$box := .PickedBox}}{{$total := .BoxTotal}}{{$csrf := .CSRFToken}}
+        {{range .BoxEntries}}
+          <tr>
+            <td>{{.Ordinal}}</td>
+            <td>{{.RewardName}} <code>{{.RewardSlug}}</code></td>
+            <td class="text-end">{{.Weight}}</td>
+            {{/* The chance, not just the weight: "how likely is this" is the
+                 question an operator is actually asking, and the weight column
+                 does not answer it without arithmetic. */}}
+            <td class="text-end">{{printf "%.1f" (.Chance $total)}}%</td>
+            <td class="text-end">
+              <form method="post" action="/admin/p/rewards/lootbox-remove" style="display:inline">
+                <input type="hidden" name="_csrf" value="{{$csrf}}">
+                <input type="hidden" name="id" value="{{.ID}}">
+                <input type="hidden" name="box" value="{{$box}}">
+                <button class="button button--sm" type="submit">Remove</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="text-muted small">Nothing in this box yet.</p>
+    {{end}}
+    {{end}}
+
+    <form method="post" action="/admin/p/rewards/lootbox-add" class="mt-3">
+      <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:end">
+        <label class="form__label" for="lb-box">Box
+          <input id="lb-box" name="box" class="form__input" value="{{.PickedBox}}"
+                 placeholder="daily-crate" pattern="[a-z0-9]+(-[a-z0-9]+)*">
+        </label>
+        <label class="form__label" for="lb-reward">Prize
+          <select id="lb-reward" name="reward_id" class="form__input">
+            {{range .Rewards}}<option value="{{.ID}}">{{.Name}} ({{.Slug}})</option>{{end}}
+          </select>
+        </label>
+        <label class="form__label" for="lb-weight">Weight
+          <input id="lb-weight" name="weight" class="form__input" inputmode="numeric" value="1" size="5">
+        </label>
+        <label class="form__label" for="lb-ordinal">Order
+          <input id="lb-ordinal" name="ordinal" class="form__input" inputmode="numeric" value="0" size="5">
+        </label>
+        <button class="button button--primary button--sm" type="submit">Add to box</button>
+      </div>
+      <p class="text-muted small mt-2 m-0">
+        Adding a prize already in the box changes its weight rather than adding a
+        second line, so the odds stay readable.
+      </p>
+    </form>
   </div>
 </div>
 

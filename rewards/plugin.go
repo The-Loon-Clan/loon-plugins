@@ -16,6 +16,7 @@ package rewards
 
 import (
 	"context"
+	"crypto/rand"
 	"embed"
 	"errors"
 	"fmt"
@@ -147,6 +148,48 @@ func (p *Plugin) Provision(c *core.Core) error {
 		// traceable to the exact frozen line that produced it.
 		_, err := c.Points.Award(ctx, g.UserID, amount, "reward", g.RewardSlug, payout.ID)
 		return err
+	})
+
+	// A lootbox is opened HERE, not by a host registration: the box, the draw
+	// and the reward it lands on are all this plugin's own furniture. The
+	// drawn prize is granted through the same by-slug path every other giver
+	// uses, so a box can only ever contain something that path would accept.
+	//
+	// The reference carries the grant payout id, so a box opened twice by a
+	// retry settles once — the idempotence every granter here relies on.
+	p.engine.Handle(PayoutLootbox, func(ctx context.Context, g Grant, payout Payout) error {
+		entries, err := p.admin.LootboxEntries(ctx, payout.Target)
+		if err != nil {
+			return fmt.Errorf("lootbox %q: %w", payout.Target, err)
+		}
+		won, err := DrawLootbox(rand.Reader, entries)
+		if err != nil {
+			// An empty box is a configuration fault, and the member is owed
+			// something. Refusing the payout leaves the grant unsettled and
+			// visible rather than quietly paying nothing.
+			return fmt.Errorf("lootbox %q: %w", payout.Target, err)
+		}
+		prize, err := p.store.RewardByID(ctx, won.RewardID)
+		if err != nil {
+			return fmt.Errorf("lootbox %q prize: %w", payout.Target, err)
+		}
+		if prize == nil {
+			return fmt.Errorf("lootbox %q drew reward %d, which no longer exists", payout.Target, won.RewardID)
+		}
+		ref := fmt.Sprintf("lootbox:%d", payout.ID)
+		granted, err := byslugGranter{store: p.store, engine: p.engine, admin: p.admin}.
+			GrantOneOff(ctx, g.UserID, prize.Slug, ref)
+		if err != nil {
+			return fmt.Errorf("lootbox %q granting %q: %w", payout.Target, prize.Slug, err)
+		}
+		if !granted {
+			// Already held, or already granted under this reference. Both are
+			// a settled line rather than a failure: a retry must not loop, and
+			// a member cannot be given the same one-off twice by design.
+			log.Printf("rewards: lootbox %s drew %s for user %d — nothing new to grant",
+				payout.Target, prize.Slug, g.UserID)
+		}
+		return nil
 	})
 
 	// Every other payout kind comes from outside. A host that registers none
