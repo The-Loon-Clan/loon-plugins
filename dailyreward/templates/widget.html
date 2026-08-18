@@ -13,6 +13,7 @@
     </div>
     {{if not .Claimed}}
     <form method="post" action="/plugin/dailyreward/claim" data-dr-form>
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
       {{.Captcha}}
       <button class="btn btn-primary btn-sm mt-2" type="submit">Claim +{{.Reward}} points</button>
     </form>

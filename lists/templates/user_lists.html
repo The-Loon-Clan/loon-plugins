@@ -8,6 +8,7 @@
             <div class="card-header">Create New Collection</div>
             <div class="card-body">
                 <form method="POST" action="/lists">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-2">
                         <input type="text" name="name" class="form-control" placeholder="Collection name" required maxlength="100">
                     </div>
@@ -49,16 +50,19 @@
                         <td style="width:200px;vertical-align:middle;">
                             {{if .Public}}
                             <form method="POST" action="/lists/{{.ID}}/visibility" class="d-inline me-1">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="public" value="0">
                                 <button class="btn btn-sm btn-outline-secondary">Make Private</button>
                             </form>
                             {{else}}
                             <form method="POST" action="/lists/{{.ID}}/visibility" class="d-inline me-1">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="public" value="1">
                                 <button class="btn btn-sm btn-outline-secondary">Make Public</button>
                             </form>
                             {{end}}
                             <form method="POST" action="/lists/{{.ID}}/delete" class="d-inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <button class="btn btn-sm btn-outline-danger">Delete</button>
                             </form>
                         </td>
@@ -96,9 +100,11 @@
                         <td style="color:var(--text-muted);font-size:0.85rem;width:80px;vertical-align:middle;">{{.ItemCount}} items</td>
                         <td style="width:180px;vertical-align:middle;white-space:nowrap;">
                             <form method="POST" action="/lists/{{.ID}}/copy" class="d-inline me-1">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <button class="btn btn-sm btn-outline-secondary" title="Copy to my lists">Copy</button>
                             </form>
                             <form method="POST" action="/lists/{{.ID}}/unfollow" class="d-inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <button class="btn btn-sm btn-outline-danger">Unfollow</button>
                             </form>
                         </td>

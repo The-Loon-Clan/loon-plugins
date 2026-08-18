@@ -24,9 +24,11 @@
     </span>
     <div style="margin-left:auto;display:flex;gap:.5rem">
         <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
             <button class="btn btn-sm btn-outline-primary py-0" type="submit">Run crawl</button>
         </form>
         <form method="post" action="/admin/p/usenet/backfill" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
             <button class="btn btn-sm btn-outline-primary py-0" type="submit">Run backfill</button>
         </form>
         <a class="btn btn-sm btn-outline-secondary py-0" href="/admin/p/usenet#crawlers">details →</a>

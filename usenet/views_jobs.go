@@ -99,7 +99,7 @@ func (p *Plugin) renderJobs(ctx context.Context, showBuilder bool) (template.HTM
 		}
 	}
 
-	return p.frag("jobs.html", map[string]any{
+	return p.frag(ctx, "jobs.html", map[string]any{
 		"Jobs":        panes,
 		"WorkerStale": tv.Stale, "WorkerLastSeen": fmtTime(tv.UpdatedAt),
 		"Builder": builder, "PGStaging": pgStaging, "BuilderShown": builderShown,

@@ -69,6 +69,7 @@
                         <td class="text-muted small">{{if .BackfilledAt}}{{ts .BackfilledAt}}{{else if .Metric}}&mdash; not scored yet{{else}}&mdash; n/a{{end}}</td>
                         <td class="data-table__nowrap">
                             <form method="post" action="/admin/p/achievements/achievement-toggle">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="id" value="{{.ID}}">
                                 <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
                                 <button class="button button--outlined button--sm"
@@ -94,6 +95,7 @@
     <div class="panel__body">
         <form method="post" action="/admin/p/achievements/achievement-create"
               enctype="multipart/form-data" class="stack">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
             <div class="form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem">
                 <label class="form__label">Slug
                     <input name="slug" class="form__input" placeholder="centurion" required>

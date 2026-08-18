@@ -147,14 +147,17 @@
                     {{if .List.Public}}
                         {{if .IsFollowing}}
                         <form method="POST" action="/lists/{{.List.ID}}/unfollow">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <button class="btn btn-outline-danger btn-sm w-100 fw-semibold">Unfollow</button>
                         </form>
                         {{else}}
                         <form method="POST" action="/lists/{{.List.ID}}/follow">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <button class="btn btn-outline-primary btn-sm w-100 fw-semibold">Follow</button>
                         </form>
                         {{end}}
                         <form method="POST" action="/lists/{{.List.ID}}/copy" class="mt-2">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <button class="btn btn-outline-secondary btn-sm w-100 fw-semibold">Copy to my lists</button>
                         </form>
                         {{/* Report — visible to every signed-in viewer except
@@ -215,6 +218,7 @@
                         All my lists
                     </a>
                     <form method="POST" action="/lists/{{.List.ID}}/visibility">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         <input type="hidden" name="public" value="{{if .List.Public}}0{{else}}1{{end}}">
                         <button class="btn btn-outline-{{if .List.Public}}warning{{else}}info{{end}} btn-sm w-100 fw-semibold">
                             Make {{if .List.Public}}private{{else}}public{{end}}

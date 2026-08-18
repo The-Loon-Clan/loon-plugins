@@ -14,6 +14,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/blob"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // The definition page.
@@ -47,6 +49,10 @@ type achAdminVM struct {
 	// TriggerOptions is every declared event — fires-shaped, so any of them
 	// can complete an achievement outright.
 	TriggerOptions []string
+	// CSRFToken for the two POST forms on this page. They shipped with no
+	// token at all, against a host that gates every POST — so create and
+	// toggle each answered 403 for every operator who tried.
+	CSRFToken string
 	// IconOptions is the host's sprite vocabulary, arriving through the
 	// achievements.icons registry key. Empty when no host published one, in
 	// which case the field is free text: the plugin must not invent names
@@ -73,7 +79,7 @@ type achAdminVM struct {
 
 // renderAdminPage draws the definition page.
 func (p *Plugin) renderAdminPage(ctx context.Context, msg, errMsg string) (template.HTML, error) {
-	vm := achAdminVM{Msg: msg, Err: errMsg,
+	vm := achAdminVM{Msg: msg, Err: errMsg, CSRFToken: pluginapi.CSRFFrom(ctx),
 		MetricOptions:  p.metricOptions(),
 		TriggerOptions: p.triggerOptions(),
 		IconOptions:    p.iconOptions,

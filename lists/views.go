@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // The /lists pages, owned by the plugin that owns lists.
@@ -35,6 +37,10 @@ var pageTmpl = template.Must(template.ParseFS(pageFS, "templates/*.html"))
 type userListsVM struct {
 	Lists    []List
 	Followed []List
+	// CSRFToken for this page's forms. They shipped with none, against a host
+	// that gates every POST, so creating a list and every visibility, delete,
+	// copy and unfollow button answered 403.
+	CSRFToken string
 }
 
 type listDetailVM struct {
@@ -47,6 +53,8 @@ type listDetailVM struct {
 	ViewerID    int
 	NzbCardCSS  template.HTML
 	ReportModal template.HTML
+	// CSRFToken — see userListsVM.
+	CSRFToken string
 }
 
 type releaseListsVM struct {
@@ -72,6 +80,9 @@ func render(name string, vm any) (template.HTML, error) {
 
 // page renders a fragment and hands it to the host for chrome. A render
 // failure becomes the site's error page rather than a truncated 200.
+// csrfToken is the host's per-request token, for the forms on these pages.
+func csrfToken(c *gin.Context) string { return pluginapi.CSRFToken(deps.Core, c) }
+
 func page(c *gin.Context, title, name string, vm any) {
 	frag, err := render(name, vm)
 	if err != nil {

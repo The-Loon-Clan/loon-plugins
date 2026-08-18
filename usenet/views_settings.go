@@ -200,7 +200,7 @@ func (p *Plugin) renderSettings(ctx context.Context, q settingsQuery) (template.
 	for k, v := range boolViewData(p.effective(ctx)) {
 		data[k] = v
 	}
-	return p.frag("settings.html", data)
+	return p.frag(ctx, "settings.html", data)
 }
 
 // boolViewData maps each admin-editable boolean to the template key its

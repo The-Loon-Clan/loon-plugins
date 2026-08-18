@@ -2,6 +2,7 @@ package usenet
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"html/template"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 //go:embed templates/*.html
@@ -41,7 +44,10 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		// keep it in their generic Plugins section.
 		Nav: core.NavHint{Group: "Operations"},
 		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.renderSettings(gc.Request.Context(), settingsQuery{
+			// The token goes in the ctx HERE, the one place this page is
+			// entered, and every tab and fragment below reads it out of the
+			// same ctx — see frag. Twenty-five POST forms depend on it.
+			return p.renderSettings(p.viewCtx(gc), settingsQuery{
 				GroupQuery: gc.Query("gq"), Msg: gc.Query("msg"), Err: gc.Query("err"),
 				ShowBuilder: gc.Query("builder") == "1",
 				// dkind reaches SQL as a bound parameter and the template
@@ -110,12 +116,27 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	return c.RegisterView(core.View{
 		Slug: "usenet-jobs", Title: "Usenet jobs", Slot: core.SlotJobsWidget, Anchor: "Usenet",
 		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.renderJobsWidget(gc.Request.Context())
+			return p.renderJobsWidget(p.viewCtx(gc))
 		},
 	})
 }
 
-func (p *Plugin) frag(name string, data any) (template.HTML, error) {
+// frag renders one fragment, injecting the CSRF token every POST form on it
+// needs.
+//
+// Injected HERE rather than added to nine data maps by hand, because that is
+// nine chances to forget and the symptom of forgetting is invisible: this
+// plugin's twenty-five admin forms all shipped without a token, and every one
+// of them answered 403 to every operator who clicked it. The access audit
+// cannot catch that — it probes destructive POSTs WITH a valid token by design.
+//
+// The token rides in the ctx from the view boundary (pluginapi.WithCSRF), so
+// the six page builders keep taking a context.Context and none of them learns
+// about gin to pass one string down.
+func (p *Plugin) frag(ctx context.Context, name string, data any) (template.HTML, error) {
+	if m, ok := data.(map[string]any); ok {
+		m["CSRF"] = pluginapi.CSRFFrom(ctx)
+	}
 	var buf bytes.Buffer
 	if err := p.tmpl.ExecuteTemplate(&buf, name, data); err != nil {
 		return "", err
@@ -238,4 +259,12 @@ func fmtTime(t time.Time) string {
 		return "—"
 	}
 	return t.Format("2006-01-02 15:04:05")
+}
+
+// viewCtx is the request context carrying this request's CSRF token, for the two
+// places a usenet page is entered. Everything below takes a context.Context
+// and reads the token back with pluginapi.CSRFFrom, so no page builder has to
+// learn about gin to put a hidden field in a form.
+func (p *Plugin) viewCtx(gc *gin.Context) context.Context {
+	return pluginapi.WithCSRF(gc.Request.Context(), pluginapi.CSRFToken(p.core, gc))
 }

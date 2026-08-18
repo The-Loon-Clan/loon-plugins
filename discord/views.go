@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // The /profile Discord card, owned by the plugin that owns Discord.
@@ -33,6 +35,7 @@ var cardTmpl = template.Must(template.New("discord-card").Parse(`
             </div>
             <form method="POST" action="/profile/discord-unlink" class="d-inline"
                   onsubmit="return confirm('Unlink your Discord account?')">
+                <input type="hidden" name="_csrf" value="{{.CSRF}}">
                 <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.75rem;">Unlink</button>
             </form>
         </div>
@@ -93,12 +96,15 @@ func (p *Plugin) renderCard(c *gin.Context) (template.HTML, error) {
 	}
 
 	var sb strings.Builder
-	// No _csrf field: the host's site-wide submit listener injects the current
-	// token from the cookie when the form is actually submitted, so a token
-	// baked in at render time would only be the stale one.
+	// The token, baked in. The comment here used to say a "site-wide submit
+	// listener" injected it from the cookie at submit time, so a rendered one
+	// would be stale — there is no such listener on this host, and the unlink
+	// answered 403 for every member who pressed it. A token minted at render
+	// time is exactly what every other form on the site carries.
 	if err := cardTmpl.Execute(&sb, map[string]any{
 		"Link":  link,
 		"Token": token,
+		"CSRF":  pluginapi.CSRFToken(p.core, c),
 	}); err != nil {
 		return "", err
 	}

@@ -72,7 +72,7 @@ func (p *Plugin) renderSpots(ctx context.Context) (template.HTML, error) {
 	} else {
 		p.reportErr(ctx, "usenet/op-stats-read", err)
 	}
-	return p.frag("spots.html", map[string]any{
+	return p.frag(ctx, "spots.html", map[string]any{
 		"OpStats":      opStats,
 		"Group":        SpotGroup,
 		"MinKeyBits":   MinSpotKeyBits,

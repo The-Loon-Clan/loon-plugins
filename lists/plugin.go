@@ -28,6 +28,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if c.Process != "web" && c.Process != "all" {
 		return nil
 	}
+	// The registry, for the per-request seams the views resolve (the CSRF
+	// token). Set here rather than by the host's SetDeps because the Core is
+	// what Provision is handed.
+	deps.Core = c
 	if !deps.ok() {
 		return fmt.Errorf("lists: SetDeps was not called with a full Deps before core.Boot")
 	}

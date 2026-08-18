@@ -30,6 +30,7 @@
           <span class="text-muted small">next run: <span data-role="next">{{if $j.Next}}{{$j.Next}}{{else}}—{{end}}</span></span>
           {{if $j.DutyLabel}}<span class="text-muted small">{{$j.DutyLabel}}</span>{{end}}
           <form method="post" action="/admin/p/usenet/{{$j.Action}}" class="ms-auto">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
             <button class="btn btn-sm btn-outline-primary py-0" type="submit">Run now</button>
           </form>
         </div>

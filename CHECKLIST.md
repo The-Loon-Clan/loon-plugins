@@ -89,8 +89,22 @@ the site_settings bug shipped because nobody ever did.
       nobody may pass, not everybody. A signed-in member refused by an
       entitlement goes to `/`, not `/login` (they ARE logged in; a login
       prompt loops).
-- [ ] **MUST** — CSRF tokens come from the host seam, never minted by the
-      plugin. Destructive actions are POST + confirm.
+- [ ] **MUST** — CSRF tokens come from the host seam
+      (`pluginapi.CSRFToken`, key `csrf.token`), never minted by the plugin,
+      and **every POST form carries a hidden `_csrf`**. Destructive actions
+      are POST + confirm.
+
+      Not a formality. A host mounts CSRF middleware over the whole engine, so
+      a form without the field answers 403 to every human who clicks it — and
+      `audit_access.py` CANNOT see that, because it probes destructive POSTs
+      WITH a valid token by design (it tests the gate, not the form). A sweep
+      on 18 Aug 2026 found **58 tokenless forms across nine plugins**: every
+      admin action in usenet, ranks, events, achievements, messages and lists,
+      the rewards page's own toggle and create, and the discord and irc unlink
+      buttons — the last two carrying a comment explaining that a "site-wide
+      submit listener" made a rendered token unnecessary, which described a
+      mechanism no host had. All of them had been refusing every operator and
+      member who tried, for as long as they had existed.
 - [ ] **MUST** — machine endpoints carry their own credential (passkey in
       path, API key) and no session; a torrent client cannot follow a login
       redirect and will parse the login page as a wire response.
@@ -111,14 +125,13 @@ the site_settings bug shipped because nobody ever did.
 - [ ] **SHOULD** — a `Backupable` hook (the `backups` plugin runs every
       plugin's) so the operator's one archive includes this plugin's data.
 
-Verify: `python scripts/sqllint.py` and `python scripts/audit_access.py` in
-the host; review against this list; for webhooks, a replay test that proves
-the dedupe. NOTE the audit's blind spot: it probes destructive POSTs WITH a
-valid token by design (it tests the gate, not the form), so a form that never
-carries a token is invisible to it and simply 403s for every human — which is
-exactly how news's and wiki's admin forms shipped broken. The check that
-catches that is a template test counting `_csrf` inputs per POST form
-(releasegroups' CSRF-per-form invariant is the pattern).
+Verify: `python scripts/sqllint.py`, `python scripts/audit_access.py` and
+**`make resources`** in the host — the last one scans every template AND every
+Go file in both trees for a POST form with no `_csrf`, which is the blind spot
+the access audit has by design. A per-plugin template test counting tokens is
+still worth having where the markup is generated (releasegroups' CSRF-per-form
+invariant, and rewards' since the sweep); the repo-wide scan is what catches
+the plugin nobody thought to write one for.
 
 ## 4. Events & exports
 

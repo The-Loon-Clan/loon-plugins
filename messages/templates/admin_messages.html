@@ -5,6 +5,7 @@
             <div class="card-header">Compose Message</div>
             <div class="card-body">
                 <form method="POST" action="/admin/messages">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-3">
                         <label class="form-label">To</label>
                         <select name="target" class="form-select">
@@ -52,6 +53,7 @@
                         <td style="white-space:nowrap;">{{.CreatedAt.Format "Jan 02 15:04"}}</td>
                         <td>
                             <form method="POST" action="/admin/messages/{{.ID}}/delete" style="display:inline;">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                             </form>
                         </td>

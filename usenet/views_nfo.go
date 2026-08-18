@@ -46,7 +46,7 @@ func (p *Plugin) renderNFO(ctx context.Context) (template.HTML, error) {
 	backend, err := p.resolveNFOBackend()
 	if err != nil {
 		vm.NoStore = true
-		return p.frag("nfo.html", vm)
+		return p.frag(ctx, "nfo.html", vm)
 	}
 	// The two reads are independent and neither is worth failing the tab
 	// over; the settings renderer already degrades a failing tab to a card,
@@ -64,7 +64,7 @@ func (p *Plugin) renderNFO(ctx context.Context) (template.HTML, error) {
 			}
 		}
 	}
-	return p.frag("nfo.html", vm)
+	return p.frag(ctx, "nfo.html", vm)
 }
 
 // nfoTabRows is how many extractions the tab lists. Enough to see the job

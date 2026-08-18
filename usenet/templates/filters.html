@@ -49,16 +49,19 @@
                         </td>
                         <td class="text-nowrap">
                             <form method="post" action="/admin/p/usenet/junk-move" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                                 <input type="hidden" name="name" value="{{.Name}}">
                                 <input type="hidden" name="dir" value="up">
                                 <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="run earlier">&uarr;</button>
                             </form>
                             <form method="post" action="/admin/p/usenet/junk-move" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                                 <input type="hidden" name="name" value="{{.Name}}">
                                 <input type="hidden" name="dir" value="down">
                                 <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="run later">&darr;</button>
                             </form>
                             <form method="post" action="/admin/p/usenet/junk-toggle" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                                 <input type="hidden" name="name" value="{{.Name}}">
                                 <input type="hidden" name="enabled" value="{{if .Enabled}}false{{else}}true{{end}}">
                                 <button class="btn btn-sm py-0 {{if .Enabled}}btn-success{{else}}btn-outline-secondary{{end}}"
@@ -71,6 +74,7 @@
             </table>
         </div>
         <form method="post" action="/admin/p/usenet/junk-order" class="d-flex gap-2 align-items-center mt-2">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
             <input type="text" name="confirm" class="form-control form-control-sm" style="max-width:12rem"
                    placeholder="type reorder" autocomplete="off">
             <button class="btn btn-sm btn-primary" type="submit">Apply recommended order</button>
@@ -98,6 +102,7 @@
     </p>
 
     <form method="post" action="/admin/p/usenet/filter-add" class="row g-2 align-items-end mb-3">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <div class="col-md-6">
             <label class="form-label small mb-1">Pattern (Go regex)</label>
             <input name="pattern" class="form-control form-control-sm" required
@@ -132,6 +137,7 @@
                     <td class="small text-muted">{{.Field}}</td>
                     <td>
                         <form method="post" action="/admin/p/usenet/filter-toggle" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="id" value="{{.ID}}">
                             <button class="btn btn-sm py-0 {{if .Enabled}}btn-success{{else}}btn-outline-secondary{{end}}"
                                     type="submit">{{if .Enabled}}on{{else}}off{{end}}</button>
@@ -140,6 +146,7 @@
                     <td class="text-end">
                         <form method="post" action="/admin/p/usenet/filter-del" style="display:inline"
                               onsubmit="return confirm('Delete this rule? Releases it was blocking will be indexed from the next build pass.')">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="id" value="{{.ID}}">
                             <button class="btn btn-sm btn-outline-danger py-0" type="submit">&times;</button>
                         </form>
@@ -192,6 +199,7 @@
         <span class="text-muted small">{{.TotalHits}} release(s) dropped in total.</span>
         <form method="post" action="/admin/p/usenet/filter-reset"
               onsubmit="return confirm('Clear all counters? Totals from before a rule was rewritten answer a question nobody asked, so this is worth doing after tuning.')">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
             <button class="btn btn-sm btn-outline-secondary py-0" type="submit">Reset counters</button>
         </form>
     </div>
@@ -377,6 +385,7 @@
       when this trade is in effect.
     </p>
     <form method="post" action="/admin/p/usenet/poster-watch" class="d-flex mb-3" style="gap:.5rem;flex-wrap:wrap">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
       <input class="form-control form-control-sm" type="text" name="pattern"
              placeholder="tsukihime" style="max-width:16rem" required>
       <input class="form-control form-control-sm" type="text" name="note"
@@ -388,6 +397,7 @@
     <div class="d-flex mb-3" style="gap:.4rem;flex-wrap:wrap">
       {{range .Watched}}
       <form method="post" action="/admin/p/usenet/poster-watch-del" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <input type="hidden" name="pattern" value="{{.}}">
         <button class="btn btn-sm py-0 btn-outline-secondary" type="submit"
                 title="stop watching this poster">{{.}} &times;</button>

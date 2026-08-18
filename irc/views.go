@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // The /profile IRC card, owned by the plugin that owns IRC. Mirror of the
@@ -32,6 +34,7 @@ var cardTmpl = template.Must(template.New("irc-card").Parse(`
             </div>
             <form method="POST" action="/profile/irc-unlink" class="d-inline"
                   onsubmit="return confirm('Unlink your IRC account?')">
+                <input type="hidden" name="_csrf" value="{{.CSRF}}">
                 <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.75rem;">Unlink</button>
             </form>
         </div>
@@ -104,6 +107,12 @@ func (p *Plugin) renderCard(c *gin.Context) (template.HTML, error) {
 		data["Channel"], _ = deps.Settings.GetSetting(ctx, "irc_channel")
 		data["BotNick"], _ = deps.Settings.GetSetting(ctx, "irc_nick")
 	}
+
+	// The token, baked in. The comment beside the form claimed a "site-wide
+	// submit listener" injected it at submit time so a rendered one would be
+	// stale — there is no such listener on this host, and the unlink answered
+	// 403 for every member who pressed it.
+	data["CSRF"] = pluginapi.CSRFToken(p.core, c)
 
 	var sb strings.Builder
 	if err := cardTmpl.Execute(&sb, data); err != nil {

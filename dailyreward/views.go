@@ -56,6 +56,9 @@ func (p *Plugin) renderWidget(c *gin.Context) (template.HTML, error) {
 		"Claimed": claimed,
 		"Reward":  rewardFor(nextStreak(st)),
 		"Captcha": p.captchaWidget(),
+		// The claim form posts, and this host gates every POST — without the
+		// token the button answered 403 for every member who pressed it.
+		"CSRF": pluginapi.CSRFToken(p.core, c),
 	}); err != nil {
 		return "", err
 	}

@@ -84,9 +84,11 @@
     <span id="pass-title">{{if .Pass.Running}}Crawl in progress{{else if .Pass.Any}}Last crawl pass{{else}}Crawler{{end}}</span>
     <div class="ms-auto d-flex" style="gap:.5rem">
       <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <button class="btn btn-sm btn-outline-primary py-0" type="submit">Crawl now</button>
       </form>
       <form method="post" action="/admin/p/usenet/backfill" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <button class="btn btn-sm btn-outline-primary py-0" type="submit">Backfill now</button>
       </form>
     </div>

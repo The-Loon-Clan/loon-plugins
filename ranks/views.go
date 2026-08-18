@@ -11,6 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 //go:embed templates/*.html
@@ -48,6 +50,10 @@ type groupsPageVM struct {
 	CanHide bool
 	Error   string
 	Ok      bool
+	// CSRFToken for the three POST forms on this page. They shipped with no
+	// token, against a host that gates every POST — so creating, updating and
+	// deleting a group each answered 403 for every operator who tried.
+	CSRFToken string
 }
 
 func (p *Plugin) renderGroups(c *gin.Context) (template.HTML, error) {
@@ -64,10 +70,11 @@ func (p *Plugin) renderGroups(c *gin.Context) (template.HTML, error) {
 	}
 
 	vm := groupsPageVM{
-		Kinds:   []string{"paid", "earned", "assigned"},
-		CanHide: p.viewerIsAdmin(c),
-		Error:   c.Query("error"),
-		Ok:      c.Query("ok") == "1",
+		CSRFToken: pluginapi.CSRFToken(p.core, c),
+		Kinds:     []string{"paid", "earned", "assigned"},
+		CanHide:   p.viewerIsAdmin(c),
+		Error:     c.Query("error"),
+		Ok:        c.Query("ok") == "1",
 	}
 	for i := range groups {
 		g := &groups[i]

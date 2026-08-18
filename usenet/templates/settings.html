@@ -84,11 +84,14 @@
          column per field keeps the headers aligned with the inputs — the old
          flex-wrapped row scrambled at narrow widths into unlabeled boxes. */}}
     {{range .Servers}}
-    <form id="prov-{{.ID}}" method="post" action="/admin/p/usenet/provider"></form>
+    <form id="prov-{{.ID}}" method="post" action="/admin/p/usenet/provider">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}"></form>
     <form id="prov-del-{{.ID}}" method="post" action="/admin/p/usenet/provider-del"
-          onsubmit="return confirm('Remove this provider? Its crawl history is kept.')"></form>
+          onsubmit="return confirm('Remove this provider? Its crawl history is kept.')">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}"></form>
     {{end}}
-    <form id="prov-new" method="post" action="/admin/p/usenet/provider"></form>
+    <form id="prov-new" method="post" action="/admin/p/usenet/provider">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}"></form>
 
     <div class="table-responsive">
     <table class="table table-sm align-middle" style="font-size:.88rem;min-width:1100px">
@@ -180,6 +183,7 @@
     <div class="card-header">Indexing</div>
     <div class="card-body">
     <form method="post" action="/admin/p/usenet/knobs">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem">
             {{range .Knobs}}
             <div>
@@ -274,6 +278,7 @@
              unintended click lands. -->
         <form method="post" action="/admin/p/usenet/fetch-groups" style="display:inline"
               onsubmit="return confirm('Fetch the FULL group list from the provider?\n\nThis adds every newsgroup the provider carries — often 100,000+ — as disabled entries. Existing groups and their crawl state are untouched, and you can remove the additions afterwards, but the list will be very long.\n\nTo find one group you already have, use the search box instead.');">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
             <button class="btn btn-outline-primary btn-sm" type="submit"
                     title="NNTP LIST against the primary provider — adds EVERY group it carries as disabled; existing groups untouched">Fetch full group list…</button>
         </form>
@@ -298,7 +303,8 @@
                          state, button = the action that changes it. */}}
                     <td>{{if .Active}}<span class="badge bg-success">enabled</span>{{else}}<span class="badge bg-secondary">disabled</span>{{end}}</td>
                     <td class="text-end">{{.NZBs}}</td>
-                    <form method="post" action="/admin/p/usenet/group-tune" id="tune-{{.Name}}" class="js-group-tune"></form>
+                    <form method="post" action="/admin/p/usenet/group-tune" id="tune-{{.Name}}" class="js-group-tune">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}"></form>
                     <td><input class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="retention_days" value="{{if .RetentionDays}}{{.RetentionDays}}{{end}}"
                                placeholder="site" title="blank = follow the site-wide crawl depth" style="width:4.5rem"></td>
                     <td><input class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="throttle_ms" value="{{.ThrottleMs}}"
@@ -310,10 +316,12 @@
                         </select></td>
                     <td style="white-space:nowrap">
                         <form method="post" action="/admin/p/usenet/group-move" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="dir" value="up">
                             <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="crawl earlier">&uarr;</button>
                         </form>
                         <form method="post" action="/admin/p/usenet/group-move" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="dir" value="down">
                             <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="crawl later">&darr;</button>
                         </form>
@@ -324,6 +332,7 @@
                         {{if .ResetArticles}}
                         <form method="post" action="/admin/p/usenet/group-reset" style="display:inline"
                               onsubmit="var v=prompt('Reset watermarks for {{.Name}}?\n\nRe-reads {{.ResetArticles}} article(s) - the span THIS crawler fetched, not the whole newsgroup. History indexed before the crawler took over is not touched.\n\nAlready-stored releases dedup on content hash, so nothing duplicates; the cost is provider bandwidth.\n\nType the group name to confirm:'); if(v===null){return false;} this.confirm.value=v; return true;">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="confirm" value="">
                             <button class="btn btn-sm py-0 btn-outline-danger" type="submit"
@@ -344,6 +353,7 @@
                         {{if .ResetHistoryArticles}}
                         <form method="post" action="/admin/p/usenet/group-reset" style="display:inline"
                               onsubmit="var v=prompt('Re-walk HISTORY for {{.Name}}?\n\nReopens the backfill over {{.ResetHistoryArticles}} article(s) - everything below the forward mark that this crawler has not recorded as fetched. Much larger than the recent reset, and runs for a long time; bounded per pass so the forward crawl keeps up.\n\nUse this when a PREVIOUS crawler missed content, not for a recent parsing fix.\n\nType the group name to confirm:'); if(v===null){return false;} this.confirm.value=v; return true;">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="scope" value="history">
                             <input type="hidden" name="confirm" value="">
@@ -358,6 +368,7 @@
                         <input form="tune-{{.Name}}" type="hidden" name="name" value="{{.Name}}">
                         <button form="tune-{{.Name}}" class="btn btn-sm py-0 btn-outline-primary" type="submit">Save</button>
                         <form method="post" action="/admin/p/usenet/group" style="display:inline" class="js-group-toggle">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="active" value="{{if .Active}}false{{else}}true{{end}}">
                             <input type="hidden" name="gq" value="{{$.GroupQuery}}">
@@ -365,6 +376,7 @@
                         </form>
                         <form method="post" action="/admin/p/usenet/group-del" style="display:inline"
                               onsubmit="return confirm('Remove {{.Name}} from the catalogue? Its crawl history is kept.')">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <button class="btn btn-sm py-0 btn-outline-danger" type="submit">&times;</button>
                         </form>
@@ -376,6 +388,7 @@
     </div>
     <form method="post" action="/admin/p/usenet/groups-purge" class="mt-2"
           onsubmit="return confirm('Remove every inactive group? Crawl history is kept.')">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <button class="btn btn-sm btn-outline-danger" type="submit">Remove all inactive groups</button>
         <span class="text-muted small ms-2">Clears the long tail left by a full group-list fetch.</span>
     </form>

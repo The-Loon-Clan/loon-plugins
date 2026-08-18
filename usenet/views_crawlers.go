@@ -530,7 +530,7 @@ func (p *Plugin) renderCrawlers(ctx context.Context, msg, errMsg string) (templa
 	for _, g := range stats.Groups {
 		names[g.Name] = true
 	}
-	return p.frag("crawlers.html", map[string]any{
+	return p.frag(ctx, "crawlers.html", map[string]any{
 		"Stats": stats, "Groups": groups, "Backbones": backbones, "Totals": totals,
 		"Pass":        statsVM(pickPass(tv.CrawlCur, tv.CrawlLast)),
 		"Backfill":    statsVM(pickPass(tv.BackfillCur, tv.BackfillLast)),
@@ -612,7 +612,7 @@ func (p *Plugin) renderJobsWidget(ctx context.Context) (template.HTML, error) {
 			crawlJobs = append(crawlJobs, j)
 		}
 	}
-	return p.frag("jobswidget.html", map[string]any{
+	return p.frag(ctx, "jobswidget.html", map[string]any{
 		"Jobs": crawlJobs, "Stats": stats,
 	})
 }

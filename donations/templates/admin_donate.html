@@ -55,6 +55,7 @@
                 <div class="card-header">{{if .Edit}}Edit cost #{{.Edit.ID}}{{else}}Add cost{{end}}</div>
                 <div class="card-body">
                     <form method="POST" action="/admin/donate/costs">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         {{if .Edit}}<input type="hidden" name="id" value="{{.Edit.ID}}">{{end}}
                         <div class="row g-2">
                             <div class="col-md-4">
@@ -127,6 +128,7 @@
                                 <td class="text-end">
                                     <a class="btn btn-link p-0" href="/admin/donate?edit={{.ID}}#costs" style="font-size:0.72rem;">edit</a>
                                     <form method="POST" action="/admin/donate/costs/{{.ID}}/del" class="d-inline" onsubmit="return confirm('Delete?')">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                         <button class="btn btn-link p-0 text-danger" style="font-size:0.72rem;">delete</button>
                                     </form>
                                 </td>
@@ -148,6 +150,7 @@
                         <div class="card-header">Knobs</div>
                         <div class="card-body">
                             <form method="POST" action="/admin/donate/points">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <div class="mb-3 p-2" style="background:rgba(var(--bs-warning-rgb),0.08);border:1px solid rgba(var(--bs-warning-rgb),0.3);border-radius:6px;">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="donate-enabled" name="donate_enabled" value="1"
@@ -223,6 +226,7 @@
                 <div class="card-body">
                     {{if .IsAdmin}}
                     <form method="POST" action="/admin/donate/wallet">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         <h6 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Receive addresses</h6>
                         <div class="row g-2 mb-3">
                             <div class="col-md-4">
@@ -342,6 +346,7 @@
                         <div class="card-header">{{if .EditPkg}}Edit package &mdash; {{.EditPkg.Label}}{{else}}New package{{end}}</div>
                         <div class="card-body">
                             <form method="POST" action="/admin/donate/packages">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="id" value="{{if .EditPkg}}{{.EditPkg.ID}}{{end}}">
                                 <div class="row g-2 mb-2">
                                     <div class="col-md-7">
@@ -403,6 +408,7 @@
                                         <td class="text-end">
                                             <a href="/admin/donate?edit_pkg={{.ID}}#packages" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.72rem;">Edit</a>
                                             <form method="POST" action="/admin/donate/packages/{{.ID}}/del" style="display:inline;" onsubmit="return confirm('Delete package &quot;{{.Label}}&quot;? Linked donations stay (package_id becomes NULL).');">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                                 <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.72rem;">Del</button>
                                             </form>
                                         </td>
@@ -433,6 +439,7 @@
             <div class="card">
                 <div class="card-body">
                     <form method="POST" action="/admin/donate/tipjar">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         {{range $slot := list 1 2}}
                         <h6 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;{{if gt $slot 1}}margin-top:1rem;{{end}}">Goal {{$slot}}</h6>
                         <div class="row g-2 mb-2">
@@ -465,6 +472,7 @@
                         <div class="card-header">Record a manual / fiat donation</div>
                         <div class="card-body">
                             <form method="POST" action="/admin/donate/log">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <div class="row g-2">
                                     <div class="col-6">
                                         <label class="form-label" style="font-size:0.78rem;">Asset</label>

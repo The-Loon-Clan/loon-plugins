@@ -36,6 +36,9 @@ type Plugin struct {
 	log       *slog.Logger
 	errs      core.ErrorReporter
 	auth      core.AuthService
+	// core is held for the registry lookups the views make — today the CSRF
+	// token seam, which this plugin's three admin forms had no way to reach.
+	core *core.Core
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -55,6 +58,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.log = c.LoggerFor("ranks")
 	p.errs = c.Errors
 	p.auth = c.Auth
+	p.core = c
 
 	// The plugin owns its schema now, so it builds its own store rather than
 	// receiving a host repository.

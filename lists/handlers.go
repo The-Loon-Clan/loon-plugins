@@ -17,7 +17,7 @@ type Handlers struct{}
 func (h *Handlers) UserLists(c *gin.Context) {
 	userID, _, _ := deps.Viewer(c)
 	owned, followed, _ := deps.UserLists(c.Request.Context(), userID)
-	page(c, "My Lists", "user_lists.html", userListsVM{Lists: owned, Followed: followed})
+	page(c, "My Lists", "user_lists.html", userListsVM{Lists: owned, Followed: followed, CSRFToken: csrfToken(c)})
 }
 
 // CreateList creates a new user list.
@@ -121,6 +121,7 @@ func (h *Handlers) ViewList(c *gin.Context) {
 	items, _ := deps.Items(c.Request.Context(), listID)
 	isFollowing, _ := deps.IsFollowing(c.Request.Context(), userID, listID)
 	page(c, list.Name, "list_detail.html", listDetailVM{
+		CSRFToken:   csrfToken(c),
 		List:        list,
 		Items:       items,
 		IsFollowing: isFollowing,

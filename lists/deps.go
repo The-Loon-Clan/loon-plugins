@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon/core"
 )
 
 // List is a watchlist as this plugin's pages display it.
@@ -71,6 +73,10 @@ type Deps struct {
 	// RenderError writes the site's error page. Used for the one refusal that
 	// is a page rather than a redirect (bulk download from an unpinned IP).
 	RenderError func(c *gin.Context, code int, msg string)
+
+	// Core is the registry, for the seams this plugin resolves per request —
+	// today the CSRF token, which its nine POST forms had no way to reach.
+	Core *core.Core
 
 	// Shared site chrome the plugin embeds but does not own. The release
 	// card itself arrives pre-rendered on each Item — the host has the record

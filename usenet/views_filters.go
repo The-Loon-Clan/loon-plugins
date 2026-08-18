@@ -153,7 +153,7 @@ func (p *Plugin) renderFilters(ctx context.Context, msg, errMsg, diagKindSel str
 		p.reportErr(ctx, "usenet/junk-drops", derr)
 	}
 
-	return p.frag("filters.html", map[string]any{
+	return p.frag(ctx, "filters.html", map[string]any{
 		"JunkRules": jrows,
 		"Rules":     vms, "Fields": blacklistFields,
 		"Hits": hvms, "TotalHits": total,

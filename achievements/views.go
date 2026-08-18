@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 //go:embed templates/*.html
@@ -41,7 +43,12 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		Description: "Define what can be earned: criterion, value, and what the badge looks like.",
 		Nav:         core.NavHint{Group: "Operations"},
 		Render: func(gc *gin.Context) (template.HTML, error) {
-			return p.renderAdminPage(gc.Request.Context(), gc.Query("msg"), gc.Query("err"))
+			// The token rides in the ctx: renderAdminPage takes a
+			// context.Context, and its two POST forms had none at all — so
+			// creating and toggling an achievement each answered 403.
+			return p.renderAdminPage(
+				pluginapi.WithCSRF(gc.Request.Context(), pluginapi.CSRFToken(p.core, gc)),
+				gc.Query("msg"), gc.Query("err"))
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			// Create and enable are SEPARATE actions on purpose: enabling

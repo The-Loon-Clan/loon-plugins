@@ -20,6 +20,8 @@
 package pluginapi
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
@@ -65,4 +67,33 @@ func CSRFToken(c *core.Core, gc *gin.Context, legacyKeys ...string) string {
 		}
 	}
 	return ""
+}
+
+// ── carrying the token through a context ────────────────────────────────────
+//
+// Several plugins render through helpers that take a context.Context rather
+// than the gin one — usenet's six page builders, for instance. Threading a
+// *gin.Context through them to reach a hidden form field would be a worse
+// change than the bug: it couples six signatures to the web layer so that one
+// string can reach the bottom.
+//
+// So the token rides in the context, put there once at the view boundary where
+// the gin context exists. WithCSRF at the top, FromCSRF at the render.
+
+type csrfCtxKey struct{}
+
+// WithCSRF returns ctx carrying the token.
+func WithCSRF(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, csrfCtxKey{}, token)
+}
+
+// CSRFFrom reads the token back, empty when none was put in. Empty is not an
+// error — see CSRFToken — but an ABSENT form field is, so callers put the
+// result in their view model unconditionally.
+func CSRFFrom(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	s, _ := ctx.Value(csrfCtxKey{}).(string)
+	return s
 }

@@ -31,12 +31,16 @@ var viewFS embed.FS
 // This page is the WHEN, now living where the WHEN is owned.
 
 type adminVM struct {
-	Now     time.Time
-	Msg     string
-	Err     string
-	Events  []eventVM
-	Picked  string
-	Windows []pluginapi.EventWindow
+	Now time.Time
+	Msg string
+	Err string
+	// CSRFToken for the three POST forms on this page. They shipped with no
+	// token, against a host that gates every POST — so saving, toggling and
+	// deleting an event each answered 403 for every operator who tried.
+	CSRFToken string
+	Events    []eventVM
+	Picked    string
+	Windows   []pluginapi.EventWindow
 
 	// Findings is the window-health report. It sits at the TOP of the page
 	// because it is the only part that says something is wrong -- an operator
@@ -86,7 +90,9 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		Render: func(gc *gin.Context) (template.HTML, error) {
 			// The slug reaches SQL as a bound parameter; an unknown one simply
 			// lists no windows.
-			return p.renderPage(gc.Request.Context(), gc.Query("event"), gc.Query("msg"), gc.Query("err"))
+			return p.renderPage(
+				pluginapi.WithCSRF(gc.Request.Context(), pluginapi.CSRFToken(p.core, gc)),
+				gc.Query("event"), gc.Query("msg"), gc.Query("err"))
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			"event-save":   p.actionSaveEvent,
@@ -127,7 +133,7 @@ func (p *Plugin) parseTemplates() error {
 
 func (p *Plugin) renderPage(ctx context.Context, picked, msg, errMsg string) (template.HTML, error) {
 	now := time.Now()
-	vm := adminVM{Now: now, Msg: msg, Err: errMsg, Picked: picked}
+	vm := adminVM{Now: now, Msg: msg, Err: errMsg, Picked: picked, CSRFToken: pluginapi.CSRFFrom(ctx)}
 
 	evs, err := p.store.ListEvents(ctx)
 	if err != nil {

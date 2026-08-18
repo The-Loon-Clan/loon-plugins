@@ -19,6 +19,7 @@
   <div class="card-header">Add group</div>
   <div class="card-body">
     <form method="POST" action="/admin/p/groups/create" class="row g-2 align-items-end">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
       <div class="col-md-3">
         <label class="form-label mb-1">Name</label>
         <input type="text" name="name" class="form-control form-control-sm" required>
@@ -75,6 +76,7 @@
       <tr>
         <td colspan="8" class="p-2">
           <form method="POST" action="/admin/p/groups/update" class="row g-2 align-items-end">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
             <input type="hidden" name="id" value="{{.ID}}">
             <div class="col-md-2">
               <label class="form-label mb-1" style="font-size:0.72rem;">
@@ -150,6 +152,7 @@
           </form>
           <form method="POST" action="/admin/p/groups/delete" class="mt-1"
                 onsubmit="return confirm('Delete {{.Name}}? Members lose it immediately.');">
+            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
             <input type="hidden" name="id" value="{{.ID}}">
             <button class="btn btn-sm btn-outline-danger">Delete</button>
           </form>
