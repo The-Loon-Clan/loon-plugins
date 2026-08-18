@@ -28,6 +28,18 @@ type Release struct {
 	Language   string
 	CategoryID int    // Newznab category id (from the catalog capability)
 	Category   string // display name, resolved when the catalog is present
+
+	// Where this release sits in a series, when its title said (see
+	// SeriesIndex). Season 0 with an empty SeriesKey means it said nothing —
+	// two thirds of a real index — and such a release browses exactly as it
+	// always did.
+	SeriesKey  string
+	SeriesName string
+	Season     int
+	// Episode is 0 on a whole-season pack, which Pack tells apart from an
+	// actual episode zero.
+	Episode int
+	Pack    bool
 }
 
 // GroupInfo is one watched newsgroup + how many NZBs it has produced.

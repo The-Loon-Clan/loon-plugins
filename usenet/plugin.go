@@ -265,6 +265,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// web/all/api: publish the READ capabilities — the public site pages AND the
 	// standalone api process both serve search / browse / Newznab / download.
 	if c.Process == "web" || c.Process == "all" || c.Process == "api" {
+		// Shows rather than releases — the same service, a separate contract.
+		if err := c.Register(pluginapi.SeriesIndexName, pluginapi.SeriesIndex(p.svc)); err != nil {
+			return fmt.Errorf("usenet: register series index: %w", err)
+		}
 		if err := c.Register(pluginapi.UsenetIndexName, p.svc); err != nil {
 			return err
 		}

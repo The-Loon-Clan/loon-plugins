@@ -34,6 +34,7 @@ func (s *service) withCategories(rs []pluginapi.Release) []pluginapi.Release {
 
 var (
 	_ pluginapi.UsenetIndex     = (*service)(nil)
+	_ pluginapi.SeriesIndex     = (*service)(nil)
 	_ pluginapi.UsenetAdmin     = (*service)(nil)
 	_ pluginapi.StatContributor = (statHook)(statHook{})
 )
@@ -214,4 +215,32 @@ func (s *service) TriggerBackfill() {
 
 func (s *service) ResetBackfill(ctx context.Context, name string) error {
 	return s.store.resetBackfillForGroup(ctx, name)
+}
+
+// ── the series index (pluginapi.SeriesIndex) ────────────────────────────
+//
+// A separate contract from UsenetIndex rather than three more methods on it:
+// widening an interface breaks every implementer for a capability most hosts
+// will not use, and a host without this simply has no series pages.
+
+func (s *service) Series(ctx context.Context, query string, limit, offset int) ([]pluginapi.SeriesRow, int, error) {
+	return s.store.seriesList(ctx, query, limit, offset)
+}
+
+func (s *service) SeriesByKey(ctx context.Context, key string) (string, bool, error) {
+	return s.store.seriesName(ctx, key)
+}
+
+func (s *service) Seasons(ctx context.Context, key string) ([]pluginapi.SeriesSeason, error) {
+	return s.store.seriesSeasons(ctx, key)
+}
+
+func (s *service) Releases(ctx context.Context, key string, season, episode, limit int) ([]pluginapi.Release, error) {
+	rs, err := s.store.seriesReleases(ctx, key, season, episode, limit)
+	if err != nil {
+		return nil, err
+	}
+	// Category names resolved the same way every other listing does, so a
+	// series page's rows read identically to a browse page's.
+	return s.withCategories(rs), nil
 }

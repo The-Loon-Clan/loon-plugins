@@ -239,6 +239,12 @@ type MaintenanceStore interface {
 	// thirds of an index is films and software, so the pair is the honest
 	// report and the first number alone would read as a poor hit rate.
 	fillEpisodes(ctx context.Context, limit int) (parsed, seen int, err error)
+
+	// The series reads (series_store.go) — shows rather than releases.
+	seriesList(ctx context.Context, query string, limit, offset int) ([]pluginapi.SeriesRow, int, error)
+	seriesName(ctx context.Context, key string) (string, bool, error)
+	seriesSeasons(ctx context.Context, key string) ([]pluginapi.SeriesSeason, error)
+	seriesReleases(ctx context.Context, key string, season, episode, limit int) ([]pluginapi.Release, error)
 	recategorizeSweep(ctx context.Context, fn func(group, title string) int, limit int) (int, error)
 	pruneNzbs(ctx context.Context, days int) (int64, error)
 	deleteJunkNzbs(ctx context.Context) (int, error)

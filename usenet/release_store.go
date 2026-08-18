@@ -34,7 +34,8 @@ func (s *PGStore) queryReleases(ctx context.Context, cond, arg string, limit int
 		// sqllint:allow cond is a fixed WHERE fragment from the two internal callers (searchNzbs/browseNzbs); the search value flows through $1
 		return tx.SelectContext(ctx, &rows,
 			`SELECT id, title, size, posted_at, group_name,
-			        resolution, source, video_codec, audio, language, category_id
+			        resolution, source, video_codec, audio, language, category_id,
+			        series_key, series_name, season, episode, is_pack
 			 FROM nzbs
 			 WHERE status = 'completed' AND `+cond+`
 			 ORDER BY COALESCE(posted_at, created_at) DESC LIMIT $2`, arg, limit)
@@ -80,7 +81,8 @@ func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, li
 		// sqllint:allow catClause is a literal built from int-only category ids (strconv.Itoa); all values flow through $N
 		if err := tx.SelectContext(ctx, &rows,
 			`SELECT id, title, size, posted_at, group_name,
-			        resolution, source, video_codec, audio, language, category_id
+			        resolution, source, video_codec, audio, language, category_id,
+			        series_key, series_name, season, episode, is_pack
 			 FROM nzbs
 			 WHERE status = 'completed' AND ($1 = '' OR title ILIKE '%' || $1 || '%')`+catClause+`
 			 ORDER BY COALESCE(posted_at, created_at) DESC
@@ -134,11 +136,20 @@ type releaseRow struct {
 	Audio      string       `db:"audio"`
 	Language   string       `db:"language"`
 	CategoryID int          `db:"category_id"`
+	// Where the title said this sits in a series. Empty/zero for the two
+	// thirds of an index that says nothing — see episode.go.
+	SeriesKey  string `db:"series_key"`
+	SeriesName string `db:"series_name"`
+	Season     int    `db:"season"`
+	Episode    int    `db:"episode"`
+	Pack       bool   `db:"is_pack"`
 }
 
 func (r releaseRow) toAPI() pluginapi.Release {
 	rel := pluginapi.Release{
 		ID: r.ID, Title: r.Title, Size: r.Size, Group: r.Group,
+		SeriesKey: r.SeriesKey, SeriesName: r.SeriesName,
+		Season: r.Season, Episode: r.Episode, Pack: r.Pack,
 		Resolution: r.Resolution, Source: r.Source, Codec: r.Codec,
 		Audio: r.Audio, Language: r.Language, CategoryID: r.CategoryID,
 	}
