@@ -108,16 +108,11 @@ func (s *service) ReleaseByID(ctx context.Context, id int64) (pluginapi.ReleaseD
 	if row == nil {
 		return pluginapi.ReleaseDetail{}, false, nil
 	}
-	d := pluginapi.ReleaseDetail{
-		Release: pluginapi.Release{
-			ID: row.ID, Title: row.Title, Size: row.Size, Group: row.Group,
-			Resolution: row.Resolution, Source: row.Source, Codec: row.Codec,
-			Audio: row.Audio, Language: row.Language, CategoryID: row.CategoryID,
-		},
-	}
-	if row.Posted.Valid {
-		d.Release.Posted = row.Posted.Time
-	}
+	// Through releaseRow.toAPI rather than field-by-field here. The hand-written
+	// version was a second place that had to learn every new column, and it did
+	// not: the series fields reached every listing and stopped at the detail
+	// page, which is the one page that most wants to link to its show.
+	d := pluginapi.ReleaseDetail{Release: row.toAPI()}
 	if s.catalog != nil {
 		d.Release.Category = s.catalog.Name(row.CategoryID)
 	}

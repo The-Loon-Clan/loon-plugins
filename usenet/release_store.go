@@ -179,7 +179,8 @@ func (s *PGStore) releaseByID(ctx context.Context, id int64) (*detailRow, error)
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.GetContext(ctx, &r,
 			`SELECT id, title, size, posted_at, group_name,
-			        resolution, source, video_codec, audio, language, category_id, nzb_data
+			        resolution, source, video_codec, audio, language, category_id,
+			        series_key, series_name, season, episode, is_pack, nzb_data
 			 FROM nzbs WHERE id = $1 AND status = 'completed'`, id)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
