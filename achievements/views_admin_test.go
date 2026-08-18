@@ -231,9 +231,12 @@ func TestAdminFormsAllPostToTheAdminActions(t *testing.T) {
 		t.Errorf("%d POST forms but %d post to /admin/p/achievements/* — a stray form "+
 			"sits outside the host's CSRF handling", forms, toSelf)
 	}
-	// Two toggle rows plus the create form.
-	if forms != 3 {
-		t.Errorf("got %d forms for 2 rows, want 3 (one toggle each + create)", forms)
+	// Per row: a toggle and an edit. Plus the create form. The edit row
+	// arrived when the page gained one — it could create and toggle and
+	// nothing else, so a mistyped threshold could only be fixed in SQL.
+	if want := 2*len(vm.Achievements) + 1; forms != want {
+		t.Errorf("got %d forms for %d rows, want %d (toggle + edit each, plus create)",
+			forms, len(vm.Achievements), want)
 	}
 }
 

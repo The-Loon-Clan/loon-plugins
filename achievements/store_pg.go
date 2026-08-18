@@ -396,3 +396,40 @@ func (s *PGStore) SetAchievementEnabled(ctx context.Context, id int64, on bool) 
 	}
 	return nil
 }
+
+// UpdateAchievement overwrites a definition by id.
+//
+// The SLUG is deliberately not settable. It is the identifier a reward payout,
+// a trigger and a store item all name, so renaming one would silently detach
+// every reference — the rule ranks made explicit when it made slug the key.
+//
+// The same validation as CreateAchievement, and for the same reason: an edit
+// can break a definition exactly as thoroughly as a create can, and a
+// catalogue that only checks on the way in is one an edit walks straight past.
+func (s *PGStore) UpdateAchievement(ctx context.Context, id int64, a NewAchievement) error {
+	a.Name = strings.TrimSpace(a.Name)
+	a.Metric = strings.TrimSpace(a.Metric)
+	a.Trigger = strings.TrimSpace(a.Trigger)
+	a.RewardSlug = strings.TrimSpace(a.RewardSlug)
+
+	switch {
+	case id <= 0:
+		return fmt.Errorf("no such achievement")
+	case a.Name == "":
+		return fmt.Errorf("name is required; a catalogue of achievement-3 helps nobody")
+	case a.Metric == "" && a.Trigger == "":
+		return fmt.Errorf("a criterion is required: a metric with a threshold, or a trigger event")
+	case a.Metric != "" && a.Threshold <= 0:
+		return fmt.Errorf("threshold must be positive")
+	}
+
+	_, err := s.exec(ctx, `
+		UPDATE achievements
+		   SET name = $2, description = $3, reward_slug = $4, metric = $5,
+		       threshold = $6, trigger = $7, icon = $8, image_path = $9,
+		       title_slug = $10, description_slug = $11, ordinal = $12, hidden = $13
+		 WHERE id = $1`,
+		id, a.Name, a.Description, a.RewardSlug, a.Metric, a.Threshold,
+		a.Trigger, a.Icon, a.ImagePath, a.TitleSlug, a.DescriptionSlug, a.Ordinal, a.Hidden)
+	return err
+}

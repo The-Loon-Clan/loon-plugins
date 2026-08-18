@@ -41,6 +41,11 @@ type adminVM struct {
 	Events    []eventVM
 	Picked    string
 	Windows   []pluginapi.EventWindow
+	// Edit is the event the save form is prefilled from, nil for a blank one.
+	// The save is an upsert on slug, so without this "editing" meant retyping
+	// every field from memory and silently wiping whatever was left alone —
+	// a form that looks like an editor and is not.
+	Edit *editVM
 
 	// Findings is the window-health report. It sits at the TOP of the page
 	// because it is the only part that says something is wrong -- an operator
@@ -61,6 +66,24 @@ type eventVM struct {
 	NextOpen time.Time
 	Windows  int
 	LastEnds time.Time
+}
+
+// editVM is one event as the form needs it: the definition plus the duration
+// in the unit the form takes. Minutes rather than a Go duration, because that
+// is what the field accepts and re-deriving it in the template is where a
+// round trip would start losing precision.
+type editVM struct {
+	pluginapi.ScheduledEvent
+}
+
+// DurationMinutes is blank for "no duration", which is a real setting — on a
+// recurring event it means each window runs to the next firing, and printing 0
+// would change that to "closes immediately" on the next save.
+func (e editVM) DurationMinutes() string {
+	if e.Duration <= 0 {
+		return ""
+	}
+	return strconv.Itoa(int(e.Duration / time.Minute))
 }
 
 // Shape reads the definition back as a sentence, because cron plus a nullable
@@ -90,9 +113,9 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		Render: func(gc *gin.Context) (template.HTML, error) {
 			// The slug reaches SQL as a bound parameter; an unknown one simply
 			// lists no windows.
-			return p.renderPage(
+			return p.renderPageEdit(
 				pluginapi.WithCSRF(gc.Request.Context(), pluginapi.CSRFToken(p.core, gc)),
-				gc.Query("event"), gc.Query("msg"), gc.Query("err"))
+				gc.Query("event"), gc.Query("edit"), gc.Query("msg"), gc.Query("err"))
 		},
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			"event-save":   p.actionSaveEvent,
@@ -132,6 +155,11 @@ func (p *Plugin) parseTemplates() error {
 }
 
 func (p *Plugin) renderPage(ctx context.Context, picked, msg, errMsg string) (template.HTML, error) {
+	return p.renderPageEdit(ctx, picked, "", msg, errMsg)
+}
+
+// renderPageEdit is renderPage with the save form prefilled from one event.
+func (p *Plugin) renderPageEdit(ctx context.Context, picked, edit, msg, errMsg string) (template.HTML, error) {
 	now := time.Now()
 	vm := adminVM{Now: now, Msg: msg, Err: errMsg, Picked: picked, CSRFToken: pluginapi.CSRFFrom(ctx)}
 
@@ -144,6 +172,11 @@ func (p *Plugin) renderPage(ctx context.Context, picked, msg, errMsg string) (te
 		return "", err
 	}
 	for _, ev := range evs {
+		// The one the form is prefilled from, matched by slug from ?edit=.
+		if edit != "" && ev.Slug == edit {
+			e := editVM{ScheduledEvent: ev}
+			vm.Edit = &e
+		}
 		row := eventVM{ScheduledEvent: ev, OpenNow: open[ev.Slug]}
 		// Errors here are per-row and non-fatal: a malformed cron should cost
 		// that row its "next opens" cell, not the page. The same rule the

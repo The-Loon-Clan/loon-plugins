@@ -63,6 +63,7 @@
               <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
               <button class="btn btn-sm btn-outline-secondary">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
             </form>
+            <a class="btn btn-sm btn-outline-secondary" href="?edit={{.Slug}}#event-form">Edit</a>
             <form method="post" action="/admin/p/events/event-delete" class="d-inline"
                   onsubmit="return confirm('Delete {{.Slug}} and all its windows? Anything referencing this slug will see it as absent.');">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
@@ -109,28 +110,33 @@
 
 <div class="card">
   <div class="card-header"><strong>Create or update an event</strong>
-    <span class="text-muted small">saving an existing slug replaces it</span>
+    {{/* PREFILLED when ?edit= names an event. It used to be blank always,
+         while the save is an upsert on slug — so "editing" meant retyping
+         every field from memory, and any field left alone was silently
+         wiped. A form that looks like an editor and quietly drops what you
+         did not retype is worse than no editor. */}}
+    <span class="text-muted small">{{if .Edit}}editing <code>{{.Edit.Slug}}</code> &mdash; <a href="?">start a new one</a>{{else}}saving an existing slug replaces it{{end}}</span>
   </div>
-  <div class="card-body">
+  <div class="card-body" id="event-form">
     <form method="post" action="/admin/p/events/event-save" class="row g-2">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
       <div class="col-md-3">
         <label class="form-label small mb-0">Slug</label>
-        <input name="slug" class="form-control form-control-sm" required placeholder="summer-2026">
+        <input name="slug" class="form-control form-control-sm" required placeholder="summer-2026" value="{{with $.Edit}}{{.Slug}}{{end}}"{{if $.Edit}} readonly{{end}}>
         <div class="form-text">How other systems reference it. Changing it detaches them.</div>
       </div>
       <div class="col-md-3">
         <label class="form-label small mb-0">Name</label>
-        <input name="name" class="form-control form-control-sm" placeholder="Summer 2026">
+        <input name="name" class="form-control form-control-sm" placeholder="Summer 2026" value="{{with $.Edit}}{{.Name}}{{end}}">
       </div>
       <div class="col-md-6">
         <label class="form-label small mb-0">Description</label>
-        <input name="description" class="form-control form-control-sm">
+        <input name="description" class="form-control form-control-sm" value="{{with $.Edit}}{{.Description}}{{end}}">
       </div>
 
       <div class="col-md-3">
         <label class="form-label small mb-0">Cron</label>
-        <input name="cron" class="form-control form-control-sm" placeholder="0 0 * * *">
+        <input name="cron" class="form-control form-control-sm" placeholder="0 0 * * *" value="{{with $.Edit}}{{.Cron}}{{end}}">
         <div class="form-text">Leave blank for a one-off, and set a start date instead.</div>
       </div>
       <div class="col-md-3">
@@ -140,7 +146,7 @@
       </div>
       <div class="col-md-3">
         <label class="form-label small mb-0">Duration (minutes)</label>
-        <input name="duration_minutes" class="form-control form-control-sm" placeholder="blank">
+        <input name="duration_minutes" class="form-control form-control-sm" placeholder="blank" value="{{with $.Edit}}{{.DurationMinutes}}{{end}}">
         <div class="form-text">
           Blank on a recurring event means each window runs until the next firing.
           Blank on a one-off means it <strong>never closes</strong>.
@@ -148,17 +154,17 @@
       </div>
       <div class="col-md-2">
         <label class="form-label small mb-0">Timezone</label>
-        <input name="timezone" class="form-control form-control-sm" value="UTC">
+        <input name="timezone" class="form-control form-control-sm" value="{{if $.Edit}}{{$.Edit.Timezone}}{{else}}UTC{{end}}">
       </div>
       <div class="col-md-1 d-flex align-items-end">
         <div class="form-check">
-          <input class="form-check-input" type="checkbox" name="enabled" value="1" id="ev-enabled" checked>
+          <input class="form-check-input" type="checkbox" name="enabled" value="1" id="ev-enabled" {{if or (not $.Edit) $.Edit.Enabled}}checked{{end}}>
           <label class="form-check-label small" for="ev-enabled">On</label>
         </div>
       </div>
 
       <div class="col-12">
-        <button class="btn btn-sm btn-primary">Save event</button>
+        <button class="btn btn-sm btn-primary">{{if .Edit}}Save changes{{else}}Create event{{end}}</button>
       </div>
     </form>
   </div>

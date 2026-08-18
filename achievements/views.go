@@ -55,6 +55,7 @@ func (p *Plugin) registerViews(c *core.Core) error {
 			// backfills the achievement to everyone already past the
 			// threshold, so one click must not both define and award it.
 			"achievement-create": p.actionCreateAchievement,
+			"achievement-update": p.actionUpdateAchievement,
 			"achievement-toggle": p.actionToggleAchievement,
 		},
 	})

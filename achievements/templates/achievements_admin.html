@@ -79,6 +79,58 @@
                             </form>
                         </td>
                     </tr>
+                    {{/* The edit row. This page could create and toggle and
+                         nothing else, so a mistyped threshold or a wrong
+                         reward slug could only be fixed in SQL. The SLUG is
+                         read-only: it is what a payout, a trigger and a store
+                         item all name, and renaming it detaches every one. */}}
+                    <tr>
+                        <td colspan="9" style="padding-top:0">
+                            <details>
+                                <summary class="text-muted small">Edit {{.Name}}</summary>
+                                <form method="post" action="/admin/p/achievements/achievement-update"
+                                      enctype="multipart/form-data" class="mt-2">
+                                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                                    <input type="hidden" name="id" value="{{.ID}}">
+                                    <input type="hidden" name="slug" value="{{.Slug}}">
+                                    {{/* Carried so an edit that sends no new file keeps the art. */}}
+                                    <input type="hidden" name="image_existing" value="{{.ImagePath}}">
+                                    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:end">
+                                        <label class="form__label" for="ed-name-{{.ID}}">Name
+                                            <input id="ed-name-{{.ID}}" name="name" class="form__input" value="{{.Name}}">
+                                        </label>
+                                        <label class="form__label" for="ed-metric-{{.ID}}">Metric
+                                            <input id="ed-metric-{{.ID}}" name="metric" class="form__input" value="{{.Metric}}" list="metric-options">
+                                        </label>
+                                        <label class="form__label" for="ed-value-{{.ID}}">Value
+                                            <input id="ed-value-{{.ID}}" name="threshold" class="form__input" inputmode="numeric" value="{{.Threshold}}" size="6">
+                                        </label>
+                                        <label class="form__label" for="ed-trigger-{{.ID}}">or Trigger
+                                            <input id="ed-trigger-{{.ID}}" name="trigger" class="form__input" value="{{.Trigger}}" list="trigger-options">
+                                        </label>
+                                        <label class="form__label" for="ed-reward-{{.ID}}">Reward slug
+                                            <input id="ed-reward-{{.ID}}" name="reward_slug" class="form__input" value="{{.RewardSlug}}">
+                                        </label>
+                                        <label class="form__label" for="ed-icon-{{.ID}}">Icon
+                                            {{if $.IconOptions}}
+                                            <select id="ed-icon-{{.ID}}" name="icon" class="form__input">
+                                                <option value="">&mdash; host default &mdash;</option>
+                                                {{$cur := .Icon}}
+                                                {{range $.IconOptions}}<option value="{{.}}" {{if eq . $cur}}selected{{end}}>{{.}}</option>{{end}}
+                                            </select>
+                                            {{else}}
+                                            <input id="ed-icon-{{.ID}}" name="icon" class="form__input" value="{{.Icon}}">
+                                            {{end}}
+                                        </label>
+                                    </div>
+                                    <label class="form__label mt-2" for="ed-desc-{{.ID}}">Description
+                                        <input id="ed-desc-{{.ID}}" name="description" class="form__input" value="{{.Description}}">
+                                    </label>
+                                    <button class="button button--primary button--sm mt-2" type="submit">Save changes</button>
+                                </form>
+                            </details>
+                        </td>
+                    </tr>
                 {{else}}
                     <tr><td colspan="9" class="text-muted">No achievements defined yet — the form below creates the first.</td></tr>
                 {{end}}

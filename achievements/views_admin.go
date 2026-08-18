@@ -326,3 +326,65 @@ func (p *Plugin) redirectOK(gc *gin.Context, msg string) (template.HTML, error) 
 	gc.Redirect(http.StatusSeeOther, adminPage+"?"+q.Encode())
 	return "", nil
 }
+
+// actionUpdateAchievement edits a definition.
+//
+// It exists because the page could create and toggle and nothing else: a
+// mistyped threshold or a wrong reward slug meant deleting the row in SQL, and
+// there was no delete either. A catalogue an operator can only add to is one
+// where every mistake is permanent.
+//
+// The SLUG is not editable — it is the identifier a payout, a trigger and a
+// store item all name — so the form carries it read-only and the parser is
+// handed the existing one.
+func (p *Plugin) actionUpdateAchievement(gc *gin.Context) (template.HTML, error) {
+	if p.admin == nil {
+		return p.redirect(gc, "no admin store configured")
+	}
+	if err := gc.Request.ParseMultipartForm(5 << 20); err != nil && err != http.ErrNotMultipart {
+		return p.redirect(gc, "could not read the form")
+	}
+	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
+	if id <= 0 {
+		return p.redirect(gc, "no such achievement")
+	}
+	a, err := parseNewAchievement(gc.Request.PostForm)
+	if err != nil {
+		return p.redirect(gc, err.Error())
+	}
+	a.Icon = strings.TrimSpace(gc.PostForm("icon"))
+
+	// A new image REPLACES the old one; sending none keeps whatever is there,
+	// which is why image_existing rides hidden on the edit form. Without that
+	// an operator fixing a threshold would silently clear the badge art.
+	if file, hdr, ferr := gc.Request.FormFile("image"); ferr == nil {
+		defer func() { _ = file.Close() }()
+		if p.files == nil {
+			return p.redirect(gc, "this host has no file store wired (achievements.files)")
+		}
+		if hdr.Size > 2<<20 {
+			return p.redirect(gc, "badge image over 2 MiB")
+		}
+		data, rerr := io.ReadAll(io.LimitReader(file, 2<<20+1))
+		if rerr != nil {
+			return p.redirect(gc, "could not read the image")
+		}
+		ext, ok := blob.ImageExts[http.DetectContentType(data)]
+		if !ok {
+			return p.redirect(gc, "badge image must be JPEG, PNG, GIF or WebP")
+		}
+		url, serr := p.files.Save(gc.Request.Context(), badgeImagePrefix+a.Slug+ext, data)
+		if serr != nil {
+			return p.redirect(gc, fmt.Sprintf("saving image: %v", serr))
+		}
+		a.ImagePath = url
+	}
+	if a.ImagePath == "" {
+		a.ImagePath = strings.TrimSpace(gc.PostForm("image_existing"))
+	}
+
+	if err := p.admin.UpdateAchievement(gc.Request.Context(), id, a); err != nil {
+		return p.redirect(gc, err.Error())
+	}
+	return p.redirectOK(gc, "saved "+a.Slug)
+}
