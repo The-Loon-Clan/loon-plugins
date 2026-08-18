@@ -1,6 +1,8 @@
 package dailyreward
 
 import (
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
+
 	"bytes"
 	"context"
 	"fmt"
@@ -131,6 +133,14 @@ func (p *Plugin) claim(c *gin.Context) {
 		// the reorder fixes is the LIE. The event now reports Reward: 0 in
 		// that case, which is what actually happened, and `claimed` false
 		// still emits nothing because somebody else took today's.
+		// The member's standing bonuses — worn medals, whatever else speaks
+		// pluginapi's points dimension — scale the claim, floored. Neutral
+		// (exactly the streak reward) on a host with no multiplier sources,
+		// so this changes nothing where nothing is installed. Applied BEFORE
+		// paid is captured, so the event and the ledger tell the same story.
+		reward = int(float64(reward) * pluginapi.ResolveMultiplier(
+			c.Request.Context(), p.core, pluginapi.MultPoints,
+			pluginapi.MultiplierContext{UserID: u.ID}))
 		paid := reward
 		if _, err := p.core.Points.Award(c.Request.Context(), u.ID, reward, "earn_daily",
 			fmt.Sprintf("Daily login reward (streak %d)", streak), 0); err != nil {
