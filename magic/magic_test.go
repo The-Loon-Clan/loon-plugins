@@ -1,6 +1,10 @@
 package magic
 
-import "testing"
+import (
+	"html/template"
+	"strings"
+	"testing"
+)
 
 // The level curve is the progression contract; a change here is a change to
 // what every member has already earned.
@@ -69,5 +73,62 @@ func TestApplyDiscountFloor(t *testing.T) {
 	}
 	if applyDiscount(100, 10) != 90 {
 		t.Error("plain percentage went wrong")
+	}
+}
+
+// The cast form only exists once a torrent is chosen.
+//
+// This page used to open with a forty-hex-character field and expect a member
+// to fill it in — which is not a thing anyone can do from memory, and is why
+// the page stopped being a menu destination. Arriving without a torrent is now
+// a wrong turn the page points back out of.
+func TestCastFormNeedsATorrentFirst(t *testing.T) {
+	// The plugin's own embedded set, parsed exactly as Provision does.
+	tmpl, err := template.ParseFS(tmplFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &Plugin{tmpl: tmpl}
+	// The real data map the handler builds (views.go), not a struct that only
+	// this test knows — a double looser than the thing it stands for passes on
+	// markup production rejects.
+	render := func(vm map[string]any) string {
+		var sb strings.Builder
+		if err := p.tmpl.ExecuteTemplate(&sb, "magic.html", vm); err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		return sb.String()
+	}
+
+	hash := strings.Repeat("a", 40)
+	with := render(map[string]any{"Hash": hash, "TorrentName": "Some.Torrent-GRP",
+		"MaxHours": 48, "CSRFToken": "tok"})
+	for _, want := range []string{
+		`name="hash" value="` + hash, // carried, not typed
+		"Some.Torrent-GRP",           // and named, so the caster can see it
+		`action="/p/magic/cast"`,
+		`href="/tracker/t/` + hash, // the way back to where they came from
+	} {
+		if !strings.Contains(with, want) {
+			t.Errorf("the cast form is missing %q", want)
+		}
+	}
+	// The editable hash box is what this change removes; a text input for it
+	// reaching the page again is the regression.
+	if strings.Contains(with, `id="mg-hash"`) {
+		t.Error("the free-text info-hash field is back")
+	}
+
+	// No torrent: no form at all, and a route back to picking one.
+	without := render(map[string]any{"MaxHours": 48, "CSRFToken": "tok"})
+	if strings.Contains(without, `action="/p/magic/cast"`) {
+		t.Error("a cast form rendered with no torrent to cast on")
+	}
+	if !strings.Contains(without, `href="/tracker"`) {
+		t.Error("nothing points a member at the torrent list")
+	}
+	// The history below still renders either way — it is the rest of the page.
+	if !strings.Contains(without, "History") {
+		t.Error("the page lost its history along with the form")
 	}
 }

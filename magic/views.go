@@ -23,7 +23,16 @@ func (p *Plugin) registerViews(c *core.Core) error {
 	if err := c.RegisterView(core.View{
 		Slug: "magic", Title: "Magic", Slot: core.SlotSitePage,
 		MinRole: core.RoleUser,
-		Nav:     core.NavHint{Group: "Releases"},
+		// NOT IN THE MENU. Magic is something you do TO a torrent, so it is
+		// reached from one — the torrent page's "Cast magic on this torrent"
+		// button, carrying the hash. Listed in a menu it invited a member to
+		// arrive with no torrent in mind and be asked for forty hex
+		// characters, which is not a thing anyone can answer.
+		//
+		// Still routed, still linkable, and still the page that shows a
+		// member's level and their casts; it simply is not a destination the
+		// site advertises browsing to.
+		Nav: core.NavHint{Menu: core.NavHidden},
 		Render:  p.renderMagic,
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			"cast":      p.actionCast,

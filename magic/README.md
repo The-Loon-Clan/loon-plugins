@@ -5,9 +5,17 @@ Torrent promotions, the NexusPHP tradition: a member spends points to cast a
 or (once practised) a custom ratio pair — **private** (themselves), **public**
 (everyone), or for one named member, lasting 24–360 hours.
 
-- **/p/magic** — the cast form (reached with `?hash=` from a torrent page)
-  and the full history: every cast, its ratios, its window, its status.
-  A cast cannot be edited; an admin can terminate it, and the row stays.
+- **/p/magic** — **not a menu destination** (`NavHidden`). A cast is something
+  you do TO a torrent, so it starts on one: the tracker's torrent page carries
+  a *Cast magic on this torrent* button that lands here with the hash. Opened
+  without one, the page offers no form at all — it points back at the torrent
+  list, because the alternative was asking a member to type forty hex
+  characters from memory. With a hash, the hash rides hidden and the torrent's
+  NAME is what the caster reads.
+
+  The page still holds the member's level and the full history: every cast,
+  its ratios, its window, its status. A cast cannot be edited; an admin can
+  terminate it, and the row stays.
 - **Resolution**: the highest upload factor and lowest download factor across
   every active magic visible to a member win — a public promotion never
   overrides a private one with better rules, and promotions stack without
