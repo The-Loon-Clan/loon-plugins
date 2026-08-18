@@ -91,6 +91,10 @@ func (h *Handlers) Index(c *gin.Context) {
 		"Topics":       topics,
 		"RecentPosts":  recentPosts,
 		"PopularPosts": popularPosts,
+		// What this deployment calls itself, so the heading is not the name
+		// of the site this plugin was lifted out of. Empty is fine — the
+		// template says just "Wiki" then.
+		"SiteName": siteName(),
 	})
 }
 
@@ -107,6 +111,7 @@ func (h *Handlers) RecentChanges(c *gin.Context) {
 		"Topics":         topics,
 		"RecentPosts":    recentPosts,
 		"RecentOnlyView": true,
+		"SiteName":       siteName(),
 	})
 }
 

@@ -109,7 +109,6 @@
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 0.7rem;
-            margin-bottom: 1.6rem;
         }
         @media (max-width: 480px) {
             .wiki-cat-grid { grid-template-columns: minmax(0, 1fr); }
@@ -181,13 +180,13 @@
         .wiki-cat-card[data-slug="community"]  .cc-ico { background: rgba(91,138,245,0.18);  color: #5b8af5; }
 
         /* ── Recent Posts ─────────────────────────────────────────── */
-        .wiki-recent-panel {
-            overflow: hidden;
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            margin-bottom: 1.6rem;
-        }
+        /* The BOX is the host panel's now (panelV2 + panel__body--flush), so
+           this draws no border, no background and no radius of its own.
+           Nesting a second card inside the first is what made the page read as
+           a stack of identical grey rectangles with nothing telling them
+           apart. What stays is the clipping, which the rounded panel needs to
+           keep the first row's hover from spilling past the corner. */
+        .wiki-recent-panel { overflow: hidden; }
         .wiki-recent-tabs {
             display: flex;
             gap: 0.35rem;
@@ -293,12 +292,10 @@
         .wiki-view-all:hover { text-decoration: underline; }
 
         /* ── Popular Articles — slim single-column list ───────────── */
-        .wiki-pop-panel {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 0.9rem 1rem;
-        }
+        /* As the recent panel above: the host panel draws the box. Padding
+           stays, because panel__body--flush deliberately removes it and a
+           list flush against the border reads as clipped. */
+        .wiki-pop-panel { padding: 0.9rem 1rem; }
         .pop-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:0.25rem; }
         .pop-item {
             display: flex;
@@ -349,8 +346,12 @@
             <div>
                 {{/* h2, not h1: this fragment renders inside site_page.html,
                      whose panel heading is already the page's one h1. */}}
-                <h2>ameNZB Wiki</h2>
-                <p class="wiki-tagline">Guides, tools and references for ameNZB and Usenet.</p>
+                {{/* The deployment's own name, from Deps.SiteName. It said
+                     "ameNZB Wiki" — the site this plugin was lifted out of —
+                     on every host that ran it. Blank falls back to "Wiki",
+                     which is true everywhere. */}}
+                <h2>{{if .SiteName}}{{.SiteName}} {{end}}Wiki</h2>
+                <p class="wiki-tagline">Guides, tools and references.</p>
             </div>
             <div class="wiki-head-side">
                 <div class="wiki-search">
@@ -365,9 +366,27 @@
             </div>
         </div>
 
-        {{/* Browse Categories grid */}}
+        {{/* Each section is a HOST panel (panelV2 / panel__header /
+             panel__heading / panel__body), not a bare <h2> above a box.
+
+             It was the bare version, and the page read as one flat wash: the
+             section headings were the same weight as the article titles under
+             them, the boxes were the same colour as the page behind them, and
+             nothing said which heading owned which box. Every other page on
+             this site — achievements, staff, the admin tables — draws a header
+             STRIP over a body, so the wiki looked out of place and read worse
+             for the same reason. The classes are the host's, and this plugin's
+             README names them as assumed. */}}
         {{if .Topics}}
-        <h2 id="categories" class="wiki-section-h">Browse Categories</h2>
+        <section class="panelV2 mt-4">
+            <header class="panel__header">
+                <h2 class="panel__heading" id="categories">
+                    <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#folder"></use></svg>
+                    Browse Categories
+                </h2>
+                <div class="panel__actions"><span class="panel__action">{{len .Topics}}</span></div>
+            </header>
+            <div class="panel__body">
         <div class="wiki-cat-grid">
             {{range .Topics}}
             <a class="wiki-cat-card" data-slug="{{.Slug}}" href="/wiki/{{.Slug}}">
@@ -383,13 +402,22 @@
             </a>
             {{end}}
         </div>
+            </div>
+        </section>
         {{end}}
 
         {{/* Recent Posts — full-width row list */}}
-        <div class="wiki-section-head">
-            <h2 class="wiki-section-h">Recent Updates</h2>
-            {{if not .RecentOnlyView}}<a class="wiki-section-link" href="/wiki/recent">View all updates &rarr;</a>{{end}}
-        </div>
+        <section class="panelV2 mt-4">
+            <header class="panel__header">
+                <h2 class="panel__heading">
+                    <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#clock"></use></svg>
+                    Recent Updates
+                </h2>
+                {{if not .RecentOnlyView}}
+                <div class="panel__actions"><a class="panel__action" href="/wiki/recent">View all updates</a></div>
+                {{end}}
+            </header>
+            <div class="panel__body panel__body--flush">
         {{if .RecentPosts}}
         <div class="wiki-recent-panel">
             <div class="wiki-recent-tabs">
@@ -420,11 +448,20 @@
         {{else}}
         <div class="wiki-empty">No posts yet.</div>
         {{end}}
+            </div>
+        </section>
 
         {{/* Popular Articles — the one right-rail card that carried real
              data. Now a slim list under the recent panel. */}}
         {{if .PopularPosts}}
-        <h2 class="wiki-section-h">Popular Articles</h2>
+        <section class="panelV2 mt-4">
+            <header class="panel__header">
+                <h2 class="panel__heading">
+                    <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#eye"></use></svg>
+                    Popular Articles
+                </h2>
+            </header>
+            <div class="panel__body panel__body--flush">
         <div class="wiki-pop-panel">
             <ul class="pop-list">
                 {{range .PopularPosts}}
@@ -441,6 +478,8 @@
                 {{end}}
             </ul>
         </div>
+            </div>
+        </section>
         {{end}}
     </div>
 

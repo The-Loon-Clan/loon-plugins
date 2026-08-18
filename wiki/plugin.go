@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -56,6 +57,24 @@ type Deps struct {
 	// anything. The access audit probes WITH a valid token by design, so only
 	// counting tokens in the rendered forms catches this class.
 	CSRFToken func(c *gin.Context) string
+
+	// SiteName is what this deployment calls itself, for the index heading.
+	//
+	// It exists because the heading said "ameNZB Wiki" — the name of the site
+	// this plugin was lifted out of — on every host that ran it. A plugin
+	// cannot know the name and must not guess it, and there is exactly one
+	// right answer per deployment, so the host says.
+	//
+	// Optional: absent, the heading is just "Wiki", which is true everywhere.
+	SiteName func() string
+}
+
+// siteName resolves the deployment's name, empty when the host set no seam.
+func siteName() string {
+	if deps.SiteName == nil {
+		return ""
+	}
+	return strings.TrimSpace(deps.SiteName())
 }
 
 var deps Deps
