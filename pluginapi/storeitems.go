@@ -242,7 +242,7 @@ func PrepareStorePurchase(info StoreItemTypeInfo, fixedCost int, fields map[stri
 				}
 			}
 			if !ok {
-				return 0, nil, StoreRefusal(fmt.Sprintf("pick one of the offered %s values", label))
+				return 0, nil, StoreRefusal(fmt.Sprintf("%s: pick one of the offered options", label))
 			}
 			resolved[f.Name] = v
 		default:

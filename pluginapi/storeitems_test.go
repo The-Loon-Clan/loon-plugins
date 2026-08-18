@@ -78,7 +78,7 @@ func TestPrepareStorePurchase(t *testing.T) {
 		{
 			name: "a band nobody offered",
 			info: charityShape(), fields: map[string]string{"amount": "2000", "ratio": "99"},
-			wantErr: "offered band",
+			wantErr: "band: pick one of the offered options",
 		},
 		{
 			name: "a field kind the store cannot draw is a wiring bug, not a purchase",
