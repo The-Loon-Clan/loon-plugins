@@ -57,13 +57,13 @@
           <td>{{ts .NextOpen}}</td>
           <td>{{ts .LastEnds}}</td>
           <td class="text-nowrap">
-            <form method="post" action="?action=event-toggle" class="d-inline">
+            <form method="post" action="/admin/p/events/event-toggle" class="d-inline">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="slug" value="{{.Slug}}">
               <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
               <button class="btn btn-sm btn-outline-secondary">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
             </form>
-            <form method="post" action="?action=event-delete" class="d-inline"
+            <form method="post" action="/admin/p/events/event-delete" class="d-inline"
                   onsubmit="return confirm('Delete {{.Slug}} and all its windows? Anything referencing this slug will see it as absent.');">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="slug" value="{{.Slug}}">
@@ -112,7 +112,7 @@
     <span class="text-muted small">saving an existing slug replaces it</span>
   </div>
   <div class="card-body">
-    <form method="post" action="?action=event-save" class="row g-2">
+    <form method="post" action="/admin/p/events/event-save" class="row g-2">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
       <div class="col-md-3">
         <label class="form-label small mb-0">Slug</label>
