@@ -61,6 +61,124 @@ func (p *Plugin) registerWidgets(c *core.Core) {
 	}); err != nil {
 		p.log.Info("register allowances widget failed", "err", err)
 	}
+
+	// ── who is in which group ───────────────────────────────────────────────
+	//
+	// The catalog above answers "what do I get"; this answers "who has it".
+	// Together with the host's `staff` widget they are the two halves of a
+	// staff page: the host knows the ROLE ladder (a permission), this knows the
+	// GROUPS (a name a site chose), and neither can express the other.
+	//
+	// Config is one string, the same one a placement's field holds and a page
+	// body's `[widget ranks-groups assigned]` passes:
+	//
+	//	(blank)    every visible group that has members
+	//	assigned   groups an admin puts people in — the staff-group shape
+	//	earned     groups the promotion sweep awards
+	//	paid       groups bought in the store
+	//	<slug>     one named group, whatever its kind
+	//
+	// Hidden groups are never listed whatever the config asks for: an operator
+	// marked them not-for-display, and a widget is not the place to overrule
+	// that. A kind with no visible members renders nothing rather than an
+	// empty panel, which is what lets one page serve a site that uses assigned
+	// groups and one that does not.
+	if err := c.RegisterWidget(core.Widget{
+		Slug:        "ranks-groups",
+		Title:       "Groups",
+		Description: "Members of each rank group — staff groups, earned ranks or bought ones.",
+		Public:      true,
+		Weight:      21,
+		ConfigLabel: "Kind or group slug",
+		ConfigHint:  "assigned, earned, paid, or one group's slug. Blank lists every visible group with members.",
+		Render: func(gc *gin.Context) (template.HTML, error) {
+			return p.renderGroupRoster(gc, strings.TrimSpace(core.WidgetConfig(gc)))
+		},
+	}); err != nil {
+		p.log.Info("register groups widget failed", "err", err)
+	}
+}
+
+// groupKinds are the values ranks.groups.kind may hold. Named here so the
+// widget can tell "a kind" from "a slug" without asking the database, and so a
+// new kind added to the schema fails visibly here rather than being silently
+// treated as a group nobody can find.
+var groupKinds = map[string]bool{"assigned": true, "earned": true, "paid": true}
+
+// renderGroupRoster draws the groups the config selects, each with its members.
+func (p *Plugin) renderGroupRoster(gc *gin.Context, cfg string) (template.HTML, error) {
+	ctx := gc.Request.Context()
+	groups, err := p.store.Groups(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	var wanted []Group
+	for _, g := range groups {
+		if !g.Visible {
+			continue
+		}
+		switch {
+		case cfg == "":
+		case groupKinds[cfg]:
+			if g.Kind != cfg {
+				continue
+			}
+		default:
+			if g.Slug != cfg {
+				continue
+			}
+		}
+		wanted = append(wanted, g)
+	}
+	if len(wanted) == 0 {
+		return "", nil
+	}
+
+	ids := make([]int, 0, len(wanted))
+	for _, g := range wanted {
+		ids = append(ids, g.ID)
+	}
+	roster, err := p.store.Roster(ctx, ids)
+	if err != nil {
+		return "", err
+	}
+	byGroup := map[int][]RosterMember{}
+	for _, m := range roster {
+		byGroup[m.GroupID] = append(byGroup[m.GroupID], m)
+	}
+
+	var b strings.Builder
+	for _, g := range wanted {
+		members := byGroup[g.ID]
+		// An empty group is a fact about the catalog, not about the site's
+		// people. Listing "Retired staff — 0" tells a reader nothing they came
+		// for, and on a fresh install it would be every panel.
+		if len(members) == 0 {
+			continue
+		}
+		b.WriteString(`<section class="panelV2"><header class="panel__header">` +
+			`<h2 class="panel__heading">`)
+		if g.Icon != "" {
+			// Host sprite ids, the same coupling the store's cards have: a
+			// missing symbol renders an empty <use>, never a broken page.
+			fmt.Fprintf(&b, `<svg class="icon panel__heading-icon" aria-hidden="true"><use href="#%s"></use></svg>`,
+				template.HTMLEscapeString(g.Icon))
+		}
+		b.WriteString(template.HTMLEscapeString(g.Name))
+		fmt.Fprintf(&b, `</h2><div class="panel__actions"><span class="panel__action">%d</span></div></header>`,
+			len(members))
+		b.WriteString(`<div class="panel__body"><ul class="member-list">`)
+		for _, m := range members {
+			fmt.Fprintf(&b, `<li><a href="/u/%[1]s">%[1]s</a></li>`,
+				template.HTMLEscapeString(m.Username))
+		}
+		b.WriteString(`</ul></div></section>`)
+	}
+	if b.Len() == 0 {
+		return "", nil
+	}
+	return template.HTML(b.String()), nil
 }
 
 func (p *Plugin) renderAllowances(gc *gin.Context, c *core.Core) (template.HTML, error) {

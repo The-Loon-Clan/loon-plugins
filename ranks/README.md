@@ -26,6 +26,25 @@ mirror is the next step, and it is what frees this plugin for the lift to
   restricted to **admins** inside the action — a group that grants entitlements
   with no badge is the shape of a privilege-escalation mistake, so mods keep
   full catalog CRUD but not that lever.
+- **widgets** — two placeable cards (`widgets.go`), offered at
+  `/admin/widgets` and usable in an editable page's body as
+  `[widget <slug> <setting>]`:
+  - `ranks-allowances` — every visible rank with its daily API and grab
+    allowance, plus any active boost. No setting.
+  - `ranks-groups` — **who is in each group**. Setting is one string: a kind
+    (`assigned`, `earned`, `paid`), one group's slug, or blank for every
+    visible group that has members. Hidden groups are never listed whatever
+    the setting asks for, and a group with no members renders no panel — so
+    one page serves a site that uses assigned groups and one that does not.
+
+    Pairs with the HOST's `staff` widget, which lists by `core.Role`. The two
+    answer different questions and neither can express the other: a role is a
+    permission the host enforces, a group is a name this site chose.
+
+    It draws host components — `panelV2` / `panel__header` / `panel__heading` /
+    `panel__body`, the `#`-referenced sprite ids for group icons, and
+    **`member-list`** for the names. A host without those class names gets an
+    unstyled but readable list.
 - **worker** — the hourly **Rank Expiry** job (`jobs.go`): sweeps lapsed
   memberships and logs deranks to history.
 - **Process kinds**: `Metadata.Processes` is `["web","worker"]` — the web/all

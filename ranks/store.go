@@ -50,6 +50,16 @@ type Member struct {
 	Source    string
 }
 
+// RosterMember is one member of a group, named. Avatar is the host's
+// avatar_path and may be empty, which every caller must treat as "draw the
+// initials" rather than "no member".
+type RosterMember struct {
+	GroupID  int
+	UserID   int
+	Username string
+	Avatar   string
+}
+
 // HistoryEntry is one membership-history row, resolved against the catalog.
 // GroupName / GroupSlug are empty when the group has since been deleted:
 // group_member_history's FK is ON DELETE SET NULL, because an audit trail that
@@ -173,6 +183,19 @@ type Store interface {
 	// for the admin catalog. One query, not one per row.
 	MemberCounts(ctx context.Context) (map[int]int, error)
 
+	// Roster returns live memberships of the given groups WITH the member's
+	// display name, for surfaces that show who is in a group — the groups
+	// widget, and whatever else lists people rather than counting them.
+	//
+	// Separate from MembersOfGroups, which the entitlement sync uses and which
+	// must stay a pure membership read: it fans out over every member of a
+	// changed group, and joining a name onto rows nobody displays would make
+	// the hot path pay for the cold one.
+	//
+	// Names come from public.user_display, the host's sanctioned view for
+	// plugin SQL — this plugin has no business reading the users table itself.
+	Roster(ctx context.Context, groupIDs []int) ([]RosterMember, error)
+
 	// RecordHistory appends one audit row. Best-effort at the call sites.
 	RecordHistory(ctx context.Context, userID int, groupID *int, action, details string) error
 
@@ -190,9 +213,11 @@ type MemStore struct {
 	mu      sync.Mutex
 	groups  map[int]*Group
 	members map[[2]int]*Member
-	history []HistoryEntry
-	nextID  int
-	now     func() time.Time
+	// usernames is what Roster's join stands for — see SetUsername.
+	usernames map[int]string
+	history   []HistoryEntry
+	nextID    int
+	now       func() time.Time
 }
 
 func NewMemStore() *MemStore {
@@ -512,6 +537,54 @@ func (m *MemStore) MemberCounts(context.Context) (map[int]int, error) {
 			out[mem.GroupID]++
 		}
 	}
+	return out, nil
+}
+
+// SetUsername tells the double what a member is called, so a Roster test reads
+// like the join it stands for. Names are the one thing this store cannot know
+// on its own — it models the groups side, and the real names come from the
+// host's user_display view.
+func (m *MemStore) SetUsername(userID int, name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.usernames == nil {
+		m.usernames = map[int]string{}
+	}
+	m.usernames[userID] = name
+}
+
+// Roster mirrors the SQL: live memberships only, ordered by username, and a
+// member the join could not name is DROPPED rather than listed blank — a
+// deleted account leaves its membership row behind, and an empty tile linking
+// to /u/ is worse than one fewer tile.
+func (m *MemStore) Roster(_ context.Context, groupIDs []int) ([]RosterMember, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	want := map[int]bool{}
+	for _, id := range groupIDs {
+		want[id] = true
+	}
+	now := m.now()
+	var out []RosterMember
+	for _, mem := range m.members {
+		if !want[mem.GroupID] {
+			continue
+		}
+		if mem.ExpiresAt != nil && !mem.ExpiresAt.After(now) {
+			continue
+		}
+		name := m.usernames[mem.UserID]
+		if name == "" {
+			continue
+		}
+		out = append(out, RosterMember{GroupID: mem.GroupID, UserID: mem.UserID, Username: name})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Username != out[j].Username {
+			return out[i].Username < out[j].Username
+		}
+		return out[i].GroupID < out[j].GroupID
+	})
 	return out, nil
 }
 

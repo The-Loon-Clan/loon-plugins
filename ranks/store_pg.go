@@ -326,6 +326,42 @@ func (s *PGStore) MembersOfGroups(ctx context.Context, groupIDs []int) ([]Member
 	return out, err
 }
 
+// Roster is MembersOfGroups with the member's name joined on, for the
+// surfaces that list people. See the Store interface for why it is separate.
+//
+// public.user_display is schema-qualified because this runs with search_path
+// set to the plugin's schema; the view is the host's sanctioned read for
+// plugin SQL, and the INNER join is deliberate — a membership whose account is
+// gone has nobody to show.
+func (s *PGStore) Roster(ctx context.Context, groupIDs []int) ([]RosterMember, error) {
+	if len(groupIDs) == 0 {
+		return nil, nil
+	}
+	var out []RosterMember
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT m.group_id, m.user_id, u.username, coalesce(u.avatar_path, '')
+			FROM group_members m
+			JOIN public.user_display u ON u.id = m.user_id
+			WHERE m.group_id = ANY($1)
+			  AND (m.expires_at IS NULL OR m.expires_at > NOW())
+			ORDER BY u.username, m.group_id`, pq.Array(groupIDs))
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var r RosterMember
+			if err := rows.Scan(&r.GroupID, &r.UserID, &r.Username, &r.Avatar); err != nil {
+				return err
+			}
+			out = append(out, r)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
 // MembershipsOfUsers returns live memberships for the given users, in one
 // query — the batch shape the display capability needs so a page rendering
 // many authors does not become an N+1.

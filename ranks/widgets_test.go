@@ -2,9 +2,12 @@ package ranks
 
 import (
 	"context"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
@@ -148,5 +151,83 @@ func TestThousands(t *testing.T) {
 		if got := thousands(in); got != want {
 			t.Errorf("thousands(%d) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// ── the groups roster ───────────────────────────────────────────────────────
+
+// testGinContext is the minimal request the widget needs: it reads nothing off
+// the context but the request's own ctx, because the config arrives as a plain
+// argument — which is what makes this renderable without a session.
+func testGinContext() *gin.Context {
+	gc, _ := gin.CreateTestContext(httptest.NewRecorder())
+	gc.Request = httptest.NewRequest("GET", "/staff", nil)
+	return gc
+}
+
+// seedRoster puts named members in a group, which is what the widget lists.
+func seedRoster(t *testing.T, st *MemStore, g *Group, names map[int]string) {
+	t.Helper()
+	for id, name := range names {
+		// A real duration: MemStore stamps expires_at = now + dur, and a
+		// zero-length membership has already lapsed by the time Roster asks.
+		if err := st.AddMember(context.Background(), id, g.ID, 24*time.Hour); err != nil {
+			t.Fatalf("add member: %v", err)
+		}
+		st.SetUsername(id, name)
+	}
+}
+
+// The config is the whole interface an operator has to this widget, whether
+// they typed it in a placement field or in a page's [widget ranks-groups ...]
+// shortcode. Each arm selects a different set, and getting one wrong publishes
+// a list nobody asked for.
+func TestGroupRosterSelection(t *testing.T) {
+	p, st := widgetPlugin(t)
+	staff := seedGroup(t, st, &Group{Name: "Sysop", Slug: "sysop", Kind: "assigned", Visible: true, Icon: "shield"})
+	earned := seedGroup(t, st, &Group{Name: "Elite", Slug: "elite", Kind: "earned", Visible: true})
+	hidden := seedGroup(t, st, &Group{Name: "Machinery", Slug: "machinery", Kind: "assigned", Visible: false})
+	empty := seedGroup(t, st, &Group{Name: "Retired", Slug: "retired", Kind: "assigned", Visible: true})
+	_ = empty
+
+	seedRoster(t, st, staff, map[int]string{1: "alice"})
+	seedRoster(t, st, earned, map[int]string{2: "bob"})
+	seedRoster(t, st, hidden, map[int]string{3: "carol"})
+
+	render := func(cfg string) string {
+		got, err := p.renderGroupRoster(testGinContext(), cfg)
+		if err != nil {
+			t.Fatalf("render %q: %v", cfg, err)
+		}
+		return string(got)
+	}
+
+	all := render("")
+	for _, want := range []string{"Sysop", "alice", "Elite", "bob", "#shield"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("the unconfigured widget is missing %q", want)
+		}
+	}
+	// Two absences that are policy, not accident: a group an operator marked
+	// not-for-display, and one with nobody in it. Listing "Retired — 0" tells a
+	// reader nothing, and on a fresh install it would be every panel.
+	for _, absent := range []string{"Machinery", "carol", "Retired"} {
+		if strings.Contains(all, absent) {
+			t.Errorf("the widget published %q", absent)
+		}
+	}
+
+	assigned := render("assigned")
+	if !strings.Contains(assigned, "alice") || strings.Contains(assigned, "bob") {
+		t.Errorf("kind=assigned selected the wrong groups:\n%s", assigned)
+	}
+	one := render("elite")
+	if !strings.Contains(one, "bob") || strings.Contains(one, "alice") {
+		t.Errorf("a slug config selected the wrong group:\n%s", one)
+	}
+	// A config naming nothing renders nothing rather than falling back to
+	// everything — a typo must not publish the whole membership.
+	if got := render("no-such-group"); strings.TrimSpace(got) != "" {
+		t.Errorf("an unknown config rendered %q", got)
 	}
 }
