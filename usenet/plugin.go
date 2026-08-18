@@ -509,6 +509,21 @@ func (p *Plugin) runTagFillLocked(ctx context.Context) {
 		return
 	}
 	p.tagJob.Log("re-tagged %d NZB(s)", n)
+	// Where each release sits in a series, read from the same title. Batched
+	// bigger than the retag above because it is one UPDATE per row with no
+	// parsing cost worth speaking of, and there are 160k rows to walk once.
+	//
+	// Reported as filed-of-read rather than just filed: two thirds of an index
+	// is films and software, so "1,204 of 5,000" is the honest sentence and a
+	// bare "1,204" would read as a low hit rate on a job that is working.
+	if filed, read, err := p.st.fillEpisodes(ctx, 5000); err != nil {
+		// Non-fatal to the pass: the retag above already succeeded, and losing
+		// the whole job over the newer half would be a regression in the older.
+		p.reportErr(ctx, "usenet/episode-fill", err)
+		p.tagJob.Log("episode fill failed: %v", err)
+	} else if read > 0 {
+		p.tagJob.Log("filed %d of %d title(s) into a series", filed, read)
+	}
 	// Re-run the categoriser over the table and correct whatever disagrees with
 	// the current rules — including rows that matched the WRONG rule, which
 	// never sit at the default and so were previously never revisited.

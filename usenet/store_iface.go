@@ -234,6 +234,11 @@ type LeaseStore interface {
 // so it swaps with the backend.
 type MaintenanceStore interface {
 	retagUntagged(ctx context.Context, limit int) (int, error)
+	// fillEpisodes reads series/season/episode out of titles never read
+	// before. Returns how many were FILED and how many were read — two
+	// thirds of an index is films and software, so the pair is the honest
+	// report and the first number alone would read as a poor hit rate.
+	fillEpisodes(ctx context.Context, limit int) (parsed, seen int, err error)
 	recategorizeSweep(ctx context.Context, fn func(group, title string) int, limit int) (int, error)
 	pruneNzbs(ctx context.Context, days int) (int64, error)
 	deleteJunkNzbs(ctx context.Context) (int, error)

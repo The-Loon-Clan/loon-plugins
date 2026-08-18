@@ -254,3 +254,56 @@ func shouldRewrite(current, proposed int) bool {
 	}
 	return proposed != current
 }
+
+// fillEpisodes reads the series, season and episode out of titles that have
+// never been read, in one batch.
+//
+// Folded into the Tag Fill job rather than given its own: it is the same
+// operation on the same rows — re-read the title, store what it says — and
+// that job already carries the write gate, the lease, the overlap lock and an
+// admin card. A second job would be that ceremony copied for no gain, which is
+// the duplication SEAMS.md exists to argue against.
+//
+// The cursor is episode_parsed_at IS NULL rather than a saved offset: a row is
+// read exactly once, a row that parses to nothing is still DONE (or it would
+// be picked up on every pass forever), and a parser improvement re-reads
+// everything by clearing the column — no cursor to reset and no ordering to
+// get right.
+func (s *PGStore) fillEpisodes(ctx context.Context, limit int) (parsed, seen int, err error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	err = s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		var rows []struct {
+			ID    int64  `db:"id"`
+			Title string `db:"title"`
+		}
+		if err := tx.SelectContext(ctx, &rows,
+			`SELECT id, title FROM nzbs
+			  WHERE episode_parsed_at IS NULL
+			  ORDER BY id
+			  LIMIT $1`, limit); err != nil {
+			return err
+		}
+		seen = len(rows)
+		for _, r := range rows {
+			e := ParseEpisode(r.Title)
+			// Stamped either way. The stamp means "read", not "filed" — the
+			// two-thirds of an index that is films and software must not be
+			// re-read on every pass for the rest of time.
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE nzbs
+				   SET series_key = $2, series_name = $3, season = $4, episode = $5,
+				       is_pack = $6, episode_parsed_at = now()
+				 WHERE id = $1`,
+				r.ID, e.SeriesKey, e.Series, e.Season, e.Episode, e.Pack); err != nil {
+				return err
+			}
+			if e.Found() {
+				parsed++
+			}
+		}
+		return nil
+	})
+	return parsed, seen, err
+}
