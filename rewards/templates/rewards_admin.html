@@ -122,6 +122,14 @@
            a whole payout kind reachable only by hand-crafted POST. */}}
       <div class="col-md-1"><label class="form-label small mb-0">Medal</label>
         <input name="medal" class="form-control form-control-sm" placeholder="slug"></div>
+      {{/* A lootbox line, offered as a PICKER over the boxes that exist — a
+           free-text slug here would be a fourth place to typo a name that
+           only fails when a member opens the box. */}}
+      <div class="col-md-2"><label class="form-label small mb-0">Lootbox</label>
+        <select name="lootbox" class="form-select form-select-sm">
+          <option value="">&mdash; none &mdash;</option>
+          {{range .Boxes}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select></div>
       <div class="col-md-1"><label class="form-label small mb-0">Expires</label>
         <input name="expires_after" class="form-control form-control-sm" placeholder="never"></div>
       <div class="col-md-1"><button class="btn btn-sm btn-primary w-100">Create</button></div>

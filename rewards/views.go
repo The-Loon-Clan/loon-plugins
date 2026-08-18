@@ -286,6 +286,12 @@ func (p *Plugin) actionCreateReward(gc *gin.Context) (template.HTML, error) {
 	if target := strings.TrimSpace(gc.PostForm("medal")); target != "" {
 		r.Payouts = append(r.Payouts, Payout{Kind: PayoutMedal, Target: target})
 	}
+	// A lootbox line: the reward hands over a box, and opening it draws one of
+	// the box's prizes. Offered on the form rather than reachable only by a
+	// hand-crafted POST, which is the state the medal line was found in.
+	if target := strings.TrimSpace(gc.PostForm("lootbox")); target != "" {
+		r.Payouts = append(r.Payouts, Payout{Kind: PayoutLootbox, Target: target})
+	}
 	if len(r.Payouts) == 0 {
 		return p.redirect(gc, rewardsPage, "", "a reward with no payout lines would grant nothing")
 	}
