@@ -245,12 +245,29 @@ Verify: open `/admin` as a mod — the page is reachable from the hub;
       tense unless the data is live ("Snatched", not "Seeding", when the only
       fact is a sticky completed flag under tiles that DO count a live
       window).
+- [ ] **MUST** — no hardcoded image path. A plugin naming a file under the
+      host's `/static` is asserting the host ships it; a host that does not
+      renders a broken image and says nothing. Decorative art belongs in a
+      resource def — PENDING, the registry is designed and unbuilt, so until
+      it lands an unavoidable one goes in `audit_resources.py`'s allowlist
+      WITH its reason, and comes back out in the commit that lands the
+      registry.
+- [ ] **MUST** — every `<use href="#id">` resolves to a symbol the host
+      ships. A missing one renders an empty box: no error, no console
+      warning, nothing to notice until somebody looks at the page. Ask what
+      exists rather than guessing — the host publishes `icons.catalogue`
+      (`func() []string`), which is also what an admin picker should offer
+      instead of a free-text box. A medal held a Windows path for months
+      because its field was free text.
 - [ ] **SHOULD** — empty states say what fills them; a member-facing figure
       links to the page that explains it.
 
 Verify: host `make a11y` and `make mobile` (0 findings, every page fits);
-`make shot NAME=x URL=/y` and LOOK at it — two of this month's real bugs were
-visible only in the rendered page, never in the CSS.
+**`make resources`** (hardcoded images, unresolvable icons — reads the plugin
+tree too when it is checked out beside the host, since the sprite sheet is the
+host's and that check can only be made there); `make shot NAME=x URL=/y` and
+LOOK at it — two of this month's real bugs were visible only in the rendered
+page, never in the CSS.
 
 ## 9. Widgets
 
@@ -284,8 +301,13 @@ Verify: place it on `/admin/widgets`, view as a member with and without data.
       host-supplied helpers (the `RelativeTime` seam pattern), so locale
       formatting lands in one place.
 
-Verify: grep the templates for English embedded in Go code; review question —
-"if `T()` arrived tomorrow, is this a mechanical wrap or a rewrite?"
+Verify: **`make resources`** counts member-facing sentences built in Go and
+holds them to a RATCHET — 111 across these plugins on 18 Aug 2026, and the
+number may only go down. A check that failed on all 111 would have been
+switched off the day it was written; one that refuses the 112th is a check
+that survives. Lower the baseline in `audit_resources.py` in the same commit
+that converts one. Review question — "if `T()` arrived tomorrow, is this a
+mechanical wrap or a rewrite?"
 
 ## 11. Machine surface (api / mcp)
 
