@@ -1,0 +1,119 @@
+{{/* One torrent's own page.
+
+     There was no such page: the tracker was a flat list, so anything wanting
+     to act on ONE torrent had to be reached by pasting a 40-character hash
+     into a form. This is where a member lands from the list's name, and where
+     every per-torrent surface hangs off.
+
+     Host components throughout (panelV2 / panel__header / panel__heading /
+     panel__body / key-value / data-table / button), so it reads as part of
+     this site rather than as the tracker's own dialect — the README names
+     them. */}}
+{{define "tracker_torrent.html"}}
+<div class="container mt-4">
+
+    <section class="panelV2">
+        <header class="panel__header">
+            <h2 class="panel__heading">
+                <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#download"></use></svg>
+                {{.Torrent.Name}}
+            </h2>
+            <div class="panel__actions">
+                <a class="panel__action" href="/tracker">All torrents</a>
+            </div>
+        </header>
+        <div class="panel__body">
+            <dl class="key-value">
+                <div class="key-value__group"><dt>Size</dt><dd>{{bytes .Torrent.Size}}</dd></div>
+                <div class="key-value__group"><dt>Files</dt><dd>{{.Torrent.FileCount}}</dd></div>
+                <div class="key-value__group"><dt>Seeders</dt><dd>{{.Torrent.Seeders}}</dd></div>
+                <div class="key-value__group"><dt>Leechers</dt><dd>{{.Torrent.Leechers}}</dd></div>
+                <div class="key-value__group"><dt>Snatches</dt><dd>{{.Torrent.Snatches}}</dd></div>
+                <div class="key-value__group"><dt>Added</dt><dd>{{.Torrent.AddedAt.Format "2 Jan 2006"}}</dd></div>
+            </dl>
+            <p class="mt-3" style="font-size:0.72rem;color:var(--text-muted);word-break:break-all">
+                {{/* The hash, shown once, HERE — so a member who needs it for
+                     a client has it, and no other page has to ask them for
+                     it. */}}
+                <span style="text-transform:uppercase;letter-spacing:0.04em">Info-hash</span><br>
+                <code>{{.Torrent.InfoHash}}</code>
+            </p>
+            <div class="mt-3" style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                <a class="button button--primary button--sm" href="/tracker/download/{{.Torrent.InfoHash}}">
+                    Download .torrent
+                </a>
+                {{/* Magic, carrying the hash — the whole point of this page.
+                     Only when a magic plugin answered: a host without one gets
+                     no button rather than a link to a 404. */}}
+                {{if .HasMagic}}
+                <a class="button button--sm" href="/p/magic?hash={{.Torrent.InfoHash}}">Cast magic on this torrent</a>
+                {{end}}
+                {{/* The indexer's page for the same content, when this torrent
+                     came from a release. It used to be what the list's name
+                     linked to; it belongs here, where there is room to say what
+                     it is. */}}
+                {{with release .Torrent.NzbID}}
+                <a class="button button--sm" href="{{.}}">View the release</a>
+                {{end}}
+            </div>
+        </div>
+    </section>
+
+    {{/* Promotions — this file's history. Active and lapsed both: a member
+         asking "has this been free before" is asking about the lapsed ones,
+         and a page that showed only what is live now would answer a question
+         nobody asked.
+
+         Rendered only when the magic plugin answered. An empty list still
+         draws the panel, because "nothing has been cast here" is a real
+         answer and the button above invites the reader to change it. */}}
+    {{if .HasMagic}}
+    <section class="panelV2 mt-4">
+        <header class="panel__header">
+            <h2 class="panel__heading">
+                <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#star"></use></svg>
+                Promotions
+            </h2>
+            <div class="panel__actions"><span class="panel__action">{{len .Promotions}}</span></div>
+        </header>
+        <div class="panel__body panel__body--flush">
+            {{if .Promotions}}
+            <div class="data-table-wrapper">
+                <table class="data-table">
+                    <caption class="visually-hidden">Every promotion cast on this torrent, newest first</caption>
+                    <thead>
+                        <tr><th>Cast by</th><th>For</th><th>Ratio</th><th>Until</th><th>State</th></tr>
+                    </thead>
+                    <tbody>
+                        {{range .Promotions}}
+                        <tr>
+                            <td>{{if .Caster}}{{.Caster}}{{else}}<span class="text-muted">a departed member</span>{{end}}</td>
+                            <td>{{if eq .Scope "public"}}Everyone{{else if eq .Scope "user"}}One member{{else}}The caster{{end}}</td>
+                            <td><span class="tag">{{.UpRatio}}&times; up / {{.DownRatio}}&times; down</span></td>
+                            <td>{{if .Until.IsZero}}<span class="text-muted">&mdash;</span>{{else}}{{.Until.Format "2 Jan 2006 15:04"}}{{end}}</td>
+                            <td>
+                                {{/* Three states, told apart: still running,
+                                     stopped by an admin, and simply over. The
+                                     last two look identical to a member and are
+                                     very different to an operator. */}}
+                                {{if .Active}}<span class="tag tag--success">active</span>
+                                {{else if .Terminated}}<span class="tag">terminated</span>
+                                {{else}}<span class="tag">expired</span>{{end}}
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}
+            <div class="p-3" style="color:var(--text-muted);font-size:0.85rem;">
+                No promotions have been cast on this torrent. Casting one makes it
+                cheaper to leech &mdash; for you, for one member, or for everyone.
+            </div>
+            {{end}}
+        </div>
+    </section>
+    {{end}}
+
+</div>
+{{end}}

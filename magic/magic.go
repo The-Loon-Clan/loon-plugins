@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"html/template"
 	"math"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -89,6 +90,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if err := c.Register(pluginapi.MultiplierSourcePrefix+"magic",
 		pluginapi.MultiplierSource(resolver{p.st})); err != nil {
 		return fmt.Errorf("magic: register multiplier source: %w", err)
+	}
+	// What is cast on ONE torrent, for that torrent's own page to show. The
+	// multiplier source above answers "what applies to this member right now";
+	// this answers "what has ever been cast here", which is a different
+	// question and the one a reader looking at a file asks.
+	if err := c.Register(pluginapi.TorrentPromotionsName,
+		pluginapi.TorrentPromotionsFunc(p.torrentPromotions)); err != nil {
+		return fmt.Errorf("magic: register torrent promotions: %w", err)
 	}
 	return p.registerViews(c)
 }
@@ -187,4 +196,39 @@ func (p *Plugin) csrfToken(gc *gin.Context) string {
 		}
 	}
 	return ""
+}
+
+// torrentPromotions flattens this torrent's casts for a page that is not ours
+// to draw. Names are resolved here because the caller has no business reading
+// our caster ids, and an id in a table is not something a reader can act on.
+func (p *Plugin) torrentPromotions(ctx context.Context, infoHash string) ([]pluginapi.TorrentPromotion, error) {
+	rows, err := p.st.ByTorrent(ctx, infoHash)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	out := make([]pluginapi.TorrentPromotion, 0, len(rows))
+	for _, m := range rows {
+		tp := pluginapi.TorrentPromotion{
+			Scope:      m.Scope,
+			UpRatio:    m.UpRatio,
+			DownRatio:  m.DownRatio,
+			Terminated: m.TerminatedAt.Valid,
+		}
+		if m.EndsAt.Valid {
+			tp.Until = m.EndsAt.Time
+		}
+		// Active means BOTH: not stamped dead by an admin, and not yet run
+		// out. A cast can be either, and to a member both look like nothing
+		// happening — which is why the flag and the Terminated one are
+		// separate rather than one tri-state a template has to decode.
+		tp.Active = !m.TerminatedAt.Valid && m.EndsAt.Valid && m.EndsAt.Time.After(now)
+		if p.core != nil && p.core.Users != nil {
+			if u, err := p.core.Users.GetByID(ctx, m.CasterID); err == nil && u != nil {
+				tp.Caster = u.Username
+			}
+		}
+		out = append(out, tp)
+	}
+	return out, nil
 }

@@ -234,3 +234,21 @@ func (s *PGStore) AddXP(ctx context.Context, userID, n int64) error {
 		ON CONFLICT (user_id) DO UPDATE SET xp = magic.magic_xp.xp + $2`, userID, n)
 	return err
 }
+
+// ByTorrent is every cast on one torrent, newest first — the read behind
+// pluginapi.TorrentPromotionsName, which a torrent's own page asks.
+//
+// Bounded rather than complete: a heavily promoted torrent could carry
+// hundreds of lapsed casts, and a page showing "the history of this file"
+// wants the recent ones. The active ones are never dropped, because they sort
+// first only by accident of id — so the limit is generous rather than tight.
+func (s *PGStore) ByTorrent(ctx context.Context, infoHash string) ([]Magic, error) {
+	var out []Magic
+	err := s.db.SelectContext(ctx, &out, `
+		SELECT id, caster_id, info_hash, scope, target_user_id, up_ratio, down_ratio,
+		       starts_at, ends_at, hours, cost, comment, terminated_at, terminated_by, created_at
+		  FROM magic.magics
+		 WHERE info_hash = $1
+		 ORDER BY id DESC LIMIT 50`, infoHash)
+	return out, err
+}

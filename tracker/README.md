@@ -34,9 +34,18 @@ pinned by goldens in `wire_golden_test.go` (announce/scrape bodies) and
 | `GET /api/tracker/scrape/:passkey` | **public** (as announce) | |
 | `GET /tracker` | member + `tracker.access` | Swarm listing. |
 | `GET /tracker/my` | member + `tracker.access` | Per-torrent counters, announce URL, rotate button. |
+| `GET /tracker/t/:info_hash` | member + `tracker.access` | **One torrent's own page** — facts, the `.torrent`, the info-hash, the release cross-link, and every promotion ever cast on it. A static `/t/` prefix so it cannot collide with `/my` or `/download` in Gin's tree. Reached from the list's torrent name. |
 | `GET /tracker/download/:info_hash` | member + `tracker.access` | Splices the member's passkey into the announce URL; `info_bytes` are spliced **unchanged**. |
 | `POST /tracker/passkey/rotate` | member + `tracker.access` | Returns the new key with a warning: rotating invalidates every `.torrent` already downloaded. |
 | `GET /admin/p/tracker` | `RoleMod` (host admin gate) | One page — torrents plus every member's accounting. |
+
+The torrent page exists because there was no such thing: the tracker was a flat
+list, so any surface wanting to act on ONE torrent had to be reached by pasting
+a 40-character info-hash into a form. Casting magic was the case that made it
+obvious. It consumes `pluginapi.TorrentPromotionsName` (looked up in **Start** —
+sibling registration order is nobody's promise), and a host without the magic
+plugin gets the page with no promotions panel and no cast button, rather than a
+link to a route it does not serve.
 
 Gates, in order: the host's own auth chain (`c.Auth.RequireUser`), then the
 tracker's entitlement. Order matters — checking the entitlement first would mean

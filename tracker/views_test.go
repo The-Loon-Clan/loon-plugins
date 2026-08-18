@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 func renderFixture(t *testing.T) *Plugin {
@@ -236,14 +238,19 @@ func TestStatsFragmentCarriesTheCSRFToken(t *testing.T) {
 	}
 }
 
-// The torrent name links to the release it was made from — and only then.
+// The TORRENT PAGE links to the release it was made from — and only then.
+//
+// This link used to be the list's torrent name, and moved when the torrent got
+// a page of its own: the name now goes to that page (which every torrent has),
+// and the release cross-link lives where there is room to label it. The
+// guarantee is unchanged and still worth holding.
 //
 // Three cases, because the failure modes differ and two of them are silent. A
 // torrent uploaded directly has no nzb_id; a host that wires no ReleaseURL seam
 // has no page to point at. Either one emitting <a href=""> gives a member a link
 // that reloads the page they are on, which reads as the site being broken rather
 // than as there being nothing to link to.
-func TestTorrentNameLinksToItsReleaseOnlyWhenThereIsOne(t *testing.T) {
+func TestTorrentPageLinksToItsReleaseOnlyWhenThereIsOne(t *testing.T) {
 	id := int64(4242)
 	for _, tc := range []struct {
 		name     string
@@ -272,12 +279,11 @@ func TestTorrentNameLinksToItsReleaseOnlyWhenThereIsOne(t *testing.T) {
 				t.Fatal(err)
 			}
 			var sb strings.Builder
-			if err := p.tmpl.ExecuteTemplate(&sb, "tracker_list.html", PageData{
-				Torrents: []*Torrent{{
+			if err := p.tmpl.ExecuteTemplate(&sb, "tracker_torrent.html", PageData{
+				Torrent: &Torrent{
 					InfoHash: strings.Repeat("b", 40), Name: "Linked.Release-GRP",
 					Size: 1 << 30, FileCount: 3, NzbID: tc.nzbID, AddedAt: time.Now(),
-				}},
-				Total: 1,
+				},
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -295,5 +301,101 @@ func TestTorrentNameLinksToItsReleaseOnlyWhenThereIsOne(t *testing.T) {
 				t.Error("an empty href reached the page — a link that reloads this page")
 			}
 		})
+	}
+}
+
+// The torrent page is the answer to "a member should not have to type a hash".
+// Every per-torrent action hangs off it, and the promotions panel is the one
+// that only exists when a sibling plugin answered.
+func TestTorrentPageOffersItsActionsAndItsHistory(t *testing.T) {
+	SetDeps(Deps{
+		RenderPage:   func(*gin.Context, string, template.HTML) {},
+		CSRFToken:    func(*gin.Context) string { return "tok" },
+		RelativeTime: func(time.Time) string { return "now" },
+	})
+	t.Cleanup(func() { deps = nil })
+
+	p := &Plugin{}
+	if err := p.parseTemplates(); err != nil {
+		t.Fatal(err)
+	}
+	hash := strings.Repeat("c", 40)
+	tor := &Torrent{InfoHash: hash, Name: "Some.Torrent-GRP", Size: 1 << 30,
+		FileCount: 4, Seeders: 2, Leechers: 1, Snatches: 7, AddedAt: time.Now()}
+
+	render := func(data PageData) string {
+		var sb strings.Builder
+		if err := p.tmpl.ExecuteTemplate(&sb, "tracker_torrent.html", data); err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		return sb.String()
+	}
+
+	// With magic: the cast link carries the hash, and the history is drawn —
+	// all three states, since "expired" and "terminated" look the same to a
+	// member and must not to an operator.
+	ends := time.Now().Add(24 * time.Hour)
+	out := render(PageData{Torrent: tor, HasMagic: true, Promotions: []pluginapi.TorrentPromotion{
+		{Caster: "bob", Scope: "private", UpRatio: 1, DownRatio: 0, Until: ends, Active: true},
+		{Caster: "alice", Scope: "public", UpRatio: 2, DownRatio: 1, Until: time.Now().Add(-time.Hour)},
+		{Scope: "user", UpRatio: 1, DownRatio: 0, Terminated: true},
+	}})
+	for _, want := range []string{
+		`href="/p/magic?hash=` + hash,     // no hash to type — the whole point
+		`href="/tracker/download/` + hash, // and the .torrent from the same page
+		hash,                              // shown once, for a client that wants it
+		"Some.Torrent-GRP", "bob", "alice",
+		">active<", ">expired<", ">terminated<",
+		"a departed member", // the caster whose account is gone
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the torrent page is missing %q", want)
+		}
+	}
+
+	// Without magic: no panel and no button, rather than a link to a page this
+	// host does not serve.
+	out = render(PageData{Torrent: tor})
+	for _, absent := range []string{"/p/magic", "Promotions"} {
+		if strings.Contains(out, absent) {
+			t.Errorf("a host with no magic plugin still rendered %q", absent)
+		}
+	}
+	// The page still has to be worth opening without it.
+	if !strings.Contains(out, "Some.Torrent-GRP") || !strings.Contains(out, "/tracker/download/") {
+		t.Error("the page lost its own content along with the promotions panel")
+	}
+
+	// Magic installed but nothing cast yet: the panel says so, because that is
+	// exactly the torrent somebody would want to promote.
+	out = render(PageData{Torrent: tor, HasMagic: true})
+	if !strings.Contains(out, "No promotions have been cast") {
+		t.Error("an unpromoted torrent got no empty state")
+	}
+}
+
+// The list is how the page is reached, so the name has to point at it.
+func TestTorrentListNameLinksToTheTorrentPage(t *testing.T) {
+	SetDeps(Deps{
+		RenderPage:   func(*gin.Context, string, template.HTML) {},
+		CSRFToken:    func(*gin.Context) string { return "tok" },
+		RelativeTime: func(time.Time) string { return "now" },
+	})
+	t.Cleanup(func() { deps = nil })
+
+	p := &Plugin{}
+	if err := p.parseTemplates(); err != nil {
+		t.Fatal(err)
+	}
+	hash := strings.Repeat("d", 40)
+	var sb strings.Builder
+	if err := p.tmpl.ExecuteTemplate(&sb, "tracker_list.html", PageData{
+		Torrents: []*Torrent{{InfoHash: hash, Name: "Row.Name-GRP", Size: 1 << 30, AddedAt: time.Now()}},
+		Total:    1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sb.String(), `href="/tracker/t/`+hash+`"`) {
+		t.Error("the list's torrent name does not reach the torrent page")
 	}
 }

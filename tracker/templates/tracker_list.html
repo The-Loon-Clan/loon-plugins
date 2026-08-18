@@ -94,11 +94,15 @@
                                  nowhere. Same markup either way except the
                                  element, so the two do not sit at different
                                  heights in the same column. */}}
-                            {{if $release}}
-                            <a class="data-table__title" href="{{$release}}">{{.Name}}</a>
-                            {{else}}
-                            <span class="data-table__title">{{.Name}}</span>
-                            {{end}}
+                            {{/* The name goes to the TORRENT's own page, which
+                                 every torrent has — where the release link, the
+                                 hash, the download and the promotions history
+                                 all live. It used to go to the indexer's
+                                 release page when the torrent had an nzb_id and
+                                 nowhere at all when it did not, so half the
+                                 rows were dead text and the other half left the
+                                 tracker entirely. */}}
+                            <a class="data-table__title" href="/tracker/t/{{.InfoHash}}">{{.Name}}</a>
                             {{/* NO info hash here, though there is one on the
                                  admin page's equivalent table.
 

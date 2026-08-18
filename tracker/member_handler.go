@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // The member-facing pages, lifted from the host's TrackerHandler.
@@ -36,6 +38,19 @@ type PageData struct {
 	// CSRFToken for the passkey-rotate form, supplied by the host's session
 	// layer via Deps rather than derived here.
 	CSRFToken string
+
+	// ── the torrent page ────────────────────────────────────────────────────
+	// Torrent is the one this page is about; nil on every other page.
+	Torrent *Torrent
+	// Promotions is what magic has been cast on it, newest first — active and
+	// lapsed both, because "the history of this file" is the question the
+	// panel answers. Nil on a host without the magic plugin, which renders no
+	// panel at all rather than an empty one.
+	Promotions []pluginapi.TorrentPromotion
+	// HasMagic is whether a cast can be OFFERED: the plugin answered, so the
+	// page can link at its form. Separate from len(Promotions) — a torrent
+	// nobody has promoted yet is exactly the one a member wants to promote.
+	HasMagic bool
 }
 
 // IndexPage lists the swarm.
@@ -237,4 +252,49 @@ func sanitizeFilename(s string) string {
 		out = "torrent"
 	}
 	return out
+}
+
+// TorrentPage is one torrent's own page.
+//
+// It exists because there was no such thing: the tracker was a flat list, so
+// every other surface that wanted to act on ONE torrent had to be reached by
+// pasting its info-hash into a form. Casting magic was the case that made it
+// obvious — a member had to copy a 40-character hex string out of a link.
+func (h *Handlers) TorrentPage(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID, ok := h.viewer(c)
+	if !ok {
+		return
+	}
+	// Lowercased and length-checked before it reaches the store: the hash is a
+	// path segment, and a page that 500s on a typo is a page a crawler can
+	// fill the error log with.
+	hash := strings.ToLower(strings.TrimSpace(c.Param("info_hash")))
+	if len(hash) != 40 {
+		c.String(http.StatusNotFound, "no such torrent")
+		return
+	}
+	t, err := h.store.Torrent(ctx, hash)
+	if err != nil || t == nil {
+		c.String(http.StatusNotFound, "no such torrent")
+		return
+	}
+	pk, err := h.passkeyFor(ctx, userID)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "passkey: %v", err)
+		return
+	}
+	data := PageData{
+		Torrent: t, Passkey: pk,
+		AnnounceURL: h.announceURL(pk), CSRFToken: h.csrf(c),
+	}
+	if h.promotions != nil {
+		data.HasMagic = true
+		// Best effort: a promotions read that fails costs its panel, never the
+		// page. The torrent's own facts are what the reader came for.
+		if list, perr := h.promotions(ctx, hash); perr == nil {
+			data.Promotions = list
+		}
+	}
+	h.render(c, "tracker_torrent.html", t.Name, data)
 }

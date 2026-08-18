@@ -229,6 +229,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	authed.Use(p.requireEntitled)
 	authed.GET("", p.h.IndexPage)
 	authed.GET("/my", p.h.MyStatsPage)
+	// One torrent's own page. A STATIC prefix ("/t/") rather than
+	// "/tracker/:info_hash", which would collide with /my and /download in
+	// Gin's tree and make every future static sibling a breaking change.
+	authed.GET("/t/:info_hash", p.h.TorrentPage)
 	authed.GET("/download/:info_hash", p.h.Download)
 	authed.POST("/passkey/rotate", p.h.RotatePasskey)
 
@@ -263,6 +267,17 @@ func (p *Plugin) Start(ctx context.Context) error {
 			return pluginapi.ResolveMultiplier(ctx, reg, pluginapi.MultUpload, mc),
 				pluginapi.ResolveMultiplier(ctx, reg, pluginapi.MultDownload, mc)
 		})
+	}
+	// What magic is cast on a given torrent, for the torrent page's history
+	// panel. A SIBLING plugin, so this is in Start and absence is normal: a
+	// host without magic renders the page with no promotions panel at all,
+	// which is the right page for that host.
+	if p.core != nil {
+		if v, ok := p.core.Lookup(pluginapi.TorrentPromotionsName); ok {
+			if fn, ok := v.(pluginapi.TorrentPromotionsFunc); ok {
+				p.h.SetPromotions(fn)
+			}
+		}
 	}
 	// No job means the tracker is off or the host wired no scheduler; either
 	// way there is nothing to loop.

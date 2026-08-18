@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 	"github.com/the-loon-clan/loon/core"
 )
 
@@ -81,7 +82,17 @@ type Handlers struct {
 	siteURL string
 	// tmpl is the plugin's own fragment set, shared with the admin view.
 	tmpl *template.Template
+	// promotions answers what magic is cast on one torrent, for the torrent
+	// page. A sibling plugin's read, so it is looked up in Start and may be
+	// nil — a host without the magic plugin simply has no promotions panel,
+	// which is the correct page for that host rather than a degraded one.
+	promotions pluginapi.TorrentPromotionsFunc
 }
+
+// SetPromotions installs the sibling read. Called from Start, never Provision:
+// registration order between two plugins is nobody's promise, and this one has
+// been learned twice in this tree already.
+func (h *Handlers) SetPromotions(fn pluginapi.TorrentPromotionsFunc) { h.promotions = fn }
 
 // SetTemplates hands the handler set the parsed fragments. Separate from
 // NewHandlers because Provision parses once and both the member pages and the
