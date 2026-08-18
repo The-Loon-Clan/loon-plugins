@@ -1,0 +1,32 @@
+{{/* Admin -> Settings -> Magic: the pricing knobs. */}}
+{{if .Msg}}<div class="notice notice--success"><span>{{.Msg}}</span></div>{{end}}
+
+<form method="post" action="/admin/settings/magic/save">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+        <label class="form__label" for="mg-ball">Base: all members
+            <input id="mg-ball" name="base_all" class="form__input" inputmode="numeric" value="{{.Config.BaseAll}}" size="6">
+        </label>
+        <label class="form__label" for="mg-bself">Base: myself
+            <input id="mg-bself" name="base_self" class="form__input" inputmode="numeric" value="{{.Config.BaseSelf}}" size="6">
+        </label>
+        <label class="form__label" for="mg-buser">Base: specified member
+            <input id="mg-buser" name="base_user" class="form__input" inputmode="numeric" value="{{.Config.BaseUser}}" size="6">
+        </label>
+        <label class="form__label" for="mg-avg">Typical torrent size (GB)
+            <input id="mg-avg" name="avg_size_gb" class="form__input" inputmode="numeric" value="{{.Config.AvgSizeGB}}" size="5">
+        </label>
+        <label class="form__label" for="mg-upmax">Custom UL max
+            <input id="mg-upmax" name="custom_up_max" class="form__input" value="{{.Config.CustomUpMax}}" size="5">
+        </label>
+        <label class="form__label" for="mg-downmax">Custom DL max
+            <input id="mg-downmax" name="custom_down_max" class="form__input" value="{{.Config.CustomDownMax}}" size="5">
+        </label>
+    </div>
+    <button class="button button--primary button--sm mt-3" type="submit">Save</button>
+    <p class="text-muted small mt-2">
+        cost = base &times; &radic;(size &divide; typical) &times; ratio strength &times; &radic;hours &divide; 40,
+        then the caster&#39;s level discount. Buff presets live in the database
+        (magic.buff_defs) and the six classics are re-ensured every boot.
+    </p>
+</form>

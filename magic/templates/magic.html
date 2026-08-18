@@ -1,0 +1,100 @@
+{{/* Magic — /p/magic: cast a buff, and the history of every cast. */}}
+{{if .Msg}}<div class="notice notice--success"><span>{{.Msg}}</span></div>{{end}}
+{{if .Err}}<div class="notice notice--warning"><span>{{.Err}}</span></div>{{end}}
+
+<p class="text-muted">
+    Magic casts ratio rules on a torrent: free leech, double upload, or your own
+    pair. Private (just you), public (everyone), or for one named member. The best
+    numbers win &mdash; a public promotion never overrides a private one with better
+    rules &mdash; and a cast cannot be edited, only terminated by an admin.
+    <br>Your magic: <strong>level {{.Level}}</strong> ({{.XP}} xp)
+    {{if .Discount}}&middot; {{.Discount}}% off every cast{{end}}
+    &middot; casts up to <strong>{{.MaxHours}}h</strong>
+    {{if not .Custom}}&middot; custom ratios unlock at level 1{{end}}
+</p>
+
+<form method="post" action="/p/magic/cast">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:end">
+        <label class="form__label" for="mg-hash" style="flex:1;min-width:280px">Torrent info-hash
+            <input id="mg-hash" name="hash" class="form__input" value="{{.Hash}}" placeholder="40 hex characters" pattern="[0-9a-f]{40}">
+            {{if .TorrentName}}<span class="form-help text-muted small">{{.TorrentName}}</span>{{end}}
+        </label>
+        <label class="form__label" for="mg-scope">For
+            <select id="mg-scope" name="scope" class="form__input">
+                <option value="self">Myself only (private)</option>
+                <option value="all">All members (public)</option>
+                <option value="user">A specified member</option>
+            </select>
+        </label>
+        <label class="form__label" for="mg-target">Member id <span class="text-muted small">(specified only)</span>
+            <input id="mg-target" name="target" class="form__input" inputmode="numeric" size="6">
+        </label>
+        <label class="form__label" for="mg-hours">Hours ({{.MaxHours}} max)
+            <input id="mg-hours" name="hours" class="form__input" inputmode="numeric" value="24" size="5">
+        </label>
+    </div>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:end" class="mt-2">
+        <label class="form__label" for="mg-buff">Buff
+            <select id="mg-buff" name="buff" class="form__input">
+                {{range .Buffs}}<option value="{{.Slug}}">{{.Name}} ({{.UpRatio}}&times; up / {{.DownRatio}}&times; down)</option>{{end}}
+                {{if .Custom}}<option value="custom">Custom ratio&hellip;</option>{{end}}
+            </select>
+        </label>
+        {{if .Custom}}
+        <label class="form__label" for="mg-up">UL ratio (1&ndash;{{.CustomUpMax}})
+            <input id="mg-up" name="up" class="form__input" size="5" placeholder="2.33">
+        </label>
+        <label class="form__label" for="mg-down">DL ratio (0&ndash;{{.CustomDownMax}})
+            <input id="mg-down" name="down" class="form__input" size="5" placeholder="0">
+        </label>
+        {{end}}
+        <label class="form__label" for="mg-comment" style="flex:1;min-width:220px">Comment <span class="text-muted small">(optional, delivered by your magic)</span>
+            <input id="mg-comment" name="comment" class="form__input" maxlength="240">
+        </label>
+        <button class="button button--primary button--sm" type="submit">Cast it!</button>
+    </div>
+    <p class="text-muted small mt-2 m-0">
+        The price scales with who it reaches (public costs most), the torrent&#39;s
+        size, the strength of the ratios, and the square root of the hours &mdash;
+        it is charged when the cast lands, and refused with the number if you
+        cannot afford it.
+    </p>
+</form>
+
+<h3 class="h5 mt-4">History</h3>
+<div class="data-table-wrapper">
+    <table class="data-table">
+        <caption class="visually-hidden">Every magic cast, newest first</caption>
+        <thead>
+            <tr><th>ID</th><th>Torrent</th><th>For</th><th>Ratio</th><th>Caster</th><th>Till</th><th>Status</th>{{if .IsAdmin}}<th></th>{{end}}</tr>
+        </thead>
+        <tbody>
+            {{$csrf := .CSRFToken}}{{$admin := .IsAdmin}}
+            {{range .History}}
+            <tr>
+                <td>{{.ID}}</td>
+                <td>{{if .Name}}{{.Name}}{{else}}<code>{{.ShortHash}}&hellip;</code>{{end}}</td>
+                <td>{{if eq .Scope "all"}}Everyone{{else if eq .Scope "self"}}Private{{else}}Member #{{.TargetUserID.Int64}}{{end}}</td>
+                <td><span class="tag{{if lt .DownRatio 1.0}} tag--success{{end}}">{{.UpRatio}}&times; / {{.DownRatio}}&times;</span></td>
+                <td>{{.CasterName}}</td>
+                <td>{{if .EndsAt.Valid}}{{.EndsAt.Time.Format "2 Jan 15:04"}}{{end}}</td>
+                <td>{{if eq .Status "Active"}}<span class="tag tag--success">Active</span>{{else if eq .Status "Terminated"}}<span class="tag tag--danger">Terminated</span>{{else}}<span class="tag">Expired</span>{{end}}</td>
+                {{if $admin}}
+                <td>
+                    {{if eq .Status "Active"}}
+                    <form method="post" action="/p/magic/terminate" style="display:inline">
+                        <input type="hidden" name="_csrf" value="{{$csrf}}">
+                        <input type="hidden" name="id" value="{{.ID}}">
+                        <button class="button button--sm" type="submit">Terminate</button>
+                    </form>
+                    {{end}}
+                </td>
+                {{end}}
+            </tr>
+            {{else}}
+            <tr><td colspan="8" class="text-muted">No magic has been cast yet.</td></tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>

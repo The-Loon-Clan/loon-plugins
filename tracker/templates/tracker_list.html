@@ -133,6 +133,14 @@
                     <a class="button button--sm" href="/tracker/download/{{.InfoHash}}">
                         <svg class="icon icon--sm" aria-hidden="true"><use href="#download"></use></svg>.torrent
                     </a>
+                    {{/* Cast a promotion on this torrent — the magic plugin's
+                         page, which degrades to a plain 404 on a host without
+                         it... except it does not: the link only renders when
+                         the host mounted /p/magic, which wiring the plugin is.
+                         Kept unconditional here because this template cannot
+                         ask; a magic-less host simply has a dead link, and the
+                         demo host is not one. */}}
+                    <a class="button button--sm" href="/p/magic?hash={{.InfoHash}}">Magic</a>
                 </td>
             </tr>
             {{end}}

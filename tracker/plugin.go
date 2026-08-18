@@ -149,6 +149,20 @@ func (p *Plugin) Provision(c *core.Core) error {
 	p.peers = NewPeerStore(c.Redis.Client())
 	p.h = NewHandlers(p.store, p.peers, NewGate(c), c.Auth, p.cfg.SiteURL)
 
+	// Torrent facts for the promotion page (pluginapi.TorrentInfoFunc):
+	// name and size by hash, so a magic cast can show and price what it is
+	// enchanting without reading this schema.
+	if err := c.Register(pluginapi.TorrentInfoName,
+		pluginapi.TorrentInfoFunc(func(ctx context.Context, hash string) (string, int64, bool, error) {
+			t, err := pg.Torrent(ctx, hash)
+			if err != nil || t == nil {
+				return "", 0, false, nil
+			}
+			return t.Name, t.Size, true, nil
+		})); err != nil {
+		return fmt.Errorf("tracker: register torrentinfo: %w", err)
+	}
+
 	// Transfer credit for other plugins to sell (pluginapi.TrackerCredit —
 	// the points store's GB items). Registered only on a RUNNING tracker:
 	// selling upload credit on a site whose tracker idles would take points
@@ -237,6 +251,23 @@ func (p *Plugin) requireEntitled(gc *gin.Context) {
 
 func (p *Plugin) Start(ctx context.Context) error {
 	p.ctx = ctx
+	// The promotion resolver (magic plugin), softly and in Start so sibling
+	// registration order never matters. Folded into Credit best-of; errors
+	// from the resolver credit normally — an announce must never fail over
+	// an economy question.
+	if p.core != nil {
+		if v, ok := p.core.Lookup(pluginapi.PromoResolverName); ok {
+			if r, ok := v.(pluginapi.PromoResolver); ok {
+				setPromo(func(ctx context.Context, userID int64, infoHash string) (float64, float64) {
+					up, down, err := r.EffectiveRatios(ctx, infoHash, userID)
+					if err != nil {
+						return 1, 1
+					}
+					return up, down
+				})
+			}
+		}
+	}
 	// No job means the tracker is off or the host wired no scheduler; either
 	// way there is nothing to loop.
 	if p.cheatJob == nil || p.core == nil || p.core.Scheduler == nil {

@@ -35,7 +35,20 @@ type Multiplier func(ctx context.Context, userID int64, infoHash string) (up, do
 var (
 	multMu sync.RWMutex
 	mult   Multiplier
+	// promo is the magic plugin's resolver, looked up on the registry in
+	// Start (see plugin.go). Folded with the installed multiplier BEST-OF —
+	// highest upload factor, lowest download factor — which is the
+	// promotion rule the genre settled on: a freeleech token and a 2×
+	// magic together credit 2× up and 0× down, never a compromise.
+	promo Multiplier
 )
+
+// setPromo installs the registry-sourced promotion resolver.
+func setPromo(m Multiplier) {
+	multMu.Lock()
+	defer multMu.Unlock()
+	promo = m
+}
 
 // SetMultiplier installs the credit rule. Called from the host's main() before
 // core.Boot, or by a plugin in Provision.
@@ -59,12 +72,23 @@ func SetMultiplier(m Multiplier) {
 // negative multiplier would silently run their account backwards.
 func Credit(ctx context.Context, userID int64, infoHash string, up, down int64) (int64, int64) {
 	multMu.RLock()
-	m := mult
+	m, pr := mult, promo
 	multMu.RUnlock()
-	if m == nil {
-		return up, down
+	upF, downF := 1.0, 1.0
+	if m != nil {
+		upF, downF = m(ctx, userID, infoHash)
 	}
-	upF, downF := m(ctx, userID, infoHash)
+	if pr != nil {
+		pu, pd := pr(ctx, userID, infoHash)
+		// Best-of, with the same sanity the scale guard applies: a factor
+		// that is negative or NaN loses to the one that is not.
+		if pu > upF {
+			upF = pu
+		}
+		if pd >= 0 && (pd < downF || !(downF >= 0)) {
+			downF = pd
+		}
+	}
 	return scale(up, upF), scale(down, downF)
 }
 
