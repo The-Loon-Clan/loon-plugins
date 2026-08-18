@@ -1,6 +1,10 @@
 package store
 
-import "time"
+import (
+	"time"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
+)
 
 // RewardType enumerates what a store item grants on purchase. Each
 // value maps to a capability the plugin invokes after debiting points.
@@ -45,6 +49,40 @@ const (
 	// sell medals beside everything else.
 	RewardMedalGrant RewardType = "medal"
 )
+
+// builtinTypes describes the reward types the store grants itself, in the
+// order the def editor offers them.
+//
+// The same facts the switches above encode, said as data — because the def
+// editor's dropdown is now built from this list PLUS whatever plugins
+// contribute under pluginapi.StoreItemTypePrefix, and two hand-written
+// <option> lists in a template were free to disagree with the code that
+// grants (the invite type was in the switch and missing from validItem for
+// exactly that long).
+//
+// Icons match Item.Icon, which stays the store card's answer: an item row is
+// enough to draw a card, and a card should not need a registry lookup to know
+// what picture to use.
+var builtinTypes = []pluginapi.StoreItemTypeInfo{
+	{Kind: string(RewardRank), Label: "Rank", RefLabel: "rank id", Icon: "shield"},
+	{Kind: string(RewardInvite), Label: "Invites", RefLabel: "how many", Icon: "envelope"},
+	{Kind: string(RewardPerk), Label: "Perk token", RefLabel: "perk kind", Icon: "bolt"},
+	{Kind: string(RewardFlair), Label: "Flair", RefLabel: "flair id", Icon: "star"},
+	{Kind: string(RewardUpload), Label: "GB uploaded", RefLabel: "whole GB", Icon: "tag"},
+	{Kind: string(RewardDownload), Label: "GB downloaded (wipe)", RefLabel: "whole GB", Icon: "tag"},
+	{Kind: string(RewardMedalGrant), Label: "Medal", RefLabel: "medal slug", Icon: "tag"},
+}
+
+// builtin reports whether a reward type is one the store grants itself —
+// anything else is a contributed type and belongs to a provider.
+func builtin(kind string) bool {
+	for _, t := range builtinTypes {
+		if t.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
 
 // Item is a purchasable catalog entry priced in points. PointsCost is
 // int to line up with the core PointsService (Deduct takes n int).

@@ -25,15 +25,14 @@
                                 <input type="number" name="points_cost" class="form-control form-control-sm" value="100" min="1">
                             </div>
                             <div class="col-sm-2">
-                                <label class="form-label" style="font-size:0.85rem;">Reward</label>
-                                <select name="reward_type" class="form-select form-select-sm">
-                                    <option value="rank">Rank</option>
-                                    <option value="invite">Invites</option>
-                                    <option value="perk">Perk token</option>
-                                    <option value="flair">Flair</option>
-                                    <option value="upload_gb">GB uploaded</option>
-                                    <option value="download_gb">GB downloaded (wipe)</option>
-                                    <option value="medal">Medal</option>
+                                <label class="form-label" style="font-size:0.85rem;" for="new-reward-type">Reward</label>
+                                {{/* Built from the registry, not written out: the
+                                     store's own types plus whatever a plugin
+                                     contributed under store.itemtype.*, so a
+                                     hand-kept list cannot go stale against the
+                                     code that grants. */}}
+                                <select name="reward_type" id="new-reward-type" class="form-select form-select-sm">
+                                    {{range .Types}}<option value="{{.Kind}}">{{.Label}}</option>{{end}}
                                 </select>
                             </div>
                             <div class="col-sm-2">
@@ -45,8 +44,16 @@
                                 </select>
                             </div>
                             <div class="col-sm-2">
-                                <label class="form-label" style="font-size:0.85rem;">Ref</label>
-                                <input type="text" name="reward_ref" class="form-control form-control-sm" placeholder="rank id / count / kind / GB">
+                                <label class="form-label" style="font-size:0.85rem;" for="new-reward-ref">Ref</label>
+                                <input type="text" name="reward_ref" id="new-reward-ref" class="form-control form-control-sm" placeholder="depends on the reward">
+                            </div>
+                            <div class="col-12">
+                                {{/* What Ref means, per type, from the types
+                                     themselves — a contributed type explains its
+                                     own field without this page learning it. */}}
+                                <p class="mb-0" style="font-size:0.72rem;color:var(--text-muted);">
+                                    Ref: {{range $i, $t := .Types}}{{if $i}} · {{end}}{{$t.Label}} → {{if $t.RefLabel}}{{$t.RefLabel}}{{else}}unused{{end}}{{end}}
+                                </p>
                             </div>
                             <div class="col-sm-2">
                                 <label class="form-label" style="font-size:0.85rem;">Days</label>
@@ -96,7 +103,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {{range .Items}}
+                        {{range $it := .Items}}
                         <tr>
                             <td>{{.Name}}</td>
                             <td style="color:var(--text-muted);">{{.RewardType}} #{{.RewardRef}}{{if .RewardDays}} · {{.RewardDays}}d{{end}}</td>
@@ -131,15 +138,9 @@
                                         <input type="number" name="points_cost" class="form-control form-control-sm" value="{{.PointsCost}}" style="width:70px;">
                                     </div>
                                     <div>
-                                        <label style="font-size:0.72rem;">Reward</label>
-                                        <select name="reward_type" class="form-select form-select-sm" style="width:110px;">
-                                            <option value="rank" {{if eq .RewardType "rank"}}selected{{end}}>Rank</option>
-                                            <option value="invite" {{if eq .RewardType "invite"}}selected{{end}}>Invites</option>
-                                            <option value="perk" {{if eq .RewardType "perk"}}selected{{end}}>Perk token</option>
-                                            <option value="flair" {{if eq .RewardType "flair"}}selected{{end}}>Flair</option>
-                                            <option value="upload_gb" {{if eq .RewardType "upload_gb"}}selected{{end}}>GB up</option>
-                                            <option value="download_gb" {{if eq .RewardType "download_gb"}}selected{{end}}>GB down</option>
-                                            <option value="medal" {{if eq .RewardType "medal"}}selected{{end}}>Medal</option>
+                                        <label style="font-size:0.72rem;" for="rt-{{.ID}}">Reward</label>
+                                        <select name="reward_type" id="rt-{{.ID}}" class="form-select form-select-sm" style="width:110px;">
+                                            {{range $t := $.Types}}<option value="{{$t.Kind}}" {{if eq $it.RewardType $t.Kind}}selected{{end}}>{{$t.Label}}</option>{{end}}
                                         </select>
                                     </div>
                                     <div>

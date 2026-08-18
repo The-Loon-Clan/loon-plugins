@@ -50,6 +50,7 @@ Process kinds: `Metadata.Processes` is empty → **web/all only** (session UI). 
 - **Extensions CONSUMED** (`Core.Lookup`):
   - **`pluginapi.RankGranterName` (`"ranks.granter"`)** → asserted to `pluginapi.RankGranter`. **Hard** dependency: declared in `Requires`, so a missing/wrong-typed value aborts boot. The reference example of consuming a cross-plugin capability.
   - **`pluginapi.InviteGranterName`** → asserted to `pluginapi.InviteGranter`. **Soft**: looked up without being in `Requires` (a host capability, not a plugin, so it can't order boot), and absent means the invite reward type is simply unavailable rather than a boot failure.
+  - **`pluginapi.StoreItemTypePrefix` (`"store.itemtype.*"`)** → asserted to `pluginapi.StoreItemType`. **Soft, and looked up per request rather than at Provision** — see "Contributed item types". Absent for a kind means items of that kind are hidden, not sold and failed.
 
 ## Lifecycle
 
@@ -65,7 +66,22 @@ Process kinds: `Metadata.Processes` is empty → **web/all only** (session UI). 
 3. **Grant the reward** (`grantReward` → `RankGranter.GrantRank`) — on failure, **refund the points and restore the unit**, so the user is made whole.
 4. **Record the sale** (`RecordPurchase`) — a failure here is logged (`Report`) but **not** rolled back: the economic transaction already completed, and undoing a granted rank would be worse than a missing audit row.
 
-`grantReward` switches on `reward_type`; adding a reward kind (points bonus, freeleech, invites) is one new `case` here plus its capability `Lookup` in `Provision`.
+`grantReward` switches on `reward_type` for the rewards the store grants itself; adding one is a new `case` plus its capability `Lookup`. Anything else is a **contributed item type** — see below.
+
+Step 0, before any of the four, prices the sale. A builtin item costs what the catalog row says. A contributed type may price itself from the buyer's own input, and `pluginapi.PrepareStorePurchase` checks the buy control against what the type declared **before** stock is claimed or points move, so a refusal costs nothing. What the member actually paid — not the catalog figure — is what gets debited, recorded in `store.purchases`, announced on `EventPurchased`, and refunded if the grant fails.
+
+## Contributed item types
+
+The store's own reward types are a closed set for a good reason (each one is a capability this plugin holds), but the *catalog* is not: a plugin can add a purchasable kind without either side importing the other, through `pluginapi/storeitems.go`.
+
+- A provider registers a `pluginapi.StoreItemType` under **`store.itemtype.<kind>`**, where `<kind>` is the `reward_type` value on the item row. It gets three methods: `Describe` (the def editor's dropdown entry, what `reward_ref` means, and the buy control), `Validate` (refuse a bad def at the admin form, where the person who can fix it is looking) and `Grant` (settle one sale).
+- **Discovery is per request**, never a scan at `Provision`. That is what lets a provider register in `Start` — games only offers charity where it found `RankStats` — and what keeps this plugin free of a `Requires` edge to anything that contributes.
+- **A provider is grant-only.** The store debits before `Grant` runs; `pur.Cost` is money already taken, to be distributed or credited, never charged again.
+- **The buy control is declared as fields, not markup** (`StoreFieldNumber`, `StoreFieldSelect`), and this plugin renders them. A provider that injected HTML would put a third party's markup inside a page whose accessibility and 390px width this plugin answers for.
+- **An item whose provider is absent is hidden**, exactly like an item whose flavour half is off: taking points for something nothing can deliver is worse than an item that is missing.
+- The def editor's Reward dropdown is `builtinTypes` plus whatever is registered — so a hand-kept `<option>` list can no longer drift from the code that grants (which is how the `invite` type sat un-creatable while its buy path already worked).
+
+In tree: **charity** (`games`) is the first, an amount the buyer chooses and a ratio band the def may pin.
 
 ## Files
 

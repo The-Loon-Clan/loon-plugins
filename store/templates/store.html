@@ -31,7 +31,12 @@
 
         {{if .Items}}
         <div class="row g-3">
-            {{range .Items}}
+            {{range $it := .Items}}
+            {{/* The buy control a contributed type declared for THIS item, or
+                 false for every item the store grants itself. Guarded on the
+                 key rather than indexed straight, so a caller that never heard
+                 of widgets renders plain cards instead of failing mid-page. */}}
+            {{$w := false}}{{if $.Widgets}}{{$w = index $.Widgets $it.ID}}{{end}}
             <div class="col-md-6">
                 <div class="card h-100">
                     <div class="card-body d-flex flex-column">
@@ -41,22 +46,53 @@
                                  because the name beside it already says what
                                  the item is. */}}
                             <h3 class="mb-0" style="font-weight:600;font-size:.95rem;display:flex;align-items:center;gap:0.4rem;min-width:0;">
-                                <svg class="icon" aria-hidden="true" style="flex:none;width:1rem;height:1rem;opacity:0.75;"><use href="#{{.Icon}}"></use></svg>
+                                <svg class="icon" aria-hidden="true" style="flex:none;width:1rem;height:1rem;opacity:0.75;"><use href="#{{if and $w $w.Icon}}{{$w.Icon}}{{else}}{{.Icon}}{{end}}"></use></svg>
                                 <span>{{.Name}}</span>
-                            </h6>
-                            <span style="color:var(--bs-warning);font-weight:600;white-space:nowrap;">{{.PointsCost}} pts</span>
+                            </h3>
+                            {{/* A type that prices itself has no figure to show
+                                 until the member picks one — printing the def's
+                                 cost there would name a price nobody pays. */}}
+                            <span style="color:var(--bs-warning);font-weight:600;white-space:nowrap;">
+                                {{if and $w $w.CostFrom}}you choose{{else}}{{.PointsCost}} pts{{end}}
+                            </span>
                         </div>
                         {{if .Description}}<p class="mb-2" style="font-size:0.82rem;color:var(--text-muted);">{{.Description}}</p>{{end}}
                         <div class="mb-3" style="font-size:0.72rem;color:var(--text-muted);">
                             {{if eq .RewardType "rank"}}Grants a rank{{if .RewardDays}} for {{.RewardDays}} days{{end}}.{{end}}
+                            {{if and $w $w.Note}}{{$w.Note}}{{end}}
                             {{if ge .Stock 0}}<span class="ms-1">{{.Stock}} left.</span>{{end}}
                         </div>
                         <form method="POST" action="/store/buy/{{.ID}}" class="mt-auto"
-                              onsubmit="return confirm('Spend {{.PointsCost}} points on {{.Name}}?')">
+                              {{if not $w}}onsubmit="return confirm('Spend {{.PointsCost}} points on {{.Name}}?')"{{end}}>
                             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                            {{/* The contributed type's own inputs, drawn by the
+                                 store in the store's vocabulary — the provider
+                                 declares fields, never markup, so this page
+                                 stays one plugin's answer for its own labels,
+                                 focus order and 390px width. Names are prefixed
+                                 so they cannot collide with _csrf. */}}
+                            {{if $w}}{{range $f := $w.Fields}}
+                            <div class="mb-2">
+                                <label class="form-label mb-1" style="font-size:0.72rem;" for="f-{{$it.ID}}-{{$f.Name}}">
+                                    {{$f.Label}}{{if $f.Suffix}} ({{$f.Suffix}}){{end}}
+                                </label>
+                                {{if eq $f.Kind "select"}}
+                                <select class="form-select form-select-sm" id="f-{{$it.ID}}-{{$f.Name}}" name="f_{{$f.Name}}">
+                                    {{range $f.Options}}
+                                    <option value="{{.Value}}" {{if eq .Value $f.Default}}selected{{end}}>{{if .Label}}{{.Label}}{{else}}{{.Value}}{{end}}</option>
+                                    {{end}}
+                                </select>
+                                {{else}}
+                                <input type="number" class="form-control form-control-sm" id="f-{{$it.ID}}-{{$f.Name}}"
+                                       name="f_{{$f.Name}}" value="{{$f.Default}}"
+                                       {{if $f.Min}}min="{{$f.Min}}"{{end}}{{if $f.Max}} max="{{$f.Max}}"{{end}}>
+                                {{end}}
+                                {{if $f.Help}}<div style="font-size:0.68rem;color:var(--text-muted);">{{$f.Help}}</div>{{end}}
+                            </div>
+                            {{end}}{{end}}
                             <button type="submit" class="btn btn-primary btn-sm w-100"
                                     {{if not .InStock}}disabled{{end}}>
-                                {{if .InStock}}Buy for {{.PointsCost}} pts{{else}}Out of stock{{end}}
+                                {{if not .InStock}}Out of stock{{else if and $w $w.ButtonLabel}}{{$w.ButtonLabel}}{{else}}Buy for {{.PointsCost}} pts{{end}}
                             </button>
                         </form>
                     </div>

@@ -117,6 +117,20 @@ func (p *Plugin) Start(ctx context.Context) error {
 		log.Printf("games: %q not registered — charity is unavailable (no member figures to find need with)",
 			pluginapi.RankStatsName)
 	}
+
+	// Offer charity to the points store as a purchasable item type — but only
+	// where it can actually run. A host with no member figures would otherwise
+	// show an item in the shop that refuses every buyer.
+	//
+	// Registered in START, after the stats lookup above, which is safe
+	// because the store resolves item types PER REQUEST rather than scanning
+	// at Provision (pluginapi/storeitems.go says so, and depends on it).
+	if p.stats != nil {
+		if err := p.core.Register(pluginapi.StoreItemTypePrefix+CharityItemKind,
+			pluginapi.StoreItemType(charityItemType{p})); err != nil {
+			return fmt.Errorf("games: register charity store item type: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -283,25 +297,24 @@ func validCharityRatio(r float64) bool {
 	return false
 }
 
-// give distributes one member's charity. Returns how many members it
-// reached.
-func (p *Plugin) give(ctx context.Context, donorID, amount int64, ratioMax float64) (int, error) {
+// recipients finds who a gift at this band would reach, poorest first —
+// everything that can refuse a gift, BEFORE any points move. Split out from
+// give so the points store can sell charity: the store debits its buyer, so
+// its path must find and pay the same people without deducting again.
+func (p *Plugin) recipients(ctx context.Context, donorID int64, ratioMax float64) ([]int64, error) {
 	if p.stats == nil {
-		return 0, errBadInput("charity is unavailable on this site — there are no member figures to find need with")
+		return nil, errBadInput("charity is unavailable on this site — there are no member figures to find need with")
+	}
+	if !validCharityRatio(ratioMax) {
+		return nil, errBadInput("pick one of the offered ratio bands")
 	}
 	cfg, err := p.st.Settings(ctx)
 	if err != nil {
-		return 0, err
-	}
-	if amount < cfg.CharityMin || amount > cfg.CharityMax {
-		return 0, errBadInput(fmt.Sprintf("charity is between %d and %d points", cfg.CharityMin, cfg.CharityMax))
-	}
-	if !validCharityRatio(ratioMax) {
-		return 0, errBadInput("pick one of the offered ratio bands")
+		return nil, err
 	}
 	all, err := p.stats.AllStats(ctx)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	floor := cfg.CharityDLFloorGB << 30
 	var needy []int64
@@ -314,7 +327,7 @@ func (p *Plugin) give(ctx context.Context, donorID, amount int64, ratioMax float
 		}
 	}
 	if len(needy) == 0 {
-		return 0, errBadInput("nobody currently matches that band — there is no one to give to")
+		return nil, errBadInput("nobody currently matches that band — there is no one to give to")
 	}
 	// Poorest first, so the remainder of an uneven split lands on the
 	// members who need it most rather than on map order.
@@ -324,11 +337,14 @@ func (p *Plugin) give(ctx context.Context, donorID, amount int64, ratioMax float
 		}
 		return needy[i] < needy[j]
 	})
+	return needy, nil
+}
 
-	if _, err := p.core.Points.Deduct(ctx, donorID, int(amount), "spend_charity",
-		fmt.Sprintf("Charity to %d members", len(needy)), 0); err != nil {
-		return 0, err
-	}
+// distribute pays an ALREADY-DEBITED amount out to the found members and
+// records the gift. It must never touch the donor's balance: both callers
+// have taken the points by the time they arrive here, and a deduct in this
+// function would charge the store's buyers twice.
+func (p *Plugin) distribute(ctx context.Context, donorID, amount int64, ratioMax float64, needy []int64) int {
 	giftID, err := p.st.RecordCharity(ctx, donorID, amount, ratioMax, len(needy))
 	if err != nil {
 		log.Printf("games: record charity: %v", err)
@@ -343,7 +359,28 @@ func (p *Plugin) give(ctx context.Context, donorID, amount int64, ratioMax float
 			log.Printf("games: charity award user %d: %v", uid, err)
 		}
 	}
-	return len(needy), nil
+	return len(needy)
+}
+
+// give distributes one member's charity from the charity page. Returns how
+// many members it reached.
+func (p *Plugin) give(ctx context.Context, donorID, amount int64, ratioMax float64) (int, error) {
+	cfg, err := p.st.Settings(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if amount < cfg.CharityMin || amount > cfg.CharityMax {
+		return 0, errBadInput(fmt.Sprintf("charity is between %d and %d points", cfg.CharityMin, cfg.CharityMax))
+	}
+	needy, err := p.recipients(ctx, donorID, ratioMax)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := p.core.Points.Deduct(ctx, donorID, int(amount), "spend_charity",
+		fmt.Sprintf("Charity to %d members", len(needy)), 0); err != nil {
+		return 0, err
+	}
+	return p.distribute(ctx, donorID, amount, ratioMax, needy), nil
 }
 
 // splitEven divides amount into n shares differing by at most one, the

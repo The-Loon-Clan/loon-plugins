@@ -1,10 +1,13 @@
 package store
 
 import (
-	"github.com/the-loon-clan/loon/core"
+	"context"
 	"html/template"
 	"strings"
 	"testing"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
+	"github.com/the-loon-clan/loon/core"
 )
 
 // Lifted markup, so executing it is the only thing that proves the data these
@@ -72,6 +75,34 @@ func TestAdminStoreRenders(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("admin store missing %q", want)
 		}
+	}
+}
+
+// A contributed type's buy control, drawn by the store from what the provider
+// declared. The absent-key case is covered by every other test in this file:
+// none of them pass Widgets, and a template that indexed it straight would
+// abort mid-card with a 200.
+func TestStorePageDrawsAContributedBuyControl(t *testing.T) {
+	info := (&fakeItemType{}).Describe(context.Background(), "")
+	got := render(t, "store.html", map[string]any{
+		"Items": []Item{{ID: 7, Name: "Charity", PointsCost: 1, RewardType: "charity",
+			Active: true, Stock: -1}},
+		"Widgets": map[int]*pluginapi.StoreItemTypeInfo{7: &info},
+		"Balance": 20000,
+	})
+	for _, want := range []string{
+		`name="f_amount"`, `min="1000"`, `max="50000"`, // the bounds the form must show
+		`name="f_band"`, `value="0.5" selected`, // the closed set, at its default
+		`for="f-7-amount"`,   // the label is attached to its input
+		"Give", "you choose", // the type's own words, not "Buy for 1 pts"
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the buy control is missing %q", want)
+		}
+	}
+	// The def's own price must not appear as a figure the member will pay.
+	if strings.Contains(got, "Buy for 1 pts") {
+		t.Error("a variable-cost item advertised the def's placeholder price")
 	}
 }
 

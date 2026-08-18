@@ -180,7 +180,7 @@ func TestPurchaseHappyPath(t *testing.T) {
 	gr := &fakeGranter{name: "VIP"}
 	h := newHandlers(mem, pts, gr)
 
-	reward, err := h.purchase(context.Background(), 42, it)
+	reward, _, err := h.purchase(context.Background(), 42, it, nil)
 	if err != nil {
 		t.Fatalf("purchase: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestPurchaseUnlimitedStock(t *testing.T) {
 	mem := newMemStore(it)
 	h := newHandlers(mem, &fakePoints{balance: 500}, &fakeGranter{name: "VIP"})
 
-	if _, err := h.purchase(context.Background(), 42, it); err != nil {
+	if _, _, err := h.purchase(context.Background(), 42, it, nil); err != nil {
 		t.Fatalf("purchase: %v", err)
 	}
 	if it.Stock != -1 {
@@ -223,7 +223,7 @@ func TestPurchaseOutOfStock(t *testing.T) {
 	gr := &fakeGranter{name: "VIP"}
 	h := newHandlers(mem, pts, gr)
 
-	_, err := h.purchase(context.Background(), 42, it)
+	_, _, err := h.purchase(context.Background(), 42, it, nil)
 	if !errors.Is(err, errOutOfStock) {
 		t.Fatalf("err=%v, want errOutOfStock", err)
 	}
@@ -242,7 +242,7 @@ func TestPurchaseInsufficientPoints(t *testing.T) {
 	gr := &fakeGranter{name: "VIP"}
 	h := newHandlers(mem, pts, gr)
 
-	_, err := h.purchase(context.Background(), 42, it)
+	_, _, err := h.purchase(context.Background(), 42, it, nil)
 	if !errors.Is(err, core.ErrInsufficientPoints) {
 		t.Fatalf("err=%v, want ErrInsufficientPoints", err)
 	}
@@ -264,7 +264,7 @@ func TestPurchaseGrantFailureRefunds(t *testing.T) {
 	gr := &fakeGranter{err: errors.New("rank not found")}
 	h := newHandlers(mem, pts, gr)
 
-	_, err := h.purchase(context.Background(), 42, it)
+	_, _, err := h.purchase(context.Background(), 42, it, nil)
 	if err == nil {
 		t.Fatal("expected grant failure, got nil")
 	}
@@ -292,7 +292,7 @@ func TestPurchaseRecordFailureStillSucceeds(t *testing.T) {
 	gr := &fakeGranter{name: "VIP"}
 	h := newHandlers(mem, pts, gr)
 
-	reward, err := h.purchase(context.Background(), 42, it)
+	reward, _, err := h.purchase(context.Background(), 42, it, nil)
 	if err != nil {
 		t.Fatalf("purchase should succeed despite record failure: %v", err)
 	}
@@ -306,7 +306,7 @@ func TestPurchaseRecordFailureStillSucceeds(t *testing.T) {
 
 func TestGrantRewardUnknownType(t *testing.T) {
 	h := newHandlers(newMemStore(), &fakePoints{}, &fakeGranter{})
-	_, err := h.grantReward(context.Background(), 1, &Item{ID: 1, RewardType: "mystery"})
+	_, err := h.grantReward(context.Background(), 1, &Item{ID: 1, RewardType: "mystery"}, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown reward type")
 	}
