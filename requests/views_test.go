@@ -122,10 +122,23 @@ func TestListPageRenders(t *testing.T) {
 			t.Errorf("open tab missing %q", want)
 		}
 	}
+	// The "Already on the site?" card ships hidden next to the create form
+	// (JS fills it from /community/requests/existing) — fragment plus its
+	// refresh hook must both be present, or the endpoint has no consumer.
+	for _, want := range []string{`id="existing-releases"`, "refreshExistingReleases"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("open tab missing already-exists card piece %q", want)
+		}
+	}
 
 	feed := testRender(t, "community_requests.html", listPageData("feed"))
 	if !strings.Contains(feed, "Feed Item") {
 		t.Error("feed tab did not render the feed item")
+	}
+	// No create form on the feed tab means no card either — its JS bails on
+	// the missing element, but the markup should not ship at all.
+	if strings.Contains(feed, `id="existing-releases"`) {
+		t.Error("feed tab renders the already-exists card despite having no form")
 	}
 	// The status filter's derived options (the host's ListFeedItems
 	// translates these sentinels into the open-request join).

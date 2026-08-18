@@ -281,6 +281,23 @@ type NzbInfo struct {
 	Filename string
 }
 
+// ExistingRelease is one catalog release line for the create form's
+// "this may already exist" card — enough to render a link with badges.
+// Dead is carried rather than filtered: a dead-only episode is a
+// legitimate request, so the card flags dead copies instead of hiding
+// them.
+type ExistingRelease struct {
+	ID         int64
+	Title      string
+	Season     *int
+	Episode    *int
+	Resolution string
+	Source     string
+	Size       int64
+	CreatedAt  time.Time
+	Dead       bool
+}
+
 // UpscaleOption is the display data for one AI-upscale model key.
 type UpscaleOption struct {
 	Key     string

@@ -156,6 +156,16 @@ type Deps struct {
 	// RefreshAnime queues a metadata scrape after a request names an anime;
 	// nil when the host has no scraper wired.
 	RefreshAnime func(ctx context.Context, aid int) error
+	// ExistingReleases lists the catalog's releases for an anime episode —
+	// the create form's "this may already exist" card. nil season/episode =
+	// no filter on that column. OPTIONAL and deliberately outside ok(): a
+	// half-wired host must still boot; absence just hides the card (the
+	// endpoint answers found:false and the form works as before).
+	ExistingReleases func(ctx context.Context, animeID int, season, episode *int, limit int) ([]ExistingRelease, error)
+	// ResolveAnimeTitle maps a free-text title to a catalog anime id for the
+	// card's title path. OPTIONAL, same contract as ExistingReleases: nil
+	// just disables title resolution, never the form.
+	ResolveAnimeTitle func(ctx context.Context, title string) (animeID int, ok bool)
 }
 
 func (d *Deps) ok() bool {
@@ -167,9 +177,10 @@ func (d *Deps) ok() bool {
 		d.BlockedExtension != nil && d.SanitizeHTML != nil &&
 		d.UpscaleOptions != nil && d.PriorityTypes != nil &&
 		d.BoostCost != nil && d.BoostPerGB != nil
-	// Prowlarr, Torznab, RefreshAnime are the deliberate optionals: each
-	// degrades one feature (Prowlarr fallback, nekoBT search, cover-art
-	// refresh) rather than the page.
+	// Prowlarr, Torznab, RefreshAnime, ExistingReleases and
+	// ResolveAnimeTitle are the deliberate optionals: each degrades one
+	// feature (Prowlarr fallback, nekoBT search, cover-art refresh, the
+	// already-exists card, its title path) rather than the page.
 }
 
 // JobDeps is the worker side — the backlog sweep, and nothing else.

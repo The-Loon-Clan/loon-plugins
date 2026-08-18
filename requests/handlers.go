@@ -1777,3 +1777,122 @@ func (h *Handlers) LookupAnime(c *gin.Context) {
 		"end_date":   meta.EndDate,
 	})
 }
+
+// ── "This may already exist" card ───────────────────────────────────────────
+
+// existingReleasesLimit caps the card at a screenful: the point is "check
+// before requesting", not a full listing — the link rows carry the user to
+// the release pages for that.
+const existingReleasesLimit = 8
+
+type existingReleaseJSON struct {
+	ID         int64  `json:"id"`
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+	Season     *int   `json:"season"`
+	Episode    *int   `json:"episode"`
+	Resolution string `json:"resolution"`
+	Source     string `json:"source"`
+	Size       int64  `json:"size"`
+	Date       string `json:"date"`
+	Dead       bool   `json:"dead"`
+}
+
+type existingReleasesResponse struct {
+	OK    bool `json:"ok"`
+	Found bool `json:"found"`
+	// Exact reports whether BOTH the season and episode filters were
+	// applied, so the card can say "this episode already has N releases"
+	// rather than the weaker series-level hint.
+	Exact    bool                  `json:"exact"`
+	Releases []existingReleaseJSON `json:"releases"`
+	// Total is the number of rows RETURNED (the card is capped at a
+	// screenful); HasMore reports that the cap truncated the real
+	// count, so the UI can say "8+" instead of claiming a total it
+	// doesn't know.
+	Total   int  `json:"total"`
+	HasMore bool `json:"has_more"`
+}
+
+// parseEpisodeFilter reads the form's free-text season/episodes value
+// best-effort: a lone non-negative integer filters that column; ranges
+// ("1-12"), lists ("1,3"), "*", or anything else unparseable means no
+// filter (nil) — a loose card beats a wrong one.
+func parseEpisodeFilter(s string) *int {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return nil
+	}
+	return &n
+}
+
+// ExistingReleases answers the create form's "this may already exist" card
+// (JSON). Resolution order: an explicit anime_id wins; otherwise the title
+// param through the optional ResolveAnimeTitle seam; no resolution — or a
+// host that wired neither seam — answers {ok:true, found:false}, so the
+// card silently stays hidden and never breaks the form.
+func (h *Handlers) ExistingReleases(c *gin.Context) {
+	ctx := c.Request.Context()
+	resp := existingReleasesResponse{OK: true, Releases: []existingReleaseJSON{}}
+	if h.deps.ExistingReleases == nil {
+		c.JSON(http.StatusOK, resp)
+		return
+	}
+
+	animeID := 0
+	if s := strings.TrimSpace(c.Query("anime_id")); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			animeID = n
+		}
+	}
+	if animeID == 0 && h.deps.ResolveAnimeTitle != nil {
+		if title := strings.TrimSpace(c.Query("title")); title != "" {
+			if id, ok := h.deps.ResolveAnimeTitle(ctx, title); ok && id > 0 {
+				animeID = id
+			}
+		}
+	}
+	if animeID == 0 {
+		c.JSON(http.StatusOK, resp)
+		return
+	}
+
+	season := parseEpisodeFilter(c.Query("season"))
+	episode := parseEpisodeFilter(c.Query("episodes"))
+	resp.Exact = season != nil && episode != nil
+
+	// One over the cap: the extra row only proves the cap truncated,
+	// so the card can honestly say "8+" rather than presenting the
+	// page length as the episode's total.
+	rows, err := h.deps.ExistingReleases(ctx, animeID, season, episode, existingReleasesLimit+1)
+	if err != nil {
+		h.errs.Report(ctx, "requests/existing-releases", err)
+		jsonError(c, http.StatusInternalServerError, "failed to check existing releases")
+		return
+	}
+	if len(rows) > existingReleasesLimit {
+		rows = rows[:existingReleasesLimit]
+		resp.HasMore = true
+	}
+	for _, r := range rows {
+		resp.Releases = append(resp.Releases, existingReleaseJSON{
+			ID:         r.ID,
+			Title:      r.Title,
+			URL:        fmt.Sprintf("/release/%d", r.ID),
+			Season:     r.Season,
+			Episode:    r.Episode,
+			Resolution: r.Resolution,
+			Source:     r.Source,
+			Size:       r.Size,
+			Date:       r.CreatedAt.Format("2006-01-02"),
+			Dead:       r.Dead,
+		})
+	}
+	resp.Found = len(resp.Releases) > 0
+	resp.Total = len(resp.Releases)
+	c.JSON(http.StatusOK, resp)
+}

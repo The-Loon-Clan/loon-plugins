@@ -7,6 +7,12 @@
         .scrape-file { padding:2px 0; border-bottom:1px solid var(--border); }
         .scrape-file:last-child { border-bottom:none; }
         .anime-preview { font-size:0.78rem; color:var(--text-muted); margin-top:0.5rem; padding:0.5rem; background:var(--bg-elevated); border-radius:4px; }
+        /* "Already on the site?" rows — same muted compact lines as the
+           release page's similar-releases list. */
+        .existing-release-row { font-size:0.78rem; padding:3px 0; border-bottom:1px solid var(--border); }
+        .existing-release-row:last-child { border-bottom:none; }
+        .existing-release-row .badge { font-size:0.65rem; font-weight:500; }
+        .existing-release-meta { color:var(--text-muted); }
 
         /* Cover-card overrides for the request/feed grids:
            - drop-shadow on every card so blank-cover ones still read
@@ -119,6 +125,20 @@
 
         {{/* ── Create form ── Hidden on feed + backlog; see above. */}}
         {{if not (or (eq .Tab "feed") (eq .Tab "backlog"))}}
+
+        {{/* ── "Already on the site?" card ── filled by JS from
+             /community/requests/existing whenever the form learns an anime
+             (prefill, ID lookup, scrape) or a title. Informational only:
+             it never disables submit — a different cut of an episode the
+             site carries, or a dead-only episode, is a legitimate request. */}}
+        <div id="existing-releases" class="card mb-3" style="display:none;">
+            <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">Already on the site?</div>
+            <div class="card-body py-2">
+                <div id="existing-releases-headline" style="font-size:0.85rem;margin-bottom:0.35rem;"></div>
+                <div id="existing-releases-rows"></div>
+            </div>
+        </div>
+
         <div class="collapse mb-4{{if .OpenForm}} show{{end}}" id="new-request-form">
             <div class="card">
                 <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">New Request</div>
@@ -1061,6 +1081,9 @@
                     if (d.genres) html += '<br><span style="font-size:0.72rem;">' + d.genres + '</span>';
                     preview.innerHTML = html;
                     preview.style.display = 'block';
+                    // A successful lookup pinned down the anime — refresh
+                    // the "Already on the site?" card for it.
+                    if (window.refreshExistingReleases) window.refreshExistingReleases();
                 })
                 .catch(function(){ preview.style.display='none'; });
         }
@@ -1234,6 +1257,12 @@
                         html += '</div>';
                     }
                     resultEl.innerHTML = html || 'No data found';
+                    // The scrape may have filled title/season/episodes (and
+                    // its cross-lookup may land an anime id asynchronously —
+                    // that path re-triggers via the anime_id change event).
+                    // Refresh the "Already on the site?" card off what is
+                    // known right now.
+                    if (window.refreshExistingReleases) window.refreshExistingReleases();
                 })
                 .catch(function(){ resultEl.innerHTML = '<span class="text-danger">Scrape failed</span>'; });
         });
@@ -1348,6 +1377,124 @@
             setTimeout(function(){ msg.remove(); }, 3000);
         }
     }
+    </script>
+    <script>
+    // ── "Already on the site?" card ── informational duplicate check for the
+    // create form. Reads whatever the form knows (anime_id first, else the
+    // title) plus the season/episodes free text, and asks
+    // /community/requests/existing for matching catalog releases. Never
+    // blocks or disables anything: a card that renders is a hint, a card
+    // that stays hidden is the answer "nothing found / nothing to ask".
+    (function(){
+        var card = document.getElementById('existing-releases');
+        if (!card) return; // feed/backlog tabs render no form and no card
+        var headline = document.getElementById('existing-releases-headline');
+        var rowsEl = document.getElementById('existing-releases-rows');
+        var fldAnime = document.getElementById('field-anime-id');
+        var fldTitle = document.querySelector('input[name="title"]');
+        var fldSeason = document.querySelector('input[name="season"]');
+        var fldEpisodes = document.querySelector('input[name="episodes"]');
+
+        // Local copy — the shared escapeHtml lives inside another closure.
+        function esc(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+        function fmtSize(b) {
+            if (b >= 1073741824) return (b/1073741824).toFixed(2) + ' GB';
+            if (b >= 1048576) return (b/1048576).toFixed(1) + ' MB';
+            if (b >= 1024) return Math.round(b/1024) + ' KB';
+            return b > 0 ? b + ' B' : '';
+        }
+
+        var debounceTimer = null;
+        var inflight = null;
+
+        function render(d) {
+            if (!d || !d.ok || !d.found || !d.releases || !d.releases.length) {
+                card.style.display = 'none';
+                return;
+            }
+            if (d.exact) {
+                headline.innerHTML = 'This episode already has <strong>'
+                    + d.total + (d.has_more ? '+' : '') + '</strong> release'
+                    + (d.total === 1 && !d.has_more ? '' : 's')
+                    + ' on the site &mdash; check before requesting.';
+            } else {
+                headline.innerHTML = 'This series has releases on the site &mdash; check before requesting.';
+            }
+            var html = '';
+            d.releases.forEach(function(r){
+                html += '<div class="existing-release-row">';
+                html += '<a href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.title) + '</a>';
+                if (r.resolution) html += ' <span class="badge bg-secondary bg-opacity-50">' + esc(r.resolution) + '</span>';
+                if (r.source) html += ' <span class="badge bg-secondary bg-opacity-50">' + esc(r.source) + '</span>';
+                if (r.dead) html += ' <span class="badge bg-danger">DEAD</span>';
+                var meta = [];
+                var size = fmtSize(r.size);
+                if (size) meta.push(size);
+                if (r.date) meta.push(r.date);
+                if (meta.length) html += ' <span class="existing-release-meta">' + esc(meta.join(' · ')) + '</span>';
+                html += '</div>';
+            });
+            rowsEl.innerHTML = html;
+            card.style.display = '';
+        }
+
+        function run() {
+            var params = new URLSearchParams();
+            var aid = fldAnime && fldAnime.value.trim();
+            var title = fldTitle && fldTitle.value.trim();
+            if (aid) {
+                params.set('anime_id', aid);
+            } else if (title) {
+                params.set('title', title);
+            } else {
+                // Nothing to look up: kill any in-flight fetch too, or a
+                // slow response could re-show the card for a form the
+                // user has since cleared.
+                if (inflight) { inflight.abort(); inflight = null; }
+                card.style.display = 'none';
+                return;
+            }
+            if (fldSeason && fldSeason.value.trim()) params.set('season', fldSeason.value.trim());
+            if (fldEpisodes && fldEpisodes.value.trim()) params.set('episodes', fldEpisodes.value.trim());
+            if (inflight) inflight.abort();
+            var ctrl = new AbortController();
+            inflight = ctrl;
+            fetch('/community/requests/existing?' + params.toString(), {signal: ctrl.signal})
+                .then(function(r){ return r.json(); })
+                .then(function(d){ if (inflight === ctrl) render(d); })
+                .catch(function(){ /* aborted or failed — leave the card as it is */ });
+        }
+
+        function check() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(run, 350);
+        }
+        // The lookup/scrape success paths in the closures above call this.
+        window.refreshExistingReleases = check;
+
+        if (fldAnime) fldAnime.addEventListener('change', check);
+        if (fldSeason) fldSeason.addEventListener('change', check);
+        if (fldEpisodes) fldEpisodes.addEventListener('change', check);
+        // Title path only when no id pins the anime down — the id always wins.
+        if (fldTitle) fldTitle.addEventListener('blur', function(){
+            if (!fldAnime || !fldAnime.value.trim()) check();
+        });
+
+        // Page-load check for the prefilled form (?anime_id= / prefill
+        // branch). DOMContentLoaded on purpose, and this listener registers
+        // AFTER the prefill block's, so the query-param values are already
+        // in the fields when it runs.
+        document.addEventListener('DOMContentLoaded', function(){
+            if ((fldAnime && fldAnime.value.trim()) || (fldTitle && fldTitle.value.trim())) check();
+        });
+    })();
     </script>
     <!-- Floating bulk-add bar -->
     <div id="queue-bar" style="display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg-surface);border-top:2px solid var(--blue);padding:0.6rem 1.5rem;z-index:1050;font-size:0.85rem;">

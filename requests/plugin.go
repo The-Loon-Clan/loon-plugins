@@ -56,7 +56,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return nil
 	}
 	if !deps.ok() {
-		return fmt.Errorf("requests: SetDeps was not called with a full Deps before core.Boot — wire it in the host's composition root (stores + chrome + vocabulary; Prowlarr/Torznab/RefreshAnime are the only optionals)")
+		return fmt.Errorf("requests: SetDeps was not called with a full Deps before core.Boot — wire it in the host's composition root (stores + chrome + vocabulary; Prowlarr/Torznab/RefreshAnime/ExistingReleases/ResolveAnimeTitle are the only optionals)")
 	}
 	if err := parseTemplates(); err != nil {
 		return err
@@ -88,6 +88,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	g.GET("/requests/scrape", p.handlers.ScrapeNyaa)
 	g.GET("/requests/search", p.handlers.SearchTorrents)
 	g.GET("/requests/lookup", p.handlers.LookupAnime)
+	g.GET("/requests/existing", p.handlers.ExistingReleases)
 	// The calendar page's torrent search shares the board's search
 	// backends; the path is historical.
 	g.GET("/calendar/search", p.handlers.SearchNekoBT)
