@@ -12,6 +12,12 @@
 security, i18n-readiness, admin surface, jobs, docs, tests, and how each item
 is verified.
 
+**Before writing one, read [SEAMS.md](SEAMS.md)** — every shared system a plugin
+can reach for (41 declared contracts, grouped by what they are for), the rules
+they live by, and what is still duplicated across the 49 plugins because nothing
+was there to reach for. It answers the question an author asks first and
+currently answers by grepping: *does this already exist?*
+
 Each plugin is a self-describing module a loon host imports and boots. The job
 machinery (`RegisterJob`, `RunLoop`, off-peak gating, the `/admin/jobs` view)
 lives in loon's `schedule` package, so a plugin inherits the scheduler for free —
