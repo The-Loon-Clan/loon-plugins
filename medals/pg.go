@@ -135,8 +135,11 @@ func (s *PGStore) SetShown(ctx context.Context, userID, medalID int64, shown boo
 // Worn answers the profile: the icons a member is displaying, in catalogue
 // order.
 func (s *PGStore) Worn(ctx context.Context, userID int64) ([]pluginapi.WornMedal, error) {
+	// The SLUG comes back too, because an icon field the operator left blank
+	// resolves to a sprite chosen from it — the profile must draw the same
+	// face the medals page does.
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT m.name, m.icon FROM medals.user_medals um
+		SELECT m.name, m.icon, m.slug FROM medals.user_medals um
 		  JOIN medals.medals m ON m.id = um.medal_id
 		 WHERE um.user_id = $1 AND um.shown AND m.enabled
 		 ORDER BY m.ordinal, m.name`, userID)
@@ -147,9 +150,11 @@ func (s *PGStore) Worn(ctx context.Context, userID int64) ([]pluginapi.WornMedal
 	var out []pluginapi.WornMedal
 	for rows.Next() {
 		var w pluginapi.WornMedal
-		if err := rows.Scan(&w.Name, &w.Icon); err != nil {
+		var icon, slug string
+		if err := rows.Scan(&w.Name, &icon, &slug); err != nil {
 			return nil, err
 		}
+		w.Sprite, w.Icon = spriteOrImage(icon, slug)
 		out = append(out, w)
 	}
 	return out, rows.Err()

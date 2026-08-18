@@ -20,7 +20,12 @@
                 {{range .Medals}}
                 <tr>
                     <td>
-                        {{if .Icon}}<img src="{{.Icon}}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;vertical-align:middle">{{end}}
+                        {{/* Exactly one of the two is ever set — see icons.go.
+                             Both aria-hidden/alt-empty: the medal's name is
+                             the next thing in the cell, so the picture is
+                             decoration and naming it twice is noise. */}}
+                        {{if .Sprite}}<svg class="icon" aria-hidden="true" style="width:32px;height:32px;vertical-align:middle;color:var(--primary-tint)"><use href="#{{.Sprite}}"></use></svg>{{end}}
+                        {{if .Image}}<img src="{{.Image}}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;vertical-align:middle">{{end}}
                         <strong>{{.Name}}</strong>
                     </td>
                     <td class="text-muted">{{.Description}}</td>

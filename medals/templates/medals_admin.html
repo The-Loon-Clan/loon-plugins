@@ -13,7 +13,8 @@
             {{range .Medals}}
             <tr>
                 <td>
-                    {{if .Icon}}<img src="{{.Icon}}" alt="" style="width:32px;height:32px;object-fit:cover;border-radius:6px;vertical-align:middle">{{end}}
+                    {{if .Sprite}}<svg class="icon" aria-hidden="true" style="width:26px;height:26px;vertical-align:middle;color:var(--primary-tint)"><use href="#{{.Sprite}}"></use></svg>{{end}}
+                    {{if .Image}}<img src="{{.Image}}" alt="" style="width:32px;height:32px;object-fit:cover;border-radius:6px;vertical-align:middle">{{end}}
                     {{.Name}}
                 </td>
                 <td><code>{{.Slug}}</code></td>
@@ -54,8 +55,9 @@
         <label class="form__label" for="md-name">Name
             <input id="md-name" name="name" class="form__input" placeholder="Founder">
         </label>
-        <label class="form__label" for="md-icon" style="flex:1;min-width:220px">Icon URL
-            <input id="md-icon" name="icon" class="form__input" placeholder="/uploads/medals/founder.png">
+        <label class="form__label" for="md-icon" style="flex:1;min-width:220px">Icon
+            <input id="md-icon" name="icon" class="form__input" placeholder="star">
+            <span class="form-help text-muted small">An icon name (star, shield, verified, coin, check, clock, globe, users) or an image URL. Leave blank and the medal picks one and keeps it.</span>
         </label>
     </div>
     <div style="display:flex;gap:0.75rem;flex-wrap:wrap" class="mt-2">

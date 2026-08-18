@@ -25,9 +25,20 @@ type MedalGranter interface {
 const WornMedalsName = "medals.worn"
 
 // WornMedal is one displayed medal, ready to draw.
+//
+// Two ways to draw it and exactly one is ever set, so a host template picks
+// with an {{if}} rather than having to guess from the string's shape:
+//
+//	Sprite  a host sprite id, drawn as <svg><use href="#…">
+//	Icon    an image URL, drawn as <img src="…">
+//
+// Sprite exists because most medals never get an upload, and a medal with no
+// picture at all is a worse badge than a generic one. The plugin fills it from
+// the medal's slug when its operator has not chosen — see medals/icons.go.
 type WornMedal struct {
-	Name string
-	Icon string // an image URL
+	Name   string
+	Icon   string // an image URL
+	Sprite string // a host sprite id
 }
 
 // WornMedalsFunc answers for one member. Registered AS this type — a bare
