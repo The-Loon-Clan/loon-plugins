@@ -47,7 +47,7 @@ type SeriesIndex interface {
 	// first, with the total for paging.
 	Series(ctx context.Context, query string, limit, offset int) ([]SeriesRow, int, error)
 
-	// Series1 returns one show's display name and whether it exists at all.
+	// SeriesByKey returns one show's display name and whether it exists at all.
 	SeriesByKey(ctx context.Context, key string) (name string, ok bool, err error)
 
 	// Seasons lists a show's seasons with their counts, ascending. Season 0 is

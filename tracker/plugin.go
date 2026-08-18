@@ -171,6 +171,17 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return fmt.Errorf("tracker: register credit: %w", err)
 	}
 
+	// Which releases the tracker also carries (pluginapi.TorrentMirrors), so
+	// an index listing can offer both ways of getting the same content on one
+	// row. The tracker holds the answer — `torrents.nzb_id` — and until this
+	// existed nothing could read it a page at a time.
+	//
+	// Registered on a RUNNING tracker only, like the credit seam above: a
+	// badge linking to torrent pages that are not mounted is a link to a 404.
+	if err := c.Register(pluginapi.TorrentMirrorsName, pluginapi.TorrentMirrors(mirrorReader{pg})); err != nil {
+		return fmt.Errorf("tracker: register mirrors: %w", err)
+	}
+
 	// Cheat detection (cheat_job.go). Registered even when the rules are off:
 	// the sampling still runs so that switching detection on starts working at
 	// the next sweep rather than the one after, and an operator can see the job

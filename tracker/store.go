@@ -116,6 +116,17 @@ type Store interface {
 	// the tracker — so a caller renders nothing rather than "0 seeders", which
 	// would claim a dead torrent instead of no torrent.
 	TorrentByNzbID(ctx context.Context, nzbID int64) (*Torrent, error)
+
+	// TorrentsByNzbIDs is TorrentByNzbID for a whole page of releases at once,
+	// keyed by release id, with the release ids that have no torrent simply
+	// absent. It is what pluginapi.TorrentMirrors publishes: a listing asking
+	// "which of these fifty are also on the tracker" must be one query, not
+	// fifty.
+	//
+	// info_bytes is not read — a badge renders none of it, and it is kilobytes
+	// per row.
+	TorrentsByNzbIDs(ctx context.Context, nzbIDs []int64) (map[int64]*Torrent, error)
+
 	ListTorrents(ctx context.Context, limit, offset int) ([]*Torrent, int, error)
 
 	// ── The announce path ───────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 
 	"github.com/the-loon-clan/loon/core"
 )
@@ -142,6 +143,37 @@ func (s *PGStore) TorrentByNzbID(ctx context.Context, nzbID int64) (*Torrent, er
 		return nil, fmt.Errorf("torrent for release %d: %w", nzbID, err)
 	}
 	return &t, nil
+}
+
+func (s *PGStore) TorrentsByNzbIDs(ctx context.Context, nzbIDs []int64) (map[int64]*Torrent, error) {
+	out := map[int64]*Torrent{}
+	if len(nzbIDs) == 0 {
+		// Not an error, and not a query: an empty page asks about nothing.
+		return out, nil
+	}
+	var rows []*Torrent
+	// ORDER BY added_at ASC with a last-write-wins fold below, so that a
+	// release with two torrents resolves to the NEWEST — the same answer
+	// TorrentByNzbID gives, reached without a window function.
+	//
+	// info_bytes is selected as empty for the reason on ListTorrents: it is
+	// the whole info dict and a badge renders none of it.
+	err := s.sel(ctx, &rows, `
+		SELECT info_hash, name, size, piece_length, file_count, files_json,
+		       ''::bytea AS info_bytes, uploaded_by, nzb_id, added_at,
+		       seeders, leechers, snatches
+		  FROM torrents
+		 WHERE nzb_id = ANY($1)
+		 ORDER BY added_at ASC`, pq.Array(nzbIDs))
+	if err != nil {
+		return nil, fmt.Errorf("torrents for %d release(s): %w", len(nzbIDs), err)
+	}
+	for _, t := range rows {
+		if t.NzbID != nil {
+			out[*t.NzbID] = t
+		}
+	}
+	return out, nil
 }
 
 func (s *PGStore) ListTorrents(ctx context.Context, limit, offset int) ([]*Torrent, int, error) {

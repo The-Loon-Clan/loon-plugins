@@ -143,6 +143,32 @@ func (m *MemStore) TorrentByNzbID(ctx context.Context, nzbID int64) (*Torrent, e
 	return &cp, nil
 }
 
+func (m *MemStore) TorrentsByNzbIDs(ctx context.Context, nzbIDs []int64) (map[int64]*Torrent, error) {
+	out := map[int64]*Torrent{}
+	if len(nzbIDs) == 0 {
+		return out, nil
+	}
+	want := make(map[int64]bool, len(nzbIDs))
+	for _, id := range nzbIDs {
+		want[id] = true
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, t := range m.torrents {
+		if t.NzbID == nil || !want[*t.NzbID] {
+			continue
+		}
+		// Newest wins, for the reason on TorrentByNzbID: the two lookups must
+		// agree, and a map has no order to fall back on.
+		if cur, ok := out[*t.NzbID]; ok && !t.AddedAt.After(cur.AddedAt) {
+			continue
+		}
+		cp := *t
+		out[*t.NzbID] = &cp
+	}
+	return out, nil
+}
+
 func (m *MemStore) Torrent(ctx context.Context, infoHash string) (*Torrent, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
