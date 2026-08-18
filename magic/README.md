@@ -21,8 +21,9 @@ or (once practised) a custom ratio pair — **private** (themselves), **public**
 
 ## Seams
 
-- publishes `magic.promo` (`pluginapi.PromoResolver`) — one indexed read on
-  the announce path; errors credit normally.
+- registers as a USER MULTIPLIER source (`multipliers.source.magic`,
+  upload/download dimensions) — one indexed read on the announce path;
+  errors are no-opinion. The combining rules live in pluginapi/multipliers.go.
 - consumes `tracker.torrentinfo` (`pluginapi.TorrentInfoFunc`, in Start) for
   names, sizes and existence checks — absent, casts are priced size-1 and
   unnamed.

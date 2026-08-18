@@ -130,12 +130,22 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return errors.New("rewards: core.Points is not wired; every points payout would be refused at grant time")
 	}
 	p.engine.Handle(PayoutPoints, func(ctx context.Context, g Grant, payout Payout) error {
+		// The member's standing bonuses (worn medals, whatever else speaks
+		// the points dimension) scale what a reward pays. Floored via int
+		// conversion, like the tracker's crediting: a bonus never invents a
+		// fraction of a point. 1 with no sources, so a host without any
+		// multiplier system pays exactly the frozen amount, as always.
+		amount := payout.Amount
+		if f := pluginapi.ResolveMultiplier(ctx, c, pluginapi.MultPoints,
+			pluginapi.MultiplierContext{UserID: g.UserID}); f != 1 {
+			amount = int(float64(amount) * f)
+		}
 		// The detail is the reward's slug, so a ledger reader can tell a
 		// daily-login credit from a summer bonus — 30,000 tenure points
 		// labelled just "reward" is the first question in every balance
 		// dispute. ref is the grant payout id: it makes every ledger row
 		// traceable to the exact frozen line that produced it.
-		_, err := c.Points.Award(ctx, g.UserID, payout.Amount, "reward", g.RewardSlug, payout.ID)
+		_, err := c.Points.Award(ctx, g.UserID, amount, "reward", g.RewardSlug, payout.ID)
 		return err
 	})
 

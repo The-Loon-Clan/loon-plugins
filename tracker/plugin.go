@@ -251,22 +251,18 @@ func (p *Plugin) requireEntitled(gc *gin.Context) {
 
 func (p *Plugin) Start(ctx context.Context) error {
 	p.ctx = ctx
-	// The promotion resolver (magic plugin), softly and in Start so sibling
-	// registration order never matters. Folded into Credit best-of; errors
-	// from the resolver credit normally — an announce must never fail over
-	// an economy question.
+	// The user-multiplier system, folded into Credit best-of with the
+	// installed multiplier (perks' slot). One resolve per dimension per
+	// announce; sources that error are no-opinion, so an announce never
+	// fails over an economy question. The resolver scans the registry per
+	// call, so sources registered after this still count.
 	if p.core != nil {
-		if v, ok := p.core.Lookup(pluginapi.PromoResolverName); ok {
-			if r, ok := v.(pluginapi.PromoResolver); ok {
-				setPromo(func(ctx context.Context, userID int64, infoHash string) (float64, float64) {
-					up, down, err := r.EffectiveRatios(ctx, infoHash, userID)
-					if err != nil {
-						return 1, 1
-					}
-					return up, down
-				})
-			}
-		}
+		reg := p.core
+		setPromo(func(ctx context.Context, userID int64, infoHash string) (float64, float64) {
+			mc := pluginapi.MultiplierContext{UserID: userID, InfoHash: infoHash}
+			return pluginapi.ResolveMultiplier(ctx, reg, pluginapi.MultUpload, mc),
+				pluginapi.ResolveMultiplier(ctx, reg, pluginapi.MultDownload, mc)
+		})
 	}
 	// No job means the tracker is off or the host wired no scheduler; either
 	// way there is nothing to loop.

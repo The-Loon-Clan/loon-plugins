@@ -5,8 +5,8 @@
 // of hours. Every cast is history: a promotion cannot be edited once cast,
 // only terminated by an admin, and the row stays either way.
 //
-// RESOLUTION is the genre's rule, stated in the plugin's one published
-// answer (pluginapi.PromoResolver): on a torrent, a member gets the HIGHEST
+// RESOLUTION is the genre's rule, spoken through the USER MULTIPLIER
+// system (pluginapi.ResolveMultiplier): on a torrent, a member gets the HIGHEST
 // upload factor and the LOWEST download factor across every active magic
 // visible to them — a global promotion never overrides a private one with
 // better numbers, and there is no limit to how many promotions a torrent
@@ -82,11 +82,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.tmpl = t
 
-	// The one published answer: the resolver the tracker folds into its
-	// crediting. Registered at Provision; the tracker looks it up in Start,
-	// so the order between the two never matters.
-	if err := c.Register(pluginapi.PromoResolverName, pluginapi.PromoResolver(resolver{p.st})); err != nil {
-		return fmt.Errorf("magic: register resolver: %w", err)
+	// The one published answer, in the USER MULTIPLIER vocabulary: magic is
+	// a source of upload/download factors, discovered by prefix and combined
+	// with every other source (medals, whatever comes next) by
+	// pluginapi.ResolveMultiplier — where the stacking rules live, once.
+	if err := c.Register(pluginapi.MultiplierSourcePrefix+"magic",
+		pluginapi.MultiplierSource(resolver{p.st})); err != nil {
+		return fmt.Errorf("magic: register multiplier source: %w", err)
 	}
 	return p.registerViews(c)
 }
@@ -119,13 +121,23 @@ var classicBuffs = []BuffDef{
 	{Slug: "30", Name: "30%", UpRatio: 1, DownRatio: 0.3, Ordinal: 60},
 }
 
-// resolver answers the tracker. One indexed read; errors mean "credit
-// normally" on the tracker's side, so this only has to be honest, not
-// heroic.
+// resolver answers the multiplier system: magic speaks the upload and
+// download dimensions, from one indexed read. Errors and other dimensions
+// are "no opinion" — earning never fails over a promotion.
 type resolver struct{ st *PGStore }
 
-func (r resolver) EffectiveRatios(ctx context.Context, infoHash string, userID int64) (float64, float64, error) {
-	return r.st.EffectiveRatios(ctx, infoHash, userID)
+func (r resolver) Factor(ctx context.Context, dim string, mc pluginapi.MultiplierContext) (float64, bool, error) {
+	if (dim != pluginapi.MultUpload && dim != pluginapi.MultDownload) || mc.InfoHash == "" {
+		return 0, false, nil
+	}
+	up, down, err := r.st.EffectiveRatios(ctx, mc.InfoHash, mc.UserID)
+	if err != nil {
+		return 0, false, err
+	}
+	if dim == pluginapi.MultUpload {
+		return up, up != 1, nil
+	}
+	return down, down != 1, nil
 }
 
 // ── cost ────────────────────────────────────────────────────────────────

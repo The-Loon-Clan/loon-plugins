@@ -35,7 +35,7 @@
         </label>
     </div>
     <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:end" class="mt-2">
-        <label class="form__label" for="mg-buff">Buff
+        <label class="form__label" for="mg-buff">Multiplier
             <select id="mg-buff" name="buff" class="form__input">
                 {{range .Buffs}}<option value="{{.Slug}}">{{.Name}} ({{.UpRatio}}&times; up / {{.DownRatio}}&times; down)</option>{{end}}
                 {{if .Custom}}<option value="custom">Custom ratio&hellip;</option>{{end}}

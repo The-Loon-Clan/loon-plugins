@@ -115,12 +115,35 @@ func (p *Plugin) Provision(c *core.Core) error {
 		})); err != nil {
 		return fmt.Errorf("medals: register bonus: %w", err)
 	}
+	// And the same answer in the USER MULTIPLIER vocabulary: worn medals are
+	// a source of the points dimension, combined additively with every other
+	// bonus by pluginapi.ResolveMultiplier. A host that wants medals to be
+	// nothing but medals sets every bonus_pct to 0 — the optionality moved
+	// from "no consumer" to "no value", which an operator can see and set.
+	if err := c.Register(pluginapi.MultiplierSourcePrefix+"medals",
+		pluginapi.MultiplierSource(bonusSource{p.st})); err != nil {
+		return fmt.Errorf("medals: register multiplier source: %w", err)
+	}
 
 	return p.registerViews(c)
 }
 
 func (p *Plugin) Start(ctx context.Context) error { return nil }
 func (p *Plugin) Stop(ctx context.Context) error  { return nil }
+
+// bonusSource speaks the points dimension: 1 + the summed worn bonus.
+type bonusSource struct{ st *PGStore }
+
+func (b bonusSource) Factor(ctx context.Context, dim string, mc pluginapi.MultiplierContext) (float64, bool, error) {
+	if dim != pluginapi.MultPoints {
+		return 0, false, nil
+	}
+	pct, err := b.st.WornBonusPct(ctx, mc.UserID)
+	if err != nil || pct == 0 {
+		return 0, false, err
+	}
+	return 1 + float64(pct)/100, true, nil
+}
 
 // granter adapts the store to pluginapi.MedalGranter. Unknown slugs are the
 // quiet no-op the payout tolerance expects; a repeat grant is the same

@@ -5,23 +5,9 @@ package pluginapi
 
 import "context"
 
-// PromoResolverName is where the magic plugin publishes its resolver. The
-// tracker looks it up in Start (softly — a site without the plugin credits
-// normally) and folds it into Credit BEST-OF alongside any installed
-// multiplier: the highest upload factor and the lowest download factor win,
-// which is the promotion rule the genre settled on — a freeleech token and
-// a 2× magic together credit 2× up and 0× down, never a compromise of
-// either.
-const PromoResolverName = "magic.promo"
-
-// PromoResolver answers the effective promotion for one member on one
-// torrent, across every active magic visible to them. (1, 1) means none.
-//
-// Called on the announce path: implementations must be one cheap indexed
-// read, and errors mean "credit normally", never "fail the announce".
-type PromoResolver interface {
-	EffectiveRatios(ctx context.Context, infoHash string, userID int64) (up, down float64, err error)
-}
+// The promotion resolver that briefly lived here became the generic USER
+// MULTIPLIER system — see multipliers.go, where magic registers as a source
+// of the upload/download dimensions and the combining rules live.
 
 // TorrentInfoName is where the tracker publishes a name/size lookup, so a
 // promotions page can show what a hash IS and price a cast by size without
