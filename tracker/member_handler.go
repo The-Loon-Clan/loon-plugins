@@ -71,7 +71,11 @@ func (h *Handlers) IndexPage(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "passkey: %v", err)
 		return
 	}
-	h.render(c, "tracker_list.html", "Private Tracker", PageData{
+	// "Torrents", which is what the site's own nav has always called this
+	// page (navadmin's builtin entry) — the heading said "Private Tracker" and
+	// disagreed with the menu that got you here. It is a list of torrents; a
+	// member browsing one does not need telling that the tracker is private.
+	h.render(c, "tracker_list.html", "Torrents", PageData{
 		Torrents: rows, Total: total, Totals: totals,
 		Passkey: pk, AnnounceURL: h.announceURL(pk), CSRFToken: h.csrf(c),
 	})

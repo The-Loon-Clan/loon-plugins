@@ -186,9 +186,14 @@ func TestMemberFragmentsRenderWithRealData(t *testing.T) {
 		CSRFToken:   "tok",
 	}
 
-	for _, tc := range []struct{ tmpl, wants string }{
-		{"tracker_list.html", "Some Release"},
-		{"tracker_stats.html", "Rotate passkey"},
+	// tail is the LAST thing each fragment writes. A truncated stream is the
+	// failure mode this test exists for, and the two templates no longer end
+	// the same way: the ratio was the list's tail until its stat tiles moved
+	// off the page, and an anchor that has moved is an anchor that proves
+	// nothing.
+	for _, tc := range []struct{ tmpl, wants, tail string }{
+		{"tracker_list.html", "Some Release", "rotate it"},
+		{"tracker_stats.html", "Rotate passkey", "3.00"},
 	} {
 		t.Run(tc.tmpl, func(t *testing.T) {
 			var sb strings.Builder
@@ -203,8 +208,8 @@ func TestMemberFragmentsRenderWithRealData(t *testing.T) {
 			}
 			// A truncated stream is the failure mode: assert the LAST thing in
 			// the fragment made it out, not merely that something did.
-			if !strings.Contains(out, "3.00") {
-				t.Errorf("%s: ratio missing — Totals.Ratio did not render: %s", tc.tmpl, out)
+			if !strings.Contains(out, tc.tail) {
+				t.Errorf("%s: stopped before %q — the fragment truncated: %s", tc.tmpl, tc.tail, out)
 			}
 			if strings.Contains(out, "ActiveCount") || strings.Contains(out, "TorrentCount") {
 				t.Errorf("%s leaked a field name into the output", tc.tmpl)

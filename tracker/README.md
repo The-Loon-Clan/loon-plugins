@@ -32,7 +32,7 @@ pinned by goldens in `wire_golden_test.go` (announce/scrape bodies) and
 |---|---|---|
 | `GET /api/tracker/announce/:passkey` | **public** (passkey IS the auth) | No session middleware by design: the caller is a torrent client, has no cookie, cannot follow a login redirect, and would parse a login page as a bencoded response. |
 | `GET /api/tracker/scrape/:passkey` | **public** (as announce) | |
-| `GET /tracker` | member + `tracker.access` | Swarm listing. |
+| `GET /tracker` | member + `tracker.access` | The torrent listing, titled **Torrents** — the name the site nav has always used for it. Just the list: the viewer's own uploaded/downloaded/ratio tiles moved off it to `/tracker/my`, which one quiet link reaches, because a member opening a torrent list came to find a torrent. |
 | `GET /tracker/my` | member + `tracker.access` | Per-torrent counters, announce URL, rotate button. |
 | `GET /tracker/t/:info_hash` | member + `tracker.access` | **One torrent's own page** — facts, the `.torrent`, the info-hash, the release cross-link, and every promotion ever cast on it. A static `/t/` prefix so it cannot collide with `/my` or `/download` in Gin's tree. Reached from the list's torrent name. |
 | `GET /tracker/download/:info_hash` | member + `tracker.access` | Splices the member's passkey into the announce URL; `info_bytes` are spliced **unchanged**. |

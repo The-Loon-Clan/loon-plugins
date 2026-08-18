@@ -29,31 +29,20 @@
      this fragment is executed by the plugin's parsed set, not the host's. */}}
 {{define "tracker_list.html"}}
 
-{{/* The viewer's own standing, first, because it is the number they came to
-     check. stat-tile is the host's component — /stats builds its whole tracker
-     panel out of these — so three figures here look like six figures there. */}}
-<div class="stat-grid">
-    <div class="stat-tile">
-        <svg class="icon stat-tile__icon" aria-hidden="true"><use href="#chevron-up"></use></svg>
-        <span class="stat-tile__label">Uploaded</span>
-        <span class="stat-tile__value">{{bytes .Totals.Uploaded}}</span>
-    </div>
-    <div class="stat-tile">
-        <svg class="icon stat-tile__icon" aria-hidden="true"><use href="#chevron-down"></use></svg>
-        <span class="stat-tile__label">Downloaded</span>
-        <span class="stat-tile__value">{{bytes .Totals.Downloaded}}</span>
-    </div>
-    {{/* The ratio tile is a LINK to the member's own page, which is where the
-         per-torrent breakdown behind this number lives. a.stat-tile is styled
-         for it (components.css), so this is the host's affordance rather than
-         an anchor dropped on a box. It replaces the "My Stats" button that used
-         to sit in a header bar of its own. */}}
-    <a class="stat-tile" href="/tracker/my">
-        <svg class="icon stat-tile__icon" aria-hidden="true"><use href="#shield"></use></svg>
-        <span class="stat-tile__label">Ratio &middot; your stats</span>
-        <span class="stat-tile__value">{{ratio .Totals.Ratio}}</span>
-    </a>
-</div>
+{{/* NO stat tiles here. This page had three — uploaded, downloaded, ratio —
+     on the reasoning that the ratio is "the number they came to check". On
+     THIS page it is not: a member opening a torrent list came to find a
+     torrent, and their own standing is a different question with a page of its
+     own. Three figures across the top pushed the first row of the actual
+     content below the fold on a laptop.
+
+     The one thing worth keeping from them is the way OUT, because /tracker is
+     not in the host's account area and so carries no second-row menu — remove
+     the tiles and the member's own stats page becomes unreachable from here.
+     So: one quiet link, not three figures. */}}
+<p class="mb-3" style="font-size:0.82rem;">
+    <a href="/tracker/my">Your tracker stats &rarr;</a>
+</p>
 
 {{if .Torrents}}
 <div class="data-table-wrapper">
