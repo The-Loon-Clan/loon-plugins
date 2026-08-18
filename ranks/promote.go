@@ -16,19 +16,25 @@ import (
 // model, and nothing ever evaluated it — a member could reach an earned group
 // by no path at all. This is that path.
 //
-// WHY A SWEEP AND NOT AN EVENT. Two of the three criteria have nothing to fire
-// on. Ratio moves on every announce, and a promotion check there would sit on
-// the tracker's hottest path to answer a question that changes for one member a
+// WHY A SWEEP AND NOT AN EVENT. Most of the criteria have nothing to fire on.
+// Ratio moves on every announce, and a promotion check there would sit on the
+// tracker's hottest path to answer a question that changes for one member a
 // week. Account age moves with no event whatsoever: nothing happens on the day
 // somebody turns thirty days old, and the rewards plugin already makes exactly
 // this argument about tenure — "no plugin announces an anniversary, and none
 // should, because the member does not do anything on the day."
 //
+// Release count is the one criterion that DOES have an event — a publish — and
+// it is still judged here, because a rung gated on releases and age cannot be
+// decided at publish time anyway: the member usually clears the count long
+// before the tenure, and a ladder that promoted on one clock and demoted on
+// another would move people twice for the same qualification.
+//
 // WHY NOT AN ACHIEVEMENT, which is the reuse that looks obvious. Three
 // differences, and the third is fatal:
 //
 //	criteria     an achievement has ONE threshold on ONE metric; a class is
-//	             conjunctive — uploaded AND ratio AND age.
+//	             conjunctive — uploaded AND ratio AND age AND releases.
 //	cardinality  achievements are a bag, you hold every one you earn; a class is
 //	             exclusive, you hold the highest you qualify for.
 //	direction    an achievement completes once and cannot walk backwards. A
@@ -49,7 +55,11 @@ func (g Group) Automatic() bool {
 	if g.Kind != "earned" {
 		return false
 	}
-	return g.MinUploaded > 0 || g.MinRatio > 0 || g.MinAgeDays > 0
+	// Any ONE criterion is enough to make the group gated. A rung asking only
+	// for releases is a complete rule — it is the whole ladder on a host with no
+	// tracker — so leaving it out here would leave that group looking
+	// half-configured and never promoting anyone.
+	return g.MinUploaded > 0 || g.MinRatio > 0 || g.MinAgeDays > 0 || g.MinReleases > 0
 }
 
 // Qualifies reports whether these figures meet every criterion this group sets.
@@ -66,6 +76,22 @@ func (g Group) Qualifies(s pluginapi.MemberStats, now time.Time) bool {
 	}
 	if g.MinAgeDays > 0 && s.AgeDays(now) < g.MinAgeDays {
 		return false
+	}
+	if g.MinReleases > 0 {
+		// Absent is not zero, and neither one earns the rung: a count the host
+		// never proved cannot satisfy a threshold. Fails CLOSED like every
+		// criterion here, which is also what lets a rung require releases AND
+		// bytes together — the tracker-era case where a member has to have both
+		// contributed and seeded, not either.
+		//
+		// The cost of failing closed is on the host, and pluginapi documents it:
+		// a host that supplies counts, promotes on them and then reports the same
+		// members with the count missing deranks that rung. Omit the member
+		// instead — planPromotions leaves an omitted member alone.
+		n, known := s.Releases()
+		if !known || n < g.MinReleases {
+			return false
+		}
 	}
 	return true
 }
@@ -196,7 +222,7 @@ type rankPromotion struct {
 func newRankPromotion(store Store, ents *entSync, stats pluginapi.RankStats, sched core.SchedulerService) *rankPromotion {
 	p := &rankPromotion{store: store, ents: ents, stats: stats, sched: sched}
 	p.job = sched.RegisterJob("Rank Promotion",
-		"Promotes and demotes members between earned ranks on upload, ratio and account age").
+		"Promotes and demotes members between earned ranks on releases contributed, upload, ratio and account age").
 		MarkWrites()
 	p.job.SetTrigger(func() { go p.run(context.Background()) })
 	return p
@@ -221,7 +247,7 @@ func (p *rankPromotion) run(ctx context.Context) {
 		// No host seam: nothing to judge anyone on. Said rather than silently
 		// doing nothing, because an operator who has configured a ladder and
 		// sees no promotions needs to know the figures never arrived.
-		p.job.SetError("no RankStats capability registered — the host supplies the upload/ratio/age figures, and without it no rank can be earned")
+		p.job.SetError("no RankStats capability registered — the host supplies the release-count/upload/ratio/age figures, and without it no rank can be earned")
 		return
 	}
 
@@ -284,6 +310,19 @@ func (p *rankPromotion) run(ctx context.Context) {
 		if err := p.store.AddMember(ctx, ch.UserID, ch.Add, 0); err != nil {
 			p.job.Log("user %d: granting group %d: %v", ch.UserID, ch.Add, err)
 			continue
+		}
+		// Grant what the rank confers, mirroring the revoke in the drop loop
+		// above. The two were asymmetric: a demotion revoked immediately, a
+		// promotion waited for the next process Start to pick the grants up in
+		// rebuildAll. On its own that is a delay; PAIRED with the drop loop it
+		// is a hole, because a member who moved rung — dropped one, gained the
+		// next — lost the old rank's entitlements at once and gained the new
+		// rank's only after a restart. Permanent by construction (the grant
+		// carries no expiry because the membership has none), and best-effort
+		// for the same reason the history write is: the membership is already
+		// written, and rebuildAll at boot is the repair path.
+		if p.ents != nil && p.ents.ents != nil {
+			_ = p.ents.grantMembership(ctx, ch.UserID, ch.Add, nil)
 		}
 		_ = p.store.RecordHistory(ctx, ch.UserID, &ch.Add, "promote",
 			"automatic: meets the criteria for this rank")

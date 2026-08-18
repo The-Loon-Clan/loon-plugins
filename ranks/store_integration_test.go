@@ -33,6 +33,19 @@ func storeFixture(t *testing.T) (*PGStore, *sqlx.DB) {
 	db := migrationDB(t)
 	seedLegacyRanks(t, db)
 	applyMigration(t, db)
+	// 005 seeds a default earned ladder into a catalog that has none, and this
+	// fixture's schema is empty when the migrations run, so it fires here and
+	// takes the first four ids from the sequence. Clear it before installing
+	// the production catalog below, which addresses groups by the ids the live
+	// site uses (notably 5 = Arashi) and would otherwise be silently shifted or
+	// skipped by the ON CONFLICT. The seed's own behaviour is covered by
+	// earned_ladder_integration_test.go against a catalog shaped like a real
+	// upgrade — paid tiers already present — which is the case this fixture
+	// cannot represent, since the migrations must run before anything can be
+	// inserted.
+	if _, err := db.Exec(`DELETE FROM ` + testSchema + `.groups WHERE kind = 'earned'`); err != nil {
+		t.Fatalf("clear seeded ladder: %v", err)
+	}
 	// The catalog is seeded HERE, by the test, because the migration no longer
 	// does it — importing an existing site's tiers is a separate operation now
 	// (ADOPTION-MIGRATIONS.md). These ids and names match the production

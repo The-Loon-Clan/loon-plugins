@@ -33,11 +33,24 @@ type Group struct {
 	CreatedAt    time.Time
 	Grants       map[string]int64
 
-	// Promotion criteria (migration 003). Zero means "not a criterion"; a
-	// group with all three zero is not automatic at all — see Automatic.
+	// Promotion criteria (migrations 003, 004). Zero means "not a criterion"; a
+	// group with all of them zero is not automatic at all — see Automatic.
 	MinUploaded int64
 	MinRatio    float64
 	MinAgeDays  int
+
+	// MinReleases gates on pluginapi.MemberStats.ReleasesContributed — a COUNT
+	// of releases, not the byte figure MinUploaded reads. The two are different
+	// types (int here, int64 there) so a rule cannot compare one against the
+	// other by accident; see that field for why the names avoid it too.
+	//
+	// Unset is "not asked", exactly like its three siblings, and that is what
+	// keeps the column additive: every ladder configured before it is judged
+	// identically afterwards. Set above zero it needs a host that supplies the
+	// count, and a host that does not is one where this rung goes unearned —
+	// never one that fails to boot, and never one that grants it to everybody
+	// because the figure read as zero.
+	MinReleases int
 }
 
 // Member is one membership. ExpiresAt nil means permanent — only reachable
@@ -140,6 +153,14 @@ type Store interface {
 	ActiveMembership(ctx context.Context, userID int) (*Member, error)
 	// AddMember joins userID to groupID for dur, extending an existing
 	// membership from whichever is later: its current expiry or now.
+	//
+	// dur <= 0 means PERMANENT (a NULL expiry), and upgrades an existing timed
+	// membership to permanent. That is what an EARNED rank is: it is held for
+	// as long as it is earned, and the promotion sweep — not the clock — is
+	// what takes it away. Without this case the sweep's zero fell through to
+	// the timed path, where the interval is clamped up to one hour, so every
+	// earned membership was expired by the hourly Rank Expiry job and re-granted
+	// by the hourly promotion job, forever.
 	AddMember(ctx context.Context, userID, groupID int, dur time.Duration) error
 	// ExpireMemberships removes every lapsed membership and returns them.
 	// Permanent memberships (NULL expiry) are never swept.
@@ -407,6 +428,17 @@ func (m *MemStore) AddMember(_ context.Context, userID, groupID int, dur time.Du
 		return ErrGroupNotFound
 	}
 	now := m.now()
+	// dur <= 0 is PERMANENT, mirroring PGStore — see the comment there for the
+	// hourly promote/expire churn the old fall-through caused. Getting this
+	// wrong in the double would be worse than in the store: base.Add(0) makes
+	// an ALREADY-expired membership, so a unit test of the promotion sweep
+	// would see its own grant vanish and the fix would look like the bug.
+	if dur <= 0 {
+		m.members[[2]int{userID, groupID}] = &Member{
+			UserID: userID, GroupID: groupID, GrantedAt: now, ExpiresAt: nil, Source: "purchase",
+		}
+		return nil
+	}
 	base := now
 	cur, existing := m.members[[2]int{userID, groupID}]
 	if existing {

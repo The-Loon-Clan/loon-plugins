@@ -34,8 +34,10 @@ func TestMigrations_ApplyWithNoLegacyTables(t *testing.T) {
 
 	applyMigration(t, db) // must not error
 
-	// The tables exist and are empty — the plugin is usable, just unseeded.
-	for _, tbl := range []string{"groups", "group_entitlements", "group_members", "group_member_history"} {
+	// The membership tables exist and are empty — nobody is a member of
+	// anything on a fresh install, which is what the removed seed used to get
+	// wrong by importing another site's memberships.
+	for _, tbl := range []string{"group_entitlements", "group_members", "group_member_history"} {
 		var n int
 		if err := db.Get(&n, `SELECT count(*) FROM `+testSchema+`.`+tbl); err != nil {
 			t.Fatalf("%s missing after migration: %v", tbl, err)
@@ -43,6 +45,18 @@ func TestMigrations_ApplyWithNoLegacyTables(t *testing.T) {
 		if n != 0 {
 			t.Errorf("%s has %d rows on a fresh install, want 0", tbl, n)
 		}
+	}
+
+	// groups is the exception, and the distinction is the whole point of
+	// ADOPTION-MIGRATIONS.md: a CATALOG is configuration and ships with the
+	// plugin, a MEMBERSHIP is data and belongs to a site. 005 seeds the former.
+	var n int
+	if err := db.Get(&n, `SELECT count(*) FROM `+testSchema+`.groups WHERE kind = 'earned'`); err != nil {
+		t.Fatalf("groups missing after migration: %v", err)
+	}
+	if n != 4 {
+		t.Errorf("fresh install has %d earned ranks, want the 4 seeded by 005 — "+
+			"without them Rank Promotion has nothing to promote to", n)
 	}
 
 	// The sequence is still initialised, so the first insert cannot collide.

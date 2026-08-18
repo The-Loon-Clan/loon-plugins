@@ -40,7 +40,7 @@ var _ Store = (*PGStore)(nil)
 
 const groupCols = `id, slug, name, kind, visible, parent_id, depth, color,
                    title_color, icon, cost_points, duration_days, sort_order, created_at,
-                   min_uploaded, min_ratio, min_age_days`
+                   min_uploaded, min_ratio, min_age_days, min_releases`
 
 type groupRow struct {
 	ID           int           `db:"id"`
@@ -60,6 +60,10 @@ type groupRow struct {
 	MinUploaded  int64         `db:"min_uploaded"`
 	MinRatio     float64       `db:"min_ratio"`
 	MinAgeDays   int           `db:"min_age_days"`
+	// A COUNT of releases, so int rather than the int64 the byte column uses —
+	// the type difference is the guard against a rule comparing the two. See
+	// migrations/004_release_criteria.sql.
+	MinReleases int `db:"min_releases"`
 }
 
 func (r groupRow) toGroup() Group {
@@ -69,6 +73,7 @@ func (r groupRow) toGroup() Group {
 		CostPoints: r.CostPoints, DurationDays: r.DurationDays, SortOrder: r.SortOrder,
 		CreatedAt: r.CreatedAt, Grants: map[string]int64{},
 		MinUploaded: r.MinUploaded, MinRatio: r.MinRatio, MinAgeDays: r.MinAgeDays,
+		MinReleases: r.MinReleases,
 	}
 	if r.ParentID.Valid {
 		p := int(r.ParentID.Int64)
@@ -140,6 +145,14 @@ func (s *PGStore) Group(ctx context.Context, id int) (*Group, error) {
 	return g, nil
 }
 
+// The promotion criteria (min_uploaded, min_ratio, min_age_days, min_releases)
+// are READ by groupCols and written by NEITHER CreateGroup nor UpdateGroup, which
+// is deliberate rather than an oversight in 004. The admin form has no inputs for
+// them — formGroup never populates the fields — so listing them in these
+// statements would reset an operator's thresholds to zero on every unrelated
+// catalog save, and a ladder that silently un-gated itself when somebody renamed
+// a rank is worse than one configured out of band. They are set by seed or by
+// SQL until the form grows the inputs, and the columns' defaults make that safe.
 func (s *PGStore) CreateGroup(ctx context.Context, g *Group) error {
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		err := tx.QueryRowContext(ctx, `
@@ -568,6 +581,35 @@ func (s *PGStore) AddMember(ctx context.Context, userID, groupID int, dur time.D
 		// exist fails here rather than inserting an orphan the FK would catch
 		// with a far less obvious error.
 		if _, err := groupInTx(ctx, tx, groupID); err != nil {
+			return err
+		}
+		// dur <= 0 is PERMANENT — a NULL expiry — and this branch is the whole
+		// reason an earned rank can exist.
+		//
+		// It used to fall through to the timed path below, where intervalArg
+		// clamps anything under an hour UP to one hour. The promotion sweep
+		// passes 0 and documents it as permanent, so every earned membership was
+		// written with expires_at = NOW() + 1 hour instead: Rank Expiry (hourly)
+		// deleted it, Rank Promotion (hourly) put it back, and the member got a
+		// fresh "promote" row in their own audit trail every hour forever, with
+		// the badge blinking out in the gap between the two ticks. Nothing
+		// failed, so nothing said anything.
+		//
+		// No caller loses the old behaviour: the only other writer,
+		// rankGranter.GrantRank, already normalises a non-positive duration to
+		// the group's configured days before it gets here, precisely so a
+		// mis-typed catalog row cannot sell somebody an expired rank.
+		//
+		// On conflict this UPGRADES a timed membership to permanent, which is
+		// the right direction: the sweep re-affirming a rank a member still
+		// earns must never shorten what they already hold.
+		if dur <= 0 {
+			_, err := tx.ExecContext(ctx, `
+				INSERT INTO group_members (user_id, group_id, expires_at, source)
+				VALUES ($1, $2, NULL, 'purchase')
+				ON CONFLICT (user_id, group_id) DO UPDATE
+				  SET expires_at = NULL`,
+				userID, groupID)
 			return err
 		}
 		// Extending stacks from the later of now and the current expiry, which

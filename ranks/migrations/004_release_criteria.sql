@@ -1,0 +1,28 @@
+-- A release-count criterion, so an earned rank can be reached by CONTRIBUTING
+-- rather than only by moving bytes.
+--
+-- 003 gave earned ranks three criteria and all three are tracker accounting:
+-- min_uploaded, min_ratio, min_age_days. An indexer with no tracker has no byte
+-- figures at all — every member reads zero — so its only usable rung was tenure,
+-- which promotes everybody who waits and nobody for the work. min_releases is
+-- the figure such a host can actually answer.
+--
+-- IT COUNTS RELEASES, NOT BYTES, and it is deliberately not named min_uploads:
+-- one character from min_uploaded, both numeric, and a rule that compared a byte
+-- threshold against a release count would still run while being wrong by nine
+-- orders of magnitude. The Go side keeps the distinction in the type as well as
+-- the name — int here, int64 for bytes — see
+-- pluginapi.MemberStats.ReleasesContributed.
+--
+-- Defaults to 0 = "not a criterion", exactly like the three beside it, and that
+-- is what makes this additive in both directions. Every ladder configured before
+-- this column is judged identically after it. A rung that DOES set it needs a
+-- host publishing RankStats with the count; a host that does not publish it
+-- still compiles, still boots, and simply leaves that rung unearned rather than
+-- granting it to everyone whose figure defaulted to zero. See Group.Automatic
+-- and Group.Qualifies.
+--
+-- Kept separate from the byte criteria rather than replacing them: when the BT
+-- tracker lands, a rung can require releases AND uploaded together, which is the
+-- conjunction Qualifies already implements.
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS min_releases INT NOT NULL DEFAULT 0 CHECK (min_releases >= 0);

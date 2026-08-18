@@ -164,12 +164,12 @@ func TestGroupsMigration_IsIdempotent(t *testing.T) {
 	applyMigration(t, db)
 	applyMigration(t, db) // a re-run is a boot on an already-migrated database
 
-	// The tables exist and stay EMPTY. The legacy fixture is still seeded above
-	// precisely to prove the point: the migration no longer looks at it, so a
-	// database that happens to have user_ranks gets exactly what a fresh one
-	// gets. Importing that data is a separate operation now
+	// The three MEMBERSHIP tables stay empty, and the legacy fixture is still
+	// seeded above precisely to prove it: the migration no longer looks at
+	// user_ranks, so a database that happens to have it gets exactly what a
+	// fresh one gets. Importing that data is a separate operation now
 	// (ADOPTION-MIGRATIONS.md).
-	for _, tbl := range []string{"groups", "group_entitlements", "group_members", "group_member_history"} {
+	for _, tbl := range []string{"group_entitlements", "group_members", "group_member_history"} {
 		var n int
 		if err := db.Get(&n, `SELECT count(*) FROM `+testSchema+`.`+tbl); err != nil {
 			t.Fatalf("%s: %v", tbl, err)
@@ -178,6 +178,25 @@ func TestGroupsMigration_IsIdempotent(t *testing.T) {
 			t.Errorf("%s = %d rows; the migration must not seed from the host's tables", tbl, n)
 		}
 	}
+
+	// groups holds the default earned ladder from 005 and NOTHING ELSE — four
+	// rows after two applications, which is the idempotency this test is named
+	// for. A seed that ran twice would show eight, or would have aborted on the
+	// slug UNIQUE and taken boot down with it.
+	var n int
+	if err := db.Get(&n, `SELECT count(*) FROM `+testSchema+`.groups`); err != nil {
+		t.Fatalf("groups: %v", err)
+	}
+	if n != 4 {
+		t.Errorf("groups = %d rows after two applications, want the 4 seeded earned ranks", n)
+	}
+	var kinds string
+	if err := db.Get(&kinds, `SELECT string_agg(DISTINCT kind, ',') FROM `+testSchema+`.groups`); err != nil {
+		t.Fatalf("kinds: %v", err)
+	}
+	if kinds != "earned" {
+		t.Errorf("seeded kinds = %q, want only \"earned\" — nothing may be imported from the host", kinds)
+	}
 }
 
 func TestGroupsMigration_DepthAndCycleGuards(t *testing.T) {
@@ -185,9 +204,13 @@ func TestGroupsMigration_DepthAndCycleGuards(t *testing.T) {
 	seedLegacyRanks(t, db)
 	applyMigration(t, db)
 
-	// The catalog is empty now that the migration does not seed, so this test
-	// builds its own — which it should have done all along: relying on the
-	// seed's ids made it a test of two things at once.
+	// This test builds its own catalog at known ids — which it should have done
+	// all along: relying on a seed's ids made it a test of two things at once.
+	// 005's default ladder has to go first, since it occupies ids from the same
+	// sequence and the depth assertion below is written against exactly five.
+	if _, err := db.Exec(`DELETE FROM ` + testSchema + `.groups`); err != nil {
+		t.Fatalf("clear seeded ladder: %v", err)
+	}
 	if _, err := db.Exec(`INSERT INTO ` + testSchema + `.groups (id, slug, name, kind, visible, duration_days)
 	                      VALUES (1,'a','A','paid',TRUE,30),(2,'b','B','paid',TRUE,30),
 	                             (3,'c','C','paid',TRUE,30),(4,'d','D','paid',TRUE,30),
