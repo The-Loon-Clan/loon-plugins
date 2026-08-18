@@ -43,13 +43,19 @@ func (s *PGStore) seriesList(ctx context.Context, query string, limit, offset in
 			   AND ($1 = '' OR series_key LIKE '%' || $1 || '%')`, q); err != nil {
 			return err
 		}
-		// max(series_name) rather than any(): one show can appear under
-		// several spellings that fold to one key, and a list that flickered
-		// between them run to run would look broken. Deterministic beats
-		// prettiest.
+		// mode() — the spelling MOST of the show's releases use.
+		//
+		// One show appears under several spellings that fold to one key, so a
+		// name has to be chosen, and it has to be chosen the same way every
+		// run or the list flickers. max() was deterministic and wrong: it
+		// takes the lexicographic maximum, lowercase sorts after uppercase in
+		// C collation, and the index therefore listed "the simpsons", "friends"
+		// and "dexter" — the one spelling in each group that looked like a
+		// mistake. mode() is just as deterministic (ties break on the ORDER BY)
+		// and picks what the releases actually say.
 		return tx.SelectContext(ctx, &rows, `
 			SELECT series_key,
-			       max(series_name) AS series_name,
+			       mode() WITHIN GROUP (ORDER BY series_name) AS series_name,
 			       count(*)                       AS releases,
 			       count(DISTINCT season)         AS seasons,
 			       to_char(max(COALESCE(posted_at, created_at)), 'YYYY-MM-DD') AS latest
@@ -82,7 +88,7 @@ func (s *PGStore) seriesName(ctx context.Context, key string) (string, bool, err
 	var name string
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.GetContext(ctx, &name, `
-			SELECT max(series_name) FROM nzbs
+			SELECT mode() WITHIN GROUP (ORDER BY series_name) FROM nzbs
 			 WHERE series_key = $1 AND status = 'completed'`, key)
 	})
 	if err != nil || name == "" {
