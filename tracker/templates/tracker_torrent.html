@@ -14,9 +14,13 @@
 
     <section class="panelV2">
         <header class="panel__header">
+            {{/* NOT the torrent's name: the chrome already draws it as the
+                 page's heading from render()'s title, and a fragment that
+                 repeats it gives the reader the same long scene name twice
+                 before any content (CHECKLIST section 8). */}}
             <h2 class="panel__heading">
                 <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#download"></use></svg>
-                {{.Torrent.Name}}
+                Details
             </h2>
             <div class="panel__actions">
                 <a class="panel__action" href="/tracker">All torrents</a>

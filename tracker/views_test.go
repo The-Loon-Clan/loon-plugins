@@ -291,11 +291,12 @@ func TestTorrentPageLinksToItsReleaseOnlyWhenThereIsOne(t *testing.T) {
 			if got := strings.Contains(out, `href="/release/4242"`); got != tc.wantLink {
 				t.Errorf("release link present = %v, want %v", got, tc.wantLink)
 			}
-			// Whichever branch ran, the name itself must be on the page. An
-			// empty <a> or a dropped <span> would both still pass the check
-			// above.
-			if !strings.Contains(out, "Linked.Release-GRP") {
-				t.Error("the torrent name did not render at all")
+			// Whichever branch ran, the page itself must have rendered. The
+			// name is deliberately NOT the check any more — the chrome draws
+			// that from render()'s title and the fragment must not repeat it —
+			// so this asserts the content that only this fragment carries.
+			if !strings.Contains(out, "/tracker/download/") {
+				t.Error("the torrent page did not render its own content at all")
 			}
 			if strings.Contains(out, `href=""`) {
 				t.Error("an empty href reached the page — a link that reloads this page")
@@ -344,7 +345,7 @@ func TestTorrentPageOffersItsActionsAndItsHistory(t *testing.T) {
 		`href="/p/magic?hash=` + hash,     // no hash to type — the whole point
 		`href="/tracker/download/` + hash, // and the .torrent from the same page
 		hash,                              // shown once, for a client that wants it
-		"Some.Torrent-GRP", "bob", "alice",
+		"bob", "alice",
 		">active<", ">expired<", ">terminated<",
 		"a departed member", // the caster whose account is gone
 	} {
@@ -362,8 +363,14 @@ func TestTorrentPageOffersItsActionsAndItsHistory(t *testing.T) {
 		}
 	}
 	// The page still has to be worth opening without it.
-	if !strings.Contains(out, "Some.Torrent-GRP") || !strings.Contains(out, "/tracker/download/") {
+	if !strings.Contains(out, "/tracker/download/") || !strings.Contains(out, "Snatches") {
 		t.Error("the page lost its own content along with the promotions panel")
+	}
+	// And it must NOT carry the torrent's name: the chrome draws that from
+	// render()'s title, and printing it again gives the reader the same long
+	// scene name twice before any content.
+	if strings.Contains(out, tor.Name) {
+		t.Error("the fragment repeats the page title the chrome already draws")
 	}
 
 	// Magic installed but nothing cast yet: the panel says so, because that is
