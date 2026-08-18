@@ -46,6 +46,12 @@ const (
 	CSRFExtension      = "medals.csrf"
 	L10nSlugsExtension = "medals.l10n.slugs"
 	L10nExtension      = "medals.l10n.resolve"
+	// IconsExtension is what icons THIS site has (func() []string), so the
+	// admin form can offer them instead of asking an operator to type a name
+	// they have no way to look up. Optional: without it the form falls back to
+	// this plugin's own palette, which is the set the defaults come from
+	// anyway — so the picker is never empty, just shorter.
+	IconsExtension = "icons.catalogue"
 )
 
 func init() {
@@ -58,6 +64,19 @@ type Plugin struct {
 	tmpl      *template.Template
 	l10nSlugs func(context.Context) ([]string, error)
 	l10n      func(*gin.Context, string) (string, bool)
+	icons     func() []string
+}
+
+// iconChoices is what the admin picker offers: the host's whole icon set when
+// it publishes one, this plugin's palette otherwise. Never empty — a picker
+// with nothing in it is worse than the text box it replaced.
+func (p *Plugin) iconChoices() []string {
+	if p.icons != nil {
+		if got := p.icons(); len(got) > 0 {
+			return got
+		}
+	}
+	return spritePalette
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -78,11 +97,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.st = NewPGStore(db.DB())
 
-	t, err := template.ParseFS(tmplFS, "templates/*.html")
-	if err != nil {
-		return fmt.Errorf("medals: templates: %w", err)
+	if err := p.parseTemplates(); err != nil {
+		return err
 	}
-	p.tmpl = t
 
 	// The localization seams, host-registered before Boot (Provision-safe).
 	// Optional: a host without a catalogue simply has plain descriptions.
@@ -94,6 +111,11 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if v, ok := c.Lookup(L10nExtension); ok {
 		if fn, ok := v.(func(*gin.Context, string) (string, bool)); ok {
 			p.l10n = fn
+		}
+	}
+	if v, ok := c.Lookup(IconsExtension); ok {
+		if fn, ok := v.(func() []string); ok {
+			p.icons = fn
 		}
 	}
 
@@ -179,4 +201,47 @@ func (p *Plugin) localizedDescription(gc *gin.Context, m Medal) string {
 		}
 	}
 	return m.Description
+}
+
+// parseTemplates builds the plugin's own set, with the two helpers the icon
+// picker needs. A method rather than inline in Provision so a template test can
+// render the same set the site does — the picker is one partial called from
+// three places, which is exactly the shape that fails only at runtime.
+func (p *Plugin) parseTemplates() error {
+	t, err := template.New("medals").Funcs(template.FuncMap{
+		// dict passes several values to a partial. The host's own templates
+		// have the same helper under the same name; a partial taking a struct
+		// instead would need a type per call site.
+		"dict": func(kv ...any) (map[string]any, error) {
+			if len(kv)%2 != 0 {
+				return nil, fmt.Errorf("dict: odd argument count")
+			}
+			m := make(map[string]any, len(kv)/2)
+			for i := 0; i < len(kv); i += 2 {
+				k, ok := kv[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict: key %d is %T, not a string", i, kv[i])
+				}
+				m[k] = kv[i+1]
+			}
+			return m, nil
+		},
+		// hasIcon reports whether the picker already offers a value — the
+		// guard that keeps an image URL set before the picker existed from
+		// being silently replaced with a default the first time somebody opens
+		// the form and saves it.
+		"hasIcon": func(icons []string, want string) bool {
+			for _, s := range icons {
+				if s == want {
+					return true
+				}
+			}
+			return false
+		},
+	}).ParseFS(tmplFS, "templates/*.html")
+	if err != nil {
+		return fmt.Errorf("medals: templates: %w", err)
+	}
+	p.tmpl = t
+	return nil
 }

@@ -39,6 +39,7 @@ func (p *Plugin) registerViews(c *core.Core) error {
 		Render:      p.renderAdmin,
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			"create": p.actionCreate,
+			"update": p.actionUpdate,
 			"toggle": p.actionToggle,
 			"delete": p.actionDelete,
 		},
@@ -166,6 +167,7 @@ func (p *Plugin) renderAdmin(gc *gin.Context) (template.HTML, error) {
 	if err := p.tmpl.ExecuteTemplate(&buf, "medals_admin.html", map[string]any{
 		"Medals":    list,
 		"L10nSlugs": slugs,
+		"Icons":     p.iconChoices(),
 		"Msg":       gc.Query("msg"),
 		"Err":       gc.Query("err"),
 		"CSRFToken": p.csrfToken(gc),
@@ -205,6 +207,52 @@ func (p *Plugin) actionCreate(gc *gin.Context) (template.HTML, error) {
 		return "", nil
 	}
 	gc.Redirect(http.StatusSeeOther, "/admin/p/medals?msg="+url.QueryEscape("Created "+m.Slug))
+	return "", nil
+}
+
+// actionUpdate edits an existing medal. It exists because the icon picker
+// below is useless without it: every medal a site already has was created
+// before the picker, and "delete and recreate" throws away every holder's row.
+func (p *Plugin) actionUpdate(gc *gin.Context) (template.HTML, error) {
+	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
+	if id <= 0 {
+		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+url.QueryEscape("no such medal"))
+		return "", nil
+	}
+	cur, err := p.st.Get(gc.Request.Context(), id)
+	if err != nil {
+		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+url.QueryEscape("no such medal"))
+		return "", nil
+	}
+	// Read over the CURRENT row rather than building a fresh one: the edit
+	// form carries the fields it edits, and a missing field must leave the
+	// medal alone rather than blanking it.
+	if v, ok := gc.GetPostForm("name"); ok && strings.TrimSpace(v) != "" {
+		cur.Name = strings.TrimSpace(v)
+	}
+	if v, ok := gc.GetPostForm("icon"); ok {
+		cur.Icon = strings.TrimSpace(v)
+	}
+	if v, ok := gc.GetPostForm("description"); ok {
+		cur.Description = strings.TrimSpace(v)
+	}
+	if v, ok := gc.GetPostForm("description_slug"); ok {
+		cur.DescriptionSlug = strings.TrimSpace(v)
+	}
+	if n, err := strconv.Atoi(strings.TrimSpace(gc.PostForm("bonus_pct"))); err == nil && n >= 0 {
+		cur.BonusPct = n
+	}
+	if n, err := strconv.ParseInt(strings.TrimSpace(gc.PostForm("price")), 10, 64); err == nil && n >= 0 {
+		cur.Price = n
+	}
+	if n, err := strconv.Atoi(strings.TrimSpace(gc.PostForm("ordinal"))); err == nil {
+		cur.Ordinal = n
+	}
+	if err := p.st.Update(gc.Request.Context(), cur); err != nil {
+		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+url.QueryEscape("save failed"))
+		return "", nil
+	}
+	gc.Redirect(http.StatusSeeOther, "/admin/p/medals?msg="+url.QueryEscape("Saved "+cur.Slug))
 	return "", nil
 }
 

@@ -69,6 +69,22 @@ func (s *PGStore) SetEnabled(ctx context.Context, id int64, on bool) error {
 	return err
 }
 
+// Update overwrites a medal's definition by id.
+//
+// The SLUG is deliberately not settable. It is the identifier a reward payout,
+// an achievement and a store item all name (pluginapi.MedalGranter takes a
+// slug), so renaming one would silently stop every grant that pointed at it —
+// the rule ranks made explicit when it made slug the key.
+func (s *PGStore) Update(ctx context.Context, m Medal) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE medals.medals
+		   SET name = $2, icon = $3, description = $4, description_slug = $5,
+		       bonus_pct = $6, price = $7, ordinal = $8
+		 WHERE id = $1`,
+		m.ID, m.Name, m.Icon, m.Description, m.DescriptionSlug, m.BonusPct, m.Price, m.Ordinal)
+	return err
+}
+
 // Delete removes a medal; holders' rows cascade. The admin page warns.
 func (s *PGStore) Delete(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM medals.medals WHERE id = $1`, id)

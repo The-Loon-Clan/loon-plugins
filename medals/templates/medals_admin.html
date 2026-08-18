@@ -38,6 +38,41 @@
                     </form>
                 </td>
             </tr>
+            {{/* The edit row. <details> rather than a script: hosts ship
+                 script-src 'self', so a JS toggle would arrive as a dead
+                 control. The SLUG is not here — it is the identifier every
+                 reward, achievement and store item names, so renaming it
+                 would silently break every grant pointing at it. */}}
+            <tr>
+                <td colspan="7" style="padding-top:0">
+                    <details>
+                        <summary class="text-muted small">Edit {{.Name}}</summary>
+                        <form method="post" action="/admin/p/medals/update" class="mt-2">
+                            <input type="hidden" name="_csrf" value="{{$csrf}}">
+                            <input type="hidden" name="id" value="{{.ID}}">
+                            <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:end">
+                                <label class="form__label" for="ed-name-{{.ID}}">Name
+                                    <input id="ed-name-{{.ID}}" name="name" class="form__input" value="{{.Name}}">
+                                </label>
+                                {{template "icon-picker" dict "ID" (print "ed-icon-" .ID) "Value" .Icon "Icons" $.Icons}}
+                                <label class="form__label" for="ed-bonus-{{.ID}}">Bonus %
+                                    <input id="ed-bonus-{{.ID}}" name="bonus_pct" class="form__input" inputmode="numeric" value="{{.BonusPct}}" size="4">
+                                </label>
+                                <label class="form__label" for="ed-price-{{.ID}}">Price
+                                    <input id="ed-price-{{.ID}}" name="price" class="form__input" inputmode="numeric" value="{{.Price}}" size="7">
+                                </label>
+                                <label class="form__label" for="ed-ordinal-{{.ID}}">Order
+                                    <input id="ed-ordinal-{{.ID}}" name="ordinal" class="form__input" inputmode="numeric" value="{{.Ordinal}}" size="4">
+                                </label>
+                            </div>
+                            <label class="form__label mt-2" for="ed-desc-{{.ID}}">Description
+                                <input id="ed-desc-{{.ID}}" name="description" class="form__input" value="{{.Description}}">
+                            </label>
+                            <button class="button button--primary button--sm mt-2" type="submit">Save</button>
+                        </form>
+                    </details>
+                </td>
+            </tr>
             {{else}}
             <tr><td colspan="7" class="text-muted">No medals yet &mdash; define the first below.</td></tr>
             {{end}}
@@ -55,10 +90,7 @@
         <label class="form__label" for="md-name">Name
             <input id="md-name" name="name" class="form__input" placeholder="Founder">
         </label>
-        <label class="form__label" for="md-icon" style="flex:1;min-width:220px">Icon
-            <input id="md-icon" name="icon" class="form__input" placeholder="star">
-            <span class="form-help text-muted small">An icon name (star, shield, verified, coin, check, clock, globe, users) or an image URL. Leave blank and the medal picks one and keeps it.</span>
-        </label>
+        {{template "icon-picker" dict "ID" "md-icon" "Value" "" "Icons" .Icons}}
     </div>
     <div style="display:flex;gap:0.75rem;flex-wrap:wrap" class="mt-2">
         <label class="form__label" for="md-bonus">Bonus % <span class="text-muted small">(0 = just a medal)</span>
@@ -92,3 +124,34 @@
         does anything is the host&#39;s choice, and on this site today it does not.
     </p>
 </form>
+
+{{/* icon-picker — the icon field, everywhere it appears.
+
+     A SELECT of what this site actually has (Plugin.iconChoices: the host's
+     sprite ids through icons.catalogue, this plugin's palette otherwise),
+     because the free-text box it replaces asked an operator to type a name
+     with nothing to look it up in — which is how one medal came to hold a
+     Windows path and draw the broken-image glyph.
+
+     Blank is a real choice and the first one: the medal picks an icon from its
+     slug and keeps it. An operator who wants a specific one says so.
+
+     A row of every icon is NOT drawn beside the select. That is the nicer
+     control and it needs script or a wall of radio buttons; the select names
+     what it will draw and the table above shows the result on save, which is
+     one click and no dead JavaScript.
+
+     Dot: .ID (element id + label target), .Value (current), .Icons ([]string). */}}
+{{define "icon-picker"}}
+<label class="form__label" for="{{.ID}}" style="min-width:220px">Icon
+    <select id="{{.ID}}" name="icon" class="form__input">
+        <option value="">&mdash; pick one from the slug &mdash;</option>
+        {{$cur := .Value}}
+        {{range .Icons}}<option value="{{.}}" {{if eq . $cur}}selected{{end}}>{{.}}</option>{{end}}
+        {{/* An image URL set before the picker existed, or by hand. Kept as an
+             option so opening the form and saving does not silently replace a
+             perfectly good icon with a default. */}}
+        {{if $cur}}{{if not (hasIcon $.Icons $cur)}}<option value="{{$cur}}" selected>{{$cur}} (image)</option>{{end}}{{end}}
+    </select>
+</label>
+{{end}}
