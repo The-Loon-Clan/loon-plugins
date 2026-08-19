@@ -182,6 +182,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return fmt.Errorf("tracker: register mirrors: %w", err)
 	}
 
+	// And the write side (pluginapi.TorrentMirrorMaker): making a torrent for a
+	// release that has none, so a member can take either. Registered beside the
+	// read for the same reason and under the same condition — a mirror made on
+	// an idle tracker is a torrent nothing can announce.
+	if err := c.Register(pluginapi.TorrentMirrorMakerName, pluginapi.TorrentMirrorMaker(mirrorReader{pg})); err != nil {
+		return fmt.Errorf("tracker: register mirror maker: %w", err)
+	}
+
 	// Cheat detection (cheat_job.go). Registered even when the rules are off:
 	// the sampling still runs so that switching detection on starts working at
 	// the next sweep rather than the one after, and an operator can see the job
