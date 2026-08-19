@@ -61,6 +61,9 @@ func sampleRequest(id int64) *Request {
 		NyaaURL: "https://nyaa.si/view/123", InfoHash: "aaaa0000aaaa0000aaaa0000aaaa0000aaaa0000",
 		SeedCount: 12, Notes: "please and thank you", AnimeID: &aid,
 		VoteCount: 3, BoostCount: 1, PriorityScore: 9,
+		// A person filed this one. Fixtures default to the members' side so
+		// a test that cares about automation has to say so.
+		Origin: string(ScopeMember),
 		Priorities:  []RequestPriority{{TypeSlug: "boost", Count: 1, Label: "Boost", IconHTML: "<b>+</b>", ShowCount: true}},
 		RemuxOption: "none", CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -83,6 +86,8 @@ func listPageData(tab string) gin.H {
 		"ErrorMessage":   "Title is required.",
 		"AllowedHosts":   allowedRequestHosts,
 		"ViewerID":       7,
+		// Every tab renders every badge — see the tab strip's comment.
+		"TabCounts":      map[string]int{"open": 7, "automated": 6413, "sourcing": 9},
 		"AnimeID":        0,
 		"FeedSource":     "",
 		"FeedStatus":     "",
@@ -203,7 +208,14 @@ func TestPagesRenderEmpty(t *testing.T) {
 		"Pagination": template.HTML(""),
 	}
 	out := testRender(t, "community_requests.html", empty)
-	if !strings.Contains(out, "No requests yet") {
+	if !strings.Contains(out, "No member requests open right now") {
 		t.Error("empty state did not render")
+	}
+	// This page passes no TabCounts at all, which is the point: the badges
+	// render on every tab, so a branch that forgot the key must cost the
+	// badge and nothing else. `index` would have made it an execute error
+	// and taken the listing with it.
+	if strings.Contains(out, `<span class="tab-count">`) {
+		t.Error("a badge rendered from an absent TabCounts")
 	}
 }

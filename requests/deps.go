@@ -23,7 +23,19 @@ import (
 
 // RequestStore is the board's slice of the host's request repository.
 type RequestStore interface {
-	GetOpenNzbRequests(ctx context.Context, limit, offset int) ([]*Request, int, error)
+	// ListOpenRequests is the open queue cut by Scope — the board's
+	// member / automated / needs-sourcing tabs. It replaced an unscoped
+	// "every open request" read, which is what let 6,413 auto-filed rows
+	// bury 7 members' asks in one list.
+	//
+	// An unrecognised scope must return no rows, NOT every row: a typo in
+	// ?tab= that fell back to the unsplit list would silently undo the
+	// split, and it would look like the feature simply did not work.
+	ListOpenRequests(ctx context.Context, scope Scope, limit, offset int) ([]*Request, int, error)
+	// OpenRequestCounts is the tab badges, keyed by scope, in one round
+	// trip. Every scope is present with a zero rather than absent, so the
+	// template decides what a zero badge looks like.
+	OpenRequestCounts(ctx context.Context) (map[Scope]int, error)
 	GetRequestsForAnime(ctx context.Context, aid int) ([]*Request, error)
 	GetNzbRequestByID(ctx context.Context, id int64) (*Request, error)
 	// CreateNzbRequest returns the persisted row with server-stamped fields.

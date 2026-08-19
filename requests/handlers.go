@@ -139,6 +139,57 @@ func (h *Handlers) backlogTotal(ctx context.Context) int {
 	return total
 }
 
+// tabCounts is the badge on each open-queue tab, in template-friendly form.
+//
+// Best-effort for the same reason backlogTotal is: these render on every tab,
+// so a failed count must cost a badge, not the listing under it. The map is
+// keyed by the ?tab= word rather than the scope, because the template renders
+// one link per tab and looking a badge up by the same word it links to is one
+// less thing to keep in step.
+//
+// The three numbers do NOT sum to the open queue and are not shown as if they
+// did — needs-sourcing is a lens over the other two plus the backlog. See
+// ScopeNeedsSourcing.
+func (h *Handlers) tabCounts(ctx context.Context) map[string]int {
+	counts, err := h.deps.Requests.OpenRequestCounts(ctx)
+	if err != nil {
+		h.errs.Report(ctx, "requests/open-counts", err)
+		return map[string]int{}
+	}
+	out := make(map[string]int, len(tabScopes))
+	for tab, scope := range tabScopes {
+		out[tab] = counts[scope]
+	}
+	return out
+}
+
+// listPageChrome is every key the page's shared furniture reads — the tab
+// strip, the create form, the per-row gates — regardless of which tab is
+// showing.
+//
+// It exists because the alternative kept failing in one direction: the create
+// form lives ABOVE the tab switch and renders on every branch, so a branch
+// that forgot "Prefill" or "PriorityTypes" produced a page that looked fine
+// and had dead JavaScript. The feed tab shipped that way once and the backlog
+// tab nearly did. A map-driven template answers a missing key with silence,
+// so the only real fix is to stop having per-branch key lists.
+func (h *Handlers) listPageChrome(ctx context.Context, c *gin.Context, tab string, upscaleOpts []UpscaleOption) gin.H {
+	return gin.H{
+		"Tab":            tab,
+		"PriorityTypes":  h.deps.PriorityTypes(),
+		"UpscaleOptions": upscaleOpts,
+		"Prefill": map[string]string{
+			"title": "", "anime_id": "", "season": "",
+			"episodes": "", "resolution": "", "source": "",
+		},
+		"OpenForm":     false,
+		"AllowedHosts": allowedRequestHosts,
+		"ViewerID":     h.viewerID(c),
+		"BacklogTotal": h.backlogTotal(ctx),
+		"TabCounts":    h.tabCounts(ctx),
+	}
+}
+
 func (h *Handlers) RequestsPage(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -160,7 +211,6 @@ func (h *Handlers) RequestsPage(c *gin.Context) {
 			requests, _ := h.deps.Requests.GetRequestsForAnime(ctx, aid)
 			anime, _ := h.deps.Anime.GetAnimeMetadata(ctx, aid)
 			h.attachRequestPriorities(ctx, requests)
-			ptypes := h.deps.PriorityTypes()
 			pg := h.deps.RenderPagination(1, 1, fmt.Sprintf("/community/requests?anime_id=%d&", aid))
 			prefill := map[string]string{
 				"title":      c.Query("title"),
@@ -171,27 +221,21 @@ func (h *Handlers) RequestsPage(c *gin.Context) {
 				"source":     c.Query("source"),
 			}
 			openForm := c.Query("open") == "1"
-			h.render(c, http.StatusOK, "Community Requests", "community_requests.html", gin.H{
-				"Tab":            "open",
-				"Requests":       requests,
-				"Total":          len(requests),
-				"Page":           1,
-				"TotalPages":     1,
-				"Anime":          anime,
-				"AnimeID":        aid,
-				"UpscaleOptions": upscaleOpts,
-				"PriorityTypes":  ptypes,
-				"Pagination":     pg,
-				"Prefill":        prefill,
-				"OpenForm":       openForm,
-				// The other two branches pass these too; the anime-filter
-				// branch historically omitted them, which silently degraded
-				// the per-row gates and supported-sites hint on ?anime_id=
-				// views. Fixed in the lift.
-				"AllowedHosts": allowedRequestHosts,
-				"ViewerID":     h.viewerID(c),
-				"BacklogTotal": h.backlogTotal(ctx),
-			})
+			// Deliberately NOT origin-split. "Who else wants this anime" is
+			// a different question from "what did members ask for": if the
+			// importer already filed this episode, that is the single most
+			// useful thing to show somebody about to request it again.
+			data := h.listPageChrome(ctx, c, "open", upscaleOpts)
+			data["Requests"] = requests
+			data["Total"] = len(requests)
+			data["Page"] = 1
+			data["TotalPages"] = 1
+			data["Anime"] = anime
+			data["AnimeID"] = aid
+			data["Pagination"] = pg
+			data["Prefill"] = prefill
+			data["OpenForm"] = openForm
+			h.render(c, http.StatusOK, "Community Requests", "community_requests.html", data)
 			return
 		}
 	}
@@ -241,35 +285,21 @@ func (h *Handlers) RequestsPage(c *gin.Context) {
 		}
 		baseURL += "&"
 		pg := h.deps.RenderPagination(page, totalPages, baseURL)
-		// PriorityTypes + Prefill are referenced by the New Request
-		// form — which lives ABOVE the tab switch and renders on
-		// every tab. Pass empty/nil-safe defaults so the template's
-		// {{index .Prefill "title"}} etc don't blow up on the feed
-		// branch and break downstream JS (which would silently
-		// disable the navbar dropdown / vote buttons / etc).
-		ptypes := h.deps.PriorityTypes()
-		emptyPrefill := map[string]string{
-			"title": "", "anime_id": "", "season": "",
-			"episodes": "", "resolution": "", "source": "",
-		}
-		h.render(c, http.StatusOK, "Community Requests", "community_requests.html", gin.H{
-			"Tab":            "feed",
-			"FeedItems":      items,
-			"UpscaleOptions": upscaleOpts,
-			"Total":          total,
-			"Page":           page,
-			"TotalPages":     totalPages,
-			"Pagination":     pg,
-			"FeedSource":     source,
-			"FeedStatus":     statusFilter,
-			"Query":          q,
-			"PriorityTypes":  ptypes,
-			"Prefill":        emptyPrefill,
-			"OpenForm":       false,
-			"AllowedHosts":   allowedRequestHosts,
-			"ViewerID":       h.viewerID(c),
-			"BacklogTotal":   h.backlogTotal(ctx),
-		})
+		// listPageChrome carries PriorityTypes + Prefill, which the New
+		// Request form reads — it lives ABOVE the tab switch and renders on
+		// every tab, and this branch is where forgetting them was first
+		// found: the template's {{index .Prefill "title"}} silently yielded
+		// nothing and took the page's JS down with it.
+		data := h.listPageChrome(ctx, c, "feed", upscaleOpts)
+		data["FeedItems"] = items
+		data["Total"] = total
+		data["Page"] = page
+		data["TotalPages"] = totalPages
+		data["Pagination"] = pg
+		data["FeedSource"] = source
+		data["FeedStatus"] = statusFilter
+		data["Query"] = q
+		h.render(c, http.StatusOK, "Community Requests", "community_requests.html", data)
 		return
 	}
 
@@ -313,38 +343,76 @@ func (h *Handlers) RequestsPage(c *gin.Context) {
 		}
 		// ?requeued=<id> / ?requeue=already drive the post-action banner.
 		requeuedID, _ := strconv.ParseInt(c.Query("requeued"), 10, 64)
-		h.render(c, http.StatusOK, "Community Requests", "community_requests.html", gin.H{
-			"Tab":            "backlog",
-			"Requests":       requests,
-			"Total":          total,
-			"Page":           page,
-			"TotalPages":     totalPages,
-			"Pagination":     h.deps.RenderPagination(page, totalPages, "/community/requests?tab=backlog&"),
-			"BacklogTotal":   total,
-			"BacklogSummary": summary,
-			"RequeuedID":     requeuedID,
-			"RequeueState":   c.Query("requeue"),
-			// The create form is hidden on this tab, but the keys it reads
-			// live above the tab switch — the feed branch learned the same
-			// lesson the hard way.
-			"PriorityTypes":  h.deps.PriorityTypes(),
-			"UpscaleOptions": upscaleOpts,
-			"Prefill": map[string]string{
-				"title": "", "anime_id": "", "season": "",
-				"episodes": "", "resolution": "", "source": "",
-			},
-			"OpenForm":     false,
-			"AllowedHosts": allowedRequestHosts,
-			"ViewerID":     h.viewerID(c),
-		})
+		data := h.listPageChrome(ctx, c, "backlog", upscaleOpts)
+		data["Requests"] = requests
+		data["Total"] = total
+		data["Page"] = page
+		data["TotalPages"] = totalPages
+		data["Pagination"] = h.deps.RenderPagination(page, totalPages, "/community/requests?tab=backlog&")
+		// The badge on this tab counts what this tab LISTS — every origin,
+		// because the backlog holds every origin. It is not scoped to
+		// members the way the queue tabs are: a badge that disagreed with
+		// the list under it would be the exact failure this change is
+		// about, in a new place.
+		data["BacklogTotal"] = total
+		data["BacklogSummary"] = summary
+		data["RequeuedID"] = requeuedID
+		data["RequeueState"] = c.Query("requeue")
+		h.render(c, http.StatusOK, "Community Requests", "community_requests.html", data)
 		return
 	}
 
-	// Default: open-requests tab. Fulfilled / In Progress tabs were
-	// retired — fulfilled releases are reachable via /release/{id},
-	// in-progress agent state belongs to the dashboard.
-	requests, total, err := h.deps.Requests.GetOpenNzbRequests(ctx, requestsPageSize, offset)
+	// Needs-sourcing tab: a member asked for something and there is nothing
+	// to click.
+	//
+	// This is the operator's job, and it had no home. The queue could not
+	// show it (6,413 of 6,420 open rows were the importer's), the backlog
+	// sweep shelved these along with everything else that stopped moving,
+	// and no counter anywhere named them. On the day it was built production
+	// held nine — two with no link of any kind, both already swept off the
+	// board months earlier.
+	//
+	// Oldest first and shelved rows included; see ScopeNeedsSourcing.
+	if tab == "sourcing" {
+		requests, total, err := h.deps.Requests.ListOpenRequests(ctx, ScopeNeedsSourcing, requestsPageSize, offset)
+		if err != nil {
+			h.errs.Report(ctx, "requests/needs-sourcing", err)
+			c.String(http.StatusInternalServerError, "failed to load the sourcing queue")
+			return
+		}
+		totalPages := (total + requestsPageSize - 1) / requestsPageSize
+		if totalPages < 1 {
+			totalPages = 1
+		}
+		h.attachRequestPriorities(ctx, requests)
+		data := h.listPageChrome(ctx, c, "sourcing", upscaleOpts)
+		data["Requests"] = requests
+		data["Total"] = total
+		data["Page"] = page
+		data["TotalPages"] = totalPages
+		data["Pagination"] = h.deps.RenderPagination(page, totalPages, "/community/requests?tab=sourcing&")
+		h.render(c, http.StatusOK, "Community Requests", "community_requests.html", data)
+		return
+	}
+
+	// Default: the open queue. Fulfilled / In Progress tabs were retired —
+	// fulfilled releases are reachable via /release/{id}, in-progress agent
+	// state belongs to the dashboard.
+	//
+	// Split by origin since 2026-08-18. "open" (the historical default, and
+	// what every existing link points at) now means MEMBER-filed; the
+	// importer's rows moved to ?tab=automated. Anything unrecognised also
+	// lands here, so a stale or mistyped tab shows a member the members'
+	// board rather than an error.
+	scope := ScopeMember
+	if s, ok := tabScopes[tab]; ok {
+		scope = s
+	} else {
+		tab = "open"
+	}
+	requests, total, err := h.deps.Requests.ListOpenRequests(ctx, scope, requestsPageSize, offset)
 	if err != nil {
+		h.errs.Report(ctx, "requests/open-list", err)
 		c.String(http.StatusInternalServerError, "failed to load requests")
 		return
 	}
@@ -353,8 +421,13 @@ func (h *Handlers) RequestsPage(c *gin.Context) {
 		totalPages = 1
 	}
 	h.attachRequestPriorities(ctx, requests)
-	ptypes := h.deps.PriorityTypes()
-	pg := h.deps.RenderPagination(page, totalPages, "/community/requests?")
+	// Pagination has to stay on the tab it started on, or page 2 of the
+	// automated list silently becomes page 2 of the members' list.
+	pagerBase := "/community/requests?"
+	if tab != "open" {
+		pagerBase = "/community/requests?tab=" + url.QueryEscape(tab) + "&"
+	}
+	pg := h.deps.RenderPagination(page, totalPages, pagerBase)
 	// ?created=<id> drives the post-submit success banner. Parse here (int
 	// via ParseInt, 0 on missing/bad input) so the template can just
 	// `{{if .JustCreatedID}}…{{end}}` instead of inventing its own coercion.
@@ -391,26 +464,19 @@ func (h *Handlers) RequestsPage(c *gin.Context) {
 		openForm = true
 	}
 
-	h.render(c, http.StatusOK, "Community Requests", "community_requests.html", gin.H{
-		"Tab":            "open",
-		"Requests":       requests,
-		"Total":          total,
-		"Page":           page,
-		"TotalPages":     totalPages,
-		"PriorityTypes":  ptypes,
-		"Pagination":     pg,
-		"JustCreatedID":  justCreated,
-		"UpscaleOptions": upscaleOpts,
-		"Prefill":        prefill,
-		"OpenForm":       openForm,
-		"ErrorMessage":   errMsg,
-		"AllowedHosts":   allowedRequestHosts,
-		// Per-row Fulfill/Delete gates need to know "who's looking" so
-		// the buttons only render for the requester or a mod. Anon
-		// users get nothing.
-		"ViewerID":     h.viewerID(c),
-		"BacklogTotal": h.backlogTotal(ctx),
-	})
+	// listPageChrome supplies ViewerID (the per-row Fulfill/Delete gates need
+	// to know who is looking), the tab badges, and the create form's keys.
+	data := h.listPageChrome(ctx, c, tab, upscaleOpts)
+	data["Requests"] = requests
+	data["Total"] = total
+	data["Page"] = page
+	data["TotalPages"] = totalPages
+	data["Pagination"] = pg
+	data["JustCreatedID"] = justCreated
+	data["Prefill"] = prefill
+	data["OpenForm"] = openForm
+	data["ErrorMessage"] = errMsg
+	h.render(c, http.StatusOK, "Community Requests", "community_requests.html", data)
 }
 
 // backlogSummaryRow is one reason and its count, for the summary strip.

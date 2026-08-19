@@ -14,7 +14,10 @@ are embedded fragments rendered through the host's `RenderPage` seam.
 ## Surface
 
 - Authed (one `Authenticate` group over `/community`):
-  - `GET /community/requests` — the board (open tab, feed tab, ?anime_id= filter)
+  - `GET /community/requests` — the board. Five tabs on one path via `?tab=`:
+    member-filed (the default, `tab=open`), `tab=sourcing`, `tab=automated`,
+    `tab=backlog`, `tab=feed`; plus the `?anime_id=` filter view, which is
+    deliberately NOT origin-split ("who else wants this" wants every row).
   - `GET /community/request/:id` — detail
   - `POST /community/requests` — create (JSON or redirect, by Accept header)
   - `POST /community/requests/:id/{edit,delete,fulfill,retry,unpark,vote,boost}`
@@ -30,6 +33,12 @@ are embedded fragments rendered through the host's `RenderPage` seam.
 - Owns **no tables**. Everything (nzb_requests, request_votes / priorities /
   locks / actions, feed_items, the anime and NZB catalogs) is host-owned and
   shared with the host's agent-fulfilment pipeline and upload flows.
+- **Origin** (`Request.Origin`, host migration 326) is read-only here: the host
+  stamps which path filed each row and the board reads it to split the queue.
+  It exists because the queue stopped describing itself — on 2026-08-18 the
+  origin site had 6,420 open requests, 6,413 filed by its feed importer and 7
+  by people. `Scope` (models.go) is the vocabulary both sides share; the words
+  are the host's so a tab, its query and its badge cannot drift apart.
 
 ## Dependencies
 
@@ -67,7 +76,8 @@ are embedded fragments rendered through the host's `RenderPage` seam.
 
 - `plugin.go` — lifecycle + route table (historical paths, kept exactly).
 - `deps.go` — the seam contract.
-- `models.go` — full DTO mirrors of the host rows the templates read.
+- `models.go` — full DTO mirrors of the host rows the templates read, plus
+  the `Scope` vocabulary and the `?tab=` → scope map.
 - `handlers.go` — the 15 route handlers + scrapers + search.
 - `views.go` — embedded-template harness, chrome-key injection, local pure
   FuncMap helpers, JSON envelope copies.
@@ -81,5 +91,10 @@ are embedded fragments rendered through the host's `RenderPage` seam.
   every template branch executes over realistic data (open tab, feed tab,
   detail with active/failed locks, empty states), POST-form count equals
   CSRF-field count on every page, fragments carry no host chrome.
+- `origin_test.go` covers the split at the handler level, where it actually
+  lives: which SCOPE each `?tab=` reads (a tab wired to the wrong cut renders a
+  perfectly normal page), that the default view excludes automation, that the
+  needs-sourcing tab keeps shelved rows and renders what makes a request
+  findable, and that a failed badge count costs a badge rather than the page.
 - Needs integration (live DB/host): the 15 handlers against real stores —
   the seam adapters are exercised by the host's integration suite.

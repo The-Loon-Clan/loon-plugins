@@ -105,7 +105,7 @@
                      table would render BLANK for anyone who ever clicked
                      Covers. The backlog list is read for its reasons, and
                      a wall of posters does not carry those. */}}
-                {{if not (eq .Tab "backlog")}}
+                {{if not (or (eq .Tab "backlog") (eq .Tab "sourcing"))}}
                 <button id="toggle-view" class="btn btn-outline-secondary btn-sm" type="button">&#128444; Covers</button>
                 {{end}}
                 {{/* Hide the manual "+ New Request" affordance on the feed tab —
@@ -115,7 +115,7 @@
                      backlog tab it would be worse than noise: filing a NEW
                      request for something already shelved is the duplicate this
                      tab exists to prevent. */}}
-                {{if not (or (eq .Tab "feed") (eq .Tab "backlog"))}}
+                {{if not (or (eq .Tab "feed") (eq .Tab "backlog") (eq .Tab "sourcing"))}}
                 <button class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#new-request-form">
                     + New Request
                 </button>
@@ -124,7 +124,7 @@
         </div>
 
         {{/* ── Create form ── Hidden on feed + backlog; see above. */}}
-        {{if not (or (eq .Tab "feed") (eq .Tab "backlog"))}}
+        {{if not (or (eq .Tab "feed") (eq .Tab "backlog") (eq .Tab "sourcing"))}}
 
         {{/* ── "Already on the site?" card ── filled by JS from
              /community/requests/existing whenever the form learns an anime
@@ -354,21 +354,42 @@
         {{end}}{{/* end tab guard around create form */}}
 
         {{/* ── Tabs ─────────────────────────────────────────────
-             "Open"    — the existing open-requests list (default).
+             "Member Requests" — what PEOPLE asked for. The default, and
+                         since 2026-08-18 the only tab members' asks share
+                         with each other: the open queue used to hold every
+                         origin at once, which on the day this changed meant
+                         6,413 auto-filed rows and 7 real ones in one list.
+             "Needs Sourcing" — of those, the ones with nothing to click.
+                         A LENS over the other tabs and the backlog, not a
+                         fourth bucket: nothing is moved here, so these
+                         badges are not meant to add up and the page never
+                         shows a total.
+             "Auto-filed" — the importer, the dead-NZB resurrector, and
+                         one-click bulk imports. Reachable, not first.
              "Backlog" — requests that stopped moving and left the open
-                         queue, with WHY, and a one-click way back in.
+                         queue, with WHY, and a one-click way back in. Every
+                         origin, and its badge counts every origin, because
+                         a badge must describe the list beneath it.
              "Feed"    — the bot's full observation log, including items
                          it skipped (old release, dup hash/title). Lets
                          users spot-request something the bot rejected.
+
+             {{with}} rather than {{if gt}} on every badge: they render on
+             every tab, and a page that forgot the key would fail the
+             comparison and take the whole listing down with it. It also
+             gives zero the right behaviour — no pill at all.
              */}}
         <ul class="nav tabs mb-3">
             <li class="nav-item">
-                <a class="nav-link {{if or (not .Tab) (eq .Tab "open")}}active{{end}}" href="/community/requests">Open Requests</a>
+                <a class="nav-link {{if or (not .Tab) (eq .Tab "open")}}active{{end}}" href="/community/requests" title="Requests members asked for, one at a time">Member Requests{{with tabCount .TabCounts "open"}} <span class="tab-count">{{.}}</span>{{end}}</a>
             </li>
             <li class="nav-item">
-                {{/* {{with}} rather than {{if gt}}: the badge renders on
-                     every tab, and a page that forgot the key would fail
-                     the comparison and take the whole listing down. */}}
+                <a class="nav-link {{if eq .Tab "sourcing"}}active{{end}}" href="/community/requests?tab=sourcing" title="Members' requests with no torrent and no release — somebody has to go find these">Needs Sourcing{{with tabCount .TabCounts "sourcing"}} <span class="tab-count">{{.}}</span>{{end}}</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{if eq .Tab "automated"}}active{{end}}" href="/community/requests?tab=automated" title="Filed by the feed importer, the dead-release resurrector, or a bulk import — not by somebody asking">Auto-filed{{with tabCount .TabCounts "automated"}} <span class="tab-count">{{.}}</span>{{end}}</a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link {{if eq .Tab "backlog"}}active{{end}}" href="/community/requests?tab=backlog" title="Requests that stopped moving — nothing was deleted, and anyone can ask for one back">Backlog{{with .BacklogTotal}} <span class="tab-count">{{.}}</span>{{end}}</a>
             </li>
             <li class="nav-item">
@@ -728,6 +749,17 @@
                             {{end}}
                             <div style="font-size:0.73rem;color:var(--text-muted);">
                                 <span>{{.Username}}</span>
+                                {{/* Which automation filed it. Rendered per ROW
+                                     rather than once per tab, because two of
+                                     the lists that use this block mix origins
+                                     on purpose — the backlog holds every kind,
+                                     and the ?anime_id= view answers "who else
+                                     wants this" — and there a reader needs to
+                                     know which rows are people. The row's own
+                                     Origin is the source of truth; .Username is
+                                     a label the importer stamped and it has
+                                     meant different things over the years. */}}
+                                {{if .Automated}} &middot; <span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:0.65rem;" title="Filed automatically, not by somebody asking">{{if eq .Origin "feed"}}auto: feed{{else if eq .Origin "resurrector"}}auto: replacement{{else if eq .Origin "bulk"}}auto: bulk import{{else}}auto-filed{{end}}</span>{{end}}
                                 {{if .AnimeID}} &middot; <a href="/community/requests?anime_id={{deref .AnimeID}}" class="badge bg-warning bg-opacity-25 text-warning" style="font-size:0.65rem;text-decoration:none;">AniDB:{{deref .AnimeID}}</a>{{end}}
                                 {{if .InfoHash}} &middot; <span class="badge bg-info bg-opacity-25 text-info" style="font-size:0.65rem;" title="{{.InfoHash}}">Torrent</span>{{end}}
                                 {{/* Asked back before and stalled again. Worth
@@ -771,9 +803,118 @@
         </div>
 
         {{.Pagination}}
+        {{else if eq .Tab "sourcing"}}
+
+        {{/* ── Needs Sourcing ───────────────────────────────────
+             A member named something and left nothing an agent can act on:
+             no info_hash, no release. Somebody has to go and find it.
+
+             This queue was invisible rather than empty. The open board is
+             almost entirely feed-importer output, so these sat in a list
+             nobody could read to the bottom of, and the backlog sweep then
+             shelved them on the same "stopped moving" rule it applies to a
+             stale bot row — so the two clearest examples on production, both
+             with no link of any kind, had been off the board for months.
+             That is why shelved rows are listed here rather than filtered
+             out, and why the column that matters is AGE.
+
+             No cover grid and no create form: this is a worklist, and a wall
+             of posters does not carry "how long has this person waited". */}}
+
+        <div class="card mb-3">
+            <div class="card-body py-3">
+                <p class="mb-0" style="font-size:0.85rem;color:var(--text-secondary);">
+                    Requests where somebody named what they want but there is nothing to download yet —
+                    no torrent, no release. Usually old or rare titles that only exist somewhere a bot cannot reach.
+                    <strong>If you can find one of these, upload it and the request closes.</strong>
+                </p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="table-responsive">
+            <table class="table mb-0">
+                <thead>
+                    <tr style="font-size:0.78rem;">
+                        <th style="width:36px;">Votes</th>
+                        <th style="width:36px;"></th>
+                        <th>What was asked for</th>
+                        <th style="width:110px;">Waiting</th>
+                        <th style="width:90px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Requests}}
+                    <tr>
+                        <td class="text-center align-middle" style="padding:4px 2px;">
+                            <button class="vote-btn vote-request" data-id="{{.ID}}" title="Vote for this request">
+                                &#9650; <span class="vote-count">{{.VoteCount}}</span>
+                            </button>
+                        </td>
+                        <td class="align-middle" style="width:36px;padding:4px;">
+                            {{if .AnimeID}}
+                            <a href="/anime/{{deref .AnimeID}}">
+                                <img src="/static/covers/{{deref .AnimeID}}.jpg"
+                                     onerror="this.style.display='none'"
+                                     style="width:32px;height:46px;object-fit:cover;border-radius:3px;"
+                                     alt="" loading="lazy">
+                            </a>
+                            {{end}}
+                        </td>
+                        <td>
+                            <a href="/community/request/{{.ID}}" style="font-size:0.88rem;color:var(--text-primary);text-decoration:none;">{{.Title}}</a>
+                            {{/* Everything that makes it findable. A title
+                                 alone is a search; a title with a season, an
+                                 episode range and an AniDB id is an errand. */}}
+                            {{if or .Resolution .Category .Season .Episodes}}
+                            <div style="margin-top:2px;">
+                                {{if .Resolution}}<span class="badge bg-primary bg-opacity-25 text-primary" style="font-size:0.65rem;vertical-align:middle;">{{.Resolution}}</span>{{end}}
+                                {{if .Category}}<span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:0.65rem;vertical-align:middle;">{{.Category}}</span>{{end}}
+                                {{if or .Season .Episodes}}<span style="font-size:0.72rem;color:var(--text-muted);">{{if .Season}}S{{.Season}}{{end}}{{if .Episodes}}{{if .Season}} {{end}}E{{.Episodes}}{{end}}</span>{{end}}
+                            </div>
+                            {{end}}
+                            <div style="font-size:0.73rem;color:var(--text-muted);">
+                                <span>asked by {{.Username}}</span>
+                                {{if .AnimeID}} &middot; <a href="/anime/{{deref .AnimeID}}" class="badge bg-warning bg-opacity-25 text-warning" style="font-size:0.65rem;text-decoration:none;">AniDB:{{deref .AnimeID}}</a>{{end}}
+                                {{/* A link that produced no info_hash is still
+                                     a lead — the scraper could not read it,
+                                     but a person can. */}}
+                                {{if .NyaaURL}} &middot; <a href="{{.NyaaURL}}" rel="nofollow noopener" target="_blank" class="badge bg-info bg-opacity-25 text-info" style="font-size:0.65rem;text-decoration:none;" title="A link was given but no torrent could be read from it">unreadable link</a>{{end}}
+                                {{/* Shelved AND unsourced is the worst case:
+                                     off the board entirely, so this tab is
+                                     the only place it still appears. */}}
+                                {{if .BackloggedAt}} &middot; <span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:0.65rem;" title="The backlog sweep moved this off the open queue — it is still an open request">shelved {{.BackloggedAt.Format "Jan 02"}}</span>{{end}}
+                            </div>
+                            {{if .Notes}}
+                            <div style="font-size:0.73rem;color:var(--text-muted);margin-top:2px;">{{truncate .Notes 160}}</div>
+                            {{end}}
+                        </td>
+                        <td class="align-middle" style="font-size:0.82rem;color:var(--text-muted);">
+                            since {{.CreatedAt.Format "Jan 02 2006"}}
+                        </td>
+                        <td class="text-end align-middle" style="white-space:nowrap;">
+                            <a href="/community/request/{{.ID}}" class="btn btn-sm btn-outline-primary" title="Open this request">Details</a>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="5" class="text-center py-4" style="color:var(--text-muted);">
+                            Nothing to go looking for — every open member request has something to download.
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            </div>{{/* end .table-responsive */}}
+        </div>
+
+        {{.Pagination}}
         {{else}}
 
-        {{/* ── List ── */}}
+        {{/* ── List ── the member queue by default, the auto-filed one
+             under ?tab=automated. Same table for both: the rows are the
+             same shape, and a second nearly-identical block is how two
+             listings drift apart. */}}
         <div id="view-table">
         <div class="card">
             <table class="table mb-0">
@@ -833,6 +974,17 @@
                             {{end}}
                             <div style="font-size:0.73rem;color:var(--text-muted);">
                                 <span>{{.Username}}</span>
+                                {{/* Which automation filed it. Rendered per ROW
+                                     rather than once per tab, because two of
+                                     the lists that use this block mix origins
+                                     on purpose — the backlog holds every kind,
+                                     and the ?anime_id= view answers "who else
+                                     wants this" — and there a reader needs to
+                                     know which rows are people. The row's own
+                                     Origin is the source of truth; .Username is
+                                     a label the importer stamped and it has
+                                     meant different things over the years. */}}
+                                {{if .Automated}} &middot; <span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:0.65rem;" title="Filed automatically, not by somebody asking">{{if eq .Origin "feed"}}auto: feed{{else if eq .Origin "resurrector"}}auto: replacement{{else if eq .Origin "bulk"}}auto: bulk import{{else}}auto-filed{{end}}</span>{{end}}
                                 {{if .AnimeID}} &middot; <a href="/community/requests?anime_id={{deref .AnimeID}}" class="badge bg-warning bg-opacity-25 text-warning" style="font-size:0.65rem;text-decoration:none;">AniDB:{{deref .AnimeID}}</a>{{end}}
                                 {{if .InfoHash}} &middot; <span class="badge bg-info bg-opacity-25 text-info" style="font-size:0.65rem;" title="{{.InfoHash}}">Torrent</span>{{else}} &middot; <span class="badge bg-danger bg-opacity-25 text-danger" style="font-size:0.65rem;">No Torrent</span>{{end}}
                                 {{if .NyaaURL}} &middot; <a href="{{.NyaaURL}}" target="_blank" rel="noopener" class="badge bg-success bg-opacity-25 text-success" style="font-size:0.65rem;text-decoration:none;">{{if contains .NyaaURL "nekobt.to"}}nekoBT{{else}}Nyaa{{end}}{{if .SeedCount}} ({{.SeedCount}}S){{end}}</a>{{end}}
@@ -868,7 +1020,8 @@
                     {{else}}
                     <tr>
                         <td colspan="7" class="text-center py-4" style="color:var(--text-muted);">
-                            No requests yet. Be the first to submit one!
+                            {{if eq .Tab "automated"}}Nothing auto-filed is waiting — the importer's queue is clear.
+                            {{else}}No member requests open right now. Be the first to submit one!{{end}}
                         </td>
                     </tr>
                     {{end}}
@@ -931,7 +1084,7 @@
                     </div>
                 </div>
                 {{else}}
-                <div class="col-12 text-center" style="color:var(--text-muted);padding:2rem;">No requests yet.</div>
+                <div class="col-12 text-center" style="color:var(--text-muted);padding:2rem;">{{if eq .Tab "automated"}}Nothing auto-filed is waiting.{{else}}No member requests open right now.{{end}}</div>
                 {{end}}
             </div>
         </div>{{/* end #view-grid */}}

@@ -41,6 +41,13 @@ func parseTemplates() error {
 		// function rather than three nested {{if eq}} blocks in the
 		// template, so the wording lives next to the rule that sets it.
 		"backlogLabel": BacklogLabel,
+		// One tab badge. A function rather than {{index .TabCounts "open"}}
+		// because `index` on a MISSING key is a hard execute error ("index
+		// of untyped nil") — and these render on every tab, so one branch
+		// that forgot to pass the map would take five listings down to hide
+		// three numbers. Absent, wrong-typed and zero all answer 0, which
+		// {{with}} then renders as no pill at all.
+		"tabCount": tabCount,
 	}).ParseFS(pageFS, "templates/*.html")
 	if err != nil {
 		return fmt.Errorf("requests: parse templates: %w", err)
@@ -143,6 +150,16 @@ func formatSize(b int64) string {
 }
 
 func splitComma(s string) []string { return strings.Split(s, ",") }
+
+// tabCount reads one badge out of the counts map, total over anything the
+// template might hand it — including nothing at all.
+func tabCount(m any, key string) int {
+	counts, ok := m.(map[string]int)
+	if !ok {
+		return 0
+	}
+	return counts[key]
+}
 
 // pageOffset converts a 1-based page to a query offset, clamping hostile
 // input.

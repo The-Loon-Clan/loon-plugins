@@ -32,6 +32,32 @@ type stubRequestStore struct {
 	requeuedID   int64
 	requeuedBy   int
 	requeueCalls int
+
+	// The origin split. openScopes records every scope the handler asked
+	// for, in order — the assertions are mostly about WHICH cut of the
+	// queue a tab reads, which is invisible in the rendered HTML.
+	openScopes  []Scope
+	openRows    map[Scope][]*Request
+	openTotal   map[Scope]int
+	openErr     error
+	scopeCounts map[Scope]int
+	countsErr2  error
+}
+
+func (s *stubRequestStore) ListOpenRequests(ctx context.Context, scope Scope, limit, offset int) ([]*Request, int, error) {
+	s.openScopes = append(s.openScopes, scope)
+	if s.openErr != nil {
+		return nil, 0, s.openErr
+	}
+	total, ok := s.openTotal[scope]
+	if !ok {
+		total = len(s.openRows[scope])
+	}
+	return s.openRows[scope], total, nil
+}
+
+func (s *stubRequestStore) OpenRequestCounts(ctx context.Context) (map[Scope]int, error) {
+	return s.scopeCounts, s.countsErr2
 }
 
 func (s *stubRequestStore) GetBacklogRequests(ctx context.Context, limit, offset int) ([]*Request, int, error) {

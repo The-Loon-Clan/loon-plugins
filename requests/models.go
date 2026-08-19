@@ -72,8 +72,64 @@ type Request struct {
 	RequeueCount  int
 	RemuxOption   string
 	UpscaleOption string
+	// Origin is which path filed this row — see Scope. Read-only here:
+	// the host stamps it at creation and the board never edits it.
+	Origin        string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+}
+
+// Automated reports whether nobody typed this request in.
+//
+// The board's whole split, in one predicate. Anything that is not a person
+// asking about one thing behaves the same way on the page, so the template
+// asks this rather than comparing origin strings — a new origin the host
+// invents lands on the automated side without a template edit, which is the
+// safe direction: it keeps the members' tab about members.
+func (r *Request) Automated() bool { return r.Origin != "" && r.Origin != string(ScopeMember) }
+
+// Scope is one cut of the open request queue.
+//
+// The board grew a split because its queue stopped describing itself: on
+// 2026-08-18 production had 6,420 open requests, 6,413 of them filed by the
+// torrent feed importer and 7 by people. A member asking for a rare title was
+// on page 214 of a list that looked like a busy community board and was
+// actually a cron's output.
+//
+// The values are the HOST's — they cross the seam as strings and the host's
+// storage layer keys its queries and its counts on the same words. Two
+// vocabularies that had to be kept in step is exactly how a tab and its badge
+// come to disagree.
+type Scope string
+
+const (
+	// ScopeMember — open requests a person filed. The board's DEFAULT view.
+	ScopeMember Scope = "member"
+	// ScopeAutomated — every other origin (feed importer, dead-NZB
+	// resurrector, one-click bulk imports). Reachable, not first.
+	ScopeAutomated Scope = "automated"
+	// ScopeNeedsSourcing — a member asked and left nothing an agent can act
+	// on: no info_hash, no NZB. The queue of "somebody has to go find this".
+	//
+	// A LENS OVER THE OTHERS, not a fourth bucket. Its live rows are also on
+	// the member tab and its shelved rows are also in the backlog; nothing is
+	// moved to populate it. So the badges are not meant to sum, and the page
+	// does not present them as if they were.
+	ScopeNeedsSourcing Scope = "needs_sourcing"
+)
+
+// tabScopes maps a ?tab= value to the scope it lists. The URL words are
+// shorter than the scope words on purpose (a member reads them), and the
+// mapping is explicit so neither side has to guess the other's spelling.
+//
+// "open" is the historical default and stays the default: every existing link
+// to /community/requests, every redirect after a create, and the host's
+// page-policy prefix all point at it. What changed underneath is which rows it
+// lists — which is the fix, not a break.
+var tabScopes = map[string]Scope{
+	"open":      ScopeMember,
+	"automated": ScopeAutomated,
+	"sourcing":  ScopeNeedsSourcing,
 }
 
 // BacklogReason describes one shelving cause to a member.
