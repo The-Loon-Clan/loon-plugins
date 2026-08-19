@@ -30,3 +30,20 @@ type APIKeyResolver interface {
 	// database is down — which is a 500 and a different thing.
 	ResolveAPIKey(ctx context.Context, key string) (userID int64, ok bool, err error)
 }
+
+// APIKeyIssuer is the richer capability a host MAY publish under the same
+// registry key: not just "whose key is this" but "what is this member's key".
+//
+// Optional and type-asserted rather than a second registry entry, the same way
+// a Catalog may also be a CatalogSink. A plugin that only authenticates
+// requests wants the narrow interface and should not have to care; a plugin
+// that hands a member a preconfigured script needs the key itself, and asking
+// them to copy-paste it is precisely the step that stops people finishing a
+// setup.
+type APIKeyIssuer interface {
+	APIKeyResolver
+	// APIKeyFor returns the member's current key, minting one if they have
+	// none — a member who has never opened the API page still gets a script
+	// that works.
+	APIKeyFor(ctx context.Context, userID int64) (string, error)
+}

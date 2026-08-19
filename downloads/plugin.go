@@ -66,6 +66,11 @@ type Plugin struct {
 	// it the endpoint cannot tell one member from anybody on the internet, so
 	// it refuses rather than accepting.
 	keys pluginapi.APIKeyResolver
+	// issuer is the same registry entry when the host's key store can also
+	// hand a member's key back. Optional: without it the setup page cannot
+	// pre-fill the script and says so, rather than offering a download that
+	// arrives unconfigured.
+	issuer pluginapi.APIKeyIssuer
 	// recheck asks the health sweep to look at a release again. Optional — a
 	// host without a sweep still gets reports recorded, which is the useful
 	// half on its own.
@@ -129,6 +134,10 @@ func (p *Plugin) Start(ctx context.Context) error {
 	}
 	if v, ok := p.core.Lookup(pluginapi.APIKeyResolverName); ok {
 		p.keys, _ = v.(pluginapi.APIKeyResolver)
+		// The richer form, if the host's key store offers it. Same entry, one
+		// type assertion — see the seam's own note on why it is not a second
+		// registration.
+		p.issuer, _ = v.(pluginapi.APIKeyIssuer)
 	}
 	if r, ok := pluginapi.LookupReleaseRecheckRequester(p.core); ok {
 		p.recheck = r

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -55,9 +56,20 @@ func (p *Plugin) memberPage(c *gin.Context) (template.HTML, error) {
 	if !ok || u == nil {
 		return "", nil
 	}
+	// The download link carries the member's own key, fetched here so the page
+	// never prints it: a page that shows a credential is a page that leaks it
+	// into every screenshot and every shoulder-surf. The link is a normal
+	// same-origin GET behind the same auth gate, so the key travels no further
+	// than the file it ends up in.
+	script := ""
+	if p.issuer != nil {
+		if key, err := p.issuer.APIKeyFor(c.Request.Context(), u.ID); err == nil && key != "" {
+			script = scriptRoute + "?key=" + url.QueryEscape(key)
+		}
+	}
 	data := map[string]any{
 		"Endpoint":  ReportPath,
-		"Script":    scriptRoute,
+		"Script":    script,
 		"Available": p.keys != nil,
 		"Recheck":   p.recheck != nil,
 		"Matching":  p.grabs != nil,

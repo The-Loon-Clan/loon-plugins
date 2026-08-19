@@ -53,11 +53,23 @@
             <li>
                 <strong>Download the script.</strong> Your key and this site's address are
                 already in it — there is nothing to edit.
+                {{if .Script}}
                 <p class="mt-1 mb-0">
                     <a class="button button--filled" href="{{.Script}}" download>
                         <svg class="icon" aria-hidden="true"><use href="#download"></use></svg>report.py
                     </a>
                 </p>
+                {{else}}
+                {{/* No issuer capability, so the key cannot be filled in for
+                     you. Say what to do instead of offering a download that
+                     arrives unconfigured. */}}
+                <p class="mt-1 mb-0 small text-muted">
+                    This site cannot pre-fill the script for you. Ask an operator for the
+                    file, then set <code>SITE</code> and <code>API_KEY</code> at the top of
+                    it — or export <code>INDEXER_URL</code> and <code>INDEXER_APIKEY</code>
+                    in your client's environment.
+                </p>
+                {{end}}
             </li>
             <li class="mt-2">
                 <strong>Put it where your client keeps scripts.</strong>
