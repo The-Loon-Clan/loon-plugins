@@ -877,3 +877,41 @@ func LookupReleaseRetitleStore(c *core.Core) (ReleaseRetitleStore, bool) {
 	s, ok := v.(ReleaseRetitleStore)
 	return s, ok
 }
+
+// ── Asking for a health re-check ────────────────────────────────────────────
+
+// ReleaseRecheckName is where a host publishes the "check this one again"
+// request. Absent means the host has no health sweep to ask, and a caller then
+// records what it knows and claims nothing more.
+const ReleaseRecheckName = "usenet.recheck"
+
+// ReleaseRecheckRequester lets a plugin ask that ONE release be health-checked
+// ahead of its schedule.
+//
+// A request, not a verdict, and the distinction is the whole design. Somebody
+// saying "this release failed for me" is a SIGNAL — their news provider may
+// have thinner retention, their unpack may have run out of disk, they may have
+// grabbed the wrong thing. The truth is whether the articles are still on the
+// servers, and only the health sweep can answer that. So a report flags the row
+// and the sweep decides; nothing on the reporting path ever writes a verdict.
+//
+// The host owns the rate limit for the same reason it owns the key: a member's
+// downloader can retry a failed job in a loop, and a re-check costs real NNTP
+// work. Accepted=false for a request inside the cooldown is an ordinary answer,
+// not an error.
+type ReleaseRecheckRequester interface {
+	// RequestRecheck flags a release for the next health sweep. accepted is
+	// false when the request was dropped — an unknown release, or one already
+	// re-checked inside the host's cooldown.
+	RequestRecheck(ctx context.Context, releaseID, userID int64) (accepted bool, err error)
+}
+
+// LookupReleaseRecheckRequester resolves the host-registered recheck seam.
+func LookupReleaseRecheckRequester(c *core.Core) (ReleaseRecheckRequester, bool) {
+	v, ok := c.Lookup(ReleaseRecheckName)
+	if !ok {
+		return nil, false
+	}
+	r, ok := v.(ReleaseRecheckRequester)
+	return r, ok
+}

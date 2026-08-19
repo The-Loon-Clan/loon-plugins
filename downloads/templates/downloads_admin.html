@@ -1,0 +1,97 @@
+{{/* What members' download clients have said. One row per member per release —
+     see the migration on why a retry loop is a count rather than rows.
+
+     Failures sort first. Somebody opening this page is looking for something to
+     act on, and a page of successes with the one failure below the fold is a
+     page that hid the answer. */}}
+
+<div class="stat-strip">
+    <div class="stat-tile">
+        <span class="stat-tile__label">Reports</span>
+        <span class="stat-tile__value">{{.Total}}</span>
+    </div>
+    <div class="stat-tile">
+        <span class="stat-tile__label">Failed</span>
+        <span class="stat-tile__value">{{.Failed}}</span>
+    </div>
+    <div class="stat-tile">
+        <span class="stat-tile__label">Worked</span>
+        <span class="stat-tile__value">{{.OK}}</span>
+    </div>
+</div>
+
+{{if not .Available}}
+<p class="notice notice--warning">
+    <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+    <span>
+        No API-key resolver is registered, so <code>{{.Endpoint}}</code> refuses every
+        report. Nothing here will change until the host wires one.
+    </span>
+</p>
+{{else if not .Recheck}}
+<p class="notice notice--info">
+    <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+    <span>
+        Reports are being recorded, but no health-recheck capability is registered — a
+        failure lands here and does not queue a check against the news servers.
+    </span>
+</p>
+{{end}}
+
+<section class="panelV2 panelV2--overflow">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#database"></use></svg>
+            Recent reports
+        </h2>
+        {{if .Rows}}<div class="panel__actions"><span class="panel__grouping">{{len .Rows}} shown</span></div>{{end}}
+    </header>
+
+    {{if .Rows}}
+    <div class="data-table-wrapper">
+        <table class="data-table data-table--stack">
+            <caption class="visually-hidden">Download reports from members' clients</caption>
+            <thead>
+                <tr>
+                    <th>Release</th>
+                    <th class="data-table__nowrap">Outcome</th>
+                    <th class="data-table__nowrap">Client</th>
+                    <th class="data-table__num">Times</th>
+                    <th class="data-table__nowrap">Last</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Rows}}
+                <tr>
+                    <td>
+                        <div class="data-table__name-body">
+                            <a class="data-table__title" href="/release/{{.ReleaseID}}">Release #{{.ReleaseID}}</a>
+                            {{/* The client's own wording, kept as evidence. Nothing
+                                 branches on it — see the migration. */}}
+                            {{if .Detail}}<div class="data-table__meta"><span>{{.Detail}}</span></div>{{end}}
+                        </div>
+                    </td>
+                    <td class="data-table__nowrap">
+                        {{if eq .Status "failed"}}<span class="tag tag--danger">failed</span>
+                        {{else}}<span class="tag tag--success">worked</span>{{end}}
+                    </td>
+                    <td class="data-table__nowrap">{{if .Client}}{{.Client}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                    {{/* Times is how often this ONE member's client said it. A high
+                         number is a retry loop, not a crowd — the crowd is how many
+                         rows a release has. */}}
+                    <td class="data-table__num">{{.Reports}}</td>
+                    <td class="data-table__nowrap">{{.LastAt.Format "2006-01-02 15:04"}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <div class="panel__body">
+        <div class="empty">
+            Nothing reported yet. Members set this up from their account page — it is a
+            script for SABnzbd or NZBGet, and it reports each job's outcome back here.
+        </div>
+    </div>
+    {{end}}
+</section>

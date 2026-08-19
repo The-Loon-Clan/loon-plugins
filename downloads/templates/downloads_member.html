@@ -1,0 +1,125 @@
+{{/* The member's setup page. Three steps and a file — the request this
+     answers was for a PREBUILT script, so the page hands one over rather
+     than documenting how to write one.
+
+     The key is NOT printed here. It goes into the generated file, which the
+     download link fetches with ?key= from the account page's own copy — a page
+     that prints a credential is a page that leaks it to every screenshot. */}}
+
+{{if not .Available}}
+<p class="notice notice--warning">
+    <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+    <span>This site is not accepting download reports at the moment.</span>
+</p>
+{{else}}
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#download"></use></svg>
+            Tell us when a download fails
+        </h2>
+    </header>
+    <div class="panel__body">
+        <p>
+            Your download client knows within minutes whether an NZB actually worked.
+            This site does not — it checks releases against the news servers on a
+            schedule, which finds articles that have expired and cannot see a bad PAR2
+            set or a post that unpacks to nothing.
+        </p>
+        <p>
+            One script closes that gap. When a job finishes, it tells us the release and
+            whether it worked.
+            {{if .Recheck}}A failure puts that release at the front of the health queue,
+            so it gets checked against the servers within the hour instead of whenever
+            its turn came round.{{end}}
+        </p>
+        <p class="m-0 small text-muted">
+            It sends the job's outcome, its name, and the link it came from. Nothing about
+            your machine, your paths, or anything else you have downloaded.
+        </p>
+    </div>
+</section>
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#code"></use></svg>
+            Set it up
+        </h2>
+    </header>
+    <div class="panel__body">
+        <ol class="stack">
+            <li>
+                <strong>Download the script.</strong> Your key and this site's address are
+                already in it — there is nothing to edit.
+                <p class="mt-1 mb-0">
+                    <a class="button button--filled" href="{{.Script}}" download>
+                        <svg class="icon" aria-hidden="true"><use href="#download"></use></svg>report.py
+                    </a>
+                </p>
+            </li>
+            <li class="mt-2">
+                <strong>Put it where your client keeps scripts.</strong>
+                <br>SABnzbd — <em>Settings → Folders → Scripts Folder</em>.
+                <br>NZBGet — <em>Settings → PATHS → ScriptDir</em>.
+                <br>On Linux or macOS make it executable: <code>chmod +x report.py</code>
+            </li>
+            <li class="mt-2">
+                <strong>Turn it on.</strong>
+                <br>SABnzbd — <em>Settings → Switches → Post-processing script</em>, pick
+                <code>report.py</code>. To report on only some categories, set it per
+                category under <em>Settings → Categories</em> instead.
+                <br>NZBGet — <em>Settings → EXTENSION SCRIPTS</em>, tick it.
+            </li>
+        </ol>
+        <p class="mt-2 mb-0 small text-muted">
+            One file works for both clients. After the next download, look in your client's
+            history — the script prints what this site said back.
+        </p>
+    </div>
+</section>
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#info"></use></svg>
+            If a report says it could not match the job
+        </h2>
+    </header>
+    <div class="panel__body">
+        <p>
+            A download client reports on a <em>job</em>, and a job has a name rather than a
+            release id. When you add an NZB by its link from this site — which is what
+            Sonarr, Radarr and the download button all do — the link carries the id and the
+            match is exact.
+        </p>
+        <p class="m-0">
+            {{if .Matching}}When it does not, we fall back to matching the job's name
+            against your own recent downloads. A client configured to rename jobs heavily
+            can still defeat that, and then the report is answered honestly as unmatched
+            rather than attached to the wrong release.
+            {{else}}When it does not, the report cannot be matched, and it is answered
+            honestly as unmatched rather than attached to the wrong release.{{end}}
+        </p>
+    </div>
+</section>
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#server"></use></svg>
+            Rolling your own
+        </h2>
+    </header>
+    <div class="panel__body">
+        <p class="m-0">
+            The endpoint is <code>POST {{.Endpoint}}</code>, form-encoded or JSON, taking
+            <code>apikey</code>, <code>status</code> (<code>ok</code> or anything else for a
+            failure), and whichever of <code>id</code>, <code>url</code>, <code>name</code>
+            and <code>filename</code> you have. It answers JSON with a
+            <code>message</code> written to be read by a person.
+        </p>
+    </div>
+</section>
+{{end}}
