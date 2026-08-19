@@ -133,7 +133,32 @@ not there is indistinguishable from one that is broken.
 ## Hooks & Callbacks
 
 - Host hooks SET: **(none)**.
-- Extensions PUBLISHED (`Core.Register`): **(none)**.
+- Extensions PUBLISHED (`Core.Register`) — all four on a **running** tracker
+  only, because a capability offered by a tracker that idled for want of Redis
+  can only ever fail at the moment somebody uses it:
+
+  | Key | Contract | What it is for |
+  |---|---|---|
+  | `tracker.info` | `pluginapi.TorrentInfoFunc` | Name and size by info-hash, so a magic cast can show and price what it is enchanting without reading this schema. |
+  | `tracker.credit` | `pluginapi.TrackerCredit` | Selling transfer credit — the points store's "1.0 GB Uploaded". Credit is bookkeeping in its own table, so buying upload does not invent a torrent nobody seeded. |
+  | `tracker.mirrors` | `pluginapi.TorrentMirrors` | **Read:** which of these release ids the tracker also carries. Batched, because the caller is a listing with fifty rows and the per-row question would be fifty round trips for a badge. Ids with no torrent are ABSENT from the map — 0 seeders is a dead torrent and must not read the same as no torrent. |
+  | `tracker.mirror.make` | `pluginapi.TorrentMirrorMaker` | **Write:** turn a release into a torrent. Idempotent — it is reachable from a button, so a second click finds the first torrent. |
+
+  Both mirror structs carry `Href`, filled from `TorrentPath`: the route is this
+  plugin's to own and to move, so a foreign page links without hardcoding
+  `/tracker/t/%s`. That is the mirror image of `ReleaseURL` below.
+
+  **What a mirrored torrent's piece hashes are.** Piece hashes are SHA-1 of the
+  file bytes, and an *index* holds pointers to Usenet articles rather than
+  bytes. So `MirrorRequest` takes optional real `Pieces` from a caller that has
+  hashed the content, and falls back to a deterministic placeholder chain for
+  one that has not. A placeholder torrent announces, downloads as a `.torrent`,
+  and would fail a client's verification the moment it fetched a piece — which
+  is the honest state of a mirror of content nobody holds, and is why the
+  fallback is deterministic rather than random: the same release mirrored twice
+  is one torrent, not two. The file **list** is real either way when the caller
+  passes one.
+
 - Extensions CONSUMED (`Core.Lookup`): **(none)** — the entitlement is read
   through `core.Entitlements`, not a plugin capability.
 - Views registered: one `SlotAdminPage` (`tracker`, `RoleMod`, nav group
@@ -166,6 +191,8 @@ restart, with no migration step.
 - `store.go` / `store_pg.go` / `store_mem.go` — the Store triple.
 - `member_handler.go` — member pages, `.torrent` download, passkey mint/rotate.
 - `handlers.go` — the `Deps` seam and shared handler plumbing.
+- `mirrors.go` — the mirror seams, read and write, plus `TorrentPath`.
+- `torrentbuild.go` — `BuildTorrent`: a described release becomes an info dict. Exported because two callers build torrents (the mirror button and a host seeding demo data) and a second bencode encoder to keep byte-identical is a bug nobody finds by reading either copy.
 - `views.go` + `templates/` — the admin page and the two member fragments.
 - `migrations/001_init.sql` — the three tables.
 
