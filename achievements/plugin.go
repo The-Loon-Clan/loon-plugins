@@ -217,6 +217,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if err := p.registerBlock(c); err != nil {
 		return err
 	}
+	// The member's own page. The block above only appears where an editor put
+	// it, and the card on a profile leads nowhere, so this is the plugin's one
+	// addressable destination for a member — and the only surface where its
+	// visibility setting can live, since loon has no user-settings slot and
+	// the host mounts actions for site pages but not for profile widgets.
+	if err := p.registerMemberPage(c); err != nil {
+		return err
+	}
 	return p.registerViews(c)
 }
 

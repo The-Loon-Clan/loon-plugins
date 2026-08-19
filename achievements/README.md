@@ -32,7 +32,8 @@ payout").
 | Surface | Access | Notes |
 |---|---|---|
 | `GET /admin/p/achievements` (SlotAdminPage view, slug `achievements`) | host admin gate, nav group "Operations" | Definition table + create form. Moved from rewards with slug and URL intact. Actions: `achievement-create`, `achievement-toggle` (POST, host CSRF chrome). |
-| Profile card (SlotUserWidget, slug `achievements`, **Public**) | anyone | Earned badges are public; the in-progress list renders only on your own profile. Renders nothing when there is nothing to say. |
+| Profile card (SlotUserWidget, slug `achievements`, **Public**) | anyone | Earned badges are public; the in-progress list renders only on your own profile. Renders nothing when there is nothing to say, and nothing at all to a non-subject viewer when the member has opted out (below). Its title links to the page below. |
+| `GET /p/achievements` (SlotSitePage view, slug `achievements`, **Public**) | anyone; the personal half needs a session | The member's own card, the visibility opt-out, and the full catalogue. Action: `visibility` (POST `/p/achievements/visibility`, host CSRF chrome) — refuses anonymously for itself, since a Public view's action is reachable without a session. |
 | Content block `{{achievements}}` (`content.block.achievements`) | wherever the wiki embeds it | The public catalogue, generated per render; hidden and disabled achievements are withheld. |
 | Job "Achievement Scoring" | `/admin/jobs` | Hourly: scores metric achievements from host counters, backfills new ones, repairs unpaid completions. |
 
@@ -46,7 +47,7 @@ fire on both.
 
 ## Data
 
-Owns two tables in its own `achievements` schema (`migrations/001_init.sql`):
+Owns three tables in its own `achievements` schema:
 
 - `achievements` — slug, name, description, `reward_slug` (`''` = pure
   badge), the criterion (`metric`+`threshold` OR `trigger`, enforced by a
@@ -55,6 +56,16 @@ Owns two tables in its own `achievements` schema (`migrations/001_init.sql`):
   `completed_at`, `paid_at`, `updated_at`. **No** grant_id, **no** FK to any
   other schema; `user_id` is a plain BIGINT and cleanup on member deletion is
   a host-driven call.
+- `profile_visibility` (`migrations/003_profile_visibility.sql`) — one row per
+  member who has made a choice about publishing their badges. **Absence is
+  shown**: earned badges are public by design, so the default is the missing
+  row, the column default, and the zero value all at once, and only an
+  explicit opt-out is recorded. Enforced in the profile card's Render, before
+  the achievements are read, and only when the viewer is not the subject — a
+  member always sees their own. It lives here rather than in a host
+  preferences table because it is a fact about this plugin's card, and a host
+  that mounted the plugin would otherwise have to grow a column, a form field
+  and a POST handler before the opt-out worked at all.
 
 **Succession:** migration 001 lifts rows from `rewards.achievements` /
 `rewards.user_achievements` when they exist (`to_regclass`-guarded,
@@ -72,7 +83,8 @@ a `user_id` removes their entire trace.
 
 **Core services:** `Storage.SchemaDB` (own schema), `Scheduler` (the job),
 the event bus (`DeclareEvent`/`On`/`Emit`), the view registry. `Auth` is used
-only to decide "is this my own profile".
+only to decide "is this my own profile" — which is also the whole of the
+visibility rule, and why the page's action re-asks it before writing.
 
 **Soft, cross-plugin:** `pluginapi.RewardBySlugGranter`
 (`rewards.granter.byslug`), looked up in **Start** — Boot runs every

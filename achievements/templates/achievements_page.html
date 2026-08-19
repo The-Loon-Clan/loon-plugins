@@ -1,0 +1,65 @@
+{{/* The member's achievements page (loon SlotSitePage, GET /p/achievements).
+     A fragment — the host supplies the page chrome.
+
+     Three parts, in the order a reader wants them: what YOU have, how it is
+     published, and what there is to earn. The catalogue is last because it is
+     the same table the wiki block renders and the least personal thing here.
+
+     The visibility form posts to the host's site-page action convention,
+     POST /p/<slug>/<action>. That URL is hardcoded because it is a contract
+     loon documents for this slot, the same way the admin fragment hardcodes
+     its own. */}}
+{{define "achievements_page.html"}}
+
+{{if .Msg}}<div class="alert alert-success py-2" style="font-size:0.85rem;">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert alert-danger py-2" style="font-size:0.85rem;">{{.Err}}</div>{{end}}
+
+{{if .SignedIn}}
+  {{/* The same card a profile shows, from the same code — so this page cannot
+       drift into a second opinion about what a member has earned. */}}
+  {{if .Card}}
+  {{.Card}}
+  {{else}}
+  <div class="card mb-3" style="background:var(--bg-elevated); border:1px solid var(--border);">
+    <div class="card-body py-3" style="font-size:0.88rem;">
+      <span class="text-muted">
+        You have not earned any achievements yet. Everything below is up for grabs.
+      </span>
+    </div>
+  </div>
+  {{end}}
+
+  <form method="POST" action="/p/achievements/visibility"
+        class="card mb-3" style="background:var(--bg-elevated); border:1px solid var(--border);">
+    <div class="card-body py-3">
+      <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="hidden" value="1" id="ach-hidden"
+               {{if .Hidden}}checked{{end}}>
+        <label class="form-check-label" for="ach-hidden" style="font-size:0.85rem;">
+          Hide my achievements from other members
+        </label>
+        <div class="form-text" style="font-size:0.75rem;">
+          Your badges are shown on your profile to anyone who visits it — that is what makes
+          them worth earning. Tick this to keep them to yourself. You will still see them
+          here and on your own profile either way.
+        </div>
+      </div>
+      <button type="submit" class="btn btn-sm btn-primary mt-3">Save</button>
+    </div>
+  </form>
+{{else}}
+  <div class="card mb-3" style="background:var(--bg-elevated); border:1px solid var(--border);">
+    <div class="card-body py-3" style="font-size:0.88rem;">
+      <span class="text-muted">Sign in to see which of these you have earned.</span>
+    </div>
+  </div>
+{{end}}
+
+<div class="card" style="background:var(--bg-elevated); border:1px solid var(--border);">
+  <div class="card-header py-2" style="font-weight:600;">Everything you can earn</div>
+  <div class="card-body py-2">
+    {{.Catalogue}}
+  </div>
+</div>
+{{end}}

@@ -82,4 +82,17 @@ type Store interface {
 	// MarkBackfilled stamps the end of an achievement's first scoring pass,
 	// once.
 	MarkBackfilled(ctx context.Context, achievementID int64) error
+
+	// ProfileHidden reports whether this member has asked for their badges to
+	// be left off other people's view of their profile.
+	//
+	// False for a member who has never chosen, which is nearly everyone:
+	// earned badges are public by design and this is the opt-OUT. The read
+	// sits on the profile-card render path, so "no row" must be an answer and
+	// not an error — see profile_visibility (migration 003).
+	ProfileHidden(ctx context.Context, userID int64) (bool, error)
+
+	// SetProfileHidden records the choice, either way. Idempotent: setting it
+	// to what it already is succeeds and changes nothing.
+	SetProfileHidden(ctx context.Context, userID int64, hidden bool) error
 }

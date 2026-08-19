@@ -41,7 +41,13 @@ type MemStore struct {
 
 	achDefs     map[int64]AchievementDef
 	achProgress map[memAchKey]*memProgress
-	nextID      int64
+	// profileHidden holds only the members who made a choice, mirroring
+	// profile_visibility: an absent key is "shown", exactly as a missing row
+	// is. A double that pre-populated every member with false would hide the
+	// difference between "chose to be shown" and "never chose", which is the
+	// whole shape of the table.
+	profileHidden map[int64]bool
+	nextID        int64
 
 	Now time.Time
 }
@@ -50,9 +56,10 @@ var _ Store = (*MemStore)(nil)
 
 func NewMemStore() *MemStore {
 	return &MemStore{
-		achDefs:     map[int64]AchievementDef{},
-		achProgress: map[memAchKey]*memProgress{},
-		Now:         time.Now(),
+		achDefs:       map[int64]AchievementDef{},
+		achProgress:   map[memAchKey]*memProgress{},
+		profileHidden: map[int64]bool{},
+		Now:           time.Now(),
 	}
 }
 
@@ -297,6 +304,24 @@ func (m *MemStore) UnpaidCompletions(ctx context.Context, limit int) ([]UnpaidCo
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+// ProfileHidden mirrors the table: a member with no row is shown.
+func (m *MemStore) ProfileHidden(ctx context.Context, userID int64) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.profileHidden[userID], nil
+}
+
+// SetProfileHidden records the choice either way, including the choice to be
+// shown — which is a row saying false, not the absence of one. The PG upsert
+// keeps that row too, so a double that deleted it would disagree about what a
+// second read returns.
+func (m *MemStore) SetProfileHidden(ctx context.Context, userID int64, hidden bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.profileHidden[userID] = hidden
+	return nil
 }
 
 func (m *MemStore) MarkBackfilled(ctx context.Context, achievementID int64) error {

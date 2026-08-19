@@ -243,6 +243,37 @@ func TestAchievementsReadVisibilityRules(t *testing.T) {
 	}
 }
 
+// Profile visibility: absence is the answer "shown", not a missing row to
+// error over. Every profile render on a site where nobody has opted out is a
+// read of a member who has no row at all, so this is the common path rather
+// than an edge case.
+func TestMemStoreProfileVisibility(t *testing.T) {
+	m := NewMemStore()
+	ctx := context.Background()
+
+	if hidden, err := m.ProfileHidden(ctx, 5); err != nil || hidden {
+		t.Errorf("ProfileHidden(no row) = %v, %v; want false, nil", hidden, err)
+	}
+	if err := m.SetProfileHidden(ctx, 5, true); err != nil {
+		t.Fatal(err)
+	}
+	if hidden, err := m.ProfileHidden(ctx, 5); err != nil || !hidden {
+		t.Errorf("ProfileHidden(after opt-out) = %v, %v; want true, nil", hidden, err)
+	}
+	// One member's choice does not travel.
+	if hidden, _ := m.ProfileHidden(ctx, 6); hidden {
+		t.Error("member 5's opt-out reached member 6")
+	}
+	// Reversible, and the row stays behind — the PG upsert keeps it too, so a
+	// double that deleted it would disagree about the second read.
+	if err := m.SetProfileHidden(ctx, 5, false); err != nil {
+		t.Fatal(err)
+	}
+	if hidden, _ := m.ProfileHidden(ctx, 5); hidden {
+		t.Error("opting back in did not stick")
+	}
+}
+
 // The frozen-clock hook: a test controlling Now gets deterministic stamps.
 func TestMemStoreUsesInjectedClock(t *testing.T) {
 	m := NewMemStore()

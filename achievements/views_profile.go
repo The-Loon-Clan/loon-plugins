@@ -57,16 +57,65 @@ func (p *Plugin) renderProfileAchievements(gc *gin.Context) (template.HTML, erro
 	if p.store == nil {
 		return "", nil
 	}
-	all, err := p.store.Achievements(gc.Request.Context(), subject)
-	if err != nil {
-		return "", err
-	}
+	ctx := gc.Request.Context()
 
 	self := false
-	if p.core != nil && p.core.Auth != nil {
-		if u, ok := p.core.Auth.CurrentUser(gc); ok && u != nil && u.ID == subject {
-			self = true
+	if u, ok := p.viewer(gc); ok && u.ID == subject {
+		self = true
+	}
+
+	// The member's opt-out, and the only place it is enforced.
+	//
+	// It has to be here rather than in the host, because this is the moment
+	// the card decides what a non-subject viewer gets, and it is the only
+	// moment every host shares — the widget is mounted on whatever profile
+	// pages a host has, and a host-side filter would have to be re-added by
+	// each of them. Before the query, not after: a member who said "do not
+	// publish this" should not have it read either.
+	//
+	// Their OWN profile is unaffected, whichever page it is on. Hiding a
+	// member's badges from themselves would leave them with no way to see what
+	// they have earned, and nothing to decide about.
+	if !self {
+		hidden, err := p.store.ProfileHidden(ctx, subject)
+		if err != nil {
+			return "", err
 		}
+		if hidden {
+			return "", nil
+		}
+	}
+
+	return p.renderCardFor(gc, subject, self)
+}
+
+// viewer is the signed-in user, or nothing. Wrapped because the plugin runs on
+// hosts and in tests where core or its auth service is absent, and every call
+// site would otherwise repeat the same three nil checks before it could ask
+// the only question it cares about.
+func (p *Plugin) viewer(gc *gin.Context) (*core.User, bool) {
+	if p.core == nil || p.core.Auth == nil {
+		return nil, false
+	}
+	u, ok := p.core.Auth.CurrentUser(gc)
+	if !ok || u == nil {
+		return nil, false
+	}
+	return u, true
+}
+
+// renderCardFor builds one member's achievements card: the read, the
+// per-viewer localization, the visibility rules, the fragment.
+//
+// Shared by the profile widget and the plugin's own page, so a member reading
+// /p/achievements sees the same card other people see on their profile rather
+// than a second rendering of the same idea that drifts from it. self carries
+// the in-progress rule (see buildProfileVM) and is the caller's to decide,
+// because "whose page is this" is a question only the caller can answer.
+func (p *Plugin) renderCardFor(gc *gin.Context, userID int64, self bool) (template.HTML, error) {
+	all, err := p.store.Achievements(gc.Request.Context(), userID)
+	if err != nil {
+		return "", err
 	}
 	// Localize the display names for THIS viewer before the pure VM build —
 	// buildProfileVM stays a pure function over the list, and localization is

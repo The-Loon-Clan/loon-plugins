@@ -303,6 +303,36 @@ func (s *PGStore) MarkBackfilled(ctx context.Context, achievementID int64) error
 	return err
 }
 
+// ── Profile visibility ──────────────────────────────────────────────────────
+
+// ProfileHidden reads the opt-out. No row is the answer "shown", not a
+// failure: the table only ever holds members who made a choice, so on a site
+// where nobody has opted out it is empty and every read here returns false.
+func (s *PGStore) ProfileHidden(ctx context.Context, userID int64) (bool, error) {
+	var hidden bool
+	err := s.get(ctx, &hidden, `SELECT hidden FROM profile_visibility WHERE user_id = $1`, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("profile visibility: %w", err)
+	}
+	return hidden, nil
+}
+
+// SetProfileHidden writes the choice. An upsert rather than an
+// insert-or-delete pair so that opting back in leaves the row and its
+// updated_at behind — "this member has considered this" is worth keeping, and
+// a delete would make the two directions asymmetric for no gain.
+func (s *PGStore) SetProfileHidden(ctx context.Context, userID int64, hidden bool) error {
+	_, err := s.exec(ctx, `
+		INSERT INTO profile_visibility (user_id, hidden, updated_at)
+		VALUES ($1, $2, now())
+		ON CONFLICT (user_id) DO UPDATE
+		   SET hidden = EXCLUDED.hidden, updated_at = now()`, userID, hidden)
+	return err
+}
+
 // ── Definition CRUD ─────────────────────────────────────────────────────────
 //
 // The point of these over raw SQL is the VALIDATION — the admin form refuses
