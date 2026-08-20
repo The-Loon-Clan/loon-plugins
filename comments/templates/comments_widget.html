@@ -46,8 +46,32 @@
                 <p class="comment__body">{{.Body}}</p>
                 {{end}}
 
-                {{if or .Mine .CanDelete}}
+                {{/* Thanks sits with the actions but reads as its own thing:
+                     a count that is always visible when non-zero, and a button
+                     only for somebody who can actually give one. */}}
+                {{if or .Mine .CanDelete .CanThank .Thanks}}
                 <div class="comment__actions">
+                    {{if .CanThank}}
+                    <form method="post" action="/p/comments/thanks" style="display:contents">
+                        <input type="hidden" name="_csrf" value="{{$csrf}}">
+                        <input type="hidden" name="id" value="{{.ID}}">
+                        <input type="hidden" name="back" value="{{$back}}">
+                        <button class="comment__thanks{{if .Thanked}} comment__thanks--given{{end}}" type="submit"
+                                title="{{if .Thanked}}You thanked this — press again to take it back{{else}}Say this was useful{{end}}">
+                            <svg class="icon icon--sm" aria-hidden="true"><use href="#star"></use></svg>
+                            <span>Thanks</span>
+                            {{if .Thanks}}<span class="comment__thanks-count">{{.Thanks}}</span>{{end}}
+                        </button>
+                    </form>
+                    {{else if .Thanks}}
+                    {{/* Not offered — your own comment, or you are signed out —
+                         but the count is still worth showing: it is the signal
+                         the whole feature exists to produce. */}}
+                    <span class="comment__thanks comment__thanks--static">
+                        <svg class="icon icon--sm" aria-hidden="true"><use href="#star"></use></svg>
+                        <span>{{.Thanks}}</span>
+                    </span>
+                    {{end}}
                     {{/* Only the author edits. A moderator removing a comment
                          is one thing; a moderator rewriting one under somebody
                          else's name is another, and this offers no way to. */}}

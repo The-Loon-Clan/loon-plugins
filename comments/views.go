@@ -29,6 +29,13 @@ type commentVM struct {
 	// put words in their mouth under their name.
 	Mine      bool
 	CanDelete bool
+
+	// Thanks is how many members found this useful, and Thanked whether the
+	// viewer is one of them. CanThank is separate from both: you cannot thank
+	// your own comment, a removed one, or anything at all while signed out.
+	Thanks   int
+	Thanked  bool
+	CanThank bool
 }
 
 // widget renders the conversation for whatever the page is about.
@@ -68,6 +75,21 @@ func (p *Plugin) widget(c *gin.Context) (template.HTML, error) {
 		}
 	}
 
+	// Thanks for the whole thread in one call — see ThanksStore. A per-row
+	// lookup would be two more queries per comment on a page that already has
+	// every id it needs.
+	ids := make([]int64, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	thanks, mine, err := p.st.ThanksFor(ctx, ids, viewerID)
+	if err != nil {
+		// A thanks count that could not be read must not take the conversation
+		// down with it: render the thread with no counts rather than an error
+		// page where the comments were.
+		thanks, mine = map[int64]int{}, map[int64]bool{}
+	}
+
 	out := make([]commentVM, 0, len(rows))
 	for _, r := range rows {
 		vm := commentVM{
@@ -77,11 +99,16 @@ func (p *Plugin) widget(c *gin.Context) (template.HTML, error) {
 		if vm.Author == "" {
 			vm.Author = "a member"
 		}
+		vm.Thanks, vm.Thanked = thanks[r.ID], mine[r.ID]
 		switch {
 		case !r.Deleted():
 			vm.Body = r.Body
 			vm.Mine = viewerID != 0 && r.UserID == viewerID
 			vm.CanDelete = vm.Mine || staff
+			// Offered to a signed-in member on somebody ELSE's live comment.
+			// Thanking your own is the first thing anybody tries and would pay
+			// you for commenting.
+			vm.CanThank = viewerID != 0 && !vm.Mine
 		case staff:
 			// Staff see what was said. A moderator asked "why did you remove
 			// this" cannot answer from a row that shows nothing.

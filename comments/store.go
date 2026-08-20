@@ -51,6 +51,12 @@ type Store interface {
 
 	// Delete withholds one. byUser must be the author unless staff is true.
 	Delete(ctx context.Context, id, byUser int64, staff bool) (bool, error)
+
+	// Thanks — one member telling another that what they said was useful.
+	// Declared here rather than as a second interface a caller has to assert
+	// to, because every consumer of comments wants both: a thread without its
+	// thanks counts is a thread missing half of what it says.
+	ThanksStore
 }
 
 type PGStore struct{ db *core.SchemaDB }

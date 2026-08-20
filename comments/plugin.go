@@ -58,6 +58,10 @@ type Plugin struct {
 	st   Store
 	tmpl *template.Template
 
+	// points pays the author of a thanked comment. Optional: without it thanks
+	// still work as a signal and simply pay nothing, which is a poorer feature
+	// but a working one.
+	points core.PointsService
 	// users resolves author names for a rendered list. Optional: without it
 	// every comment renders as "a member", which is a worse page but a working
 	// one — and far better than the plugin growing its own copy of usernames.
@@ -98,6 +102,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	engine.POST(postPath, authed...)
 	engine.POST(editPath, append(c.Auth.RequireUser(core.RoleUser), p.handleEdit)...)
 	engine.POST(deletePath, append(c.Auth.RequireUser(core.RoleUser), p.handleDelete)...)
+	engine.POST(thanksPath, append(c.Auth.RequireUser(core.RoleUser), p.handleThanks)...)
 
 	return c.RegisterWidget(core.Widget{
 		Slug:        "comments",
@@ -117,6 +122,11 @@ func (p *Plugin) Start(ctx context.Context) error {
 	if p.core == nil {
 		return nil
 	}
+	p.points = p.pointsFor(p.core)
+	if p.points == nil {
+		log.Printf("comments: no core.Points service — thanks will be recorded " +
+			"and will pay nobody.")
+	}
 	p.users = p.core.Users
 	if p.users == nil {
 		log.Printf("comments: no core.Users service — every comment will render as " +
@@ -126,3 +136,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 }
 
 func (p *Plugin) Stop(ctx context.Context) error { return nil }
+
+// logf is the plugin's one log call site, so a caller does not have to reach
+// for the standard logger in the middle of a handler.
+func (p *Plugin) logf(format string, args ...any) { log.Printf(format, args...) }
