@@ -42,9 +42,16 @@
         {{end}}
 
         {{if .CanVote}}
-            {{if .ShowResults}}
-            {{/* Already answered, results on screen. The ballot folds away:
-                 present, not shouting. */}}
+            {{if .Voted}}
+            {{/* Already answered. The ballot folds away: present, and not the
+                 loudest thing on a card whose point is the result above it.
+
+                 Keyed on having VOTED rather than on the results being on
+                 screen, which is not the same question — an 'always' poll
+                 shows its tally to somebody who has not answered yet, and
+                 folding their ballot away under "Change my answer" would hide
+                 the control from the one person who still needs it and
+                 mislabel it on the way. */}}
             <details class="poll__change">
                 <summary>Change my answer</summary>
                 {{template "poll-ballot" .}}
@@ -54,13 +61,10 @@
             {{end}}
         {{else if not .SignedIn}}
         <p class="m-0 small text-muted"><a href="/login">Sign in</a> to vote.</p>
-        {{else if not .ShowResults}}
-        {{/* Signed in, poll over, and the policy withheld the numbers while it
-             ran — but showResults hands them over on close, so reaching here
-             means the poll closed with nothing to show. Say that rather than
-             render an empty card. */}}
-        <p class="m-0 small text-muted">This poll closed with no votes.</p>
         {{end}}
+        {{/* Nothing more for a signed-in member on a CLOSED poll: showResults
+             hands the numbers to everybody once it is over, so the results are
+             already above and there is no ballot to offer. */}}
 
         {{if and (not .Closed) .ClosesAt}}
         <p class="poll__closes small text-muted">Closes {{date .ClosesAt}}</p>
