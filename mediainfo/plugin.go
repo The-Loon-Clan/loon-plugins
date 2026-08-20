@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 
@@ -70,6 +71,13 @@ const (
 )
 
 type Plugin struct {
+	// The scrape counters. Atomics because Metrics is called on a scrape
+	// goroutine while handlers are incrementing on request goroutines, and a
+	// torn read of a counter is a graph with a spike in it that never happened.
+	reportsPosted atomic.Int64
+	shotsFetched  atomic.Int64
+	shotFailures  atomic.Int64
+
 	core   *core.Core
 	st     Store
 	tmpl   *template.Template
@@ -131,6 +139,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if err := c.Register(pluginapi.HealthReporterName+"mediainfo",
 		pluginapi.HealthReporter(p)); err != nil {
 		return fmt.Errorf("mediainfo: register health: %w", err)
+	}
+	if err := c.Register(pluginapi.MetricSourcePrefix+"mediainfo",
+		pluginapi.MetricSource(p)); err != nil {
+		return fmt.Errorf("mediainfo: register metrics: %w", err)
 	}
 
 	return c.RegisterWidget(core.Widget{
@@ -230,4 +242,34 @@ func (p *Plugin) handleUnshot(c *gin.Context) {
 		_, _ = p.st.RemoveShot(c.Request.Context(), id, u.ID, u.AtLeast(core.RoleMod))
 	}
 	c.Redirect(303, backTo(c))
+}
+
+// Metrics exports what this plugin knows and the host cannot.
+//
+// Counters kept IN MEMORY rather than counted from the tables, which is the
+// rule the contract states and worth showing rather than only saying: a
+// SELECT count(*) here would run every fifteen seconds forever, on a table
+// that only grows, to answer a question a counter already answers. The
+// absolute totals live in the database and belong on an admin page; what a
+// scrape wants is the rate, and a rate needs only a counter that goes up.
+func (p *Plugin) Metrics(ctx context.Context) []pluginapi.Measurement {
+	return []pluginapi.Measurement{
+		{
+			Name: "mediainfo_reports_posted_total", Kind: pluginapi.MetricCounter,
+			Help:  "MediaInfo reports members have posted since this process started.",
+			Value: float64(p.reportsPosted.Load()),
+		},
+		{
+			Name: "mediainfo_screenshots_fetched_total", Kind: pluginapi.MetricCounter,
+			Help:  "Screenshots fetched and stored since this process started.",
+			Value: float64(p.shotsFetched.Load()),
+		},
+		{
+			Name: "mediainfo_screenshot_fetch_failures_total", Kind: pluginapi.MetricCounter,
+			Help: "Screenshot links this site refused or could not fetch. Rising against " +
+				"mediainfo_screenshots_fetched_total means members are being handed a " +
+				"failure they cannot act on.",
+			Value: float64(p.shotFailures.Load()),
+		},
+	}
 }

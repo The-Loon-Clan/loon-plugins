@@ -208,6 +208,7 @@ func (p *Plugin) handlePost(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, withErr(back, "failed"))
 		return
 	}
+	p.reportsPosted.Add(1)
 	c.Redirect(http.StatusSeeOther, back)
 }
 
@@ -241,6 +242,7 @@ func (p *Plugin) handleShot(c *gin.Context) {
 
 	stored, err := p.images.FetchImage(ctx, shotDir, remote)
 	if err != nil {
+		p.shotFailures.Add(1)
 		// The intake's own sentence, which is written to be shown: it says
 		// what was wrong with the link and nothing about this site's network.
 		c.Redirect(http.StatusSeeOther, withErr(back, "fetch")+"&miemsg="+urlSafe(err.Error()))
@@ -253,6 +255,7 @@ func (p *Plugin) handleShot(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, withErr(back, "failed"))
 		return
 	}
+	p.shotsFetched.Add(1)
 	c.Redirect(http.StatusSeeOther, back)
 }
 
