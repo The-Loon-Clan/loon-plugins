@@ -75,6 +75,15 @@ func (p *Plugin) renderCard(c *gin.Context) (template.HTML, error) {
 	if viewer == nil || int64(viewer.ID) != subject {
 		return "", nil
 	}
+	// …and not on the PUBLIC profile, even for the owner. This card carries a
+	// verification token and an unlink button -- controls, not facts -- and
+	// the page that says "here is what other members see" is the one place
+	// they should never appear. The check above already means nobody else can
+	// see them; this is so the owner is not shown their own token on a page
+	// they open to check what is public.
+	if core.IsPublicProfile(c) {
+		return "", nil
+	}
 	ctx := c.Request.Context()
 	userID := int(subject)
 

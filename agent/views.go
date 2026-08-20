@@ -71,6 +71,15 @@ func (p *Plugin) renderCard(c *gin.Context) (template.HTML, error) {
 	if !signedIn || int64(viewerID) != subject {
 		return "", nil
 	}
+	// …and not on the PUBLIC profile, even for the owner. The host renders
+	// SlotUserWidget on two pages -- the account-settings profile and
+	// /u/<username> -- and a fleet roster on the page whose whole purpose is
+	// "what other members see" reads as a leak to the person looking at it,
+	// even though the check above means nobody else can. The card belongs
+	// where the member manages the fleet, which is the settings page.
+	if core.IsPublicProfile(c) {
+		return "", nil
+	}
 	ctx := c.Request.Context()
 	agentList, _ := deps.AgentsForUser(ctx, int(subject))
 	if len(agentList) == 0 {
