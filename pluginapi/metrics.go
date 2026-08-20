@@ -24,21 +24,26 @@ import (
 	"github.com/the-loon-clan/loon/core"
 )
 
-// MetricKind is what a value MEANS, which decides how it may be read.
-type MetricKind string
+// MeasurementKind is what a value MEANS, which decides how it may be read.
+type MeasurementKind string
 
 const (
 	// MetricCounter only ever goes up (or resets to zero on restart). A rate
 	// over it is meaningful; its absolute value usually is not.
-	MetricCounter MetricKind = "counter"
+	MetricCounter MeasurementKind = "counter"
 
 	// MetricGauge is a level that moves both ways: a queue depth, a member
 	// count, a timestamp.
-	MetricGauge MetricKind = "gauge"
+	MetricGauge MeasurementKind = "gauge"
 )
 
-// Metric is one measurement.
-type Metric struct {
+// Measurement is one number a plugin exports.
+//
+// Named Measurement rather than Metric because optimization.go already has a
+// Metric — a pre-formatted string for a human reading a recommendation, which
+// is a different thing entirely from a float a scraper reads. Two types called
+// Metric in one package would have been a coin flip at every call site.
+type Measurement struct {
 	// Name is the full metric name, and it is the plugin's to get right:
 	// prefix it with the plugin, suffix it with the unit, and use base units.
 	//
@@ -55,7 +60,7 @@ type Metric struct {
 	// and read by whoever is looking at an unfamiliar metric at 3am.
 	Help string
 
-	Kind MetricKind
+	Kind MeasurementKind
 
 	// Labels are the dimensions. KEEP THEM SMALL AND BOUNDED: every distinct
 	// combination is a separate stored series forever, so a label carrying a
@@ -81,7 +86,7 @@ type MetricSource interface {
 	// Prefer reading counters the plugin already keeps in memory over asking
 	// the database. Where a query is unavoidable, it should be one the plugin
 	// would be happy running every fifteen seconds forever.
-	Metrics(ctx context.Context) []Metric
+	Metrics(ctx context.Context) []Measurement
 }
 
 // MetricSources collects every registered source, keyed by plugin name.
