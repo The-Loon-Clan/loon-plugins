@@ -149,6 +149,28 @@ on the same afternoon, both silently degrading. Anything the *host* registers is
 safe at Provision, and must be registered before `core.Boot` or it is never
 seen.
 
+**A capability an operator might not want is a FEATURE, not a config key.**
+`core.RegisterFeature` in Provision, and name the key on the `View` and `Widget`
+it governs — core then hides both from every nav and every placement, and an
+existing placement comes back still placed when it is switched on. Three things
+that are easy to get wrong:
+
+* **Check it twice.** In the view model, so the control stops being drawn and
+  nothing is queried for it; and in the handler, because a form already open in
+  somebody's browser outlives the page it came from. A feature that only hid its
+  button is one anybody can still use by keeping a tab open.
+* **The Description is for the person deciding.** "Thanks" tells an operator
+  nothing. Say what stops AND what is kept — the fear that stops anybody trying
+  a switch is that it deletes something.
+* **A host mounts routes from `AllViews`, not `Views`.** Route mounting happens
+  once at boot; a feature off at boot would otherwise never mount its route and
+  could never be switched back on without a restart. Mount everything, refuse
+  per request.
+
+Fails ON everywhere — no service, an unregistered key, an unreadable store. A
+flag that fails closed is worse than no flag: the capability vanishes and
+nothing says why.
+
 **A plugin says which half of a site it belongs to; the host does not keep a
 list.** `core.Metadata.Flavours` is `[]string{core.FlavourTracker}` or
 `{core.FlavourIndexer}`, empty for the majority that belong to both, and
