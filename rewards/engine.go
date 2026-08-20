@@ -83,7 +83,11 @@ func (e *Engine) ClaimGrant(ctx context.Context, userID, grantID int64) error {
 	if err != nil {
 		return err
 	}
-	if g == nil || g.UserID != userID {
+	// pluginapi.OwnedBy rather than `g.UserID != userID`: a userID of 0 is what
+	// an unauthenticated caller carries, and it would match a grant owned by 0.
+	// Nothing writes such a grant today, but the rule belongs in one place
+	// rather than in each caller's memory — see pluginapi/ownership.go.
+	if g == nil || !pluginapi.OwnedBy(g.UserID, userID) {
 		return ErrNotOffered
 	}
 	if g.State != StatePending {

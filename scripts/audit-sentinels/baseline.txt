@@ -1,0 +1,51 @@
+# Ownership comparisons reviewed on 20 Aug 2026 and left as they are.
+#
+# Identity = file|function|rule. Line numbers are excluded so a refactor does
+# not churn this file.
+#
+# READ THE GROUP COMMENT BEFORE ADDING A LINE. An entry here is a claim that a
+# viewer id of 0 cannot reach the comparison, or that reaching it costs nothing.
+# It is not a to-do list.
+#
+# `--update-baseline` REWRITES THIS FILE AND LOSES THESE COMMENTS. Regenerate
+# only when you mean to, and put the reasons back.
+#
+# Background: pluginapi/ownership.go states the rule, and scripts/audit-sentinels
+# is what finds where it is missing.
+
+# ── in-memory store doubles ─────────────────────────────────────────
+#
+# These are MemStore implementations that stand in for a PGStore in tests. Each
+# mirrors an equality WHERE clause (`... AND user_id = $2`), and an equality
+# match against 0 selects nothing unless a row owned by 0 exists — which none
+# does, in either the live database or a test one, because nothing writes one.
+#
+# The parity requirement cuts the other way too: making these stricter than the
+# SQL they stand for would be a double that rejects what production accepts,
+# which the checklist calls out as its own kind of wrong.
+#
+# The callers are already authenticated in every case; these are filters, not
+# gates.
+forum/mem.go|*MemStore.DeleteForumThread|compare
+forum/mem.go|*MemStore.GetForumPosts|compare
+forum/mem.go|*MemStore.UpdateForumPost|compare
+forum/mem.go|*MemStore.DeleteForumPost|compare
+rewards/store_mem.go|*MemStore.PreviousMark|compare
+rewards/store_mem.go|*MemStore.GrantsForUser|compare
+rewards/store_mem.go|*MemStore.PendingGrantsFor|compare
+
+# ── requests: same class, another workstream's files ────────────────
+#
+# NOT a clean bill of health. These are the same shape as the ones fixed on
+# 20 Aug — `user.ID != req.UserID && !user.Contributor`, which at a viewer id of
+# 0 against an owner id of 0 resolves to "allowed" — and they are safe for the
+# same reason as everything else in this sweep: no row owned by 0 exists, and
+# the routes sit behind Authenticate() with a nil-user check ahead of them.
+#
+# They are baselined rather than fixed because requests/ belongs to a different
+# workstream and editing it here would collide with work in flight. The fix is
+# one line each: pluginapi.VisibleTo(req.UserID, user.ID, user.Contributor).
+# Hand this group over rather than deleting it.
+requests/handlers.go|*Handlers.RequestDetail|compare
+requests/handlers.go|*Handlers.EditRequest|compare
+requests/handlers.go|*Handlers.FulfillRequest|compare

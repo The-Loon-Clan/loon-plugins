@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // Notification/ledger kinds — MUST match the models.LedgerEntryType
@@ -201,7 +203,8 @@ func (h *Handlers) View(c *gin.Context) {
 		return
 	}
 	// Hidden communities 404 for everyone except the owner + admins.
-	if comm.HiddenAt != nil && !(isAdmin || comm.OwnerUserID == userID) {
+	// OwnedBy, because userID is 0 for an anonymous viewer.
+	if comm.HiddenAt != nil && !pluginapi.VisibleTo(comm.OwnerUserID, userID, isAdmin) {
 		c.String(http.StatusNotFound, "community not found")
 		return
 	}
@@ -488,7 +491,8 @@ func (h *Handlers) ViewThread(c *gin.Context) {
 	// Mod-removed / admin-hidden threads stay visible for mods and
 	// the OP (so they can see the removal reason) but 404 for
 	// everyone else.
-	if (thread.RemovedAt != nil || thread.HiddenAt != nil) && !(role.CanModerate() || thread.UserID == userID) {
+	if (thread.RemovedAt != nil || thread.HiddenAt != nil) &&
+		!pluginapi.VisibleTo(thread.UserID, userID, role.CanModerate()) {
 		c.String(http.StatusNotFound, "thread not found")
 		return
 	}
@@ -819,7 +823,7 @@ func (h *Handlers) Settings(c *gin.Context) {
 		c.String(http.StatusNotFound, "community not found")
 		return
 	}
-	if comm.OwnerUserID != userID && !isAdmin {
+	if !pluginapi.VisibleTo(comm.OwnerUserID, userID, isAdmin) {
 		c.String(http.StatusForbidden, "owner only")
 		return
 	}
@@ -840,7 +844,7 @@ func (h *Handlers) SaveSettings(c *gin.Context) {
 		c.String(http.StatusNotFound, "community not found")
 		return
 	}
-	if comm.OwnerUserID != userID && !isAdmin {
+	if !pluginapi.VisibleTo(comm.OwnerUserID, userID, isAdmin) {
 		c.String(http.StatusForbidden, "owner only")
 		return
 	}

@@ -11,6 +11,8 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // Thanks — one member telling another that what they said was useful.
@@ -163,7 +165,7 @@ func (p *Plugin) handleThanks(c *gin.Context) {
 	//   own comment  — thanking yourself is the first thing anybody tries, and
 	//                  it would pay you for commenting.
 	//   removed      — a withheld comment must not still be earning.
-	if target.UserID == u.ID || target.Deleted() {
+	if pluginapi.OwnedBy(target.UserID, u.ID) || target.Deleted() {
 		c.Redirect(http.StatusSeeOther, back)
 		return
 	}

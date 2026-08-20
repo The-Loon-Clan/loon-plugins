@@ -22,6 +22,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // pageSize mirrors the host's release-list page size.
@@ -427,7 +429,7 @@ func (h *Handlers) DeleteReleaseGroupNewsPost(c *gin.Context) {
 		return
 	}
 
-	allowed := user.Mod || post.AuthorUserID == user.ID
+	allowed := pluginapi.VisibleTo(post.AuthorUserID, user.ID, user.Mod)
 	if !allowed {
 		isOwner, _ := h.deps.Groups.IsReleaseGroupOwner(ctx, group.ID, user.ID)
 		allowed = isOwner

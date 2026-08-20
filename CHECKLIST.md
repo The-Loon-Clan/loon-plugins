@@ -122,6 +122,31 @@ the site_settings bug shipped because nobody ever did.
       allowlisted identifiers are the two sanctioned escapes, each with a
       reasoned `sqllint:allow`. The directive lives OUTSIDE the SQL string
       (a `--`-less comment inside one killed the local-link sweep for days).
+- [ ] **MUST** — ownership is decided by `pluginapi.OwnedBy` / `VisibleTo`,
+      never by a bare `record.UserID == viewerID`, and privilege is a
+      SEPARATE BOOLEAN — never a magic id.
+
+      User id 0 means two things at once: the id a request carries when
+      **nobody is signed in**, and the id reserved for **the system**
+      (achievements refuses to grant a badge to user 0 on that ground). Most
+      plugin routes mount behind `Authenticate()`, which lets anonymous
+      requests through in the site's public access mode — so a bare equality
+      hands an anonymous viewer anything owned by 0.
+
+      Found FOUR times in two days, in four plugins, always by accident:
+      `playlists.owned`, `playlists.Show` (two lines below a correctly-guarded
+      one), `comments.Delete` — which used 0 to MEAN "staff", so 0 also meant
+      everyone and an anonymous caller removed any comment — and
+      `tickets.ticketVisibleTo`, on a support ticket. Each was correct in the
+      code around it and wrong on the one input nobody passes by hand.
+
+      Nothing enforces that no row is owned by 0. On 20 Aug 2026 none was
+      (63 identity columns across every schema; the only 0 was a `login_logs`
+      row for a failed sign-in, which is correct). The whole class rests on
+      that, so the rule lives in one function instead of in each author's
+      memory.
+
+      Verify: `make sentinels` — baselined, so a new one fails.
 - [ ] **MUST** — gates fail CLOSED. An unwired entitlements service means
       nobody may pass, not everybody. A signed-in member refused by an
       entitlement goes to `/`, not `/login` (they ARE logged in; a login
@@ -539,8 +564,9 @@ make itest      # migrations + SQL semantics against a disposable Postgres/Redis
 From THIS repo (`loon-plugins`), which has its own Makefile:
 
 ```
-make check      # vet (both tags), sqllint, unit tests
+make check      # vet (both tags), sqllint, sentinels, unit tests
 make itest      # the integration-tagged suite against a disposable Postgres
+make sentinels  # ownership checks a zero viewer id could satisfy
 make fmt        # gofmt as an error (over-reports on Windows — see the target)
 ```
 

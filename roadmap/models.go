@@ -188,10 +188,17 @@ type FlowProposalFilter struct {
 	Tag    string
 	Status string
 	Sort   string
-	// Mine restricts the listing to one author's requests. Zero means no
-	// restriction; it carries the viewer's own id rather than a bool so the
-	// query binds a value instead of switching SQL on a flag.
+	// Mine carries the viewer's own id, and MineOnly says whether to restrict
+	// the listing to it.
+	//
+	// TWO FIELDS rather than "zero means no restriction". That trick makes one
+	// value mean both "everybody" and "the person who is not signed in", which
+	// is the shape that let comments.Delete remove anybody's comment. Here it
+	// was only a listing filter and the rows are public, so the cost was an
+	// anonymous "My Requests" showing EVERY request instead of none — wrong
+	// rather than dangerous. Same shape, so it goes the same way.
 	Mine     int
+	MineOnly bool
 	Page     int
 	PageSize int
 }

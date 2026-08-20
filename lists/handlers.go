@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // Handlers serves /lists* + /community/watchlists.
@@ -112,9 +114,13 @@ func (h *Handlers) ViewList(c *gin.Context) {
 		c.String(http.StatusNotFound, "list not found")
 		return
 	}
-	// Only owner can view private lists
+	// Only owner can view private lists.
+	//
+	// OwnedBy, not `list.UserID != userID`: Viewer returns 0 for an
+	// anonymous request and this route is behind Authenticate(), which
+	// lets anonymous through in the site's public access mode.
 	userID, _, _ := deps.Viewer(c)
-	if !list.Public && list.UserID != userID {
+	if !list.Public && !pluginapi.OwnedBy(list.UserID, userID) {
 		c.String(http.StatusForbidden, "this list is private")
 		return
 	}
@@ -125,7 +131,7 @@ func (h *Handlers) ViewList(c *gin.Context) {
 		List:        list,
 		Items:       items,
 		IsFollowing: isFollowing,
-		IsOwner:     list.UserID == userID,
+		IsOwner:     pluginapi.OwnedBy(list.UserID, userID),
 		ViewerID:    userID,
 		NzbCardCSS:  deps.NzbCardCSS(),
 		ReportModal: deps.ReportModal(c),
@@ -149,7 +155,7 @@ func (h *Handlers) DownloadAllList(c *gin.Context) {
 		c.String(http.StatusNotFound, "list not found")
 		return
 	}
-	if !list.Public && list.UserID != userID {
+	if !list.Public && !pluginapi.OwnedBy(list.UserID, userID) {
 		c.String(http.StatusForbidden, "this list is private")
 		return
 	}

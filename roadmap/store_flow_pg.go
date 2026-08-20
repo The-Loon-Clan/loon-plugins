@@ -513,7 +513,7 @@ func (r *PGFlowStore) ListFlowProposals(ctx context.Context, f FlowProposalFilte
 		   AND n.created_by IS NOT NULL
 		   AND ($1 = '' OR ($1 = 'untagged' AND COALESCE(n.tag, '') = '') OR n.tag = $1)
 		   AND ($2 = '' OR n.status = $2)
-		   AND ($3 = 0 OR n.created_by = $3)`, f.Tag, f.Status, f.Mine); err != nil {
+		   AND (NOT $4 OR n.created_by = $3)`, f.Tag, f.Status, f.Mine, f.MineOnly); err != nil {
 		return nil, 0, err
 	}
 
@@ -541,9 +541,9 @@ func (r *PGFlowStore) ListFlowProposals(ctx context.Context, f FlowProposalFilte
 		   AND n.created_by IS NOT NULL
 		   AND ($1 = '' OR ($1 = 'untagged' AND COALESCE(n.tag, '') = '') OR n.tag = $1)
 		   AND ($2 = '' OR n.status = $2)
-		   AND ($3 = 0 OR n.created_by = $3)
+		   AND (NOT $6 OR n.created_by = $3)
 		 `+orderClause+`
-		 LIMIT $4 OFFSET $5`, f.Tag, f.Status, f.Mine, f.PageSize, offset)
+		 LIMIT $4 OFFSET $5`, f.Tag, f.Status, f.Mine, f.PageSize, offset, f.MineOnly)
 	return out, total, err
 }
 

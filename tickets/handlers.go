@@ -18,6 +18,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // Deps carries the shared app-domain dependencies. Set from
@@ -142,7 +144,7 @@ func (h *Handlers) ReplyTicket(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	ticket, err := h.store.GetTicketByID(ctx, id)
-	if err != nil || (ticket.UserID != user.ID && !user.Admin) {
+	if err != nil || !pluginapi.VisibleTo(ticket.UserID, user.ID, user.Admin) {
 		c.String(http.StatusNotFound, "ticket not found")
 		return
 	}
@@ -275,7 +277,12 @@ func clampSubject(s string) string {
 // experiment (host migration 207, retired 2026-08-16) briefly widened this;
 // the `public` column it read still exists in old databases but is dead.
 func ticketVisibleTo(t *SupportTicket, viewerID int, isAdmin bool) bool {
-	return t.UserID == viewerID || isAdmin
+	// pluginapi.VisibleTo rather than `t.UserID == viewerID || isAdmin`:
+	// viewerID is 0 for an anonymous request, and a support ticket is the
+	// last thing that should be handed to one. It keeps privilege as a
+	// separate argument for the same reason — encoding staff as a magic id
+	// is what made comments.Delete remove anybody's comment.
+	return pluginapi.VisibleTo(t.UserID, viewerID, isAdmin)
 }
 
 // roleData resolves role styling for the ticket detail chrome, falling back to

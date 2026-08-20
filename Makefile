@@ -64,5 +64,15 @@ fmt:
 sqllint:
 	$(GO) run ./scripts/lint-sql ./...
 
+## sentinels: ownership checks a zero viewer id could satisfy
+##
+## User id 0 is both "nobody is signed in" and the reserved system id, so
+## `record.UserID == viewerID` is true for an anonymous viewer whenever the
+## record's owner is 0. Found four times by accident in two days before this
+## existed. pluginapi/ownership.go states the rule; this finds where it is
+## missing. Baselined like sqllint.
+sentinels:
+	$(GO) run ./scripts/audit-sentinels ./...
+
 ## check: everything CI runs except itest
-check: vet sqllint test
+check: vet sqllint sentinels test

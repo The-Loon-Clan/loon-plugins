@@ -39,6 +39,10 @@ jobs:
           # and only surface when somebody ran the integration suite.
           go vet -tags integration ./...
 
+      - name: ownership sentinels
+        working-directory: loon-plugins
+        run: go run ./scripts/audit-sentinels ./...
+
       - name: test
         working-directory: loon-plugins
         run: go test ./...

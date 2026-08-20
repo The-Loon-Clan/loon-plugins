@@ -486,8 +486,8 @@ func (h *Handlers) RecentProposals(c *gin.Context) {
 	// than to a user id in the query string -- ?mine=<someone else> would
 	// otherwise be an author filter for any account, which is not what the
 	// control says it does.
-	mine := 0
-	if c.Query("mine") != "" {
+	mine, mineOnly := 0, c.Query("mine") != ""
+	if mineOnly {
 		if u := h.deps.Viewer(c); u != nil {
 			mine = u.ID
 		}
@@ -497,6 +497,7 @@ func (h *Handlers) RecentProposals(c *gin.Context) {
 		Status:   status,
 		Sort:     sort,
 		Mine:     mine,
+		MineOnly: mineOnly,
 		Page:     page,
 		PageSize: pageSize,
 	})
@@ -566,7 +567,7 @@ func (h *Handlers) RecentProposals(c *gin.Context) {
 		"FilterTag":     tag,
 		"FilterStatus":  status,
 		"FilterSort":    sort,
-		"FilterMine":    mine != 0,
+		"FilterMine":    mineOnly,
 		"Facets":        facets,
 		"TotalCount":    total,
 		"CurrentUserID": currentUserID,
