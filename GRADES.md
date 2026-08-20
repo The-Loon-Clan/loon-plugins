@@ -23,14 +23,14 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 | plugin | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | agent | ✓ | — | ✓ | — | — | ~ | ✓ | ✗ | ✓ | ~ | — | — | ✓ | ✓ |
-| anidbscraper | ✓ | — | ~ | ✗ | ~ | ✗ | — | — | — | ✓ | — | ✓ | ✗ | ✗ |
+| anidbscraper | ✓ | — | ~ | ✗ | ~ | ✗ | — | — | — | ✓ | — | ✓ | ✓ | ✗ |
 | backup | ✓ | ✓ | ✓ | ~ | ✓ | ✓ | ✓ | ~ | — | ~ | ✓ | ✓ | ✓ | ✓ |
-| backups | ✓ | — | ✓ | ~ | ~ | ~ | ~ | — | — | — | — | ~ | ✗ | ✓ |
-| catalog | ✓ | ✓ | ✓ | ~ | — | — | ~ | — | — | ~ | — | — | ✗ | ~ |
+| backups | ✓ | — | ✓ | ~ | ~ | ~ | ~ | — | — | — | — | ~ | ✓ | ✓ |
+| catalog | ✓ | ✓ | ✓ | ~ | — | — | ~ | — | — | ~ | — | — | ✓ | ~ |
 | chat | ✓ | — | ✓ | ✓ | — | ✓ | — | ✗ | ~ | ~ | — | ~ | ✓ | ~ |
 | communities | ✓ | ✗ | ~ | ✗ | — | ✓ | ✗ | ✗ | ~ | ~ | — | ~ | ✓ | ~ |
 | curation | ✓ | — | ✓ | ~ | ✓ | ✓ | ✓ | — | — | ~ | — | ✓ | ✓ | ✓ |
-| dailyreward | ✓ | ✓ | ~ | ~ | — | ~ | ✗ | ✗ | ~ | ~ | — | ✓ | ✗ | ~ |
+| dailyreward | ✓ | ✓ | ~ | ~ | — | ~ | ✗ | ✗ | ~ | ~ | — | ✓ | ✓ | ~ |
 | dbmaint | ✓ | — | ~ | — | ~ | ✓ | ~ | — | — | — | — | ✓ | ~ | ✓ |
 | discord | ✓ | — | ~ | ~ | ✓ | ✓ | ✓ | ✗ | ✓ | ~ | — | ✓ | ✓ | ~ |
 | donations | ✓ | ✗ | ~ | ✓ | — | ~ | ✗ | ✗ | ~ | ~ | ✓ | ~ | ✓ | ~ |
@@ -38,16 +38,16 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 | events | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ | — | — | ~ | — | ✓ | ✓ | ✓ |
 | feeds | ✓ | — | ~ | ~ | ~ | ✓ | ~ | — | — | ~ | — | ✓ | ✓ | ✓ |
 | forum | ✓ | ~ | ~ | ✓ | — | ✓ | ✗ | ✗ | ~ | ~ | — | ~ | ✓ | ~ |
-| hitrun | ✓ | ~ | ~ | ✗ | ✓ | ~ | ✗ | ~ | ✗ | ~ | — | ~ | ✗ | ~ |
+| hitrun | ✓ | ~ | ~ | ✗ | ✓ | ~ | ✗ | ~ | ✗ | ~ | — | ~ | ✓ | ~ |
 | irc | ✓ | — | ✓ | ✗ | ✓ | ✓ | ✗ | ✗ | ✓ | ~ | — | ✓ | ~ | ~ |
 | lists | ✓ | — | ~ | ✗ | — | — | — | ✗ | ~ | ~ | — | ~ | ~ | ✓ |
 | logs | ✓ | — | ✓ | — | ~ | ✓ | ✓ | ~ | — | ~ | — | ✓ | ✓ | ✓ |
 | messages | ✓ | ✗ | ~ | ✓ | — | ✓ | ✗ | ✗ | ~ | ✓ | — | ~ | ~ | ~ |
 | news | ✓ | ~ | ✗ | ✗ | — | ✓ | ✗ | ✗ | ~ | ~ | — | ~ | ~ | ~ |
 | offers | ✓ | — | ✓ | ✓ | ~ | ~ | ✗ | ✗ | ~ | ~ | ✓ | ✓ | ✓ | ~ |
-| perks | ✓ | ~ | ~ | ✗ | ~ | ✓ | ✗ | ~ | ✓ | ~ | — | ~ | ✗ | ~ |
-| playlists | ✓ | ✓ | ~ | ✓ | — | ~ | ✗ | ~ | ~ | ~ | — | ✗ | ✗ | ~ |
-| pointstore | ✓ | ~ | ~ | ✗ | — | ~ | ✗ | ✗ | ✓ | ~ | — | ~ | ✗ | ~ |
+| perks | ✓ | ~ | ~ | ✗ | ~ | ✓ | ✗ | ~ | ✓ | ~ | — | ~ | ✓ | ~ |
+| playlists | ✓ | ✓ | ~ | ✓ | — | ~ | ✗ | ~ | ~ | ~ | — | ✗ | ✓ | ~ |
+| pointstore | ✓ | ~ | ~ | ✗ | — | ~ | ✗ | ✗ | ✓ | ~ | — | ~ | ✓ | ~ |
 | ranks | ✓ | ✓ | ~ | ~ | ✓ | ✓ | ~ | ~ | ✓ | ~ | — | ✓ | ~ | ✓ |
 | releasegroups | ✓ | — | ✓ | ✗ | ✓ | ✓ | ~ | ✗ | ~ | ~ | — | ~ | ✓ | ✓ |
 | reports | ✓ | — | ~ | ~ | — | ~ | ✓ | ✗ | — | ~ | — | ✓ | ✓ | ✓ |
@@ -55,10 +55,10 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 | rewards | ✓ | ✓ | ~ | ~ | ~ | ✓ | ✓ | ✗ | ✓ | ~ | ~ | ✓ | ✓ | ✓ |
 | roadmap | ~ | ✗ | ~ | ✗ | ✓ | ✓ | ✗ | ✗ | ~ | ~ | ~ | ~ | ~ | ✓ |
 | scraper | ✓ | — | ✓ | ~ | ✓ | ~ | — | — | — | ✓ | — | ✓ | ✓ | ~ |
-| seedlock | ✓ | ~ | ~ | ✗ | — | ~ | ✗ | ~ | ✓ | ~ | — | ~ | ✗ | ~ |
-| stats | ✓ | — | ✓ | — | ✓ | ~ | — | ✗ | ✓ | ~ | — | ~ | ✗ | ✓ |
+| seedlock | ✓ | ~ | ~ | ✗ | — | ~ | ✗ | ~ | ✓ | ~ | — | ~ | ✓ | ~ |
+| stats | ✓ | — | ✓ | — | ✓ | ~ | — | ✗ | ✓ | ~ | — | ~ | ✓ | ✓ |
 | store | ✓ | ✓ | ~ | ✓ | — | ~ | ✗ | ✗ | ~ | ~ | — | ~ | ~ | ✓ |
-| tickets | ~ | ~ | ✗ | ✓ | — | ~ | ✗ | ✗ | ~ | ~ | — | ~ | ✗ | ~ |
+| tickets | ~ | ~ | ✗ | ✓ | — | ~ | ✗ | ✗ | ~ | ~ | — | ~ | ✓ | ~ |
 | tracker | ✓ | ✓ | ✓ | ✗ | ~ | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ~ | ✓ | ✓ |
 | uploads | ✓ | — | ✓ | — | — | ✓ | — | ✗ | ~ | ~ | — | ✓ | ~ | ✓ |
 | usenet | ✓ | ~ | ✓ | ~ | ✓ | ✓ | ✓ | — | — | ~ | ✓ | ✓ | ✓ | ✓ |
@@ -132,7 +132,7 @@ Most severe first. These are bugs, not style.
 | 1 | **UI speaks Bootstrap, not the host** — 23 ✗ + 6 ~; ~75 template files; 38 uncaptioned tables | nearly everyone with templates | tracker's three templates are the worked example: host vocabulary, captions, no repeated titles. Only tracker passes clean. |
 | 2 | **Admin surfaces invisible to the hub** — 18 ✗ | forum, communities, messages, news, wiki, playlists, tickets, store, donations, offers, perks, hitrun, seedlock, dailyreward, pointstore, requests, irc, roadmap | register a `SlotAdminPage`/`SlotAdminSettings` view instead of hand-mounting `/admin/*` routes; the hub ranges over views. |
 | 3 | **Nothing to build on: no events** — 13 ✗ + 11 ~ | tracker, perks, hitrun, seedlock, pointstore, communities, news, releasegroups, requests, lists, irc, roadmap, anidbscraper | `DeclareEvent` the notable facts with honest flags; the ecosystem's achievements/stats can only see what is announced. |
-| 4 | **No README** — 11 ✗ | backups, stats, tickets*, catalog, ~~scraper~~ (20 Aug), anidbscraper, playlists, perks, hitrun, seedlock, dailyreward, pointstore (*tickets has one that contradicts the code, which is worse) | tracker/README.md is the exemplar; §13 lists the sections. |
+| 4 | ~~**No README**~~ — **0 ✗ (20 Aug)** | every plugin has one. The last eleven — backups, stats, catalog, anidbscraper, playlists, perks, hitrun, seedlock, dailyreward, pointstore, and `pluginapi` itself, which was never on this list — landed together, and tickets' contradicting Surface table was corrected against the route table. | tracker/README.md is the exemplar; §13 lists the sections, and its verify step (diff the Surface table against the registration log) is what caught tickets documenting two routes that do not exist. |
 | 5 | **i18n-readiness** — 0 ✓ passes among plugins with member strings | everyone | strings into templates, host helpers for dates/bytes; §10 is written so the seam lands as a wrap, not a rewrite. |
 | 6 | **Zero-test plugins** — 1 ✗ | anidbscraper (then chat 0.8%, scraper 3%, releasegroups 5.8%, pointstore 6.4%) | §14; the template-execution test is the highest-value first test for any of them. **20 Aug:** backups, playlists and stats were paid off along with cosmetics, polls and applications; anidbscraper is left deliberately, being a stub whose bodies are not extracted yet. |
 | 7 | **Job hygiene** — repeated interval literals, pause skipped on manual triggers, `SetIdle(time.Time{})` | backups, offers, requests, economy, feeds, logs, rewards, events, stats | one interval const; check `IsPaused` on the trigger path; idle with a real horizon. |

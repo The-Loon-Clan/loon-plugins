@@ -9,13 +9,22 @@ Users see it at `/support`; staff triage at `/admin/tickets`.
 
 ## Surface
 
-- **authed** — `GET /support`, `POST /support`, `GET /support/:id`,
-  `POST /support/:id/reply`
-- **staff** — `GET /admin/tickets`, `POST /admin/tickets/:id/status`,
-  `POST /admin/tickets/:id/note`
+| Route | Access | Notes |
+|---|---|---|
+| `GET /support` | authed | The member's own tickets. |
+| `POST /support` | authed | Open one. |
+| `GET /support/:id` | owner or admin | See *Hooks* for who "or admin" is. |
+| `POST /support/:id/reply` | owner or staff | A member's reply **reopens** a closed ticket. |
+| `GET /admin/tickets` | staff | Triage. |
+| `POST /admin/tickets/:id/update` | staff | Status **and** the admin note, in one form and one statement. |
+| `POST /admin/tickets/:id/delete` | staff | |
 
-Process kinds: none declared, so it provisions everywhere the host runs. There
-is no background work.
+`Flavours: [any]`. Process kinds: none declared, so it provisions everywhere
+the host runs. There is no background work.
+
+After an update the handler returns the staff member to wherever they came
+from — the ticket detail page if the `Referer` says so, the queue otherwise —
+so triaging from a ticket does not bounce them back to the list.
 
 ## Data
 
@@ -68,6 +77,13 @@ Config keys: none. `Metadata.Requires`: none.
 Absence is information here: unlike communities, this surface feeds nothing
 else on the site.
 
+**Visibility goes through `pluginapi.VisibleTo`**, not a bare
+`t.UserID == viewerID`. A support ticket is private by definition and the
+viewer id is 0 for an anonymous request, so an equality check would hand one
+over to a signed-out visitor if a ticket were ever owned by 0. Privilege stays
+a separate boolean for the same reason it does everywhere else: encoding
+"staff" as a magic id is what once let an anonymous caller delete any comment.
+
 ## Lifecycle
 
 - **Provision** — checks the seams a render cannot proceed without
@@ -86,9 +102,20 @@ else on the site.
 
 ## Testing
 
-- Unit-tested: ticket visibility (`ticketVisibleTo` — who may read a ticket
-  they do not own), and the pure helpers, in `tickets_test.go`.
-- Needs integration (live DB): `PGStore` is a SQL passthrough. The status and
-  note updates and the reply ordering are single statements whose correctness
-  is the SQL itself, which only a real database exercises. That gap predates
-  the extraction and moved with it.
+`go test ./tickets/` for the unit suite; `make itest` (or
+`bash scripts/itest.sh ./tickets/`) for the one that needs Postgres.
+
+- **Unit** — ticket visibility (`ticketVisibleTo`: who may read a ticket they
+  do not own), the events, and the pure helpers.
+- **Integration** — `reopen_integration_test.go` covers reopen-on-member-reply
+  against a real database. That behaviour lives entirely in one SQL guard
+  (`WHERE id=$1 AND status='closed'`), so a Go-level fake would only assert
+  what the fake was told to do: the two things worth proving are that the guard
+  fires for a closed ticket and stays silent for an open one, and both are
+  properties of the statement. It returns a bool so the caller announces a
+  reopen only when a row actually changed.
+- **Still uncovered** — the rest of `PGStore` is a SQL passthrough. The status
+  and note update and the reply ordering are single statements whose
+  correctness is the SQL itself, and no test exercises them. That gap predates
+  the extraction and moved with it; `pluginapi/pgtest` is the harness to close
+  it with now.
