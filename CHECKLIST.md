@@ -167,6 +167,32 @@ the site_settings bug shipped because nobody ever did.
       submit listener" made a rendered token unnecessary, which described a
       mechanism no host had. All of them had been refusing every operator and
       member who tried, for as long as they had existed.
+- [ ] **MUST** — outbound HTTP comes from `core.HTTPClient`, never a bare
+      `&http.Client{}`; and **a credential must not reach an error**.
+
+      The second half is the one that bites. `net/http` embeds the full URL in
+      the `*url.Error` it returns from any transport failure, so the obvious
+
+      ```go
+      return fmt.Errorf("tmdb request: %w", err)
+      ```
+
+      writes an API key held in the query string into `error_logs`, where it
+      renders on an admin page — on a DNS blip, with nothing about the failure
+      hinting a credential went with it. Wrap every client error in
+      `pluginapi.RedactURLError`, and prefer a header over a query parameter
+      wherever the upstream allows one.
+
+      Pick the right client, too: `SafeFetch` for any URL a MEMBER supplied
+      (it carries the SSRF dial guard), `API`/`Media`/`HeavyImport` for fixed
+      operator-configured endpoints. Fetching a member-supplied URL from a
+      plugin at all is usually wrong — `pluginapi.ImageIntake` is the seam.
+- [ ] **MUST** — a plugin that contacts a third party SAYS SO in its README:
+      every endpoint, what is sent, what credential it needs, and anything the
+      operator cannot fix. `scraper/README.md` is the worked example — seven
+      services, and it leads with what leaves the site rather than burying it.
+      An operator cannot make a privacy decision about a call they do not know
+      is happening.
 - [ ] **MUST** — machine endpoints carry their own credential (passkey in
       path, API key) and no session; a torrent client cannot follow a login
       redirect and will parse the login page as a wire response.

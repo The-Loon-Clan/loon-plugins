@@ -54,7 +54,7 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 | requests | ✓ | — | ✓ | ✗ | ~ | ~ | ✗ | ✗ | ~ | ~ | — | ~ | ~ | ✓ |
 | rewards | ✓ | ✓ | ~ | ~ | ~ | ✓ | ✓ | ✗ | ✓ | ~ | ~ | ✓ | ✓ | ✓ |
 | roadmap | ~ | ✗ | ~ | ✗ | ✓ | ✓ | ✗ | ✗ | ~ | ~ | ~ | ~ | ~ | ✓ |
-| scraper | ✓ | — | ✗ | ~ | ✓ | ~ | — | — | — | ✓ | — | ✓ | ✗ | ~ |
+| scraper | ✓ | — | ✓ | ~ | ✓ | ~ | — | — | — | ✓ | — | ✓ | ✓ | ~ |
 | seedlock | ✓ | ~ | ~ | ✗ | — | ~ | ✗ | ~ | ✓ | ~ | — | ~ | ✗ | ~ |
 | stats | ✓ | — | ✓ | — | ✓ | ~ | — | ✗ | ✓ | ~ | — | ~ | ✗ | ✓ |
 | store | ✓ | ✓ | ~ | ✓ | — | ~ | ✗ | ✗ | ~ | ~ | — | ~ | ~ | ✓ |
@@ -109,9 +109,19 @@ Most severe first. These are bugs, not style.
    store ×2, offers ×3, roadmap's cytoscape, tickets ×2, reports) — all dead
    under the host's `script-src 'self'`, so every feature behind them is
    broken for members, and each is an undisclosed external call besides.
-9. **scraper's seven external APIs are undisclosed and un-proxied** — bare
-   `http.Client` instead of the host's SSRF-safe client, API key in the URL
-   (sources/tmdb/tmdb.go:107), and no README to disclose any of it.
+9. ~~**scraper's seven external APIs are undisclosed and un-proxied**~~ —
+   **FIXED 20 Aug**, and the diagnosis was partly wrong, which is worth keeping.
+   The real defect was not SSRF: a raw `&http.Client{}` has a nil Transport and
+   therefore already used `DefaultTransport`, proxy settings and all, and the
+   shared transport behind `NewAPI` carries no dial guard either. What was
+   actually happening is that **the TMDB key was being written to `error_logs`**
+   — `net/http` embeds the full URL in the `*url.Error` it returns, so
+   `fmt.Errorf("%w", err)` put the credential on an admin page on any DNS blip.
+   Now redacted via `pluginapi.RedactURLError` (demonstrated against a real
+   client, not reasoned about), a v4 TMDB token goes in a header, the seven
+   bespoke clients are one pooled `httpclient.NewAPI`, and `scraper/README.md`
+   discloses every endpoint — including that AniDB's httpapi is plain HTTP with
+   the client name in the query, which is unfixable here.
 10. **dailyreward emits its reward event before `Points.Award` can fail**
     (views.go:127-134) — the event can announce points that were never paid.
 
@@ -122,7 +132,7 @@ Most severe first. These are bugs, not style.
 | 1 | **UI speaks Bootstrap, not the host** — 23 ✗ + 6 ~; ~75 template files; 38 uncaptioned tables | nearly everyone with templates | tracker's three templates are the worked example: host vocabulary, captions, no repeated titles. Only tracker passes clean. |
 | 2 | **Admin surfaces invisible to the hub** — 18 ✗ | forum, communities, messages, news, wiki, playlists, tickets, store, donations, offers, perks, hitrun, seedlock, dailyreward, pointstore, requests, irc, roadmap | register a `SlotAdminPage`/`SlotAdminSettings` view instead of hand-mounting `/admin/*` routes; the hub ranges over views. |
 | 3 | **Nothing to build on: no events** — 13 ✗ + 11 ~ | tracker, perks, hitrun, seedlock, pointstore, communities, news, releasegroups, requests, lists, irc, roadmap, anidbscraper | `DeclareEvent` the notable facts with honest flags; the ecosystem's achievements/stats can only see what is announced. |
-| 4 | **No README** — 12 ✗ | backups, stats, tickets*, catalog, scraper, anidbscraper, playlists, perks, hitrun, seedlock, dailyreward, pointstore (*tickets has one that contradicts the code, which is worse) | tracker/README.md is the exemplar; §13 lists the sections. |
+| 4 | **No README** — 11 ✗ | backups, stats, tickets*, catalog, ~~scraper~~ (20 Aug), anidbscraper, playlists, perks, hitrun, seedlock, dailyreward, pointstore (*tickets has one that contradicts the code, which is worse) | tracker/README.md is the exemplar; §13 lists the sections. |
 | 5 | **i18n-readiness** — 0 ✓ passes among plugins with member strings | everyone | strings into templates, host helpers for dates/bytes; §10 is written so the seam lands as a wrap, not a rewrite. |
 | 6 | **Zero-test plugins** — 1 ✗ | anidbscraper (then chat 0.8%, scraper 3%, releasegroups 5.8%, pointstore 6.4%) | §14; the template-execution test is the highest-value first test for any of them. **20 Aug:** backups, playlists and stats were paid off along with cosmetics, polls and applications; anidbscraper is left deliberately, being a stub whose bodies are not extracted yet. |
 | 7 | **Job hygiene** — repeated interval literals, pause skipped on manual triggers, `SetIdle(time.Time{})` | backups, offers, requests, economy, feeds, logs, rewards, events, stats | one interval const; check `IsPaused` on the trigger path; idle with a real horizon. |
@@ -170,7 +180,7 @@ repeat it here unless it is the worst instance).
 - **requests** — declare created/fulfilled/boosted events; admin oversight page; fix stale README lifecycle.
 - **rewards** — maintain() SetError + real horizon; declare grant/claim events; host vocabulary.
 - **roadmap** — bundle cytoscape locally; move eight tables into plugin migrations; SlotAdminPage CRUD.
-- **scraper** — README disclosing all seven services; host SSRF-safe client; keys out of URLs. *(theporndb tested 20 Aug: the JAV routing regex, the cover-preference ladder, and the mapping.)*
+- **scraper** — DONE 20 Aug: README disclosing all seven services, pooled `httpclient.NewAPI` in place of seven bespoke clients, TMDB v4 token in a header, and every outbound error redacted — the key was reaching `error_logs`. *(theporndb tested 20 Aug: the JAV routing regex, the cover-preference ladder, and the mapping.)* Still open: nothing verifies a source honours the egress proxy, and AniDB remains cleartext by upstream design.
 - **seedlock** — reasoned sqllint:allow on views.go:143; admin view of held claims; README.
 - **stats** — README; read the snapshot back from shared cache on web processes. *(Tests done 20 Aug: the job-never-left-running rule, and that a cache failure costs the persisted copy but not the page.)*
 - **store** — drop two CDN scripts; SlotAdminPage; fix README's "ships no templates" claim.
