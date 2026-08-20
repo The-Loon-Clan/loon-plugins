@@ -22,7 +22,12 @@
     <div class="panel__body">
         <p class="poll__question">{{.Question}}</p>
 
-        {{if .ShowResults}}
+        {{/* A tally needs something to tally. An 'always' poll nobody has
+             answered yet would otherwise open with a column of 0% bars, which
+             reads as a widget that failed rather than as a question nobody has
+             got to — and the ballot underneath is the only thing on the card
+             worth looking at. */}}
+        {{if and .ShowResults .Total}}
         <ul class="poll__results">
             {{range .Options}}
             <li class="poll__result{{if .Mine}} poll__result--mine{{end}}">
@@ -45,7 +50,17 @@
         </p>
         {{end}}
 
-        {{if .CanVote}}
+        {{/* Closed, open-and-yours-to-answer, or signed out — and CanVote is
+             already "signed in AND still open", so the last branch needs no
+             test of its own. */}}
+        {{if .Closed}}
+            {{if not .Total}}
+            {{/* Ran and finished with nobody answering. Said out loud, because
+                 the alternative is a card showing a question, no ballot and no
+                 numbers, which looks broken rather than ignored. */}}
+            <p class="m-0 small text-muted">This poll closed without a vote.</p>
+            {{end}}
+        {{else if .CanVote}}
             {{if .Voted}}
             {{/* Already answered. The ballot folds away: present, and not the
                  loudest thing on a card whose point is the result above it.
@@ -63,12 +78,9 @@
             {{else}}
             {{template "poll-ballot" .}}
             {{end}}
-        {{else if not .SignedIn}}
+        {{else}}
         <p class="m-0 small text-muted"><a href="/login">Sign in</a> to vote.</p>
         {{end}}
-        {{/* Nothing more for a signed-in member on a CLOSED poll: showResults
-             hands the numbers to everybody once it is over, so the results are
-             already above and there is no ballot to offer. */}}
 
         {{if and (not .Closed) .ClosesAt}}
         <p class="poll__closes small text-muted">Closes {{date .ClosesAt}}</p>
