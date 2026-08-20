@@ -27,12 +27,13 @@ CREATE TABLE IF NOT EXISTS cosmetic_owned (
     PRIMARY KEY (user_id, slug)
 );
 
--- The renderer's query: every member wearing something, right now. Partial on
--- the live rows because that IS the query — an index over expired unlocks
--- would be pages of rows nothing ever reads.
-CREATE INDEX IF NOT EXISTS cosmetic_owned_live_idx
-    ON cosmetic_owned (user_id)
-    WHERE expires_at IS NULL OR expires_at > NOW();
+-- NO INDEX beyond the primary key, on purpose and after trying one. The first
+-- draft added a partial index over the live rows, which Postgres refuses
+-- outright: NOW() is not IMMUTABLE and cannot appear in an index predicate.
+-- The right answer turned out to be that the index was redundant anyway —
+-- every query here either looks up one member (served by the PK's leading
+-- column) or joins on the whole key. The expiry is a filter on rows already
+-- found, not a way of finding them.
 
 CREATE TABLE IF NOT EXISTS cosmetic_equipped (
     user_id BIGINT NOT NULL,
