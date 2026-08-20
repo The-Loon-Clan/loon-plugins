@@ -1,0 +1,79 @@
+{{/* Custom titles waiting to be read.
+
+     Oldest first, because a queue that shows the newest first is one where a
+     busy week buries somebody's submission forever.
+
+     The words are rendered as PLAIN TEXT in a quoted block, deliberately not
+     styled with whatever effect the member wears. A moderator is judging the
+     words; drawing them in a rainbow is the submitter decorating their own
+     review. */}}
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#tag"></use></svg>
+            Titles waiting
+        </h2>
+        {{if .Rows}}<div class="panel__actions"><span class="panel__grouping">{{len .Rows}}</span></div>{{end}}
+    </header>
+    <div class="panel__body">
+        {{if .Err}}
+        <p class="notice notice--warning">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+            <span>
+                {{if eq .Err "noreason"}}Say why. A member told only &ldquo;no&rdquo; sends the same title back, and you read it again.
+                {{else if eq .Err "bad"}}That request named nobody.
+                {{else}}That did not work.{{end}}
+            </span>
+        </p>
+        {{end}}
+        {{if .Taken}}
+        <p class="notice notice--warning">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+            <span>Another moderator decided that one first, so nothing you typed was recorded.</span>
+        </p>
+        {{end}}
+
+        {{if .Rows}}
+        <ul class="title-queue">
+            {{$csrf := .CSRF}}
+            {{range .Rows}}
+            <li class="title-queue__item">
+                <div class="title-queue__head">
+                    <a class="title-queue__who" href="/u/{{.Username}}">{{.Username}}</a>
+                    <span class="small text-muted">{{ago .Submitted}}</span>
+                </div>
+
+                <blockquote class="title-queue__text">{{.Text}}</blockquote>
+
+                {{/* What they had passed before, when this is an edit. A
+                     moderator with only the new words cannot tell "they asked
+                     for this" from "they changed something already approved
+                     into this", and those are different judgements. */}}
+                {{if .Previous}}
+                <p class="title-queue__prev small text-muted">
+                    Replacing an approved title: <q>{{.Previous}}</q>
+                </p>
+                {{end}}
+
+                <form class="title-queue__form" method="post" action="/admin/p/titles/review">
+                    <input type="hidden" name="_csrf" value="{{$csrf}}">
+                    <input type="hidden" name="user" value="{{.UserID}}">
+                    <label class="visually-hidden" for="reason-{{.UserID}}">Reason, if you are turning it down</label>
+                    <input class="form__input" id="reason-{{.UserID}}" name="reason" maxlength="300"
+                           placeholder="Why not? (required to turn down — the member reads this)">
+                    <div class="title-queue__buttons">
+                        <button class="button button--filled button--sm" type="submit"
+                                name="decision" value="approve">Approve</button>
+                        <button class="button button--outlined button--sm" type="submit"
+                                name="decision" value="reject">Turn down</button>
+                    </div>
+                </form>
+            </li>
+            {{end}}
+        </ul>
+        {{else}}
+        <p class="m-0 text-muted">Nothing waiting.</p>
+        {{end}}
+    </div>
+</section>

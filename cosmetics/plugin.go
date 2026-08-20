@@ -1,4 +1,4 @@
-// Package cosmetics sells what a username looks like.
+// Package cosmetics sells what a member looks like.
 //
 // Every reward system on this site pays in NUMBERS — points, ratio, a rank you
 // climb — and numbers are invisible to everybody except their owner. A
@@ -18,10 +18,20 @@
 // the name renders plain. So the slug list is the contract, and a host test
 // asserts its stylesheet covers every entry.
 //
-// WHAT IT DOES NOT DO. It does not let anybody type text. A custom title is
-// user-supplied words rendered beside a name on every page they appear on,
-// which is a moderation surface and a very different feature; this sells eight
-// effects from a fixed list and cannot be made to say anything.
+// FOUR SLOTS: the username, the title under it, a frame around the picture, and
+// the ground behind the profile card. A slot is a PLACE rather than a kind of
+// effect, which is why the text effects fit two of them — an aura is an aura
+// whether it is on a name or on a title, and somebody who owns one should be
+// able to put it on either without buying it twice.
+//
+// AND ONE THING THAT IS NOT A COSMETIC AT ALL. A custom title is text somebody
+// TYPED, published beside their name on every page they appear on, and it is
+// the only part of this plugin with a moderation surface. So the shop sells the
+// RIGHT to have one and staff pass the words: buying publishes nothing. See
+// titles.go, which is also where the difference between checking characters and
+// moderating is spelled out — no filter substitutes for a person reading it,
+// and what the filter is for is the tricks that are about the rendering rather
+// than the words.
 package cosmetics
 
 import (
@@ -50,7 +60,10 @@ func init() {
 
 // itemKind is the store's reward_type for a cosmetic, and the registry suffix
 // under pluginapi.StoreItemTypePrefix.
-const itemKind = "cosmetic"
+const (
+	itemKind  = "cosmetic"
+	titleKind = "custom_title"
+)
 
 // pagePath is the member's own page: what they own, and what they are wearing.
 const pagePath = "/p/cosmetics"
@@ -66,7 +79,7 @@ func (p *Plugin) Metadata() core.Metadata {
 	return core.Metadata{
 		Name:        "cosmetics",
 		Version:     "0.1.0",
-		Description: "Name effects, bought with points or granted with a standing. The only reward on the site anybody else can see.",
+		Description: "Name effects, avatar frames, profile grounds and reviewed custom titles. The only rewards on the site anybody else can see.",
 		Migrations:  migrations,
 		Processes:   []string{"web"},
 	}
@@ -93,19 +106,43 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// The buy side. One kind; the item's reward_ref decides whether a def sells
 	// ONE effect or lets the member choose — see Describe.
 	c.Register(pluginapi.StoreItemTypePrefix+itemKind, itemType{p: p})
+	// The RIGHT to have a title, which is a different purchase from an effect:
+	// it publishes nothing on its own, it unlocks a form whose output staff
+	// review. Its own kind rather than a magic reward_ref on the one above,
+	// because the two grant genuinely different things and the admin picking
+	// from a dropdown should see both.
+	c.Register(pluginapi.StoreItemTypePrefix+titleKind, titleItemType{p: p})
 
 	if err := c.RegisterView(core.View{
 		Slug:        "cosmetics",
-		Title:       "Name effects",
-		Description: "What your name looks like. Wear one at a time.",
+		MinRole:     core.RoleUser,
+		Title:       "Appearance",
+		Description: "What you look like on the site — your name, your title, your picture, your profile.",
 		Slot:        core.SlotSitePage,
 		Nav:         core.NavHint{Group: "Account"},
 		Render:      p.page,
 		Actions: map[string]func(*gin.Context) (template.HTML, error){
 			"equip": p.equip,
+			"title": p.submitTitle,
 		},
 	}); err != nil {
 		return fmt.Errorf("cosmetics: register view: %w", err)
+	}
+	// The queue. Titles are the only thing here that publishes words somebody
+	// typed, so they are the only thing here with a staff surface.
+	if err := c.RegisterView(core.View{
+		Slug:        "titles",
+		Title:       "Custom titles",
+		Description: "Words members want under their name, waiting to be read.",
+		Slot:        core.SlotAdminPage,
+		MinRole:     core.RoleMod,
+		Nav:         core.NavHint{Group: "Moderation"},
+		Render:      p.queuePage,
+		Actions: map[string]func(*gin.Context) (template.HTML, error){
+			"review": p.review,
+		},
+	}); err != nil {
+		return fmt.Errorf("cosmetics: register titles view: %w", err)
 	}
 	return nil
 }
@@ -137,40 +174,78 @@ type resolver struct{ p *Plugin }
 
 var _ pluginapi.CosmeticResolver = resolver{}
 
-// EquippedNames returns username -> effect slug for everybody wearing one.
+// Equipped returns username -> slot -> slug for everybody wearing anything.
 //
 // Two queries and no join across a schema boundary: the equipped map comes from
 // this plugin's tables, the names from the host's user directory. A view that
 // joined them would be this plugin reaching into the host's users table, which
 // is precisely what core.UsersService exists to stop.
-func (r resolver) EquippedNames(ctx context.Context) (map[string]string, error) {
+func (r resolver) Equipped(ctx context.Context) (map[string]pluginapi.Worn, error) {
 	p := r.p
 	if p.st == nil || p.users == nil {
 		return nil, nil
 	}
-	byID, err := p.st.LiveEquipped(ctx, SlotName)
+	byID, err := p.st.LiveEquipped(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if len(byID) == 0 {
-		return nil, nil
-	}
-	ids := make([]int64, 0, len(byID))
-	for id := range byID {
-		ids = append(ids, id)
-	}
-	names, err := p.users.BulkDisplayNames(ctx, ids)
+	names, err := r.names(ctx, keysOf(byID))
 	if err != nil {
-		return nil, fmt.Errorf("cosmetics: resolving names: %w", err)
+		return nil, err
 	}
-	out := make(map[string]string, len(byID))
-	for id, slug := range byID {
-		// A member the directory did not return is skipped rather than keyed
-		// under an empty string, which would put an effect on every name that
-		// failed to resolve.
+	out := make(map[string]pluginapi.Worn, len(byID))
+	for id, worn := range byID {
 		if name := names[id]; name != "" {
-			out[name] = slug
+			out[name] = pluginapi.Worn(worn)
 		}
 	}
 	return out, nil
+}
+
+// ApprovedTitles returns username -> the words staff have passed.
+func (r resolver) ApprovedTitles(ctx context.Context) (map[string]string, error) {
+	p := r.p
+	if p.st == nil || p.users == nil {
+		return nil, nil
+	}
+	byID, err := p.st.ApprovedTitles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	names, err := r.names(ctx, keysOf(byID))
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(byID))
+	for id, text := range byID {
+		if name := names[id]; name != "" {
+			out[name] = text
+		}
+	}
+	return out, nil
+}
+
+// names resolves ids through the host's directory.
+//
+// A member the directory did not return is skipped by every caller rather than
+// keyed under an empty string, which would attach one person's cosmetics to
+// every name that failed to resolve.
+func (r resolver) names(ctx context.Context, ids []int64) (map[int64]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	names, err := r.p.users.BulkDisplayNames(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("cosmetics: resolving names: %w", err)
+	}
+	return names, nil
+}
+
+// keysOf is the ids of any map keyed by user id.
+func keysOf[V any](m map[int64]V) []int64 {
+	out := make([]int64, 0, len(m))
+	for id := range m {
+		out = append(out, id)
+	}
+	return out
 }

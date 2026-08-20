@@ -6,12 +6,20 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
-// SlotName is the only slot today: the username, the one place a member's name
-// is drawn with any styling at all.
-const SlotName = "name"
+// The slots, re-exported from the contract so this package's own code does not
+// spell them twice.
+const (
+	SlotName    = pluginapi.SlotName
+	SlotTitle   = pluginapi.SlotTitle
+	SlotAvatar  = pluginapi.SlotAvatar
+	SlotProfile = pluginapi.SlotProfile
+)
 
 // Owned is one unlock.
 type Owned struct {
@@ -44,9 +52,18 @@ type Store interface {
 	// EquippedBy reports what the member is wearing in a slot.
 	EquippedBy(ctx context.Context, userID int64, slot string) (string, error)
 
-	// LiveEquipped returns user_id -> slug for everybody wearing something in
-	// a slot, skipping any whose unlock has lapsed.
-	LiveEquipped(ctx context.Context, slot string) (map[int64]string, error)
+	// LiveEquipped returns user_id -> slot -> slug for everybody wearing
+	// anything, skipping any whose unlock has lapsed.
+	LiveEquipped(ctx context.Context) (map[int64]map[string]string, error)
+
+	// Owns reports whether a member currently holds one unlock. Used for the
+	// title RIGHT, which is bought like an effect and is not one.
+	Owns(ctx context.Context, userID int64, slug string) (bool, error)
+
+	// Custom titles are the one thing here that publishes words somebody
+	// typed. Declared as part of the same store because they are bought
+	// through the same table and expire the same way.
+	TitleStore
 }
 
 type PGStore struct{ db *core.SchemaDB }
@@ -157,28 +174,46 @@ func (s *PGStore) EquippedBy(ctx context.Context, userID int64, slot string) (st
 	return slugs[0], nil
 }
 
-// LiveEquipped is the renderer's query.
+// LiveEquipped is the renderer's query: everybody, every slot, in one read.
+//
+// EVERY SLOT AT ONCE rather than one call per slot, because a rendered page
+// wants a member's name effect and their avatar frame in the same breath, and
+// four queries to draw one listing is three too many.
 //
 // The JOIN back to cosmetic_owned is what makes a lapsed VIP effect stop
 // rendering without anything having to sweep the equipped table: the row stays
 // (so the effect comes back if they renew), and it simply stops matching.
-func (s *PGStore) LiveEquipped(ctx context.Context, slot string) (map[int64]string, error) {
+func (s *PGStore) LiveEquipped(ctx context.Context) (map[int64]map[string]string, error) {
 	var rows []struct {
 		UserID int64  `db:"user_id"`
+		Slot   string `db:"slot"`
 		Slug   string `db:"slug"`
 	}
 	if err := s.sel(ctx, &rows, `
-		SELECT e.user_id, e.slug
+		SELECT e.user_id, e.slot, e.slug
 		  FROM cosmetic_equipped e
 		  JOIN cosmetic_owned o
 		    ON o.user_id = e.user_id AND o.slug = e.slug
-		 WHERE e.slot = $1
-		   AND (o.expires_at IS NULL OR o.expires_at > NOW())`, slot); err != nil {
+		 WHERE o.expires_at IS NULL OR o.expires_at > NOW()`); err != nil {
 		return nil, fmt.Errorf("live equipped: %w", err)
 	}
-	out := make(map[int64]string, len(rows))
+	out := make(map[int64]map[string]string, len(rows))
 	for _, r := range rows {
-		out[r.UserID] = r.Slug
+		if out[r.UserID] == nil {
+			out[r.UserID] = map[string]string{}
+		}
+		out[r.UserID][r.Slot] = r.Slug
 	}
 	return out, nil
+}
+
+// Owns reports whether a member currently holds one unlock.
+func (s *PGStore) Owns(ctx context.Context, userID int64, slug string) (bool, error) {
+	var n []int
+	if err := s.sel(ctx, &n, `
+		SELECT 1 FROM cosmetic_owned
+		 WHERE user_id = $1 AND slug = $2`+liveWhere, userID, slug); err != nil {
+		return false, fmt.Errorf("owns: %w", err)
+	}
+	return len(n) > 0, nil
 }

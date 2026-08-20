@@ -1,21 +1,19 @@
-{{/* The member's own page: the whole catalogue, each entry drawn as it will
-     actually look, with YOUR name in it.
+{{/* A member's appearance: four slots, and the title.
 
-     The whole catalogue and not just what you own, because a page listing only
-     your purchases sells nothing and — more to the point — nobody can choose
-     between eight effects from eight names. The preview IS the description;
-     the sentence under it is a caption.
+     Each slot lists its WHOLE catalogue, each entry drawn as it will actually
+     look, with YOUR name in it — because a page listing only your purchases
+     sells nothing, and nobody can choose between eight effects from eight
+     names. The preview IS the description; the sentence under it is a caption.
 
-     Your own name in every preview rather than a sample word, because the
-     length and the letters are most of how an effect reads: "Sparkle" set in
-     sparkles tells you nothing about what a nine-character username will look
-     like in a table row. */}}
+     Your own name rather than a sample word, because the length and the letters
+     are most of how an effect reads: "Sparkle" set in sparkles tells you
+     nothing about what a nine-character username looks like in a table row. */}}
 
 <section class="panelV2">
     <header class="panel__header">
         <h2 class="panel__heading">
             <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#star"></use></svg>
-            Your name
+            How you look
         </h2>
     </header>
     <div class="panel__body">
@@ -23,56 +21,130 @@
         <p class="notice notice--warning">
             <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
             <span>
-                {{if eq .Err "notowned"}}You do not own that effect. Buy it in the shop first — or it may have run out while this page was open.
-                {{else if eq .Err "unknown"}}There is no effect by that name.
+                {{if eq .Err "notowned"}}You do not own that. Buy it in the shop first — or it may have run out while this page was open.
+                {{else if eq .Err "unknown"}}That does not go there.
+                {{else if eq .Err "notitle"}}You need the custom title item from the shop before you can propose one.
+                {{else if eq .Err "badtitle"}}That title cannot be used. Keep it short, on one line, and made of letters people can read.
                 {{else}}That did not work.{{end}}
             </span>
         </p>
         {{end}}
-
-        <p class="text-muted">
-            One at a time, and you can switch whenever you like. Effects show
-            wherever your name appears — listings, comments, the forum.
+        {{if .Sent}}
+        <p class="notice notice--success">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#check"></use></svg>
+            <span>Sent to staff. It appears under your name once somebody has read it.</span>
         </p>
+        {{end}}
+        <p class="m-0 text-muted">
+            One per slot, and you can switch whenever you like. Effects show wherever
+            you appear — listings, comments, the forum.
+        </p>
+    </div>
+</section>
 
-        {{if .Wearing}}
-        <form method="post" action="/p/cosmetics/equip">
-            <input type="hidden" name="_csrf" value="{{.CSRF}}">
-            {{/* Empty slug is "take it off" — see equip(). */}}
-            <input type="hidden" name="slug" value="">
-            <button class="button button--outlined button--sm" type="submit">Wear nothing</button>
-        </form>
+{{/* ------------------------------------------------------------------ title */}}
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#tag"></use></svg>
+            Your title
+        </h2>
+        {{with .Title}}{{if .Allowed}}
+        <div class="panel__actions">
+            {{if eq .State "pending"}}<span class="tag">Waiting for staff</span>
+            {{else if eq .State "approved"}}<span class="tag tag--ok">Showing</span>
+            {{else if eq .State "rejected"}}<span class="tag">Turned down</span>{{end}}
+        </div>
+        {{end}}{{end}}
+    </header>
+    <div class="panel__body">
+        {{with .Title}}
+        {{if .Allowed}}
+            {{if eq .State "rejected"}}
+            {{/* The reason, verbatim and to the member. A rejection with no
+                 reason is one they simply resubmit. */}}
+            <p class="notice notice--warning">
+                <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+                <span>Turned down{{if .Reviewed}} on {{date .Reviewed}}{{end}}: {{.Reason}}</span>
+            </p>
+            {{end}}
+            <form class="form" method="post" action="/p/cosmetics/title">
+                <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+                <div class="form__group">
+                    <label class="form__label" for="title-text">Words under your name</label>
+                    <input class="form__input" id="title-text" name="text" maxlength="{{.Max}}"
+                           value="{{.Text}}" placeholder="Keeper of the par2s">
+                    {{/* Said plainly and up front. Somebody who submits and
+                         sees nothing change has been given no way to tell
+                         "waiting" from "broken". */}}
+                    <p class="form__hint">
+                        Staff read every title before it appears, including a change to one
+                        already showing. Up to {{.Max}} characters.
+                    </p>
+                </div>
+                <button class="form__button form__button--filled" type="submit">
+                    <svg class="icon" aria-hidden="true"><use href="#send"></use></svg>Send to staff
+                </button>
+            </form>
+        {{else}}
+        <p class="m-0 text-muted">
+            A custom title is your own words under your name. The right to propose one
+            is in the <a href="/store">shop</a>; the words themselves are read by staff
+            before they appear.
+        </p>
+        {{end}}
         {{end}}
     </div>
 </section>
 
+{{/* ------------------------------------------------------------------ slots */}}
+{{$csrf := .CSRF}}{{$name := .Name}}
+{{range .Slots}}
 <section class="panelV2">
     <header class="panel__header">
         <h2 class="panel__heading">
             <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#store"></use></svg>
-            Effects
+            {{.Label}}
         </h2>
+        {{if .Wearing}}
+        <div class="panel__actions">
+            <form method="post" action="/p/cosmetics/equip">
+                <input type="hidden" name="_csrf" value="{{$csrf}}">
+                <input type="hidden" name="slot" value="{{.Slot}}">
+                {{/* Empty slug is "take it off" — see equip(). */}}
+                <input type="hidden" name="slug" value="">
+                <button class="button button--outlined button--sm" type="submit">Wear nothing</button>
+            </form>
+        </div>
+        {{end}}
     </header>
     <div class="panel__body">
+        {{$slot := .Slot}}
         <ul class="fx-list">
-            {{$csrf := .CSRF}}{{$name := .Name}}
             {{range .Effects}}
             <li class="fx-card{{if .Worn}} fx-card--worn{{end}}">
-                {{/* The preview. A span rather than the real user-tag, because
-                     this is not a link to anybody and the effect classes are
-                     what is being demonstrated, not the role colour. */}}
+                {{/* The preview. What is drawn depends on the slot, because an
+                     avatar frame around the word "bob" would demonstrate
+                     nothing — each sample is the shape the effect actually
+                     lands on. */}}
                 <div class="fx-card__preview">
+                    {{if eq $slot "avatar"}}
+                    <span class="avatar avatar--round poster--h0 {{.Class}}"><span class="avatar__fallback">{{firstRune $name}}</span></span>
+                    {{else if eq $slot "profile"}}
+                    <span class="fx-ground {{.Class}}"><span class="fx-ground__card">{{$name}}</span></span>
+                    {{else}}
                     <span class="fx-preview {{.Class}}">{{$name}}</span>
+                    {{end}}
                 </div>
 
                 <div class="fx-card__body">
                     <div class="fx-card__head">
                         <strong class="fx-card__label">{{.Label}}</strong>
-                        {{/* Said out loud, both of them. "Replaces your colour"
+                        {{/* Said out loud, both of them. "Replaces the colour"
                              is the one thing somebody with an earned rank
                              colour needs to know BEFORE buying, and "moves" is
-                             what makes a still-looking preview on a
-                             reduced-motion machine not read as broken. */}}
+                             what stops a still-looking preview on a
+                             reduced-motion machine reading as broken. */}}
                         {{if .Tinted}}<span class="tag tag--sm">Own colour</span>{{end}}
                         {{if .Animated}}<span class="tag tag--sm">Moves</span>{{end}}
                     </div>
@@ -88,6 +160,7 @@
                     {{else if .Owned}}
                     <form method="post" action="/p/cosmetics/equip">
                         <input type="hidden" name="_csrf" value="{{$csrf}}">
+                        <input type="hidden" name="slot" value="{{$slot}}">
                         <input type="hidden" name="slug" value="{{.Slug}}">
                         <button class="button button--filled button--sm" type="submit">Wear</button>
                     </form>
@@ -104,3 +177,4 @@
         </ul>
     </div>
 </section>
+{{end}}
