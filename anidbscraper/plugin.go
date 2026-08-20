@@ -56,6 +56,8 @@ func (p *Plugin) Metadata() core.Metadata {
 		// Worker-only: the scraper registers jobs, never routes. A route-
 		// registering plugin booted in the worker (no router) would nil-panic.
 		Processes: []string{"worker"},
+		// Scans untagged NZBs. No NZBs, nothing to scan.
+		Flavours: []string{core.FlavourIndexer},
 		// No Migrations: the scraper operates on host-owned anime_metadata /
 		// nzbs via injected ports; it does not own a Postgres schema. (A future
 		// step that makes anime_metadata plugin-owned would add them here.)

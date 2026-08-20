@@ -70,6 +70,10 @@ func (p *Plugin) Metadata() core.Metadata {
 		// perk that applied on one process and not the other would make a
 		// member's ratio depend on which one served them.
 		Processes: []string{"web", "api"},
+		// Freeleech and double-upload tokens. Both are discounts on TRANSFER,
+		// and an indexer-only site has no transfer to discount — so on one
+		// these are shop items that take points and grant nothing.
+		Flavours: []string{core.FlavourTracker},
 	}
 }
 

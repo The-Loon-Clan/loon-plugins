@@ -86,6 +86,11 @@ func (p *Plugin) Metadata() core.Metadata {
 		// would break every client pointed at it, with nothing on the site saying
 		// so — the failure surfaces only in the client.
 		Processes: []string{"web", "api"},
+		// The tracker half, by definition. Without this the announce and
+		// scrape endpoints mount, passkeys get minted and ratio accounting
+		// starts the moment the process is reachable — on a site with no
+		// torrents.
+		Flavours: []string{core.FlavourTracker},
 	}
 }
 

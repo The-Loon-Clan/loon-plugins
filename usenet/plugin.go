@@ -177,7 +177,10 @@ func (p *Plugin) Metadata() core.Metadata {
 		Version:     "0.1.0",
 		Description: "A basic Usenet indexer: crawls recent posts, builds NZB files, and serves search / groups / download.",
 		Processes:   []string{"web", "worker", "api"},
-		Migrations:  migrations,
+		// The indexer half. Without this a torrent-only site runs an NNTP
+		// crawler against newsgroups it will never publish.
+		Flavours:   []string{core.FlavourIndexer},
+		Migrations: migrations,
 	}
 }
 

@@ -43,6 +43,9 @@ func (p *Plugin) Metadata() core.Metadata {
 		// one process only is a rule a member can walk around by pointing their
 		// second client at the other.
 		Processes: []string{"web", "api"},
+		// One host per torrent per member — a rule about announcing, which is
+		// something only a tracker site does.
+		Flavours: []string{core.FlavourTracker},
 	}
 }
 

@@ -65,6 +65,10 @@ func (p *Plugin) Metadata() core.Metadata {
 		// web only. The api process serves machine traffic and has no business
 		// issuing punishments on a timer.
 		Processes: []string{"web"},
+		// Enforcement over the tracker's accounting. On a site with no swarm
+		// it is an admin page, a nightly sweep and warnings to issue about
+		// torrents nobody is seeding.
+		Flavours: []string{core.FlavourTracker},
 	}
 }
 
