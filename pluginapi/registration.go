@@ -18,8 +18,6 @@
 package pluginapi
 
 import (
-	"strings"
-
 	"github.com/the-loon-clan/loon/core"
 )
 
@@ -97,27 +95,18 @@ type RegistrationMode interface {
 // submits, and a mismatch means one of those two would disagree with the other
 // — which is a bug that surfaces as "the site quietly reverted my choice".
 func RegistrationModes(c *core.Core) []RegistrationModeInfo {
-	if c == nil {
-		return nil
-	}
-	var out []RegistrationModeInfo
-	for _, name := range c.ExtensionNames() {
-		if !strings.HasPrefix(name, RegistrationModePrefix) {
-			continue
-		}
-		v, ok := c.Lookup(name)
-		if !ok {
-			continue
-		}
-		m, ok := v.(RegistrationMode)
-		if !ok {
-			continue
-		}
-		info := m.RegistrationMode()
-		if info.Key == "" || info.Key != strings.TrimPrefix(name, RegistrationModePrefix) {
-			continue
-		}
-		out = append(out, info)
+	// ConsistentKeys is the check this function has always made and the reason
+	// it is a shared helper now: the registered key is what a settings row
+	// stores and what a form submits, and a mode whose own Key disagrees with
+	// it leaves one half of the site believing a setting took while the other
+	// does not.
+	modes := ConsistentKeys(
+		Contributions[RegistrationMode](c, RegistrationModePrefix),
+		func(m RegistrationMode) string { return m.RegistrationMode().Key },
+	)
+	out := make([]RegistrationModeInfo, 0, len(modes))
+	for _, m := range modes {
+		out = append(out, m.Value.RegistrationMode())
 	}
 	return out
 }

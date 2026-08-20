@@ -40,6 +40,26 @@ others (one binary, so the compiler is the version check).
       declaration carries a comment saying what would run pointlessly without
       it (hitrun on an indexer: an admin page, a nightly sweep and warnings
       about a swarm that does not exist).
+- [ ] **MUST** — before shipping a setting whose values are a CLOSED SET, ask:
+      **can another plugin append to this?** If the answer is yes — or is "no,
+      surely not", which is the answer that has been wrong every time — it is a
+      registry PREFIX and a `pluginapi` contract, not a validated string. The
+      host shipped three ways to join, open/invite/closed, and a fourth arrived
+      in a plugin with nowhere to put it: not a value the validator accepted,
+      not a radio button on the form, not a case in the handler. Opening a
+      closed set later is a change to the host, its storage, its form and its
+      handler, all at once, while somebody waits.
+      Read the set as a question rather than a list. "Which of these three
+      modes" is closed; "how may somebody join this site" is open, and so are
+      *what can be bought*, *what scales what a member earns*, *what can go on a
+      page* and *where a selection can be filed* — every one of which is a
+      prefix here today. A genuinely closed set is one where a fourth value
+      would be a different FEATURE, not another of the same thing: a site is
+      normal, read-only or in maintenance, and a fourth is not something a
+      plugin contributes.
+      Scan it with `pluginapi.Contributions[T]` rather than hand-rolling the
+      loop — it sorts, which the hand-rolled ones did not, and a dropdown whose
+      options move between page loads reads as a bug in the page.
 - [ ] **SHOULD** — a capability an operator might not want is declared with
       `core.RegisterFeature`, not left as a config key. Config flags are
       invisible: nothing lists them and nothing says what switching one off

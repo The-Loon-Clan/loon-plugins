@@ -51,7 +51,9 @@ reinvented.** The csrf keys were collapsed into one declared contract on
 candidates.
 
 > **Rule of thumb.** If a second plugin could ever want it, it belongs in
-> `pluginapi` with a name constant and a type. A bare string is for a seam that
+> `pluginapi` with a name constant and a type. If a second plugin could ever
+> want to add ANOTHER ONE, make it a `Prefix` and scan it with
+> `pluginapi.Contributions[T]`. A bare string is for a seam that
 > is genuinely one host talking to one plugin, and there are fewer of those than
 > it looks.
 
@@ -148,6 +150,28 @@ Provision — games missed the rewards granter and store missed `tracker.credit`
 on the same afternoon, both silently degrading. Anything the *host* registers is
 safe at Provision, and must be registered before `core.Boot` or it is never
 seen.
+
+**A closed set of options is a PREFIX, not a validated string.** Before
+shipping a setting whose values are a fixed list, ask *can another plugin append
+to this?* — and treat "no, surely not" as the answer that has been wrong every
+time. The site's three ways to join were as closed as a set gets until
+`applications` needed a fourth, and by then opening it meant changing the host's
+validator, its storage, its form and its handler at once.
+
+The tell is whether the set reads as a question or a list. "Which of these three
+modes" is closed; "how may somebody join this site" is open, and so is *what can
+be bought*, *what scales what a member earns*, *what goes on a page*, *where a
+selection can be filed*. A genuinely closed set is one where a fourth value
+would be a different FEATURE rather than another of the same thing — a site is
+normal, read-only or in maintenance, and nothing a plugin writes belongs beside
+those.
+
+Scan with `pluginapi.Contributions[T]`, which exists because five domains wrote
+the loop themselves and it drifted: two sorted their results and three did not,
+so one dropdown was stable and another reshuffled between page loads, and only
+one of the five checked that a value's own key matched the key it was registered
+under — the disagreement that surfaces to an operator as "the site quietly
+reverted my choice".
 
 **A capability an operator might not want is a FEATURE, not a config key.**
 `core.RegisterFeature` in Provision, and name the key on the `View` and `Widget`

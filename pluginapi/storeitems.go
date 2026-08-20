@@ -34,7 +34,6 @@ package pluginapi
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -162,38 +161,13 @@ func LookupStoreItemType(c *core.Core, kind string) (StoreItemType, bool) {
 	if c == nil || kind == "" {
 		return nil, false
 	}
-	v, ok := c.Lookup(StoreItemTypePrefix + kind)
-	if !ok {
-		return nil, false
-	}
-	t, ok := v.(StoreItemType)
-	return t, ok
+	return Contributed[StoreItemType](c, StoreItemTypePrefix, kind)
 }
 
 // StoreItemTypes returns every contributed type, ordered by kind so the def
 // editor's dropdown does not reshuffle between page loads.
 func StoreItemTypes(c *core.Core) []StoreItemType {
-	if c == nil {
-		return nil
-	}
-	var names []string
-	for _, name := range c.ExtensionNames() {
-		if strings.HasPrefix(name, StoreItemTypePrefix) {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	out := make([]StoreItemType, 0, len(names))
-	for _, name := range names {
-		v, ok := c.Lookup(name)
-		if !ok {
-			continue
-		}
-		if t, ok := v.(StoreItemType); ok {
-			out = append(out, t)
-		}
-	}
-	return out
+	return ContributedValues[StoreItemType](c, StoreItemTypePrefix)
 }
 
 // PrepareStorePurchase checks the buy control's submitted values against what
