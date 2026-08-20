@@ -17,7 +17,7 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **52** of them, counted from the `…Name` and
+importing the other. There are **56** of them, counted from the `…Name` and
 `…Prefix` constants in `pluginapi` on 20 Aug 2026. They are discoverable: an
 author reading `pluginapi` sees what exists, the compiler catches interface
 skew, and `/admin/contracts` can report an unwired one.
@@ -28,7 +28,7 @@ skew, and `/admin/contracts` can report an unwired one.
 > page exists to prevent. One line does it:
 >
 > ```
-> grep -rhoE '[A-Za-z]+(Name|Prefix)\s+=\s+"[^"]+"' pluginapi/*.go | sort -u
+> grep -rhoE '[A-Za-z]+(Name|Prefix)\s+=\s+"[^"]+"' pluginapi/*.go \n>   --exclude='*_test.go' | sort -u
 > ```
 >
 > Diff that against the tables below when you add a contract.
@@ -37,18 +37,30 @@ skew, and `/admin/contracts` can report an unwired one.
 typed as a raw func, declared nowhere:
 
 ```
-achievements.icons        achievements.files
-achievements.l10n.slugs   achievements.l10n.resolve
-medals.l10n.slugs         medals.l10n.resolve
-games.csrf                medals.csrf                magic.csrf
+games.csrf                medals.csrf                magic.csrf     (deprecated)
+achievements.icons        achievements.files                        (deprecated)
+achievements.l10n.slugs   achievements.l10n.resolve                 (deprecated)
+medals.l10n.slugs         medals.l10n.resolve                       (deprecated)
 ```
 
 Nothing lists these. A plugin author cannot find them, so the tenth plugin to
 need a token invents an eleventh key — or, as actually happened, ships without
 one and every form 403s. **Every seam in the second tier is a seam that will be
-reinvented.** The csrf keys were collapsed into one declared contract on
-18 Aug 2026 for exactly that reason; the l10n and icon keys are the remaining
-candidates.
+reinvented.**
+
+**All of them are now collapsed**, and the tier is empty of live seams — the
+csrf keys on 18 Aug 2026, the l10n, icon and file keys on 20 Aug. Every one is
+still READ, so a host that has not moved keeps working, and nothing new should
+add to the list.
+
+The l10n pair is the one to remember, because it shows the cost rather than the
+principle. Two plugins each agreed a private pair with the host, so the host
+registered **the same two closures four times**, under a comment that said "one
+key per consumer, the same closures". A third plugin would have made it six. The
+icon list is the other failure mode: agreed twice for one list, with two
+different TYPES — `func() []string` and a plain `[]string` — so one consumer saw
+sprites added later and the other went on offering the list as it stood at
+Provision, with nothing to say which was right.
 
 > **Rule of thumb.** If a second plugin could ever want it, it belongs in
 > `pluginapi` with a name constant and a type. If a second plugin could ever
@@ -124,7 +136,9 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 | Key | Contract | For |
 |---|---|---|
 | `i18n.declare` | `I18nDeclarer` | Seed a plugin's default strings into the catalogue. Seed-only. |
-| `icons.catalogue` | `func() []string` | What icons this site can draw. Offer these in a picker instead of a free-text box. |
+| `i18n.catalogue` | `MessageCatalogue` | READ the catalogue: the slug list for a definition form, and slug → text for the current viewer. One key for every consumer — it replaced four. |
+| `icons.catalogue` | `IconCatalogue` | What icons this site can draw. Offer these in a picker instead of a free-text box. A func, not a slice: a sprite added later changes the answer. |
+| `files.store` | `blob.Store` | Somewhere to put a plugin's uploads. One key for every plugin; the plugin picks the name it saves under. Absent means HIDE the upload control, never offer one that fails on submit. |
 | *(core)* `RegisterWidget` | `core.Widget` | A placeable card. The host may also expose it as a `[widget …]` shortcode in page bodies. |
 
 ### Operations
@@ -135,6 +149,7 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 | `notify.release` | `ReleaseNotifier` | Announce a release outward. |
 | `backup.packs` | `BackupPacks` | Contribute to the one archive. |
 | `feeds.status` | `FeedsStatus` | Feed health. |
+| `health.*` | `HealthReporter` | **Prefix.** Whether a plugin is actually WORKING, as opposed to merely loaded. The state that earns it is `degraded`: a plugin that degrades gracefully is by construction one that can be silently useless. |
 | `achievements.granter` | `AchievementGranter` | Award a badge. |
 | `media.intake` | `ImageIntake` | Fetch an image a MEMBER named, and store it locally. **A plugin must never do this itself** — see the rule below. |
 

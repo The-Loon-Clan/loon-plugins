@@ -128,6 +128,11 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return fmt.Errorf("mediainfo: register screenshots feature: %w", err)
 	}
 
+	if err := c.Register(pluginapi.HealthReporterName+"mediainfo",
+		pluginapi.HealthReporter(p)); err != nil {
+		return fmt.Errorf("mediainfo: register health: %w", err)
+	}
+
 	return c.RegisterWidget(core.Widget{
 		Slug:        "mediainfo",
 		Title:       "Media details",
@@ -168,6 +173,38 @@ func (p *Plugin) Start(ctx context.Context) error {
 }
 
 func (p *Plugin) Stop(ctx context.Context) error { return nil }
+
+// Health reports the one way this plugin is quietly useless.
+//
+// It degrades gracefully when the host offers no image intake — reports still
+// work and the screenshot form is simply not shown — which is correct
+// behaviour and completely invisible. An operator wondering why nobody posts
+// screenshots has no way to discover that the field was never offered, and
+// this is the sentence that tells them.
+func (p *Plugin) Health(ctx context.Context) pluginapi.Health {
+	if p.st == nil {
+		return pluginapi.Health{
+			State:   pluginapi.HealthFailing,
+			Summary: "no database — reports and screenshots cannot be stored",
+		}
+	}
+	if p.images == nil {
+		return pluginapi.Health{
+			State:   pluginapi.HealthDegraded,
+			Summary: "screenshots are off: this host publishes no image intake",
+			Detail: "MediaInfo reports work normally. A plugin must not fetch a member-supplied " +
+				"URL itself, so the screenshot form is hidden rather than offered and failing. " +
+				"The host registers " + pluginapi.ImageIntakeName + " to switch it on.",
+		}
+	}
+	if p.users == nil {
+		return pluginapi.Health{
+			State:   pluginapi.HealthDegraded,
+			Summary: "no user directory — every report renders as \"a member\"",
+		}
+	}
+	return pluginapi.Health{State: pluginapi.HealthOK}
+}
 
 // handleRemove withholds a report.
 func (p *Plugin) handleRemove(c *gin.Context) {

@@ -142,31 +142,47 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// form's dropdowns) and per-viewer resolution (for the plugin's own
 	// rendered surfaces); without them the text columns simply ARE the
 	// content, which is every pre-catalogue site.
-	if v, ok := c.Lookup("achievements.l10n.slugs"); ok {
-		if fn, ok := v.(func(context.Context) ([]string, error)); ok {
-			p.l10nSlugs = fn
-		} else {
-			return fmt.Errorf("achievements: %q is %T, want func(context.Context) ([]string, error)", "achievements.l10n.slugs", v)
+	// One declared contract each, where there used to be four private keys
+	// between this plugin and its host — see pluginapi/i18n.go on what that
+	// cost. The legacy keys are still read below so a host that has not moved
+	// keeps working.
+	if cat, ok := pluginapi.Messages(c); ok {
+		p.l10nSlugs = cat.Slugs
+		p.l10n = cat.Resolve
+	} else {
+		if v, ok := c.Lookup("achievements.l10n.slugs"); ok {
+			if fn, ok := v.(func(context.Context) ([]string, error)); ok {
+				p.l10nSlugs = fn
+			} else {
+				return fmt.Errorf("achievements: %q is %T, want func(context.Context) ([]string, error)", "achievements.l10n.slugs", v)
+			}
 		}
-	}
-	if v, ok := c.Lookup("achievements.l10n.resolve"); ok {
-		if fn, ok := v.(func(*gin.Context, string) (string, bool)); ok {
-			p.l10n = fn
-		} else {
-			return fmt.Errorf("achievements: %q is %T, want func(*gin.Context, string) (string, bool)", "achievements.l10n.resolve", v)
+		if v, ok := c.Lookup("achievements.l10n.resolve"); ok {
+			if fn, ok := v.(func(*gin.Context, string) (string, bool)); ok {
+				p.l10n = fn
+			} else {
+				return fmt.Errorf("achievements: %q is %T, want func(*gin.Context, string) (string, bool)", "achievements.l10n.resolve", v)
+			}
 		}
 	}
 
-	if v, ok := c.Lookup("achievements.files"); ok {
+	if fs, ok := pluginapi.Files(c); ok {
+		p.files = fs
+	} else if v, ok := c.Lookup("achievements.files"); ok {
 		fs, ok := v.(blob.Store)
 		if !ok {
 			return fmt.Errorf("achievements: %q is %T, want blob.Store", "achievements.files", v)
 		}
 		p.files = fs
 	}
-	if v, ok := c.Lookup("achievements.icons"); ok {
-		if icons, ok := v.([]string); ok {
-			p.iconOptions = icons
+	// The icon list, from the SHARED catalogue medals has always used. This
+	// plugin had its own key holding a plain []string — a snapshot taken at
+	// Provision, which never notices a sprite added later. The func does.
+	if icons, ok := pluginapi.Icons(c); ok {
+		p.iconOptions = icons()
+	} else if v, ok := c.Lookup("achievements.icons"); ok {
+		if list, ok := v.([]string); ok {
+			p.iconOptions = list
 		}
 	}
 

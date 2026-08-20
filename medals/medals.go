@@ -43,7 +43,10 @@ var tmplFS embed.FS
 
 // The host-registered seams this plugin consumes.
 const (
-	CSRFExtension      = "medals.csrf"
+	CSRFExtension = "medals.csrf"
+	// Deprecated: read only when pluginapi.MessageCatalogueName is absent, for
+	// a host that has not moved to the declared contract. Nothing new should
+	// add a per-plugin l10n key.
 	L10nSlugsExtension = "medals.l10n.slugs"
 	L10nExtension      = "medals.l10n.resolve"
 	// IconsExtension is what icons THIS site has (func() []string), so the
@@ -51,7 +54,9 @@ const (
 	// they have no way to look up. Optional: without it the form falls back to
 	// this plugin's own palette, which is the set the defaults come from
 	// anyway — so the picker is never empty, just shorter.
-	IconsExtension = "icons.catalogue"
+	// Deprecated: use pluginapi.IconCatalogueName, which this now resolves
+	// through. Kept because it is the same string and other code names it.
+	IconsExtension = pluginapi.IconCatalogueName
 )
 
 func init() {
@@ -103,20 +108,28 @@ func (p *Plugin) Provision(c *core.Core) error {
 
 	// The localization seams, host-registered before Boot (Provision-safe).
 	// Optional: a host without a catalogue simply has plain descriptions.
-	if v, ok := c.Lookup(L10nSlugsExtension); ok {
-		if fn, ok := v.(func(context.Context) ([]string, error)); ok {
-			p.l10nSlugs = fn
+	//
+	// One declared contract instead of the private pair this plugin used to
+	// agree with its host — see pluginapi/i18n.go on why four keys existed for
+	// two closures. The old keys are still read so a host that has not moved
+	// keeps working.
+	if cat, ok := pluginapi.Messages(c); ok {
+		p.l10nSlugs = cat.Slugs
+		p.l10n = cat.Resolve
+	} else {
+		if v, ok := c.Lookup(L10nSlugsExtension); ok {
+			if fn, ok := v.(func(context.Context) ([]string, error)); ok {
+				p.l10nSlugs = fn
+			}
+		}
+		if v, ok := c.Lookup(L10nExtension); ok {
+			if fn, ok := v.(func(*gin.Context, string) (string, bool)); ok {
+				p.l10n = fn
+			}
 		}
 	}
-	if v, ok := c.Lookup(L10nExtension); ok {
-		if fn, ok := v.(func(*gin.Context, string) (string, bool)); ok {
-			p.l10n = fn
-		}
-	}
-	if v, ok := c.Lookup(IconsExtension); ok {
-		if fn, ok := v.(func() []string); ok {
-			p.icons = fn
-		}
+	if fn, ok := pluginapi.Icons(c); ok {
+		p.icons = fn
 	}
 
 	// The published answers. All three are ours to answer regardless of who
