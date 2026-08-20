@@ -199,9 +199,9 @@ var Effects = []Effect{
 		Tinted:      true,
 	},
 	{
-		Slug:        "frame-spin",
-		Label:       "Spinning frame",
-		Description: "A band of colour turning slowly around the edge.",
+		Slug:        "frame-prism",
+		Label:       "Prism frame",
+		Description: "The ring turns through gold, ice and violet.",
 		Slots:       []string{SlotAvatar},
 		Tinted:      true,
 		Animated:    true,
