@@ -17,7 +17,7 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **56** of them, counted from the `…Name` and
+importing the other. There are **58** of them, counted from the `…Name` and
 `…Prefix` constants in `pluginapi` on 20 Aug 2026. They are discoverable: an
 author reading `pluginapi` sees what exists, the compiler catches interface
 skew, and `/admin/contracts` can report an unwired one.
@@ -137,6 +137,7 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 |---|---|---|
 | `i18n.declare` | `I18nDeclarer` | Seed a plugin's default strings into the catalogue. Seed-only. |
 | `i18n.catalogue` | `MessageCatalogue` | READ the catalogue: the slug list for a definition form, and slug → text for the current viewer. One key for every consumer — it replaced four. |
+| `icons.set.*` | `IconCatalogue` | **Prefix.** A CURATED icon list for a purpose (`icons.set.achievement-badge`). Falls back to the full catalogue when a host has curated nothing — a picker with too much in it beats one with nothing. |
 | `icons.catalogue` | `IconCatalogue` | What icons this site can draw. Offer these in a picker instead of a free-text box. A func, not a slice: a sprite added later changes the answer. |
 | `files.store` | `blob.Store` | Somewhere to put a plugin's uploads. One key for every plugin; the plugin picks the name it saves under. Absent means HIDE the upload control, never offer one that fails on submit. |
 | *(core)* `RegisterWidget` | `core.Widget` | A placeable card. The host may also expose it as a `[widget …]` shortcode in page bodies. |
@@ -149,6 +150,7 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 | `notify.release` | `ReleaseNotifier` | Announce a release outward. |
 | `backup.packs` | `BackupPacks` | Contribute to the one archive. |
 | `feeds.status` | `FeedsStatus` | Feed health. |
+| `metrics.source.*` | `MetricSource` | **Prefix.** What a plugin measures and the host cannot see — a staging backlog, announces, a failure rate. Counters and gauges only; the one distribution is the host's own request timing. |
 | `health.*` | `HealthReporter` | **Prefix.** Whether a plugin is actually WORKING, as opposed to merely loaded. The state that earns it is `degraded`: a plugin that degrades gracefully is by construction one that can be silently useless. |
 | `achievements.granter` | `AchievementGranter` | Award a badge. |
 | `media.intake` | `ImageIntake` | Fetch an image a MEMBER named, and store it locally. **A plugin must never do this itself** — see the rule below. |

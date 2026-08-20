@@ -382,6 +382,13 @@ cookie; the README row matches the registered route.
 
 ## 12. Metrics & observability
 
+Three audiences, and a plugin owes something different to each: a person
+reading logs after the fact, an operator looking at an admin page now, and a
+scraper building a graph. The first two were the whole of this section until
+20 Aug 2026; the third is the one that pages somebody at 3am.
+
+**Logs and operator figures**
+
 - [ ] **MUST** — structured log keys come from the host's vocabulary
       (`logkeys_test.go`); a new key is added there with a meaning, in the
       same commit. A log schema nobody reviews is one nobody can query.
@@ -393,8 +400,52 @@ cookie; the README row matches the registered route.
       facts (see §4), and admin-page counts where an operator will ask "is it
       working".
 
-Verify: host `go test` (the logkeys sweep runs repo-wide); review question —
-"can an operator tell this is working without psql?"
+**Saying whether it works**
+
+- [ ] **SHOULD** — a `pluginapi.HealthReporter` when the plugin can be running
+      and not doing its job. Every plugin here degrades gracefully because §1
+      requires it, which means every plugin can be **silently useless** — a
+      scraper with no API key and an IRC bot that has not connected since
+      Tuesday both look exactly like healthy plugins from outside. Report
+      `degraded` with a sentence an operator can act on ("no API key", not
+      "config error"), and read state you already hold: a reporter that dialled
+      its upstream would make the admin page as slow and as flaky as the thing
+      it reports on.
+
+**Metrics**
+
+- [ ] **SHOULD** — a `pluginapi.MetricSource` for what the host cannot see: a
+      staging backlog, announces, a per-source failure rate. Name them
+      `<plugin>_<thing>[_total]`, and use BASE UNITS — seconds, not
+      milliseconds. A dashboard cannot tell from the wire which you meant, and
+      mixing them is how a graph ends up a thousand times wrong silently.
+- [ ] **MUST** — labels are BOUNDED sets: a job name, an outcome, a source.
+      Never a user id, a release id or a raw path. Every distinct combination
+      is a stored series forever, so an unbounded label does not make a richer
+      metric — it makes an unusable one and takes the monitoring system with
+      it. The host labels request timings by ROUTE TEMPLATE (`/release/:id`)
+      for exactly this reason: the path form would be 160,000 series here.
+- [ ] **MUST** — `Metrics` is cheap and cannot fail a scrape. Read counters
+      already in memory; a `SELECT count(*)` that runs every fifteen seconds
+      forever is a monitoring system acting as a load generator, and a source
+      that blocks on a dependency makes the scrape time out — which looks
+      exactly like the whole process being down.
+- [ ] **SHOULD** — prefer a counter and let the query do the rate. Absolute
+      totals belong on an admin page; a graph wants a number that only goes up.
+
+**What the HOST owes, stated here because a plugin author will look for it**
+
+`/healthz` is LIVENESS and checks nothing external — a probe that touched the
+database would let a thirty-second blip restart every container at once.
+`/readyz` is READINESS and checks the database, so the same blip drains traffic
+instead. `/versionz` is build identity for a person or a deploy script.
+`/metrics` is gated: it names every job, every plugin, the member count and the
+exact build, which is a reconnaissance summary of the deployment.
+
+Verify: host `go test` (the logkeys sweep runs repo-wide), `curl /admin/metrics`
+and read it — an unfamiliar metric with no HELP, or a label you could not
+enumerate, is the finding. Review question: "can an operator tell this is
+working without psql?"
 
 ## 13. Documentation (doc + readme)
 
