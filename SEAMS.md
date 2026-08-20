@@ -17,9 +17,21 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **41** of them. They are discoverable: an author
-reading `pluginapi` sees what exists, the compiler catches interface skew, and
-`/admin/contracts` can report an unwired one.
+importing the other. There are **52** of them, counted from the `…Name` and
+`…Prefix` constants in `pluginapi` on 20 Aug 2026. They are discoverable: an
+author reading `pluginapi` sees what exists, the compiler catches interface
+skew, and `/admin/contracts` can report an unwired one.
+
+> **Recount it rather than trusting that number.** It was 41 when this document
+> was written and nobody noticed it drifting to 52 — eleven contracts arrived
+> and none of them reached the catalogue below, which is the exact failure this
+> page exists to prevent. One line does it:
+>
+> ```
+> grep -rhoE '[A-Za-z]+(Name|Prefix)\s+=\s+"[^"]+"' pluginapi/*.go | sort -u
+> ```
+>
+> Diff that against the tables below when you add a contract.
 
 **Bare-string conventions** are a key agreed between one host and one plugin,
 typed as a raw func, declared nowhere:
@@ -61,6 +73,10 @@ consumer); the rest are single values.
 | `groups.display` | — | A member's badge, resolved in batch. |
 | `groups.audit` | — | Membership history. |
 | `limits.boost` | `APIBoost` | A live multiplier on API allowances. |
+| `auth.apikey` | `APIKeyResolver` | Turn an API key into a member. The only way a machine-facing endpoint knows who is calling. Optionally also `APIKeyIssuer`, type-asserted off the same registry entry. |
+| `auth.invite.issue` | `InviteIssuer` | Open the door on a plugin's behalf. An application queue decides WHO may join; the host still decides how — same mint, same window, same email, same chain. |
+| `auth.regmode.*` | `RegistrationModeInfo` | **Prefix.** A way to join, offered beside the host's built-in open/invite/closed. `AllowsSignup` governs the PAGE, not the endpoint — an approved applicant arriving with an invite must still get in. |
+| `cosmetics.effects` | `CosmeticResolver` | Who is wearing which name effect, avatar frame or profile ground, and their approved title. Keyed by USERNAME, because the templates that draw a member have a name and nothing else. |
 
 ### The economy
 
@@ -82,6 +98,12 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 |---|---|---|
 | `catalog.taxonomy` | `CatalogName` | The Newznab category tree. |
 | `usenet.releasesink` / `.healthstore` / `.nfostore` / `.imagestore` / `.retitlestore` / `.activity` / `.catalog-stats` / `.junk-sweep` | various | The indexer's ports into a host's own domain. |
+| `usenet.index` / `.admin` / `.newznab` | `UsenetIndex`, various | The read surface, the operator surface, and the Newznab endpoint. What a host renders a release page from. |
+| `usenet.series` | `SeriesStore` | Every copy of an episode, grouped. What the /series pages read. |
+| `usenet.grabs` | `DownloadGrabLookup` | Which releases a member has taken — the check that stops a download report being writable by anyone who guesses an id. |
+| `usenet.recheck` | `ReleaseRecheckRequester` | Flag a release for the health sweep. A report is a signal; **the sweep decides from the articles themselves**. |
+| `tracker.mirrors` / `tracker.mirror.make` | `TorrentMirrors`, `TorrentMirrorMaker` | Which releases also exist as torrents, and making one on demand. On-demand because an index of 160,000 releases would otherwise pre-build gigabytes of info dictionaries nobody asked for. |
+| `collections.sink` | `CollectionSink` | Where a selection of releases can be filed. Deliberately narrow — name a member's own collections and take a batch. It cannot create one, read one, or touch anybody else's: a cart is a trolley, not an editor. |
 | `search.torznab` | `TorznabSearch` | Torrent search, answered by whoever has torrents. |
 | `content.block.*` | — | **Prefix.** A block a page can render. |
 | `content.pipeline` | — | The shared render pipeline. |
@@ -112,6 +134,7 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 | `backup.packs` | `BackupPacks` | Contribute to the one archive. |
 | `feeds.status` | `FeedsStatus` | Feed health. |
 | `achievements.granter` | `AchievementGranter` | Award a badge. |
+| `media.intake` | `ImageIntake` | Fetch an image a MEMBER named, and store it locally. **A plugin must never do this itself** — see the rule below. |
 
 ---
 
@@ -125,6 +148,26 @@ Provision — games missed the rewards granter and store missed `tracker.credit`
 on the same afternoon, both silently degrading. Anything the *host* registers is
 safe at Provision, and must be registered before `core.Boot` or it is never
 seen.
+
+**A plugin never fetches a URL a member typed.** It asks `media.intake`.
+Fetching a typed URL is a request the SERVER makes, from inside the network, to
+an address the poster chose: a cloud metadata endpoint, a port scan of a private
+subnet, or on a host whose egress goes through a VPN, a way to make the site
+reveal its real address. The address rules, the redirect re-check, the size cap
+and the content sniffing are one thing to get right rather than one per plugin —
+and the way to get it wrong is subtle enough to be worth naming: the guard
+belongs in `net.Dialer.Control`, which runs after resolution and is handed the
+real `ip:port`. In `Transport.DialContext` it is handed the HOSTNAME, cannot
+parse it as an address, and refuses every named host on earth while passing
+every test you wrote for it.
+
+**A widget returns BODY content; the host draws the frame.** A host wraps a
+placed widget in its own section and heading, so a widget that renders its own
+panel lands inside that one, heading under heading. `ranks`, `perks`, `hitrun`
+and the tracker's swarm get this right; `comments` and `cosmetics` both got it
+wrong and it stayed invisible until a poll landed in a 250px sidebar where the
+two borders sit inches apart. State that belongs in a header — a count, a
+"closed" tag — goes beside the first line of the body instead.
 
 **Register AS the declared type.** The registry asserts on the exact type, so a
 bare `func(...)` never satisfies `pluginapi.SomethingFunc`. Wrong type under the

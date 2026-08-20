@@ -180,6 +180,59 @@ repeat it here unless it is the worst instance).
 - **usenet** — describe the six plain-Registered capabilities; dismissed-marker for deleted curated newsgroups.
 - **wiki** — wire the CSRF seam (forms 403 today); SlotAdminPage; rewrite README's template/extension claims.
 
+## Not in the table above — NOT GRADED
+
+Ten plugins are missing from the grading table. They are listed here rather
+than given rows, because this document's own rule is that it is *"a snapshot,
+not a scoreboard to keep green by editing this file: regrade after real work and
+replace it wholesale"* — and a self-assessment by the author of the code is not
+the six-independent-reviewer method the rest of the table was produced by.
+Grading my own work into a table that does not say so would make the whole page
+less trustworthy, not more.
+
+So this holds only what a command can check. Dates are the first commit that
+added the directory; README and test-file counts are from the tree on
+20 Aug 2026.
+
+| plugin | added | README | test files |
+|---|---|---|---|
+| achievements | 16 Aug | ✓ | 10 |
+| games | 17 Aug | ✓ | 2 |
+| magic | 17 Aug | ✓ | 1 |
+| medals | 17 Aug | ✓ | 2 |
+| downloads | 18 Aug | ✓ | 1 |
+| applications | 19 Aug | ✓ *(20 Aug)* | **0** |
+| comments | 19 Aug | ✓ *(20 Aug)* | 1 |
+| cosmetics | 19 Aug | ✓ *(20 Aug)* | **0** |
+| mediainfo | 19 Aug | ✓ *(20 Aug)* | 1 |
+| polls | 19 Aug | ✓ *(20 Aug)* | **0** |
+
+The five marked *(20 Aug)* had no README until that day; writing them was how
+this section came to exist.
+
+**The pattern, and it is not flattering.** Everything shipped in the last week
+was verified against a running site — by transcript, and for anything visual by
+screenshot, which repeatedly caught faults no test would have. Almost none of it
+was verified by a test that runs in CI. Hand-verification proves it worked once,
+on one machine, on one afternoon; it does not survive the next refactor and a
+contributor cannot run it.
+
+Three of the ten have **no test file at all**, and each has at least one pure
+function that is exactly the shape a table test wants:
+
+- `cosmetics.cleanTitle` — strips bidi overrides and stacked combining marks
+  from text published beside somebody's name. Security-adjacent and untested.
+- `applications.looksLikeEmail` / `hashIP`, plus the enumeration rule that a
+  known address and an unknown one must answer identically — the kind of
+  property that regresses silently when somebody adds a helpful error message.
+- `polls.showResults` / `percent` / `slugify` / `Poll.Closed` — a
+  three-policy × voted × closed matrix, which is a table test and nothing more.
+
+A first correction to this list was written from memory and got three rows
+wrong — it claimed `games`, `magic` and `medals` had neither README nor tests,
+and all three have both. They are here because the 16 Aug batch missed them, not
+because anything is wrong with them. Check the tree, not your recollection.
+
 ## Mechanical appendix
 
 Coverage (statement %, `go test -cover`, 2026-08-16): agent 72 · reports 62 ·
