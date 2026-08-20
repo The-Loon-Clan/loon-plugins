@@ -25,7 +25,7 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 | agent | ✓ | — | ✓ | — | — | ~ | ✓ | ✗ | ✓ | ~ | — | — | ✓ | ✓ |
 | anidbscraper | ✓ | — | ~ | ✗ | ~ | ✗ | — | — | — | ✓ | — | ✓ | ✗ | ✗ |
 | backup | ✓ | ✓ | ✓ | ~ | ✓ | ✓ | ✓ | ~ | — | ~ | ✓ | ✓ | ✓ | ✓ |
-| backups | ✓ | — | ✓ | ~ | ~ | ~ | ~ | — | — | — | — | ~ | ✗ | ✗ |
+| backups | ✓ | — | ✓ | ~ | ~ | ~ | ~ | — | — | — | — | ~ | ✗ | ✓ |
 | catalog | ✓ | ✓ | ✓ | ~ | — | — | ~ | — | — | ~ | — | — | ✗ | ~ |
 | chat | ✓ | — | ✓ | ✓ | — | ✓ | — | ✗ | ~ | ~ | — | ~ | ✓ | ~ |
 | communities | ✓ | ✗ | ~ | ✗ | — | ✓ | ✗ | ✗ | ~ | ~ | — | ~ | ✓ | ~ |
@@ -46,7 +46,7 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 | news | ✓ | ~ | ✗ | ✗ | — | ✓ | ✗ | ✗ | ~ | ~ | — | ~ | ~ | ~ |
 | offers | ✓ | — | ✓ | ✓ | ~ | ~ | ✗ | ✗ | ~ | ~ | ✓ | ✓ | ✓ | ~ |
 | perks | ✓ | ~ | ~ | ✗ | ~ | ✓ | ✗ | ~ | ✓ | ~ | — | ~ | ✗ | ~ |
-| playlists | ✓ | ✓ | ~ | ✓ | — | ~ | ✗ | ~ | ~ | ~ | — | ✗ | ✗ | ✗ |
+| playlists | ✓ | ✓ | ~ | ✓ | — | ~ | ✗ | ~ | ~ | ~ | — | ✗ | ✗ | ~ |
 | pointstore | ✓ | ~ | ~ | ✗ | — | ~ | ✗ | ✗ | ✓ | ~ | — | ~ | ✗ | ~ |
 | ranks | ✓ | ✓ | ~ | ~ | ✓ | ✓ | ~ | ~ | ✓ | ~ | — | ✓ | ~ | ✓ |
 | releasegroups | ✓ | — | ✓ | ✗ | ✓ | ✓ | ~ | ✗ | ~ | ~ | — | ~ | ✓ | ✓ |
@@ -56,7 +56,7 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 | roadmap | ~ | ✗ | ~ | ✗ | ✓ | ✓ | ✗ | ✗ | ~ | ~ | ~ | ~ | ~ | ✓ |
 | scraper | ✓ | — | ✗ | ~ | ✓ | ~ | — | — | — | ✓ | — | ✓ | ✗ | ~ |
 | seedlock | ✓ | ~ | ~ | ✗ | — | ~ | ✗ | ~ | ✓ | ~ | — | ~ | ✗ | ~ |
-| stats | ✓ | — | ✓ | — | ✓ | ~ | — | ✗ | ✓ | ~ | — | ~ | ✗ | ✗ |
+| stats | ✓ | — | ✓ | — | ✓ | ~ | — | ✗ | ✓ | ~ | — | ~ | ✗ | ✓ |
 | store | ✓ | ✓ | ~ | ✓ | — | ~ | ✗ | ✗ | ~ | ~ | — | ~ | ~ | ✓ |
 | tickets | ~ | ~ | ✗ | ✓ | — | ~ | ✗ | ✗ | ~ | ~ | — | ~ | ✗ | ~ |
 | tracker | ✓ | ✓ | ✓ | ✗ | ~ | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ~ | ✓ | ✓ |
@@ -124,7 +124,7 @@ Most severe first. These are bugs, not style.
 | 3 | **Nothing to build on: no events** — 13 ✗ + 11 ~ | tracker, perks, hitrun, seedlock, pointstore, communities, news, releasegroups, requests, lists, irc, roadmap, anidbscraper | `DeclareEvent` the notable facts with honest flags; the ecosystem's achievements/stats can only see what is announced. |
 | 4 | **No README** — 12 ✗ | backups, stats, tickets*, catalog, scraper, anidbscraper, playlists, perks, hitrun, seedlock, dailyreward, pointstore (*tickets has one that contradicts the code, which is worse) | tracker/README.md is the exemplar; §13 lists the sections. |
 | 5 | **i18n-readiness** — 0 ✓ passes among plugins with member strings | everyone | strings into templates, host helpers for dates/bytes; §10 is written so the seam lands as a wrap, not a rewrite. |
-| 6 | **Zero-test plugins** — 4 ✗ | anidbscraper, backups, playlists, stats (then chat 0.8%, scraper 3%, releasegroups 5.8%, pointstore 6.4%) | §14; the template-execution test is the highest-value first test for any of them. |
+| 6 | **Zero-test plugins** — 1 ✗ | anidbscraper (then chat 0.8%, scraper 3%, releasegroups 5.8%, pointstore 6.4%) | §14; the template-execution test is the highest-value first test for any of them. **20 Aug:** backups, playlists and stats were paid off along with cosmetics, polls and applications; anidbscraper is left deliberately, being a stub whose bodies are not extracted yet. |
 | 7 | **Job hygiene** — repeated interval literals, pause skipped on manual triggers, `SetIdle(time.Time{})` | backups, offers, requests, economy, feeds, logs, rewards, events, stats | one interval const; check `IsPaused` on the trigger path; idle with a real horizon. |
 
 Unadopted contracts, for whoever wants a first-mover slot: `pluginapi.Proposer`
@@ -139,9 +139,9 @@ against the systemic table (a plugin listed under a systemic gap does not
 repeat it here unless it is the worst instance).
 
 - **agent** — restyle the two cards; honest empty state for a zero-agent owner.
-- **anidbscraper** — finish or retire the extraction: the fetch is a stub; then tests + README.
+- **anidbscraper** — finish or retire the extraction: the fetch is a stub; then tests + README. Left out of the 20 Aug test sweep on purpose: a test over a placeholder pins the placeholder.
 - **backup** — declare sealed-generation/ack events; captions.
-- **backups** — README and first tests; log succeeded vs failed entries.
+- **backups** — README; log succeeded vs failed entries. *(Tests done 20 Aug: every path out of `run` ends the job, and one failing hook does not cost the rest of the archive.)*
 - **catalog** — README; execute settings.html in a test; describe the capability.
 - **chat** — move the SSE client to a host-served asset (inline script is CSP-dead); handler tests.
 - **communities** — declare events (join/thread/reply); drop host-table FKs from schema.sql; admin oversight page.
@@ -162,7 +162,7 @@ repeat it here unless it is the worst instance).
 - **news** — wire the CSRF seam (forms 403 today); declare publish events; adopt host RelativeTime.
 - **offers** — drop three CDN scripts; SlotAdminPage ×2; pause + one interval const.
 - **perks** — README (the tracker cross-schema read is undisclosed); admin oversight for tokens; grant/spend events.
-- **playlists** — README, first tests, stop swallowing lookup errors; oversight page.
+- **playlists** — README, stop swallowing lookup errors; oversight page. *(Tests done 20 Aug — and they found that `owned()` treated an anonymous viewer id of 0 as an owner id; hardened.)*
 - **pointstore** — refund on SetFlair failure (points are lost today); host vocabulary; operator-editable catalog.
 - **ranks** — refresh the stale README (SetJobDeps/mirror both gone); declare promote/derank events; NavHint.
 - **releasegroups** — recut five templates; declare claim/news/follow events; followed-groups widget.
@@ -170,9 +170,9 @@ repeat it here unless it is the worst instance).
 - **requests** — declare created/fulfilled/boosted events; admin oversight page; fix stale README lifecycle.
 - **rewards** — maintain() SetError + real horizon; declare grant/claim events; host vocabulary.
 - **roadmap** — bundle cytoscape locally; move eight tables into plugin migrations; SlotAdminPage CRUD.
-- **scraper** — README disclosing all seven services; host SSRF-safe client; keys out of URLs; test theporndb.
+- **scraper** — README disclosing all seven services; host SSRF-safe client; keys out of URLs. *(theporndb tested 20 Aug: the JAV routing regex, the cover-preference ladder, and the mapping.)*
 - **seedlock** — reasoned sqllint:allow on views.go:143; admin view of held claims; README.
-- **stats** — README + first tests; read the snapshot back from shared cache on web processes.
+- **stats** — README; read the snapshot back from shared cache on web processes. *(Tests done 20 Aug: the job-never-left-running rule, and that a cache failure costs the persisted copy but not the page.)*
 - **store** — drop two CDN scripts; SlotAdminPage; fix README's "ships no templates" claim.
 - **tickets** — rewrite the README (Surface contradicts the code); CSRF on every form; SlotAdminPage; stop swallowing update/delete errors.
 - **tracker** — fix the deferred-SetIdle clobber; declare snatch/cheat events; MetricSource for up/down/snatches.
@@ -201,11 +201,11 @@ added the directory; README and test-file counts are from the tree on
 | magic | 17 Aug | ✓ | 1 |
 | medals | 17 Aug | ✓ | 2 |
 | downloads | 18 Aug | ✓ | 1 |
-| applications | 19 Aug | ✓ *(20 Aug)* | **0** |
+| applications | 19 Aug | ✓ *(20 Aug)* | 1 |
 | comments | 19 Aug | ✓ *(20 Aug)* | 1 |
-| cosmetics | 19 Aug | ✓ *(20 Aug)* | **0** |
+| cosmetics | 19 Aug | ✓ *(20 Aug)* | 1 |
 | mediainfo | 19 Aug | ✓ *(20 Aug)* | 1 |
-| polls | 19 Aug | ✓ *(20 Aug)* | **0** |
+| polls | 19 Aug | ✓ *(20 Aug)* | 1 |
 
 The five marked *(20 Aug)* had no README until that day; writing them was how
 this section came to exist.
@@ -217,8 +217,8 @@ was verified by a test that runs in CI. Hand-verification proves it worked once,
 on one machine, on one afternoon; it does not survive the next refactor and a
 contributor cannot run it.
 
-Three of the ten have **no test file at all**, and each has at least one pure
-function that is exactly the shape a table test wants:
+Three of the ten had **no test file at all** when this was written, and each
+had at least one pure function that was exactly the shape a table test wants:
 
 - `cosmetics.cleanTitle` — strips bidi overrides and stacked combining marks
   from text published beside somebody's name. Security-adjacent and untested.
@@ -227,6 +227,26 @@ function that is exactly the shape a table test wants:
   property that regresses silently when somebody adds a helpful error message.
 - `polls.showResults` / `percent` / `slugify` / `Poll.Closed` — a
   three-policy × voted × closed matrix, which is a table test and nothing more.
+
+**All three are done (20 Aug)**, and the sweep carried on into every other
+package that had no test file: `stats`, `backups`, `playlists`, the
+`theporndb` source, and `scripts/lint-sql`. Only `anidbscraper` is still bare,
+deliberately — its bodies are stubs awaiting extraction, so a test would pin a
+placeholder.
+
+Two things the tests found on the way, which is the argument for having written
+them at all:
+
+- `playlists.owned()` compared the stored owner against a viewer id that is
+  **0 for anonymous**, so a `user_id = 0` row would have been owned by every
+  signed-out visitor. Unreachable today — every write route sits behind
+  `RequireUser` — but the check claims to stand on its own and did not.
+- `lint-sql`, the guard that keeps SQL in this repo constant-only, could be
+  stepped around by **naming your string**: it skips bare identifier arguments,
+  so `q := fmt.Sprintf(...)` followed by `tx.ExecContext(ctx, q)` passed in
+  silence. Closed, with the rule narrowed to strings that both are built
+  dynamically and open with a SQL verb, so a Sprint'ed value bound as `$1` is
+  not mistaken for a query.
 
 A first correction to this list was written from memory and got three rows
 wrong — it claimed `games`, `magic` and `medals` had neither README nor tests,
@@ -243,6 +263,14 @@ discord 14 · donations 13 · uploads 13 · economy 12 · offers 12 · lists 12 
 irc 12 · roadmap 9 · tickets 9 · dbmaint 8 · pointstore 6 · releasegroups 6 ·
 scraper 3 · chat 1 · anidbscraper 0 · backups 0 · playlists 0 · stats 0.
 (scraper's sources average ~77 — the shell is what is bare.)
+
+Re-measured for the packages touched on 20 Aug: backups 62.9 · stats 43.1 ·
+applications 20.5 · playlists 13.0 · polls 10.4 · cosmetics 8.2 · anidbscraper
+still 0. Plus two that were not in the original sweep at all: lint-sql 69.1 and
+scraper/sources/theporndb 41.7. The low numbers are honest — these files test
+the decisions (an ownership gate, an enumeration rule, a results policy, a job
+that must never be left running), not the SQL around them, and a store method
+that only a database can exercise is not reachable from a unit test here.
 
 Tables without captions: 38 templates. Bootstrap vocabulary: ~75 template
 files. CDN scripts: 11 tags in 7 plugins. Plugins declaring events: 12 of 41.
