@@ -143,17 +143,21 @@ func (s *PGStore) Edit(ctx context.Context, id, userID int64, body string) (bool
 // the difference between an author changing their mind and a moderator acting
 // — and the two need telling apart when somebody asks why their comment is
 // gone.
+// The staff widening is its own BOOLEAN parameter, and that is a correction.
+// It used to be expressed by passing 0 in place of the caller's id, with the
+// clause reading `($3 = 0 OR user_id = $3)` — the sentinel meaning "staff" and
+// the id meaning "nobody signed in" were the same value, so a non-staff call
+// with byUser 0 took the staff branch and removed anybody's comment. The routes
+// were the only thing preventing it; an integration test found it in one line.
+// Written this way the two cases cannot collide: byUser 0 matches no author,
+// because no comment has user_id 0.
 func (s *PGStore) Delete(ctx context.Context, id, byUser int64, staff bool) (bool, error) {
-	owner := byUser
-	if staff {
-		owner = 0 // 0 matches no user_id, so the OR below becomes "any author"
-	}
 	var n int64
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		res, err := tx.ExecContext(ctx, `
 			UPDATE comments SET deleted_at = now(), deleted_by = $1
 			 WHERE id = $2 AND deleted_at IS NULL
-			   AND ($3 = 0 OR user_id = $3)`, byUser, id, owner)
+			   AND (user_id = $1 OR $3)`, byUser, id, staff)
 		if err != nil {
 			return err
 		}

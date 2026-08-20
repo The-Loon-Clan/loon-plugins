@@ -496,10 +496,33 @@ log.
 - [ ] **SHOULD** — concurrency-sensitive paths run under `-race` where the
       toolchain allows, and are written so the store arbitrates races rather
       than the test hoping.
+- [ ] **MUST** — a store test that needs Postgres uses `pluginapi/pgtest`
+      rather than its own connection and its own environment variable:
 
-Verify: `go test ./<plugin>/` and `make itest`; `make cover` against the
-floor; for the bite-check, the commit message says what was deleted to prove
-it.
+      ```go
+      //go:build integration
+
+      func testStore(t *testing.T) *PGStore {
+          return NewPGStore(pgtest.SchemaDB(t, "myplugin_store_test", migrations))
+      }
+      ```
+
+      A SCRATCH schema name, not the plugin's real one, so a run cannot drop
+      a schema somebody is using; and the plugin's own embedded migrations,
+      so the test exercises the shipped files rather than a hand-written
+      CREATE TABLE that stopped matching two migrations ago.
+
+      The variable is `LOON_TEST_DSN` and nothing else. Thirty-one integration
+      tests were written before this existed, each with its own name —
+      `ACHIEVEMENTS_TEST_DSN`, `NEWS_TEST_DSN`, and eight more — and not one of
+      them was set by anything, so every one skipped and the suite went green
+      by doing nothing. That is the failure this rule exists to prevent, and it
+      is worse than having no test: a skip reports as a pass.
+
+Verify: `go test ./<plugin>/` and `make itest` (which starts a disposable
+Postgres and runs the whole `integration`-tagged suite; CI runs the same);
+`make cover` against the floor; for the bite-check, the commit message says
+what was deleted to prove it.
 
 ---
 
@@ -512,6 +535,19 @@ make check      # fmt, build, vet, golangci, sqllint, contrast, tests, coverage 
 make release    # + access, links, a11y, mobile against the running site
 make itest      # migrations + SQL semantics against a disposable Postgres/Redis
 ```
+
+From THIS repo (`loon-plugins`), which has its own Makefile:
+
+```
+make check      # vet (both tags), sqllint, unit tests
+make itest      # the integration-tagged suite against a disposable Postgres
+make fmt        # gofmt as an error (over-reports on Windows — see the target)
+```
+
+`scripts/itest.sh` is where `make itest` actually lives, because this is a
+repo people open on machines with no `make` at all — a target that only works
+in one place is a check that quietly stops being run. It takes `go test`
+arguments, so `bash scripts/itest.sh ./cosmetics/ -v` narrows it.
 
 From THIS repository, which the host's targets cannot see into:
 

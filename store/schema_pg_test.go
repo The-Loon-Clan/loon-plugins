@@ -252,9 +252,30 @@ func seedHostTables(t *testing.T, db *sqlx.DB) {
 // and both properties are ones a hand-run SQL file gets wrong easily: that
 // re-running does not duplicate, and that it does not overwrite a price an
 // admin has since changed.
+// applyProfileImport runs the one-time adoption importer, if this checkout has
+// it.
+//
+// It usually does NOT. The importer is a DEPLOYMENT asset — it reads the
+// operator's legacy `public.user_ranks` and `public.site_settings` to seed the
+// catalog, so it belongs to whichever repo holds the deployment, and the
+// store/README says as much. The relative path below came across with the
+// plugin when it was ported out of the indexer repo and has pointed at nothing
+// ever since; nobody noticed, because the test never ran — INDEXER_TEST_DB_DSN
+// was never set by anything.
+//
+// So this SKIPS rather than fails, and names the file when it does. Set
+// STORE_IMPORT_SQL to run it against a checkout that has the importer.
 func applyProfileImport(t *testing.T, db *sqlx.DB) {
 	t.Helper()
-	body, err := os.ReadFile("../../deploy/import/store_from_profile.sql")
+	path := os.Getenv("STORE_IMPORT_SQL")
+	if path == "" {
+		path = "../../deploy/import/store_from_profile.sql"
+	}
+	body, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		t.Skipf("the adoption importer is not in this checkout (%s). "+
+			"It is a deployment asset, not a plugin file; set STORE_IMPORT_SQL to point at it.", path)
+	}
 	if err != nil {
 		t.Fatalf("read importer: %v", err)
 	}

@@ -1,0 +1,101 @@
+name: test
+on: [push, pull_request]
+
+jobs:
+  # The unit suite: no services, so it is the fast signal on every push.
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: loon-plugins
+      # loon is a sibling module (go.mod replace => ../loon), so it has to be
+      # on disk beside this one before anything resolves.
+      - uses: actions/checkout@v4
+        with:
+          repository: ameNZB/loon
+          path: loon
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: loon-plugins/go.mod
+          cache-dependency-path: loon-plugins/go.sum
+
+      - name: gofmt
+        working-directory: loon-plugins
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "gofmt would change these files:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: vet
+        working-directory: loon-plugins
+        run: |
+          go vet ./...
+          # Separately, because the integration files are not compiled without
+          # the tag — a build error in one of them would otherwise reach main
+          # and only surface when somebody ran the integration suite.
+          go vet -tags integration ./...
+
+      - name: test
+        working-directory: loon-plugins
+        run: go test ./...
+
+  # The tests that need a real Postgres.
+  #
+  # These existed long before this job did — thirty-one files — and had never
+  # run anywhere: each read its own environment variable, none of which was set
+  # by anything, so every one of them skipped and the suite went green by doing
+  # nothing. That is the whole reason this job exists.
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: demo
+          POSTGRES_PASSWORD: demo
+          POSTGRES_DB: loon_plugins_test
+        ports:
+          - 5432:5432
+        # Without this the job races the database and fails on connect.
+        options: >-
+          --health-cmd "pg_isready -U demo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: loon-plugins
+      - uses: actions/checkout@v4
+        with:
+          repository: ameNZB/loon
+          path: loon
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: loon-plugins/go.mod
+          cache-dependency-path: loon-plugins/go.sum
+
+      - name: integration test
+        working-directory: loon-plugins
+        env:
+          LOON_TEST_DSN: postgres://demo:demo@localhost:5432/loon_plugins_test?sslmode=disable
+          # The pre-pgtest tests each read their own name. Same DSN under all of
+          # them, which is what scripts/itest.sh does locally; keep the two
+          # lists together when one changes.
+          ACHIEVEMENTS_TEST_DSN: postgres://demo:demo@localhost:5432/loon_plugins_test?sslmode=disable
+          BACKUP_TEST_DSN: postgres://demo:demo@localhost:5432/loon_plugins_test?sslmode=disable
+          EVENTS_TEST_DSN: postgres://demo:demo@localhost:5432/loon_plugins_test?sslmode=disable
+          NEWS_TEST_DSN: postgres://demo:demo@localhost:5432/loon_plugins_test?sslmode=disable
+          RANKS_TEST_DSN: postgres://demo:demo@localhost:5432/loon_plugins_test?sslmode=disable
+          REWARDS_TEST_DSN: postgres://demo:demo@localhost:5432/loon_plugins_test?sslmode=disable
+          TICKETS_TEST_DSN: postgres://demo:demo@localhost:5432/loon_plugins_test?sslmode=disable
+          TRACKER_TEST_DSN: postgres://demo:demo@localhost:5432/loon_plugins_test?sslmode=disable
+          USENET_TEST_DSN: postgres://demo:demo@localhost:5432/loon_plugins_test?sslmode=disable
+          INDEXER_TEST_DB_DSN: postgres://demo:demo@localhost:5432/loon_plugins_test?sslmode=disable
+        # NOT a -run subset. A hardcoded list means an integration test added
+        # later never runs and nobody is told.
+        run: go test -tags integration -count=1 ./...
