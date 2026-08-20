@@ -1,0 +1,108 @@
+{{/* The conversation under whatever the page is about.
+
+     The form is at the BOTTOM, after the comments, because the order people
+     read in is: what has been said, then have I got something to add. A box
+     above the thread asks for an opinion before showing you the ones already
+     there, which is how a thread gets four people saying the same thing.
+
+     Every write carries `back`, the path the viewer is on, so a handler can
+     return them without this plugin knowing the host's routes. */}}
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#comment"></use></svg>
+            Comments
+        </h2>
+        {{if .Comments}}<div class="panel__actions"><span class="panel__grouping">{{len .Comments}}</span></div>{{end}}
+    </header>
+
+    <div class="panel__body">
+        {{if .Comments}}
+        <ol class="comment-list">
+            {{$csrf := .CSRF}}{{$back := .Back}}{{$max := .Max}}
+            {{range .Comments}}
+            <li class="comment{{if .Deleted}} comment--removed{{end}}" id="comment-{{.ID}}">
+                <div class="comment__head">
+                    <strong class="comment__author">{{.Author}}</strong>
+                    <span class="comment__when" title="{{.When.Format "2 Jan 2006 15:04"}}">{{ago .When}}</span>
+                    {{/* Said out loud. A comment that changed after people
+                         replied to it is a different comment, and hiding that
+                         is how a thread stops making sense. */}}
+                    {{if .Edited}}<span class="comment__edited">edited</span>{{end}}
+                </div>
+
+                {{if .Deleted}}
+                    {{if .Body}}
+                    {{/* Staff only — see views.go. A moderator asked "why did
+                         you remove this" cannot answer from a row showing
+                         nothing. */}}
+                    <p class="comment__body comment__body--withheld">{{.Body}}</p>
+                    <p class="comment__note">Removed. Visible to staff only.</p>
+                    {{else}}
+                    <p class="comment__note">This comment was removed.</p>
+                    {{end}}
+                {{else}}
+                <p class="comment__body">{{.Body}}</p>
+                {{end}}
+
+                {{if or .Mine .CanDelete}}
+                <div class="comment__actions">
+                    {{/* Only the author edits. A moderator removing a comment
+                         is one thing; a moderator rewriting one under somebody
+                         else's name is another, and this offers no way to. */}}
+                    {{if and .Mine (not .Deleted)}}
+                    <details class="comment__edit">
+                        <summary>Edit</summary>
+                        <form method="post" action="/p/comments/edit">
+                            <input type="hidden" name="_csrf" value="{{$csrf}}">
+                            <input type="hidden" name="id" value="{{.ID}}">
+                            <input type="hidden" name="back" value="{{$back}}">
+                            <textarea class="form__input" name="body" rows="3" maxlength="{{$max}}" required>{{.Body}}</textarea>
+                            <button class="button button--outlined button--sm mt-1" type="submit">Save</button>
+                        </form>
+                    </details>
+                    {{end}}
+                    {{if and .CanDelete (not .Deleted)}}
+                    <form method="post" action="/p/comments/delete" style="display:contents">
+                        <input type="hidden" name="_csrf" value="{{$csrf}}">
+                        <input type="hidden" name="id" value="{{.ID}}">
+                        <input type="hidden" name="back" value="{{$back}}">
+                        <button class="button button--outlined button--sm" type="submit">Remove</button>
+                    </form>
+                    {{end}}
+                </div>
+                {{end}}
+            </li>
+            {{end}}
+        </ol>
+        {{else}}
+        <p class="m-0 text-muted">
+            Nothing yet.{{if .CanPost}} If you grabbed this, say whether it worked.{{end}}
+        </p>
+        {{end}}
+    </div>
+
+    {{if .CanPost}}
+    <div class="panel__body">
+        <form class="form" method="post" action="/p/comments/post">
+            <input type="hidden" name="_csrf" value="{{.CSRF}}">
+            <input type="hidden" name="kind" value="{{.Kind}}">
+            <input type="hidden" name="subject" value="{{.SubjectID}}">
+            <input type="hidden" name="back" value="{{.Back}}">
+            <div class="form__group">
+                <label class="form__label" for="comment-body">Add a comment</label>
+                <textarea class="form__input" id="comment-body" name="body" rows="3" required
+                          maxlength="{{.Max}}" placeholder="Was the encode good? Did it unpack?"></textarea>
+            </div>
+            <button class="form__button form__button--filled" type="submit">
+                <svg class="icon" aria-hidden="true"><use href="#comment"></use></svg>Post
+            </button>
+        </form>
+    </div>
+    {{else}}
+    <div class="panel__body">
+        <p class="m-0 small text-muted"><a href="/login">Sign in</a> to comment.</p>
+    </div>
+    {{end}}
+</section>
