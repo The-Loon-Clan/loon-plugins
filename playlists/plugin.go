@@ -23,6 +23,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 //go:embed migrations/*.sql
@@ -66,6 +68,9 @@ func SetDeps(d Deps) { deps = d }
 // Plugin is the core.Plugin lifecycle wrapper. There is no background work, so
 // Start and Stop are no-ops.
 type Plugin struct {
+	// pg is the concrete store, held for the collection sink — which needs the
+	// database rather than the Store interface's per-playlist operations.
+	pg *PGStore
 	core     *core.Core
 	handlers *Handlers
 }
@@ -95,9 +100,18 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if db == nil {
 		return fmt.Errorf("playlists: no schema DB")
 	}
-	p.handlers = &Handlers{store: NewPGStore(db), auth: c.Auth, core: c}
+	pg := NewPGStore(db)
+	p.pg = pg
+	p.handlers = &Handlers{store: pg, auth: c.Auth, core: c}
 	if err := declareEvents(c); err != nil {
 		return err
+	}
+	// Where the host's cart empties (pluginapi.CollectionSink). The host lets a
+	// member tick rows across a listing; one thing it can then do with them is
+	// put them in a collection, without knowing collections are playlists or
+	// that this plugin exists.
+	if err := c.Register(pluginapi.CollectionSinkName, sink{p: p}); err != nil {
+		return fmt.Errorf("playlists: register collection sink: %w", err)
 	}
 
 	engine := c.Router.Engine()
