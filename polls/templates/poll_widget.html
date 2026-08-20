@@ -28,7 +28,11 @@
             <li class="poll__result{{if .Mine}} poll__result--mine{{end}}">
                 <div class="poll__result-head">
                     <span class="poll__result-label">{{.Label}}</span>
-                    <span class="poll__result-count">{{.Percent}}%<span class="poll__result-votes">{{.Votes}}</span></span>
+                    {{/* The share, then the raw count in brackets. Both, because they answer
+                         different questions — a share says what the room thinks, a count
+                         says whether that is four people or four hundred — and the
+                         brackets are what stop "50% 1" reading as one number. */}}
+                    <span class="poll__result-count">{{.Percent}}%<span class="poll__result-votes">({{.Votes}})</span></span>
                 </div>
                 {{/* The bar's WIDTH is the only per-option value a stylesheet
                      cannot know, so it is the only thing set inline. */}}
