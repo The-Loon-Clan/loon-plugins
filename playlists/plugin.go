@@ -334,7 +334,16 @@ func (h *Handlers) owned(c *gin.Context) (*Playlist, bool) {
 		c.String(http.StatusNotFound, "playlist not found")
 		return nil, false
 	}
-	if p.UserID != h.viewer(c) {
+	// viewer() returns 0 for anonymous, and 0 is a REAL value in the comparison
+	// below — a row with user_id 0 would come out owned by everybody who is not
+	// signed in. Nothing can create such a row today (every write route is
+	// behind RequireUser, and Create stamps the caller's id), so this is
+	// defence in depth rather than a fix. It is here because the comment above
+	// says an ownership check that is easy to omit eventually gets omitted, and
+	// "the middleware would have stopped them" is the same bet one layer up.
+	// The column is only NOT NULL, so the schema does not rule 0 out either.
+	viewer := h.viewer(c)
+	if viewer <= 0 || p.UserID != viewer {
 		// 404 rather than 403, for the same reason Show uses one.
 		c.String(http.StatusNotFound, "playlist not found")
 		return nil, false

@@ -5,11 +5,28 @@
 // introduced — every value should reach the driver via a $N placeholder
 // instead.
 //
+// It also flags the INDIRECT form, where the query is assembled into a
+// local variable and the call receives only its name:
+//
+//	q := fmt.Sprintf("SELECT … '%s'", name)
+//	tx.ExecContext(ctx, q)
+//
+// A local counts as SQL when it is both dynamically built AND opens
+// with a SQL verb. The second half is what keeps the rule usable: a
+// Sprint'ed VALUE passed as a bind parameter beside a constant query
+// (`userTarget := fmt.Sprintf("user:%d", id)`) is the common shape in
+// this repo and must not be mistaken for a query.
+//
 // Suppress a finding by adding `// sqllint:allow <reason>` on the same
 // line as the call (or the line immediately above). Use that ONLY for
 // dynamic identifiers (table/column names, ORDER BY columns) where the
 // value comes from a hard-coded allowlist or switch statement — never
 // for actual user input.
+//
+// The token reaches its own line and ONE line after it, so in a
+// multi-line justification the token goes LAST. A token on the first
+// line of a two-line comment suppresses nothing, and the comment above
+// the finding reads as though it should.
 //
 // Run from the repo root:
 //
@@ -27,6 +44,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -232,6 +250,7 @@ func scanFile(path string, out *[]finding) {
 			continue
 		}
 		funcName := funcDeclName(fd)
+		dynamicSQL := dynamicSQLLocals(fd, src, staticStrs)
 		ast.Inspect(fd, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
 			if !ok {
@@ -250,8 +269,8 @@ func scanFile(path string, out *[]finding) {
 			// args in order and pick the first whose AST shape is a
 			// string-being-built (literal, +-chain, fmt.Sprint*). Bare
 			// *ast.Ident args are skipped — they could be ctx/tx/dest,
-			// and a SQL string held in an identifier (`q := ...`) should
-			// be linted at its assignment site, not here.
+			// and a SQL string held in an identifier (`q := ...`) is
+			// handled by the dynamicSQL fallback below instead.
 			var sqlArg ast.Expr
 			for _, a := range call.Args {
 				if exprIsLikelyString(a) {
@@ -259,10 +278,34 @@ func scanFile(path string, out *[]finding) {
 					break
 				}
 			}
+			pos := fset.Position(call.Pos())
 			if sqlArg == nil {
+				// No string-shaped argument, so the query is either a
+				// constant from elsewhere (fine, and unknowable here) or
+				// it was BUILT into a local variable a line earlier:
+				//
+				//	q := fmt.Sprintf("SELECT … '%s'", name)
+				//	tx.ExecContext(ctx, q)
+				//
+				// That form used to pass silently, which made the rest of
+				// this linter a formality anybody could step around by
+				// naming their string. dynamicSQL holds only locals whose
+				// value is both dynamically built AND begins with a SQL
+				// verb, so a Sprint'ed VALUE passed as a bind parameter
+				// (`userTarget := fmt.Sprintf("user:%d", id)`) is not
+				// mistaken for a query.
+				if name, ok := firstDynamicSQLArg(call.Args, dynamicSQL); ok && !suppressed[pos.Line] {
+					*out = append(*out, finding{
+						file:     path,
+						line:     pos.Line,
+						funcName: funcName,
+						method:   sel.Sel.Name,
+						reason:   "SQL built into variable `" + name + "` then executed",
+						snippet:  dynamicSQL[name],
+					})
+				}
 				return true
 			}
-			pos := fset.Position(call.Pos())
 			if suppressed[pos.Line] {
 				return true
 			}
@@ -279,6 +322,118 @@ func scanFile(path string, out *[]finding) {
 			return true
 		})
 	}
+}
+
+// sqlVerbs are the words a query starts with. Used to tell a SQL string being
+// assembled from an ordinary string being assembled — the difference between a
+// finding and a false positive on every fmt.Sprintf in a storage file.
+var sqlVerbs = []string{"select", "insert", "update", "delete", "with", "merge", "create", "drop", "alter", "truncate"}
+
+// dynamicSQLLocals maps each local variable in fd that is assigned a
+// dynamically-built string STARTING WITH A SQL VERB to a snippet of that
+// assignment. Both halves of the test matter: dynamic alone would flag every
+// Sprint'ed value in a storage file, and SQL-looking alone would flag the
+// constant queries that make up nearly all of them.
+//
+// Deliberately shallow — one function, no flow analysis, last assignment wins.
+// A linter that tried to be a type checker would be wrong in ways nobody could
+// predict; this is wrong only in the direction of missing things, which is the
+// direction the baseline already accounts for.
+func dynamicSQLLocals(fd *ast.FuncDecl, src []byte, staticStrs map[string]bool) map[string]string {
+	out := map[string]string{}
+	record := func(lhs []ast.Expr, rhs []ast.Expr) {
+		if len(lhs) != len(rhs) {
+			return
+		}
+		for i, l := range lhs {
+			id, ok := l.(*ast.Ident)
+			if !ok || id.Name == "_" {
+				continue
+			}
+			e := rhs[i]
+			if _, _, bad := classifyArg(e, src, staticStrs); !bad {
+				continue
+			}
+			if !looksLikeSQL(e) {
+				continue
+			}
+			out[id.Name] = srcRange(src, e.Pos(), e.End())
+		}
+	}
+	ast.Inspect(fd, func(n ast.Node) bool {
+		switch v := n.(type) {
+		case *ast.AssignStmt:
+			record(v.Lhs, v.Rhs)
+		case *ast.ValueSpec:
+			lhs := make([]ast.Expr, 0, len(v.Names))
+			for _, name := range v.Names {
+				lhs = append(lhs, name)
+			}
+			record(lhs, v.Values)
+		}
+		return true
+	})
+	return out
+}
+
+// firstDynamicSQLArg returns the name of the first argument that is a bare
+// identifier known to hold dynamically-built SQL.
+func firstDynamicSQLArg(args []ast.Expr, dynamicSQL map[string]string) (string, bool) {
+	for _, a := range args {
+		id, ok := a.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		if _, found := dynamicSQL[id.Name]; found {
+			return id.Name, true
+		}
+	}
+	return "", false
+}
+
+// looksLikeSQL reports whether a string expression's leading literal opens with
+// a SQL verb. The leading literal is the left-most leaf of a + chain, or a
+// Sprintf's format string — either way it is the start of the query.
+func looksLikeSQL(e ast.Expr) bool {
+	lit := leadingLiteral(e)
+	if lit == "" {
+		return false
+	}
+	lit = strings.ToLower(strings.TrimLeft(lit, " \t\r\n"))
+	for _, verb := range sqlVerbs {
+		if strings.HasPrefix(lit, verb+" ") || strings.HasPrefix(lit, verb+"\n") {
+			return true
+		}
+	}
+	return false
+}
+
+// leadingLiteral unquotes the left-most string literal of a string expression.
+func leadingLiteral(e ast.Expr) string {
+	switch v := e.(type) {
+	case *ast.BasicLit:
+		if v.Kind != token.STRING {
+			return ""
+		}
+		s, err := strconv.Unquote(v.Value)
+		if err != nil {
+			// A raw string with an odd byte; the quotes alone are enough
+			// to read the first word off it.
+			return strings.Trim(v.Value, "`\"")
+		}
+		return s
+	case *ast.BinaryExpr:
+		if v.Op != token.ADD {
+			return ""
+		}
+		return leadingLiteral(v.X)
+	case *ast.CallExpr:
+		if len(v.Args) == 0 {
+			return ""
+		}
+		return leadingLiteral(v.Args[0])
+	}
+	return ""
 }
 
 // funcDeclName returns a stable name for a function declaration,

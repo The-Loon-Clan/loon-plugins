@@ -124,6 +124,9 @@ func (r *PGStore) ListChangelogEntries(ctx context.Context, category string, lim
 		args = append(args, limit, offset)
 	}
 	var rows []*ChangelogEntry
+	// q is assembled from literals only — the three `where` fragments above and
+	// the two LIMIT/OFFSET forms; every value reaches the driver as a $N.
+	// sqllint:allow literal fragments only; see above
 	if err := r.db.SelectContext(ctx, &rows, q, args...); err != nil {
 		return nil, 0, err
 	}
