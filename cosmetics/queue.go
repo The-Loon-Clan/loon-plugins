@@ -59,14 +59,12 @@ func (p *Plugin) queuePage(c *gin.Context) (template.HTML, error) {
 		vm := queueRowVM{
 			UserID: r.UserID, Username: name, Text: r.Text, Submitted: r.SubmittedAt,
 		}
-		// The published title, if any — read through the same resolver the
-		// site renders from, so what a moderator is comparing against is
-		// literally what everybody else can see.
-		if name != "" && p.core != nil {
-			vm.Previous = pluginapi.MemberTitle(p.core, name).Text
-			if vm.Previous == vm.Text {
-				vm.Previous = ""
-			}
+		// What is SHOWING right now, straight off the row. The first cut read
+		// this through the resolver and always got nothing, because a
+		// submission had already overwritten the approved words — which is the
+		// bug that split the column in two (see migration 003).
+		if r.Published != r.Text {
+			vm.Previous = r.Published
 		}
 		out = append(out, vm)
 	}

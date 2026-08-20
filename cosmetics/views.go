@@ -45,8 +45,14 @@ type slotVM struct {
 type titleVM struct {
 	// Allowed is whether they have bought the right. Everything else on this
 	// struct is only meaningful when it is true.
-	Allowed  bool
-	Text     string
+	Allowed bool
+	// Text is what is in the box: their proposal, which may be waiting.
+	Text string
+	// Showing is what everybody else currently sees, which during a review is
+	// the OLD words rather than the new ones — see migration 003. Rendered as
+	// its own line so somebody who edited a title can tell that the old one is
+	// still up, instead of assuming their change went live.
+	Showing  string
 	State    string
 	Reason   string
 	Reviewed *time.Time
@@ -81,7 +87,7 @@ func (p *Plugin) page(c *gin.Context) (template.HTML, error) {
 			o, mine := have[e.Slug]
 			vm.Effects = append(vm.Effects, effectVM{
 				Slug: e.Slug, Label: e.Label, Description: e.Description,
-				Class: pluginapi.EffectClass(e.Slug),
+				Class:  pluginapi.EffectClass(e.Slug),
 				Tinted: e.Tinted, Animated: e.Animated,
 				Owned: mine, Worn: e.Slug == worn, Expires: o.ExpiresAt,
 			})
@@ -95,7 +101,8 @@ func (p *Plugin) page(c *gin.Context) (template.HTML, error) {
 		return "", err
 	}
 	if t, found, err := p.st.TitleOf(ctx, u.ID); err == nil && found {
-		title.Text, title.State, title.Reason, title.Reviewed = t.Text, t.State, t.Reason, t.ReviewedAt
+		title.Text, title.Showing = t.Text, t.Published
+		title.State, title.Reason, title.Reviewed = t.State, t.Reason, t.ReviewedAt
 	}
 
 	return p.render("cosmetics_page.html", map[string]any{

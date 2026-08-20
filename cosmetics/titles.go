@@ -43,8 +43,18 @@ const (
 
 // MemberTitle is one member's title, in whatever state it is in.
 type MemberTitle struct {
-	UserID      int64      `db:"user_id"`
-	Text        string     `db:"text"`
+	UserID int64 `db:"user_id"`
+	// Text is what they have PROPOSED — the words in the queue.
+	Text string `db:"text"`
+	// Published is what is SHOWING under their name right now.
+	//
+	// Separate from Text because a member editing an approved title is
+	// proposing new words, not withdrawing the old ones: with one column, the
+	// title vanished from every page the instant they pressed send and stayed
+	// gone until a moderator got round to them. It also gives the queue
+	// something to compare against, which is the difference between "they
+	// asked for this" and "they changed something already approved into this".
+	Published   string     `db:"published"`
 	State       string     `db:"state"`
 	SubmittedAt time.Time  `db:"submitted_at"`
 	ReviewedAt  *time.Time `db:"reviewed_at"`
@@ -67,7 +77,8 @@ type TitleStore interface {
 	// required for a refusal — see the handler.
 	ReviewTitle(ctx context.Context, userID, byUser int64, approve bool, reason string) (bool, error)
 
-	// ApprovedTitles is the renderer's query: user_id -> published words.
+	// ApprovedTitles is the renderer's query: user_id -> the words currently
+	// SHOWING, which is not the same as the words in the row — see Published.
 	ApprovedTitles(ctx context.Context) (map[int64]string, error)
 }
 
@@ -92,12 +103,15 @@ func (s *PGStore) SubmitTitle(ctx context.Context, userID int64, text string) er
 			       submitted_at = NOW(),
 			       reviewed_at = NULL,
 			       reviewed_by = NULL,
-			       reason = ''`, userID, text)
+			       reason = ''
+			   -- published is deliberately untouched: what is showing stays
+			   -- showing until the new words pass.
+			   `, userID, text)
 		return err
 	})
 }
 
-const titleCols = `user_id, text, state, submitted_at, reviewed_at, reviewed_by, reason`
+const titleCols = `user_id, text, published, state, submitted_at, reviewed_at, reviewed_by, reason`
 
 func (s *PGStore) TitleOf(ctx context.Context, userID int64) (MemberTitle, bool, error) {
 	var t MemberTitle
@@ -143,7 +157,12 @@ func (s *PGStore) ReviewTitle(ctx context.Context, userID, byUser int64, approve
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		res, err := tx.ExecContext(ctx, `
 			UPDATE cosmetic_titles
-			   SET state = $2, reviewed_at = NOW(), reviewed_by = $3, reason = $4
+			   SET state = $2, reviewed_at = NOW(), reviewed_by = $3, reason = $4,
+			       -- Approving is what PUBLISHES. Turning down leaves whatever
+			       -- was already showing exactly where it was, which is the
+			       -- whole point of the two columns: a refused edit costs a
+			       -- member nothing they already had.
+			       published = CASE WHEN $2 = 'approved' THEN text ELSE published END
 			 WHERE user_id = $1 AND state = 'pending'`,
 			userID, state, byUser, reason)
 		if err != nil {
@@ -164,7 +183,7 @@ func (s *PGStore) ApprovedTitles(ctx context.Context) (map[int64]string, error) 
 		Text   string `db:"text"`
 	}
 	if err := s.sel(ctx, &rows, `
-		SELECT user_id, text FROM cosmetic_titles WHERE state = 'approved'`); err != nil {
+		SELECT user_id, published AS text FROM cosmetic_titles WHERE published <> ''`); err != nil {
 		return nil, fmt.Errorf("approved titles: %w", err)
 	}
 	out := make(map[int64]string, len(rows))

@@ -68,6 +68,13 @@
                 <span>Turned down{{if .Reviewed}} on {{date .Reviewed}}{{end}}: {{.Reason}}</span>
             </p>
             {{end}}
+            {{/* What everybody else sees, when it is not what is in the box.
+                 During a review the OLD title is still up — which is the point
+                 of migration 003 — and somebody who edited theirs would
+                 otherwise assume the change went live. */}}
+            {{if and .Showing (ne .Showing .Text)}}
+            <p class="small text-muted">Currently under your name: <q>{{.Showing}}</q></p>
+            {{end}}
             <form class="form" method="post" action="/p/cosmetics/title">
                 <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                 <div class="form__group">
