@@ -1,0 +1,79 @@
+{{/* The application form — the one page here a stranger sees.
+
+     Written for somebody who has landed on a closed site and does not know
+     what it is or why they were turned away. So it says what happens next
+     before it asks for anything: an application that vanishes into a queue
+     with no acknowledgement is one people submit three times. */}}
+
+{{if .Sent}}
+<div class="notice notice--info">
+    <svg class="icon notice__icon" aria-hidden="true"><use href="#check"></use></svg>
+    <span>
+        Thanks &mdash; your application is in the queue. If it is accepted you will get an
+        invite by email; there is nothing else you need to do, and applying again will not
+        make it go faster.
+    </span>
+</div>
+{{end}}
+
+{{with .Err}}
+<div class="notice notice--warning">
+    <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+    <span>
+        {{if eq . "bad-email"}}That does not look like an email address &mdash; an invite would have nowhere to go.
+        {{else if eq . "no-body"}}Please say something about why you would like to join.
+        {{else if eq . "too-long"}}That is longer than we can accept.
+        {{else if eq . "already"}}You already have an application waiting. It has not been forgotten.
+        {{else}}Something went wrong. Please try again.{{end}}
+    </span>
+</div>
+{{end}}
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#user"></use></svg>
+            Apply to join
+        </h2>
+    </header>
+    <div class="panel__body">
+        <p>
+            Sign-ups are not open. You can ask to join here: staff read every application,
+            and if yours is accepted we email you an invite that lets you create an account.
+        </p>
+        <p class="small text-muted">
+            We keep what you write, your email address, and a one-way fingerprint of where
+            you applied from. Nothing else.
+        </p>
+
+        <form class="form" method="post" action="/p/apply/submit">
+            <input type="hidden" name="_csrf" value="{{.CSRF}}">
+            <div class="form__row">
+                <div class="form__group flex-grow-1">
+                    <label class="form__label" for="apply-email">Email address</label>
+                    <input class="form__input" type="email" id="apply-email" name="email" required
+                           placeholder="you@example.com" autocomplete="email">
+                </div>
+                <div class="form__group">
+                    <label class="form__label" for="apply-username">Username you would like <span class="text-muted">(optional)</span></label>
+                    <input class="form__input" type="text" id="apply-username" name="username"
+                           maxlength="64" autocomplete="off">
+                </div>
+            </div>
+            <div class="form__group">
+                <label class="form__label" for="apply-body">Why would you like to join?</label>
+                <textarea class="form__input" id="apply-body" name="body" rows="6" required
+                          maxlength="4000" placeholder="Tell us a little about yourself &mdash; what you are looking for, and anywhere else you take part."></textarea>
+            </div>
+            <p class="form__help">
+                The invite goes to the address above and is locked to it, so use one you can
+                sign up with.
+            </p>
+            <div class="form__row">
+                <button class="form__button form__button--filled" type="submit">
+                    <svg class="icon" aria-hidden="true"><use href="#send"></use></svg>Send application
+                </button>
+            </div>
+        </form>
+    </div>
+</section>

@@ -1,0 +1,132 @@
+{{/* The staff queue.
+
+     Pending first and OLDEST first, because this is a queue and the person who
+     has waited longest goes next. The decided lists are newest first for the
+     opposite reason: nobody reviews old decisions in order.
+
+     Each pending row carries its own decide form with the note field in it, so
+     a moderator writes the reason at the moment they decide rather than
+     deciding first and documenting later — which is how the reason ends up
+     blank. */}}
+
+<div class="stat-strip">
+    <div class="stat-tile">
+        <span class="stat-tile__label">Waiting</span>
+        <span class="stat-tile__value">{{.Counts.Pending}}</span>
+    </div>
+    <div class="stat-tile">
+        <span class="stat-tile__label">Accepted</span>
+        <span class="stat-tile__value">{{.Counts.Accepted}}</span>
+    </div>
+    <div class="stat-tile">
+        <span class="stat-tile__label">Rejected</span>
+        <span class="stat-tile__value">{{.Counts.Rejected}}</span>
+    </div>
+</div>
+
+{{if not .CanIssue}}
+<p class="notice notice--warning">
+    <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+    <span>
+        No invite issuer is registered on this host, so <strong>accepting will refuse</strong>
+        &mdash; there is nothing to open the door with. Applications are still collected and
+        can still be rejected.
+    </span>
+</p>
+{{end}}
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#users"></use></svg>
+            Waiting
+        </h2>
+        {{if .Pending}}<div class="panel__actions"><span class="panel__grouping">{{len .Pending}}</span></div>{{end}}
+    </header>
+    <div class="panel__body">
+        {{if .Pending}}
+        <ul class="app-queue">
+            {{$csrf := .CSRF}}{{$canIssue := .CanIssue}}
+            {{range .Pending}}
+            <li class="app-queue__item">
+                <div class="app-queue__head">
+                    <strong>{{.Email}}</strong>
+                    {{if .Username}}<span class="chip">wants {{.Username}}</span>{{end}}
+                    <span class="text-muted small">applied {{.CreatedAt.Format "2 Jan 2006"}}</span>
+                    {{/* The fingerprint, not the address — see hashIP. Shown so
+                         a run from one source is visible as a repeated value. */}}
+                    {{with .IPHash}}<span class="text-muted small" title="One-way fingerprint of where they applied from">from {{.}}</span>{{end}}
+                </div>
+                {{/* Their own words, which is the thing being judged. */}}
+                <p class="app-queue__body">{{.Body}}</p>
+                <form class="app-queue__decide" method="post" action="/admin/p/applications/decide">
+                    <input type="hidden" name="_csrf" value="{{$csrf}}">
+                    <input type="hidden" name="id" value="{{.ID}}">
+                    <input class="form__input" type="text" name="note" maxlength="1000"
+                           placeholder="Note (staff only — never shown to them)">
+                    <button class="button button--outlined button--sm" type="submit" name="decision" value="reject">Reject</button>
+                    <button class="button button--filled button--sm" type="submit" name="decision" value="accept"
+                            {{if not $canIssue}}disabled title="No invite issuer registered"{{end}}>Accept &amp; invite</button>
+                </form>
+            </li>
+            {{end}}
+        </ul>
+        {{else}}
+        <div class="empty">Nobody is waiting.</div>
+        {{end}}
+    </div>
+</section>
+
+{{define "app-decided"}}
+<div class="data-table-wrapper">
+    <table class="data-table data-table--stack">
+        <caption class="visually-hidden">Decided applications</caption>
+        <thead><tr>
+            <th>Applicant</th><th class="data-table__nowrap">Decided</th><th>Note</th>
+        </tr></thead>
+        <tbody>
+            {{range .}}
+            <tr>
+                <td>
+                    <div class="data-table__name-body">
+                        <span class="data-table__title">{{.Email}}</span>
+                        <div class="data-table__meta">
+                            {{if .Username}}<span>wanted {{.Username}}</span>{{end}}
+                            {{/* Whether the door actually opened, not only that
+                                 somebody clicked accept. */}}
+                            {{with .InviteCode}}<code>{{.}}</code>{{end}}
+                        </div>
+                    </div>
+                </td>
+                <td class="data-table__nowrap">
+                    {{with .DecidedAt}}{{.Format "2 Jan 2006"}}{{else}}<span class="text-muted">&mdash;</span>{{end}}
+                </td>
+                <td>{{if .Note}}{{.Note}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
+
+{{with .Accepted}}
+<section class="panelV2 panelV2--overflow">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#check"></use></svg>Accepted
+        </h2>
+    </header>
+    {{template "app-decided" .}}
+</section>
+{{end}}
+
+{{with .Rejected}}
+<section class="panelV2 panelV2--overflow">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#info"></use></svg>Rejected
+        </h2>
+    </header>
+    {{template "app-decided" .}}
+</section>
+{{end}}
