@@ -1,14 +1,21 @@
 // hostassets.go declares the two things a host LENDS a plugin for its own
 // admin surfaces: the icons this site can draw, and somewhere to put an upload.
 //
-// Both were bare-string conventions until now, and both show the same failure
-// in different stages. The icon list was agreed twice — `icons.catalogue` with
-// medals and `achievements.icons` with achievements — for one list, with two
-// different types: a `func() []string` on one side and a plain `[]string` on
-// the other. The func is the right answer, because a sprite added to the site
-// changes the list and a snapshot taken at Provision never notices; the
-// snapshot version was simply the second author's guess, and nothing could have
-// told them.
+// Both were bare-string conventions until now.
+//
+// The icon keys looked like a duplicate and are not, which is worth recording
+// because the first attempt at this file collapsed them and would have shipped
+// a regression. `icons.catalogue` is everything the site can draw — 114 sprite
+// ids — and medals resolves it. `achievements.icons` was a CURATED fourteen,
+// because, as the host's own comment puts it, offering the whole sheet would
+// put #logo and #chevron-down in a picker where they mean nothing. Two
+// questions, not one: *what can this site draw* and *what should a badge picker
+// offer*.
+//
+// So there are two contracts. The types did genuinely disagree — a
+// `func() []string` on one side and a plain `[]string` on the other — and the
+// func is right, because a sprite added to the site changes the answer and a
+// snapshot taken at Provision never notices.
 //
 // The file store never got a second consumer, which is the other way this goes
 // wrong: it looks fine right up until medals wants badge uploads too, and then
@@ -56,6 +63,45 @@ func Icons(c *core.Core) (IconCatalogue, bool) {
 		return fn, true
 	case func() []string:
 		return IconCatalogue(fn), true
+	}
+	return nil, false
+}
+
+// IconSetPrefix is where a host publishes CURATED icon lists for a purpose:
+// "icons.set.<purpose>", e.g. icons.set.achievement-badge.
+//
+// A prefix because the purposes multiply — badges, medals, category glyphs —
+// and each wants a different subset of the same sheet. The curation is host
+// work and cannot be a plugin's: only the host knows which of its sprites read
+// as a badge.
+const IconSetPrefix = "icons.set."
+
+// IconSet returns the curated list for a purpose, falling back to the full
+// catalogue when the host has curated nothing for it.
+//
+// The fallback is deliberate and is the difference between a useful default and
+// a broken page: a host that has not thought about a purpose should offer a
+// picker containing too much rather than a picker containing nothing.
+func IconSet(c *core.Core, purpose string) ([]string, bool) {
+	if c == nil {
+		return nil, false
+	}
+	if purpose != "" {
+		if fn, ok := Contributed[IconCatalogue](c, IconSetPrefix, purpose); ok {
+			return fn(), true
+		}
+		// Tolerating the bare func for the same reason Icons does.
+		if v, ok := c.Lookup(IconSetPrefix + purpose); ok {
+			if fn, ok := v.(func() []string); ok {
+				return fn(), true
+			}
+			if list, ok := v.([]string); ok {
+				return list, true
+			}
+		}
+	}
+	if fn, ok := Icons(c); ok {
+		return fn(), true
 	}
 	return nil, false
 }

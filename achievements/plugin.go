@@ -175,11 +175,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 		}
 		p.files = fs
 	}
-	// The icon list, from the SHARED catalogue medals has always used. This
-	// plugin had its own key holding a plain []string — a snapshot taken at
-	// Provision, which never notices a sprite added later. The func does.
-	if icons, ok := pluginapi.Icons(c); ok {
-		p.iconOptions = icons()
+	// The CURATED badge icons, not the whole sprite sheet. That distinction is
+	// the whole reason IconSet exists beside Icons: offering every sprite would
+	// put #logo and #chevron-down in a picker where they mean nothing, and the
+	// curation is the host's to do because only it knows which of its sprites
+	// read as a badge. Falls back to the full catalogue when this host has
+	// curated nothing — too many choices beats none.
+	if icons, ok := pluginapi.IconSet(c, "achievement-badge"); ok {
+		p.iconOptions = icons
 	} else if v, ok := c.Lookup("achievements.icons"); ok {
 		if list, ok := v.([]string); ok {
 			p.iconOptions = list
