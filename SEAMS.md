@@ -149,6 +149,24 @@ on the same afternoon, both silently degrading. Anything the *host* registers is
 safe at Provision, and must be registered before `core.Boot` or it is never
 seen.
 
+**A plugin says which half of a site it belongs to; the host does not keep a
+list.** `core.Metadata.Flavours` is `[]string{core.FlavourTracker}` or
+`{core.FlavourIndexer}`, empty for the majority that belong to both, and
+`core.Boot` skips what does not match — exactly as it does for `Processes`. A
+host that keeps the list keeps it wrong: it has to know that hitrun, seedlock
+and perks are tracker plugins, and the day somebody writes a fourth it does not
+know about it. Two things follow that are easy to get wrong:
+
+* `Core.Flavours` is the SET of halves that are ON, not a mode. "Both" is the
+  two-element set and never a value, because the moment it is one, every
+  consumer downstream grows a three-way switch.
+* **The tables outlive the plugin.** A site that ran as "both" and moved to
+  indexer-only still has the tracker's rows, so anything reading them directly
+  goes on reporting a swarm for a tracker that is not running. Three host pages
+  did exactly that — a stats panel, a listing badge and a release page's
+  download button, all linking to routes that no longer existed. If you read
+  another half's tables, check the flavour too.
+
 **A plugin never fetches a URL a member typed.** It asks `media.intake`.
 Fetching a typed URL is a request the SERVER makes, from inside the network, to
 an address the poster chose: a cloud metadata endpoint, a port scan of a private
