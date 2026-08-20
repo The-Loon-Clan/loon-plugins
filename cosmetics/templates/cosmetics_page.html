@@ -1,0 +1,106 @@
+{{/* The member's own page: the whole catalogue, each entry drawn as it will
+     actually look, with YOUR name in it.
+
+     The whole catalogue and not just what you own, because a page listing only
+     your purchases sells nothing and — more to the point — nobody can choose
+     between eight effects from eight names. The preview IS the description;
+     the sentence under it is a caption.
+
+     Your own name in every preview rather than a sample word, because the
+     length and the letters are most of how an effect reads: "Sparkle" set in
+     sparkles tells you nothing about what a nine-character username will look
+     like in a table row. */}}
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#star"></use></svg>
+            Your name
+        </h2>
+    </header>
+    <div class="panel__body">
+        {{if .Err}}
+        <p class="notice notice--warning">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+            <span>
+                {{if eq .Err "notowned"}}You do not own that effect. Buy it in the shop first — or it may have run out while this page was open.
+                {{else if eq .Err "unknown"}}There is no effect by that name.
+                {{else}}That did not work.{{end}}
+            </span>
+        </p>
+        {{end}}
+
+        <p class="text-muted">
+            One at a time, and you can switch whenever you like. Effects show
+            wherever your name appears — listings, comments, the forum.
+        </p>
+
+        {{if .Wearing}}
+        <form method="post" action="/p/cosmetics/equip">
+            <input type="hidden" name="_csrf" value="{{.CSRF}}">
+            {{/* Empty slug is "take it off" — see equip(). */}}
+            <input type="hidden" name="slug" value="">
+            <button class="button button--outlined button--sm" type="submit">Wear nothing</button>
+        </form>
+        {{end}}
+    </div>
+</section>
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#store"></use></svg>
+            Effects
+        </h2>
+    </header>
+    <div class="panel__body">
+        <ul class="fx-list">
+            {{$csrf := .CSRF}}{{$name := .Name}}
+            {{range .Effects}}
+            <li class="fx-card{{if .Worn}} fx-card--worn{{end}}">
+                {{/* The preview. A span rather than the real user-tag, because
+                     this is not a link to anybody and the effect classes are
+                     what is being demonstrated, not the role colour. */}}
+                <div class="fx-card__preview">
+                    <span class="fx-preview {{.Class}}">{{$name}}</span>
+                </div>
+
+                <div class="fx-card__body">
+                    <div class="fx-card__head">
+                        <strong class="fx-card__label">{{.Label}}</strong>
+                        {{/* Said out loud, both of them. "Replaces your colour"
+                             is the one thing somebody with an earned rank
+                             colour needs to know BEFORE buying, and "moves" is
+                             what makes a still-looking preview on a
+                             reduced-motion machine not read as broken. */}}
+                        {{if .Tinted}}<span class="tag tag--sm">Own colour</span>{{end}}
+                        {{if .Animated}}<span class="tag tag--sm">Moves</span>{{end}}
+                    </div>
+                    <p class="fx-card__desc">{{.Description}}</p>
+                    {{if and .Owned .Expires}}
+                    <p class="fx-card__expiry small text-muted">Yours until {{date .Expires}}</p>
+                    {{end}}
+                </div>
+
+                <div class="fx-card__action">
+                    {{if .Worn}}
+                    <span class="tag tag--ok">Wearing</span>
+                    {{else if .Owned}}
+                    <form method="post" action="/p/cosmetics/equip">
+                        <input type="hidden" name="_csrf" value="{{$csrf}}">
+                        <input type="hidden" name="slug" value="{{.Slug}}">
+                        <button class="button button--filled button--sm" type="submit">Wear</button>
+                    </form>
+                    {{else}}
+                    {{/* Not owned. A link to the shop rather than a disabled
+                         button: "you cannot have this" is a dead end, and the
+                         next thing the member wants is the page that sells
+                         it. */}}
+                    <a class="button button--outlined button--sm" href="/store">Shop</a>
+                    {{end}}
+                </div>
+            </li>
+            {{end}}
+        </ul>
+    </div>
+</section>
