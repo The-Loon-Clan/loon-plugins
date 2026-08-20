@@ -15,6 +15,8 @@ package pluginapi
 
 import (
 	"context"
+	"sync"
+	"time"
 
 	"github.com/the-loon-clan/loon/core"
 )
@@ -168,4 +170,95 @@ func Cosmetics(c *core.Core) (CosmeticResolver, bool) {
 	}
 	r, ok := v.(CosmeticResolver)
 	return r, ok
+}
+
+// ---------------------------------------------------------------------------
+// Rendering a name
+//
+// The cache lives HERE, beside the contract, rather than in the host that first
+// needed it — because the host is not the only place a username is drawn. The
+// host's user-tag covers listings, profiles and the forum's activity panels;
+// the comments plugin draws its own authors; the next plugin with a member list
+// will draw its own too. Every one of them wants the same answer to the same
+// question, and a second copy of this cache is a second staleness window and a
+// second query load.
+//
+// WHY A CACHE AT ALL, which is not this codebase's usual instinct. The lookup
+// happens once per NAME per page — forty on a listing, a hundred on a forum
+// page — and the call sites are templates and template helpers, which get no
+// request context to memoise against. So: one small map on a short timer.
+//
+// The map is naturally tiny. It holds only members currently WEARING an effect,
+// which on any real site is a fraction of a percent of the user table, and a
+// site without the plugin caches an empty map where every lookup is a miss
+// against nothing.
+
+// fxTTL is how stale a rendered name may be.
+//
+// Five seconds, which is the honest trade rather than a tuned number: a member
+// who has just equipped something sees their own page immediately (it renders
+// from the database, not from here), and everybody else seeing it within five
+// seconds is indistinguishable from instant. Longer starts to read as "it did
+// not work" to the person watching their own name in the header.
+const fxTTL = 5 * time.Second
+
+var fxCache struct {
+	mu       sync.RWMutex
+	names    map[string]string
+	loadedAt time.Time
+}
+
+// NameClass returns the effect class for a username, or "" — for anybody
+// wearing nothing, for every name on a site without the plugin, and for a
+// stored slug the catalogue no longer has.
+//
+// The hot path is a read lock, a time comparison and a map miss.
+func NameClass(c *core.Core, name string) string {
+	if name == "" {
+		return ""
+	}
+	fxCache.mu.RLock()
+	fresh := time.Since(fxCache.loadedAt) < fxTTL
+	slug := fxCache.names[name]
+	fxCache.mu.RUnlock()
+	if fresh {
+		return EffectClass(slug)
+	}
+	return EffectClass(refreshNameCache(c, name))
+}
+
+// refreshNameCache reloads the map and returns this name's slug from the fresh
+// copy.
+//
+// The double-check under the write lock is what stops a burst of names on one
+// page each triggering a reload: the first through does the work, the rest find
+// it already fresh and read the map they were going to read anyway.
+func refreshNameCache(c *core.Core, name string) string {
+	fxCache.mu.Lock()
+	defer fxCache.mu.Unlock()
+	if time.Since(fxCache.loadedAt) < fxTTL {
+		return fxCache.names[name]
+	}
+	res, ok := Cosmetics(c)
+	if !ok {
+		// No plugin. Stamp the clock anyway so a site without cosmetics does a
+		// registry lookup every five seconds rather than once per name on
+		// every page.
+		fxCache.loadedAt = time.Now()
+		fxCache.names = nil
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	names, err := res.EquippedNames(ctx)
+	// The clock moves either way. A failed read must not make every subsequent
+	// render retry the same failing query for every name on the page — being
+	// wrong here costs decoration, and hammering a struggling database costs
+	// the site.
+	fxCache.loadedAt = time.Now()
+	if err != nil {
+		return fxCache.names[name]
+	}
+	fxCache.names = names
+	return names[name]
 }

@@ -17,8 +17,16 @@ import (
 
 // commentVM is one comment as the page shows it.
 type commentVM struct {
-	ID      int64
-	Author  string
+	ID     int64
+	Author string
+	// AuthorFX is the name-effect class for this author, or "".
+	//
+	// Resolved HERE rather than left to the host, because this widget draws its
+	// own author markup instead of calling the host's user-tag — so an effect
+	// that reaches every listing on the site would stop dead at the comment
+	// thread, which is the one place a name is attached to something the person
+	// actually said.
+	AuthorFX string
 	Body    string
 	When    time.Time
 	Edited  bool
@@ -99,6 +107,7 @@ func (p *Plugin) widget(c *gin.Context) (template.HTML, error) {
 		if vm.Author == "" {
 			vm.Author = "a member"
 		}
+		vm.AuthorFX = pluginapi.NameClass(p.core, vm.Author)
 		vm.Thanks, vm.Thanked = thanks[r.ID], mine[r.ID]
 		switch {
 		case !r.Deleted():

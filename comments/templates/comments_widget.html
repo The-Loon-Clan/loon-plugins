@@ -19,7 +19,11 @@
             {{range .Comments}}
             <li class="comment{{if .Deleted}} comment--removed{{end}}" id="comment-{{.ID}}">
                 <div class="comment__head">
-                    <strong class="comment__author">{{.Author}}</strong>
+                    {{/* The author's name effect, if they wear one — this
+                         widget draws its own name markup rather than calling
+                         the host's user-tag, so it applies the class itself.
+                         See AuthorFX in views.go. */}}
+                    <strong class="comment__author{{if .AuthorFX}} {{.AuthorFX}}{{end}}">{{.Author}}</strong>
                     <span class="comment__when" title="{{.When.Format "2 Jan 2006 15:04"}}">{{ago .When}}</span>
                     {{/* Said out loud. A comment that changed after people
                          replied to it is a different comment, and hiding that
