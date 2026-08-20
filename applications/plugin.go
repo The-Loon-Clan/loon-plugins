@@ -110,6 +110,8 @@ func (modeDescriptor) RegistrationMode() pluginapi.RegistrationModeInfo {
 		Description: "No open sign-up. Visitors apply, staff decide, and an approval " +
 			"sends them a real invite — so an accepted applicant joins the same way " +
 			"an invited member does, and the invite chain records who approved them.",
+		ActionHref:     "/p/apply",
+		ActionLabel:    "Apply to join",
 		AllowsSignup:   false,
 		RequiresInvite: true,
 	}

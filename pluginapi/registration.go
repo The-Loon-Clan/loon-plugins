@@ -51,6 +51,17 @@ type RegistrationModeInfo struct {
 	// "register" widget region — which is why that region exists.
 	AllowsSignup bool
 
+	// ActionHref and ActionLabel are where a visitor should go instead, for a
+	// mode that does not allow signing up.
+	//
+	// Part of the MODE rather than left to a widget, because a widget has to
+	// be placed by an operator before it appears — and a site whose sign-up
+	// page says "you cannot register" and nothing else, because nobody had
+	// opened the widget editor yet, is a site that turns people away by
+	// accident. The widget region stays for richer content; this is the floor.
+	ActionHref  string
+	ActionLabel string
+
 	// RequiresInvite says the form must carry a valid invite code, the same
 	// rule the built-in invite mode enforces.
 	//
