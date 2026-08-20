@@ -51,6 +51,11 @@ func init() {
 // changing one are the same act — see poll_votes' primary key.
 const votePath = "/p/polls/vote"
 
+// featurePolls is the switch (core.RegisterFeature). The widget and the admin
+// view name it, so core hides both; the vote handler checks it too, because a
+// ballot in somebody's browser outlives the page it came from.
+const featurePolls = "polls"
+
 // Bounds. A poll that does not fit on a sidebar card is a forum thread
 // wearing a ballot, and the widget is the only surface this has.
 const (
@@ -98,8 +103,25 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// what makes it one vote each rather than one vote per click.
 	engine.POST(votePath, append(c.Auth.RequireUser(core.RoleUser), p.handleVote)...)
 
+	// The whole plugin, as one switch. A BIG feature in the sense that matters:
+	// it takes the widget and the admin page together, so an operator who does
+	// not want polls on their site gets no poll anywhere and no page offering
+	// to write one — without a restart, and without losing the polls already
+	// written.
+	if err := c.RegisterFeature(core.Feature{
+		Key:   featurePolls,
+		Title: "Polls",
+		Description: "Questions placed on any page, and the admin screen for writing them. " +
+			"Switched off, every placed poll renders nothing and the admin page is gone. " +
+			"The polls and their votes are kept, and come back when it is switched on.",
+		Default: true,
+	}); err != nil {
+		return fmt.Errorf("polls: register feature: %w", err)
+	}
+
 	if err := c.RegisterView(core.View{
 		Slug:        "polls",
+		Feature:     featurePolls,
 		Title:       "Polls",
 		Description: "Write a question, place it where it belongs, and read the answers.",
 		Slot:        core.SlotAdminPage,
@@ -117,6 +139,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 
 	return c.RegisterWidget(core.Widget{
 		Slug:        "poll",
+		Feature:     featurePolls,
 		Title:       "Poll",
 		Description: "One question and its answers. Name the poll in the setting below.",
 		// Public so anonymous visitors can READ the question, and the result

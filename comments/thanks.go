@@ -42,6 +42,12 @@ const thanksAward = 2
 // thanksPath is where the button posts.
 const thanksPath = "/p/comments/thanks"
 
+// featureThanks is the switch (core.RegisterFeature). Checked in two places and
+// both are needed: the view model, so the button and the counts stop being
+// drawn, and the handler, because a form in somebody's browser outlives the
+// page it came from.
+const featureThanks = "comments.thanks"
+
 // ThanksStore is the thanks half of the store.
 type ThanksStore interface {
 	// Toggle gives or withdraws a thanks and reports the state it left, plus
@@ -136,6 +142,14 @@ func (p *Plugin) handleThanks(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+
+	// Switched off since the page was drawn. Silent, like the other two
+	// refusals below: the button is not offered, so reaching here is a stale
+	// form or a forged post rather than a member to explain something to.
+	if !core.FeatureOn(p.core, featureThanks) {
+		c.Redirect(http.StatusSeeOther, back)
+		return
+	}
 
 	target, found, err := p.st.Get(ctx, id)
 	if err != nil || !found {

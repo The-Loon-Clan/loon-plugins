@@ -143,6 +143,13 @@ func (p *Plugin) handleVote(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/login")
 		return
 	}
+	// Switched off since the ballot was drawn. Silent — the form is not
+	// offered, so reaching here is a stale page rather than a member to
+	// explain something to.
+	if !core.FeatureOn(p.core, featurePolls) {
+		c.Redirect(http.StatusSeeOther, back)
+		return
+	}
 	slug := strings.TrimSpace(c.PostForm("poll"))
 	optionID, _ := strconv.ParseInt(c.PostForm("option"), 10, 64)
 	if slug == "" || optionID <= 0 {

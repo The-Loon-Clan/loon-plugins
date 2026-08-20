@@ -64,6 +64,9 @@ const (
 	shotsPerMember = 4
 	// shotDir is where intake stores them, under the host's uploads root.
 	shotDir = "screenshots"
+	// featureShots is the switch (core.RegisterFeature). Checked in the view
+	// model and again in the handler, because a form outlives its page.
+	featureShots = "mediainfo.screenshots"
 )
 
 type Plugin struct {
@@ -107,6 +110,22 @@ func (p *Plugin) Provision(c *core.Core) error {
 	engine.POST(removePath, append(authed, p.handleRemove)...)
 	engine.POST(shotPath, append(authed, p.handleShot)...)
 	engine.POST(unshotPath, append(authed, p.handleUnshot)...)
+
+	// Screenshots, separately from the reports. A MEDIUM feature: half of one
+	// widget. Worth its own switch because the two halves carry different
+	// risk — a MediaInfo paste is technical text, a screenshot is an image
+	// this site fetches from an address a member chose and then serves under
+	// its own name.
+	if err := c.RegisterFeature(core.Feature{
+		Key:   featureShots,
+		Title: "Screenshots on releases",
+		Description: "Members can add screenshots to a release, which this site fetches once " +
+			"and serves its own copy of. Switched off, the form is gone and existing " +
+			"screenshots stop being shown — the stored files are kept.",
+		Default: true,
+	}); err != nil {
+		return fmt.Errorf("mediainfo: register screenshots feature: %w", err)
+	}
 
 	return c.RegisterWidget(core.Widget{
 		Slug:        "mediainfo",

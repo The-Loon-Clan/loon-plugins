@@ -61,9 +61,16 @@ func (p *Plugin) widget(c *gin.Context) (template.HTML, error) {
 	if err != nil {
 		return "", err
 	}
-	shots, err := p.st.Shots(ctx, ref.ID)
-	if err != nil {
-		return "", err
+	// No screenshots at all when the feature is off: none shown, none
+	// queried, and the form below not offered. The stored files stay where
+	// they are and come back when it is switched on.
+	shotsOn := core.FeatureOn(p.core, featureShots)
+	var shots []Shot
+	if shotsOn {
+		shots, err = p.st.Shots(ctx, ref.ID)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	viewer, _ := p.core.Auth.CurrentUser(c)
@@ -142,7 +149,7 @@ func (p *Plugin) widget(c *gin.Context) (template.HTML, error) {
 		}
 	}
 	shotsLeft := 0
-	if viewerID != 0 && p.images != nil {
+	if shotsOn && viewerID != 0 && p.images != nil {
 		if n, err := p.st.ShotCount(ctx, ref.ID, viewerID); err == nil {
 			shotsLeft = shotsPerMember - n
 		}
@@ -218,9 +225,9 @@ func (p *Plugin) handleShot(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, back)
 		return
 	}
-	// No intake means this site did not offer the field. Reaching here is a
-	// forged post.
-	if p.images == nil {
+	// No intake, or the feature is off, means this site did not offer the
+	// field. Reaching here is a stale page or a forged post.
+	if p.images == nil || !core.FeatureOn(p.core, featureShots) {
 		c.Redirect(http.StatusSeeOther, withErr(back, "noshots"))
 		return
 	}

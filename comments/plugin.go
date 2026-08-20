@@ -104,6 +104,21 @@ func (p *Plugin) Provision(c *core.Core) error {
 	engine.POST(deletePath, append(c.Auth.RequireUser(core.RoleUser), p.handleDelete)...)
 	engine.POST(thanksPath, append(c.Auth.RequireUser(core.RoleUser), p.handleThanks)...)
 
+	// Thanks is switchable on a running site. A SMALL feature — one button
+	// inside a widget — and the reason the flag exists at all: an operator who
+	// decides the economy does not need another faucet should not have to
+	// choose between keeping it and losing the comments with it.
+	if err := c.RegisterFeature(core.Feature{
+		Key:   featureThanks,
+		Title: "Thanks on comments",
+		Description: "Members can thank a comment, and its author earns points. " +
+			"Switched off, the button disappears and no more points are awarded — " +
+			"the thanks already given are kept, and counts stop being shown.",
+		Default: true,
+	}); err != nil {
+		return fmt.Errorf("comments: register thanks feature: %w", err)
+	}
+
 	return c.RegisterWidget(core.Widget{
 		Slug:        "comments",
 		Title:       "Comments",

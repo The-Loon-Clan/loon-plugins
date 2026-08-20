@@ -27,10 +27,10 @@ type commentVM struct {
 	// thread, which is the one place a name is attached to something the person
 	// actually said.
 	AuthorFX string
-	Body    string
-	When    time.Time
-	Edited  bool
-	Deleted bool
+	Body     string
+	When     time.Time
+	Edited   bool
+	Deleted  bool
 	// Mine and CanDelete drive the controls. Separate because they are
 	// different permissions: an author may edit their own words, a moderator
 	// may only remove them — nobody edits somebody else's comment, which would
@@ -83,6 +83,12 @@ func (p *Plugin) widget(c *gin.Context) (template.HTML, error) {
 		}
 	}
 
+	// Nothing about thanks when the feature is off — no counts, no buttons, and
+	// no query for either. The thread renders exactly as it did before thanks
+	// existed, which is the point: switching a feature off should cost the page
+	// nothing, not leave a disabled control behind.
+	thanksOn := core.FeatureOn(p.core, featureThanks)
+
 	// Thanks for the whole thread in one call — see ThanksStore. A per-row
 	// lookup would be two more queries per comment on a page that already has
 	// every id it needs.
@@ -90,7 +96,12 @@ func (p *Plugin) widget(c *gin.Context) (template.HTML, error) {
 	for _, r := range rows {
 		ids = append(ids, r.ID)
 	}
-	thanks, mine, err := p.st.ThanksFor(ctx, ids, viewerID)
+	thanks, mine := map[int64]int{}, map[int64]bool{}
+	if thanksOn {
+		var tErr error
+		thanks, mine, tErr = p.st.ThanksFor(ctx, ids, viewerID)
+		err = tErr
+	}
 	if err != nil {
 		// A thanks count that could not be read must not take the conversation
 		// down with it: render the thread with no counts rather than an error
@@ -117,7 +128,7 @@ func (p *Plugin) widget(c *gin.Context) (template.HTML, error) {
 			// Offered to a signed-in member on somebody ELSE's live comment.
 			// Thanking your own is the first thing anybody tries and would pay
 			// you for commenting.
-			vm.CanThank = viewerID != 0 && !vm.Mine
+			vm.CanThank = thanksOn && viewerID != 0 && !vm.Mine
 		case staff:
 			// Staff see what was said. A moderator asked "why did you remove
 			// this" cannot answer from a row that shows nothing.
