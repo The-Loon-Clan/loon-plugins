@@ -107,7 +107,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		// separate question the widget answers per viewer — a comment section
 		// only members can see is a comment section nobody joins for.
 		Public:  true,
-		Regions: []string{"release"},
+		Regions: []string{"release-main"},
 		Render:  p.widget,
 	})
 }
