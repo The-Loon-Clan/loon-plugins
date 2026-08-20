@@ -8,17 +8,12 @@
      Every write carries `back`, the path the viewer is on, so a handler can
      return them without this plugin knowing the host's routes. */}}
 
-<section class="panelV2">
-    <header class="panel__header">
-        <h2 class="panel__heading">
-            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#comment"></use></svg>
-            Comments
-        </h2>
-        {{if .Comments}}<div class="panel__actions"><span class="panel__grouping">{{len .Comments}}</span></div>{{end}}
-    </header>
-
-    <div class="panel__body">
-        {{if .Comments}}
+{{/* NO PANEL OF ITS OWN. A host frames a placed widget and titles it — the
+     reference host's widget-region template wraps every fragment in a section
+     with an <h2> — so drawing a card here put this heading underneath the
+     host's heading, inside the host's box. What follows is BODY content, which
+     is the contract the ranks, perks and swarm widgets already keep. */}}
+{{if .Comments}}
         <ol class="comment-list">
             {{$csrf := .CSRF}}{{$back := .Back}}{{$max := .Max}}
             {{range .Comments}}
@@ -100,15 +95,14 @@
             </li>
             {{end}}
         </ol>
-        {{else}}
-        <p class="m-0 text-muted">
-            Nothing yet.{{if .CanPost}} If you grabbed this, say whether it worked.{{end}}
-        </p>
-        {{end}}
-    </div>
+{{else}}
+<p class="m-0 text-muted">
+    Nothing yet.{{if .CanPost}} If you grabbed this, say whether it worked.{{end}}
+</p>
+{{end}}
 
     {{if .CanPost}}
-    <div class="panel__body">
+    <div class="comment-post">
         <form class="form" method="post" action="/p/comments/post">
             <input type="hidden" name="_csrf" value="{{.CSRF}}">
             <input type="hidden" name="kind" value="{{.Kind}}">
@@ -125,8 +119,5 @@
         </form>
     </div>
     {{else}}
-    <div class="panel__body">
-        <p class="m-0 small text-muted"><a href="/login">Sign in</a> to comment.</p>
-    </div>
+    <p class="m-0 small text-muted mt-2"><a href="/login">Sign in</a> to comment.</p>
     {{end}}
-</section>

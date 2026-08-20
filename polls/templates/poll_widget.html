@@ -1,7 +1,16 @@
 {{/* One poll, wherever it was placed: a sidebar region, the front page, the
-     body of a news post. Nothing here assumes a width — the bars are
-     percentages and the ballot is a stack — because the operator chooses
-     where this goes and the widget does not get told.
+     body of a news post.
+
+     NO PANEL OF ITS OWN. A host frames a placed widget and titles it — see
+     the widget-region template on the reference host, which wraps every
+     fragment in a section and an <h2>. A widget that draws its own card ends
+     up inside that one, with its heading under the host's heading, which is
+     exactly what this used to do. So what follows is BODY content and nothing
+     else, the same contract the ranks, perks and swarm widgets keep.
+
+     Nothing here assumes a width either — the bars are percentages and the
+     ballot is a stack — because the operator chooses where this goes and the
+     widget does not get told.
 
      Two shapes, and which one you see is the whole editorial content of the
      feature (see showResults in views.go): the BALLOT while the answer is
@@ -10,83 +19,73 @@
      ballot returns as a fold, because changing your mind should be possible
      and should not be the loudest thing on the card. */}}
 
-<section class="panelV2 poll">
-    <header class="panel__header">
-        <h2 class="panel__heading">
-            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#check"></use></svg>
-            Poll
-        </h2>
-        {{if .Closed}}<div class="panel__actions"><span class="tag">Closed</span></div>{{end}}
-    </header>
+<p class="poll__question">
+    {{.Question}}
+    {{/* Beside the question rather than up in a header, because there is no
+         header any more and because "closed" is a fact ABOUT the question. */}}
+    {{if .Closed}}<span class="tag poll__closed">Closed</span>{{end}}
+</p>
 
-    <div class="panel__body">
-        <p class="poll__question">{{.Question}}</p>
+{{/* A tally needs something to tally. An 'always' poll nobody has answered yet
+     would otherwise open with a column of 0% bars, which reads as a widget
+     that failed rather than as a question nobody has got to — and the ballot
+     underneath is the only thing on the card worth looking at. */}}
+{{if and .ShowResults .Total}}
+<ul class="poll__results">
+    {{range .Options}}
+    <li class="poll__result{{if .Mine}} poll__result--mine{{end}}">
+        <div class="poll__result-head">
+            <span class="poll__result-label">{{.Label}}</span>
+            {{/* The share, then the raw count in brackets. Both, because they
+                 answer different questions — a share says what the room thinks,
+                 a count says whether that is four people or four hundred — and
+                 the brackets are what stop "50% 1" reading as one number. */}}
+            <span class="poll__result-count">{{.Percent}}%<span class="poll__result-votes">({{.Votes}})</span></span>
+        </div>
+        {{/* The bar's WIDTH is the only per-option value a stylesheet cannot
+             know, so it is the only thing set inline. */}}
+        <div class="poll__bar"><span class="poll__bar-fill" style="width:{{.Percent}}%"></span></div>
+    </li>
+    {{end}}
+</ul>
+<p class="poll__total">
+    {{.Total}} vote{{if ne .Total 1}}s{{end}}{{if .Voted}} &middot; you answered this{{end}}
+</p>
+{{end}}
 
-        {{/* A tally needs something to tally. An 'always' poll nobody has
-             answered yet would otherwise open with a column of 0% bars, which
-             reads as a widget that failed rather than as a question nobody has
-             got to — and the ballot underneath is the only thing on the card
-             worth looking at. */}}
-        {{if and .ShowResults .Total}}
-        <ul class="poll__results">
-            {{range .Options}}
-            <li class="poll__result{{if .Mine}} poll__result--mine{{end}}">
-                <div class="poll__result-head">
-                    <span class="poll__result-label">{{.Label}}</span>
-                    {{/* The share, then the raw count in brackets. Both, because they answer
-                         different questions — a share says what the room thinks, a count
-                         says whether that is four people or four hundred — and the
-                         brackets are what stop "50% 1" reading as one number. */}}
-                    <span class="poll__result-count">{{.Percent}}%<span class="poll__result-votes">({{.Votes}})</span></span>
-                </div>
-                {{/* The bar's WIDTH is the only per-option value a stylesheet
-                     cannot know, so it is the only thing set inline. */}}
-                <div class="poll__bar"><span class="poll__bar-fill" style="width:{{.Percent}}%"></span></div>
-            </li>
-            {{end}}
-        </ul>
-        <p class="poll__total">
-            {{.Total}} vote{{if ne .Total 1}}s{{end}}{{if .Voted}} &middot; you answered this{{end}}
-        </p>
-        {{end}}
+{{/* Closed, open-and-yours-to-answer, or signed out — and CanVote is already
+     "signed in AND still open", so the last branch needs no test of its own. */}}
+{{if .Closed}}
+    {{if not .Total}}
+    {{/* Ran and finished with nobody answering. Said out loud, because the
+         alternative is a card showing a question, no ballot and no numbers,
+         which looks broken rather than ignored. */}}
+    <p class="m-0 small text-muted">This poll closed without a vote.</p>
+    {{end}}
+{{else if .CanVote}}
+    {{if .Voted}}
+    {{/* Already answered. The ballot folds away: present, and not the loudest
+         thing on a card whose point is the result above it.
 
-        {{/* Closed, open-and-yours-to-answer, or signed out — and CanVote is
-             already "signed in AND still open", so the last branch needs no
-             test of its own. */}}
-        {{if .Closed}}
-            {{if not .Total}}
-            {{/* Ran and finished with nobody answering. Said out loud, because
-                 the alternative is a card showing a question, no ballot and no
-                 numbers, which looks broken rather than ignored. */}}
-            <p class="m-0 small text-muted">This poll closed without a vote.</p>
-            {{end}}
-        {{else if .CanVote}}
-            {{if .Voted}}
-            {{/* Already answered. The ballot folds away: present, and not the
-                 loudest thing on a card whose point is the result above it.
+         Keyed on having VOTED rather than on the results being on screen,
+         which is not the same question — an 'always' poll shows its tally to
+         somebody who has not answered yet, and folding their ballot away under
+         "Change my answer" would hide the control from the one person who
+         still needs it and mislabel it on the way. */}}
+    <details class="poll__change">
+        <summary>Change my answer</summary>
+        {{template "poll-ballot" .}}
+    </details>
+    {{else}}
+    {{template "poll-ballot" .}}
+    {{end}}
+{{else}}
+<p class="m-0 small text-muted"><a href="/login">Sign in</a> to vote.</p>
+{{end}}
 
-                 Keyed on having VOTED rather than on the results being on
-                 screen, which is not the same question — an 'always' poll
-                 shows its tally to somebody who has not answered yet, and
-                 folding their ballot away under "Change my answer" would hide
-                 the control from the one person who still needs it and
-                 mislabel it on the way. */}}
-            <details class="poll__change">
-                <summary>Change my answer</summary>
-                {{template "poll-ballot" .}}
-            </details>
-            {{else}}
-            {{template "poll-ballot" .}}
-            {{end}}
-        {{else}}
-        <p class="m-0 small text-muted"><a href="/login">Sign in</a> to vote.</p>
-        {{end}}
-
-        {{if and (not .Closed) .ClosesAt}}
-        <p class="poll__closes small text-muted">Closes {{date .ClosesAt}}</p>
-        {{end}}
-    </div>
-</section>
+{{if and (not .Closed) .ClosesAt}}
+<p class="poll__closes small text-muted">Closes {{date .ClosesAt}}</p>
+{{end}}
 
 {{define "poll-ballot"}}
 <form class="poll__ballot" method="post" action="/p/polls/vote">
