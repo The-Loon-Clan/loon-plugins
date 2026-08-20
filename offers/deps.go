@@ -266,12 +266,12 @@ type APIUser struct {
 // Deps carries everything the plugin cannot do for itself.
 type Deps struct {
 	// ── page chrome ──
-	RenderPage  func(c *gin.Context, title string, body template.HTML)
+	RenderPage func(c *gin.Context, title string, body template.HTML)
 	// RenderPagination returns the HOST's pagination partial, so /offers
 	// pages with the same numbered buttons as /browse instead of a
 	// hand-rolled Newer/Older pair. baseURL must end in '?' or '&'.
 	RenderPagination func(page, totalPages int, baseURL string) template.HTML
-	RenderError func(c *gin.Context, code int, msg string)
+	RenderError      func(c *gin.Context, code int, msg string)
 	// CSRFToken for the admin tracker form. Host-owned because the token is
 	// minted and validated by host middleware.
 	CSRFToken func(c *gin.Context) string
@@ -391,7 +391,7 @@ type Deps struct {
 	// NzbHealth reports a delivered release's health_status ('' when never
 	// probed). Optional: without it the page shows the delivery and simply
 	// cannot offer the health-based re-request.
-	NzbHealth func(ctx context.Context, nzbID int64) (string, error)
+	NzbHealth      func(ctx context.Context, nzbID int64) (string, error)
 	ClaimRequest   func(ctx context.Context, reqID, userID, offerID int, window time.Duration) (bool, error)
 	DeliverRequest func(ctx context.Context, reqID, userID int, nzbID int64) (bool, error)
 	FailRequest    func(ctx context.Context, reqID, userID int) (released bool, err error)
