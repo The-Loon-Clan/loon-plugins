@@ -1,0 +1,165 @@
+{{/* Admin → Polls. Two halves: write one, and see the ones already written.
+
+     The WRITE form is first, because this page is visited to make a poll far
+     more often than to audit the list — and the list below it is short by
+     nature. */}}
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#check"></use></svg>
+            Ask a question
+        </h2>
+    </header>
+    <div class="panel__body">
+        {{/* Every failure the create action can report. Sentences live HERE
+             rather than in Go, which is what the resources audit insists on
+             and is also where a translator would look for them. */}}
+        {{if .Err}}
+        <p class="notice notice--warning">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+            <span>
+                {{if eq .Err "bad-question"}}A poll needs a question, and it has to fit on a card.
+                {{else if eq .Err "few-options"}}Give people at least two things to choose between.
+                {{else if eq .Err "many-options"}}That is more options than anybody reads. Trim the list.
+                {{else if eq .Err "long-option"}}One of those options is too long to fit a ballot.
+                {{else if eq .Err "bad-slug"}}That name has no letters or digits in it, so nothing could refer to the poll.
+                {{else if eq .Err "taken"}}A poll already goes by that name. Names have to be unique, because a shortcode refers to exactly one poll.
+                {{else}}That did not work.{{end}}
+            </span>
+        </p>
+        {{end}}
+        {{if .Made}}
+        <p class="notice notice--success">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#check"></use></svg>
+            <span>Written. Put it on a page with <code>[widget poll {{.Made}}]</code>, or place the Poll widget in a region and name it there.</span>
+        </p>
+        {{end}}
+
+        <form class="form" method="post" action="/admin/p/polls/create">
+            <input type="hidden" name="_csrf" value="{{.CSRF}}">
+            <div class="form__group">
+                <label class="form__label" for="poll-question">Question</label>
+                <input class="form__input" id="poll-question" name="question" required maxlength="200"
+                       placeholder="Should we allow re-encodes in the anime category?">
+            </div>
+            <div class="form__group">
+                <label class="form__label" for="poll-options">Options</label>
+                <textarea class="form__input" id="poll-options" name="options" rows="5" required
+                          placeholder="Yes&#10;No&#10;Only with the source listed"></textarea>
+                <p class="form__hint">One per line. Two at least, twelve at most.</p>
+            </div>
+            <div class="form__group">
+                <label class="form__label" for="poll-slug">Name</label>
+                <input class="form__input" id="poll-slug" name="slug" maxlength="60" placeholder="re-encodes">
+                <p class="form__hint">
+                    What a page calls this poll — <code>[widget poll re-encodes]</code>.
+                    Leave it blank to name it after the question.
+                </p>
+            </div>
+            <div class="form__group">
+                <label class="form__label" for="poll-results">Show the results</label>
+                <select class="form__input" id="poll-results" name="results">
+                    {{range .Results}}<option value="{{.Key}}">{{.Label}}</option>{{end}}
+                </select>
+                <ul class="option-list">
+                    {{range .Results}}<li><strong>{{.Label}}</strong> — {{.Hint}}</li>{{end}}
+                </ul>
+            </div>
+            <div class="form__group">
+                <label class="form__label" for="poll-ttl">Runs for</label>
+                <select class="form__input" id="poll-ttl" name="ttl">
+                    {{range .TTLs}}<option value="{{.Hours}}">{{.Label}}</option>{{end}}
+                </select>
+            </div>
+            <button class="form__button form__button--filled" type="submit">
+                <svg class="icon" aria-hidden="true"><use href="#plus"></use></svg>Create
+            </button>
+        </form>
+    </div>
+</section>
+
+<section class="panelV2">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#folder"></use></svg>
+            Polls
+        </h2>
+        {{if .Polls}}<div class="panel__actions"><span class="panel__grouping">{{len .Polls}}</span></div>{{end}}
+    </header>
+    {{if .Polls}}
+    <div class="panel__body panel__body--flush">
+        <div class="data-table-wrapper">
+            <table class="data-table">
+                <caption class="visually-hidden">Every poll on this site</caption>
+                <thead>
+                    <tr>
+                        <th>Question</th>
+                        <th>Place it with</th>
+                        <th class="data-table__num">Votes</th>
+                        <th>Results</th>
+                        <th>State</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{$csrf := .CSRF}}
+                    {{range .Polls}}
+                    <tr>
+                        <td><span class="data-table__title">{{.Question}}</span></td>
+                        <td><code class="poll__shortcode">{{.Shortcode}}</code></td>
+                        <td class="data-table__num">{{.Votes}}</td>
+                        <td>{{.Results}}</td>
+                        <td>
+                            {{if .Closed}}
+                                <span class="tag">Closed</span>
+                            {{else if .ClosesAt}}
+                                <span class="tag tag--ok">Open</span>
+                                <span class="small text-muted">until {{date .ClosesAt}}</span>
+                            {{else}}
+                                <span class="tag tag--ok">Open</span>
+                            {{end}}
+                        </td>
+                        <td>
+                            <div class="poll__admin-actions">
+                                <form method="post" action="/admin/p/polls/close">
+                                    <input type="hidden" name="_csrf" value="{{$csrf}}">
+                                    <input type="hidden" name="id" value="{{.ID}}">
+                                    {{/* Reopening does NOT clear a deadline that
+                                         already passed — see SetClosed. */}}
+                                    <input type="hidden" name="open" value="{{if .Closed}}1{{else}}0{{end}}">
+                                    <button class="button button--outlined button--sm" type="submit">
+                                        {{if .Closed}}Reopen{{else}}Close{{end}}
+                                    </button>
+                                </form>
+                                {{/* Deleting throws away what people said, which
+                                     closing does not, so it asks for the poll's
+                                     name typed out. A dialog would be dismissed
+                                     by reflex; this cannot be. */}}
+                                <details class="poll__danger">
+                                    <summary>Delete</summary>
+                                    <form method="post" action="/admin/p/polls/delete">
+                                        <input type="hidden" name="_csrf" value="{{$csrf}}">
+                                        <input type="hidden" name="id" value="{{.ID}}">
+                                        <input type="hidden" name="slug" value="{{.Slug}}">
+                                        <label class="form__label" for="poll-del-{{.ID}}">
+                                            Type <code>{{.Slug}}</code> to delete this poll and its {{.Votes}} vote{{if ne .Votes 1}}s{{end}}.
+                                        </label>
+                                        <input class="form__input" id="poll-del-{{.ID}}" name="confirm" autocomplete="off" required>
+                                        <button class="button button--outlined button--sm mt-1" type="submit">Delete for good</button>
+                                    </form>
+                                </details>
+                            </div>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {{else}}
+    <div class="panel__body">
+        <p class="m-0 text-muted">No polls yet. Write one above, then place it where the question belongs.</p>
+    </div>
+    {{end}}
+</section>

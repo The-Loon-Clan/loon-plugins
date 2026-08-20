@@ -1,0 +1,93 @@
+{{/* One poll, wherever it was placed: a sidebar region, the front page, the
+     body of a news post. Nothing here assumes a width — the bars are
+     percentages and the ballot is a stack — because the operator chooses
+     where this goes and the widget does not get told.
+
+     Two shapes, and which one you see is the whole editorial content of the
+     feature (see showResults in views.go): the BALLOT while the answer is
+     still yours to give, the RESULTS once the tally is readable. Both at once
+     is a real state — an open poll you have already answered — and then the
+     ballot returns as a fold, because changing your mind should be possible
+     and should not be the loudest thing on the card. */}}
+
+<section class="panelV2 poll">
+    <header class="panel__header">
+        <h2 class="panel__heading">
+            <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#check"></use></svg>
+            Poll
+        </h2>
+        {{if .Closed}}<div class="panel__actions"><span class="tag">Closed</span></div>{{end}}
+    </header>
+
+    <div class="panel__body">
+        <p class="poll__question">{{.Question}}</p>
+
+        {{if .ShowResults}}
+        <ul class="poll__results">
+            {{range .Options}}
+            <li class="poll__result{{if .Mine}} poll__result--mine{{end}}">
+                <div class="poll__result-head">
+                    <span class="poll__result-label">{{.Label}}</span>
+                    <span class="poll__result-count">{{.Percent}}%<span class="poll__result-votes">{{.Votes}}</span></span>
+                </div>
+                {{/* The bar's WIDTH is the only per-option value a stylesheet
+                     cannot know, so it is the only thing set inline. */}}
+                <div class="poll__bar"><span class="poll__bar-fill" style="width:{{.Percent}}%"></span></div>
+            </li>
+            {{end}}
+        </ul>
+        <p class="poll__total">
+            {{.Total}} vote{{if ne .Total 1}}s{{end}}{{if .Voted}} &middot; you answered this{{end}}
+        </p>
+        {{end}}
+
+        {{if .CanVote}}
+            {{if .ShowResults}}
+            {{/* Already answered, results on screen. The ballot folds away:
+                 present, not shouting. */}}
+            <details class="poll__change">
+                <summary>Change my answer</summary>
+                {{template "poll-ballot" .}}
+            </details>
+            {{else}}
+            {{template "poll-ballot" .}}
+            {{end}}
+        {{else if not .SignedIn}}
+        <p class="m-0 small text-muted"><a href="/login">Sign in</a> to vote.</p>
+        {{else if not .ShowResults}}
+        {{/* Signed in, poll over, and the policy withheld the numbers while it
+             ran — but showResults hands them over on close, so reaching here
+             means the poll closed with nothing to show. Say that rather than
+             render an empty card. */}}
+        <p class="m-0 small text-muted">This poll closed with no votes.</p>
+        {{end}}
+
+        {{if and (not .Closed) .ClosesAt}}
+        <p class="poll__closes small text-muted">Closes {{date .ClosesAt}}</p>
+        {{end}}
+    </div>
+</section>
+
+{{define "poll-ballot"}}
+<form class="poll__ballot" method="post" action="/p/polls/vote">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    {{/* By SLUG, not by id: the handler resolves it, so the only poll a forged
+         post can name is one that exists. */}}
+    <input type="hidden" name="poll" value="{{.Slug}}">
+    {{/* Where to return. A poll does not know what page it was placed on, so
+         the page tells the form and the handler refuses anything off-site. */}}
+    <input type="hidden" name="back" value="{{.Back}}">
+    <fieldset class="poll__options">
+        <legend class="visually-hidden">{{.Question}}</legend>
+        {{$slug := .Slug}}
+        {{range .Options}}
+        <label class="poll__option" for="poll-{{$slug}}-{{.ID}}">
+            <input type="radio" id="poll-{{$slug}}-{{.ID}}" name="option" value="{{.ID}}"
+                   {{if .Mine}}checked{{end}} required>
+            <span>{{.Label}}</span>
+        </label>
+        {{end}}
+    </fieldset>
+    <button class="button button--filled button--sm" type="submit">Vote</button>
+</form>
+{{end}}
