@@ -234,8 +234,20 @@ package that had no test file: `stats`, `backups`, `playlists`, the
 deliberately — its bodies are stubs awaiting extraction, so a test would pin a
 placeholder.
 
-Two things the tests found on the way, which is the argument for having written
-them at all:
+**20 Aug, later: the store-level rules too.** `pluginapi/pgtest` (scratch
+schema + the plugin's own migrations + one variable, `LOON_TEST_DSN`),
+`scripts/itest.sh`, a Makefile and a CI job with a Postgres service — then the
+three store test files (`cosmetics.Equip`, the `comments` delete/edit rules,
+`mediainfo.SummariesFor`/`RemoveReport`). 61 packages green.
+
+The finding underneath it is the one worth keeping: **thirty-one integration
+tests already existed in this repo and none of them had ever run.** Each read
+its own environment variable and not one was set by anything, so they all
+skipped and the suite reported green — which is worse than having no test,
+because a skip reports as a pass. They run now.
+
+Three things the tests found on the way, which is the argument for having
+written them at all:
 
 - `playlists.owned()` compared the stored owner against a viewer id that is
   **0 for anonymous**, so a `user_id = 0` row would have been owned by every
@@ -247,6 +259,15 @@ them at all:
   silence. Closed, with the rule narrowed to strings that both are built
   dynamically and open with a SQL verb, so a Sprint'ed value bound as `$1` is
   not mistaken for a query.
+- `comments.Delete` expressed "staff" by passing **0** in place of the caller's
+  id, so the sentinel meaning *staff* and the id meaning *nobody is signed in*
+  were the same value — a non-staff call with user id 0 removed anybody's
+  comment. Found on the harness's first run. Now a boolean parameter, which is
+  the shape `mediainfo.RemoveReport` already used and why that one was never
+  wrong.
+
+Note the pattern in all three: each is a check that was correct in the code
+around it and wrong in the one input nobody passes by hand. `0`, twice.
 
 A first correction to this list was written from memory and got three rows
 wrong — it claimed `games`, `magic` and `medals` had neither README nor tests,
