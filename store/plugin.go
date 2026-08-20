@@ -259,6 +259,16 @@ func (p *Plugin) Provision(c *core.Core) error {
 	adm.POST("/:id/update", p.handlers.UpdateItem)
 	adm.POST("/:id/delete", p.handlers.DeleteItem)
 
+	// The link, registered beside the routes it points at so the two stay in
+	// step. These pages are a route GROUP rather than a SlotAdminPage view —
+	// the slot mounts one GET and these have several — so without this they
+	// are served and in no nav at all, findable only by knowing the URL.
+	if err := pluginapi.RegisterAdminNav(c, "store", func() []pluginapi.AdminNavEntry {
+		return []pluginapi.AdminNavEntry{{Href: "/admin/store", Label: "Store", Group: "Community", Weight: 40}}
+	}); err != nil {
+		return fmt.Errorf("store: register admin nav: %w", err)
+	}
+
 	return nil
 }
 

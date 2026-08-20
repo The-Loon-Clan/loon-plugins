@@ -10,6 +10,8 @@ import (
 
 	"github.com/the-loon-clan/loon/blob"
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 func init() {
@@ -156,6 +158,16 @@ func (p *Plugin) Provision(c *core.Core) error {
 	adm.POST("/posts/:id/update", p.handlers.UpdatePost)
 	adm.POST("/posts/:id/delete", p.handlers.DeletePost)
 	adm.POST("/upload", p.handlers.UploadImage)
+
+	// The link, registered beside the routes it points at so the two stay in
+	// step. These pages are a route GROUP rather than a SlotAdminPage view —
+	// the slot mounts one GET and these have several — so without this they
+	// are served and in no nav at all, findable only by knowing the URL.
+	if err := pluginapi.RegisterAdminNav(c, "wiki", func() []pluginapi.AdminNavEntry {
+		return []pluginapi.AdminNavEntry{{Href: "/admin/wiki", Label: "Wiki", Group: "Content", Weight: 20}}
+	}); err != nil {
+		return fmt.Errorf("wiki: register admin nav: %w", err)
+	}
 
 	return nil
 }

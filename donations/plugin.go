@@ -12,6 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 func init() {
@@ -175,6 +177,16 @@ func (p *Plugin) Provision(c *core.Core) error {
 	adm.POST("/tipjar", p.handlers.SaveDonateTipJar)
 	adm.POST("/packages", p.handlers.SaveDonatePackage)
 	adm.POST("/packages/:id/del", p.handlers.DeleteDonatePackage)
+
+	// The link, registered beside the routes it points at so the two stay in
+	// step. These pages are a route GROUP rather than a SlotAdminPage view —
+	// the slot mounts one GET and these have several — so without this they
+	// are served and in no nav at all, findable only by knowing the URL.
+	if err := pluginapi.RegisterAdminNav(c, "donations", func() []pluginapi.AdminNavEntry {
+		return []pluginapi.AdminNavEntry{{Href: "/admin/donate", Label: "Donations", Group: "Community", Weight: 10}}
+	}); err != nil {
+		return fmt.Errorf("donations: register admin nav: %w", err)
+	}
 
 	// Admin-only writes: the three credential/money vectors. Saving a
 	// BTCPay base URL + running the health check together would

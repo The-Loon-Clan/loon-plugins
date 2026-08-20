@@ -19,6 +19,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 func init() {
@@ -136,6 +138,16 @@ func (p *Plugin) Provision(c *core.Core) error {
 	adm.GET("/:id/edit", p.handlers.EditNewsPage)
 	adm.POST("/:id/update", p.handlers.UpdateNews)
 	adm.POST("/:id/delete", p.handlers.DeleteNews)
+
+	// The link, registered beside the routes it points at so the two stay in
+	// step. These pages are a route GROUP rather than a SlotAdminPage view —
+	// the slot mounts one GET and these have several — so without this they
+	// are served and in no nav at all, findable only by knowing the URL.
+	if err := pluginapi.RegisterAdminNav(c, "news", func() []pluginapi.AdminNavEntry {
+		return []pluginapi.AdminNavEntry{{Href: "/admin/news", Label: "News", Group: "Content", Weight: 10}}
+	}); err != nil {
+		return fmt.Errorf("news: register admin nav: %w", err)
+	}
 	return nil
 }
 
