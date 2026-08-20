@@ -46,6 +46,9 @@ import (
 	"time"
 
 	"github.com/the-loon-clan/loon/catalog"
+	"github.com/the-loon-clan/loon/httpclient"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // ErrNoLocalID is returned by Fetch — this source is query-only.
@@ -77,10 +80,38 @@ const (
 // empty API key (or an unknown Kind) makes New return nil, so the host
 // registers it only when configured.
 type Source struct {
-	apiKey  string
+	apiKey string
+	// bearer says the credential is a v4 read access token, which authenticates
+	// through an Authorization header. A v3 api_key has no header form and has
+	// to travel in the query string.
+	bearer  bool
 	kind    Kind
 	baseURL string
 	http    *http.Client
+}
+
+// looksLikeV4Token reports whether a TMDB credential is a v4 read access
+// token rather than a v3 api_key.
+//
+// A v4 token is a JWT: three base64url segments separated by dots, and in
+// practice always beginning "eyJ" (the encoding of `{"`). A v3 key is 32 hex
+// characters and contains no dot at all, so the two cannot be confused.
+//
+// Getting this wrong fails CLOSED in the useful direction: a v4 token
+// mistaken for a v3 key would go in the query and simply be rejected by TMDB
+// with a 401, which is visible immediately. The reverse cannot happen, since
+// a v3 key has no dots.
+func looksLikeV4Token(s string) bool {
+	parts := strings.Split(s, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" {
+			return false
+		}
+	}
+	return strings.HasPrefix(s, "eyJ")
 }
 
 var _ catalog.MetadataSource = (*Source)(nil)
@@ -100,11 +131,23 @@ func New(apiKey string, kind Kind, baseURL string) *Source {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
+	// httpclient.NewAPI rather than a bespoke &http.Client{}. core's
+	// HTTPClientService contract is explicit that "raw &http.Client{} is
+	// forbidden in plugin code" — seven sources each building their own is
+	// exactly the sprawl pkg/httpclient was written to end (it counted 21
+	// such places). NewAPI shares one pooled transport across every source,
+	// so a scrape of fifty releases reuses connections instead of opening a
+	// fresh one per lookup, and any future outbound policy lands in one file.
+	//
+	// NOT SafeFetch: that carries an SSRF dial guard for URLs a MEMBER
+	// supplied, and would refuse the loopback address these tests point at.
+	// The host here is a fixed, operator-configured API endpoint.
 	return &Source{
 		apiKey:  apiKey,
+		bearer:  looksLikeV4Token(apiKey),
 		kind:    kind,
 		baseURL: strings.TrimSuffix(baseURL, "/"),
-		http:    &http.Client{Timeout: 20 * time.Second},
+		http:    httpclient.NewAPI(),
 	}
 }
 
@@ -400,19 +443,40 @@ func (s *Source) Search(ctx context.Context, query string) (catalog.CatalogEntry
 	// a wrong hint (a series-disambiguation year, a mis-parsed subject) would
 	// otherwise turn a good match into zero results. Ranking locally degrades
 	// to "best-effort first hit" instead.
-	endpoint := fmt.Sprintf("%s/search/%s?api_key=%s&query=%s&include_adult=false&page=1",
-		s.baseURL, s.kind, url.QueryEscape(s.apiKey), url.QueryEscape(q.Title))
+	// The credential goes in a HEADER when it can, and in the query only when
+	// TMDB leaves no choice.
+	//
+	// A key in a query string is a key in every place a URL goes, and a URL
+	// goes further than it looks: net/http embeds it in the *url.Error it
+	// returns from any transport failure, so `fmt.Errorf("%w", err)` writes the
+	// operator's key into this site's error_logs table on a DNS blip. That is
+	// covered below by RedactURLError either way, but not putting it there is
+	// better than scrubbing it afterwards.
+	//
+	// TMDB's v4 read access token is a JWT and authenticates v3 endpoints
+	// through `Authorization: Bearer`. A v3 api_key is 32 hex characters and
+	// has no header form at all — it must stay in the query. So the shape of
+	// the configured credential decides, and an operator who has not migrated
+	// keeps working.
+	endpoint := fmt.Sprintf("%s/search/%s?query=%s&include_adult=false&page=1",
+		s.baseURL, s.kind, url.QueryEscape(q.Title))
+	if !s.bearer {
+		endpoint += "&api_key=" + url.QueryEscape(s.apiKey)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return catalog.CatalogEntry{}, false, err
+	}
+	if s.bearer {
+		req.Header.Set("Authorization", "Bearer "+s.apiKey)
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "loon-scraper/1.0")
 
 	resp, err := s.http.Do(req)
 	if err != nil {
-		return catalog.CatalogEntry{}, false, fmt.Errorf("tmdb request: %w", err)
+		return catalog.CatalogEntry{}, false, fmt.Errorf("tmdb request: %w", pluginapi.RedactURLError(err))
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))

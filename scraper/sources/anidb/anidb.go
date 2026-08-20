@@ -20,9 +20,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/the-loon-clan/loon/catalog"
+	"github.com/the-loon-clan/loon/httpclient"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 var errNoClient = errors.New("anidb: no client name configured (register one at anidb.net)")
@@ -60,10 +62,21 @@ func New(client string, titles map[string]int64) *Source {
 	if titles == nil {
 		titles = map[string]int64{}
 	}
+	// httpclient.NewAPI rather than a bespoke &http.Client{}. core's
+	// HTTPClientService contract is explicit that "raw &http.Client{} is
+	// forbidden in plugin code" — seven sources each building their own is
+	// exactly the sprawl pkg/httpclient was written to end (it counted 21
+	// such places). NewAPI shares one pooled transport across every source,
+	// so a scrape of fifty releases reuses connections instead of opening a
+	// fresh one per lookup, and any future outbound policy lands in one file.
+	//
+	// NOT SafeFetch: that carries an SSRF dial guard for URLs a MEMBER
+	// supplied, and would refuse the loopback address these tests point at.
+	// The host here is a fixed, operator-configured API endpoint.
 	return &Source{
 		client:  client,
 		titles:  titles,
-		http:    &http.Client{Timeout: 20 * time.Second},
+		http:    httpclient.NewAPI(),
 		baseURL: "http://api.anidb.net:9001/httpapi",
 	}
 }
@@ -129,7 +142,7 @@ func (s *Source) Fetch(ctx context.Context, aid int64) (catalog.CatalogEntry, er
 
 	resp, err := s.http.Do(req)
 	if err != nil {
-		return catalog.CatalogEntry{}, fmt.Errorf("anidb request: %w", err)
+		return catalog.CatalogEntry{}, fmt.Errorf("anidb request: %w", pluginapi.RedactURLError(err))
 	}
 	defer resp.Body.Close()
 

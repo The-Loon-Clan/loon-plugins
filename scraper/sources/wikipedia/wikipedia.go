@@ -39,6 +39,9 @@ import (
 	"time"
 
 	"github.com/the-loon-clan/loon/catalog"
+	"github.com/the-loon-clan/loon/httpclient"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // ErrNoLocalID is returned by Fetch — this source is query-only.
@@ -97,10 +100,21 @@ func New(baseURL string) *Source {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
+	// httpclient.NewAPI rather than a bespoke &http.Client{}. core's
+	// HTTPClientService contract is explicit that "raw &http.Client{} is
+	// forbidden in plugin code" — seven sources each building their own is
+	// exactly the sprawl pkg/httpclient was written to end (it counted 21
+	// such places). NewAPI shares one pooled transport across every source,
+	// so a scrape of fifty releases reuses connections instead of opening a
+	// fresh one per lookup, and any future outbound policy lands in one file.
+	//
+	// NOT SafeFetch: that carries an SSRF dial guard for URLs a MEMBER
+	// supplied, and would refuse the loopback address these tests point at.
+	// The host here is a fixed, operator-configured API endpoint.
 	return &Source{
 		baseURL:     strings.TrimSuffix(baseURL, "/"),
 		wikidataURL: defaultWikidataURL,
-		http:        &http.Client{Timeout: 20 * time.Second},
+		http:        httpclient.NewAPI(),
 		seen:        map[string]cached{},
 	}
 }
@@ -327,7 +341,7 @@ func (s *Source) getJSON(ctx context.Context, endpoint string, out any) error {
 
 	resp, err := s.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("wikipedia request: %w", err)
+		return fmt.Errorf("wikipedia request: %w", pluginapi.RedactURLError(err))
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))

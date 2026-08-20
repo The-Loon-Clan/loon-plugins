@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/the-loon-clan/loon/catalog"
@@ -418,5 +419,100 @@ func TestResultDecodeIsLenient(t *testing.T) {
 	}
 	if doc.Results[0].displayTitle() != "" || doc.Results[0].year() != 0 {
 		t.Errorf("empty payload produced %+v", doc.Results[0])
+	}
+}
+
+// ── credential placement ────────────────────────────────────────────
+
+func TestLooksLikeV4Token(t *testing.T) {
+	// A real v4 read access token: a JWT, three dot-separated segments.
+	if !looksLikeV4Token("eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJhYmMifQ.c2lnbmF0dXJl") {
+		t.Error("a v4 token was not recognised")
+	}
+	for _, in := range []string{
+		"",
+		"09f7e02f1290be211da707a266f153b3",     // a v3 api_key: 32 hex, no dots
+		"eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJhIn0", // two segments
+		"a.b.c",                                // three segments, not a JWT
+		"eyJhbGciOiJIUzI1NiJ9..c2ln",           // an empty segment
+		"eyJhbGciOiJIUzI1NiJ9.eyJhIjoxfQ.sig.extra",
+	} {
+		if looksLikeV4Token(in) {
+			t.Errorf("looksLikeV4Token(%q) = true", in)
+		}
+	}
+}
+
+// TestAV4TokenNeverReachesTheURL is the point of the whole change: a credential
+// in a query string is a credential in every place a URL goes, and net/http
+// puts the URL into the error it returns from any transport failure.
+func TestAV4TokenNeverReachesTheURL(t *testing.T) {
+	const token = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJhYmMifQ.c2lnbmF0dXJl"
+	var gotURL, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURL = r.URL.String()
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(movieBody))
+	}))
+	defer srv.Close()
+
+	s := New(token, KindMovie, srv.URL)
+	if _, _, err := s.Search(context.Background(), "Some.Movie.Name.2024.1080p-GRP"); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if strings.Contains(gotURL, token) || strings.Contains(gotURL, "api_key") {
+		t.Errorf("the token reached the URL: %s", gotURL)
+	}
+	if gotAuth != "Bearer "+token {
+		t.Errorf("Authorization = %q, want the bearer token", gotAuth)
+	}
+}
+
+// TestAV3KeyStillTravelsInTheQuery. TMDB gives a v3 api_key no header form, so
+// an operator who has not migrated must keep working — a "fix" that silently
+// broke every v3 key would be worse than the leak it closed.
+func TestAV3KeyStillTravelsInTheQuery(t *testing.T) {
+	const key = "09f7e02f1290be211da707a266f153b3"
+	var gotKey, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey = r.URL.Query().Get("api_key")
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(movieBody))
+	}))
+	defer srv.Close()
+
+	s := New(key, KindMovie, srv.URL)
+	if _, _, err := s.Search(context.Background(), "Some.Movie.Name.2024.1080p-GRP"); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if gotKey != key {
+		t.Errorf("api_key = %q, want the v3 key", gotKey)
+	}
+	if gotAuth != "" {
+		t.Errorf("Authorization = %q, want none for a v3 key", gotAuth)
+	}
+}
+
+// TestATransportFailureDoesNotLeakTheKey — the leak this began with, closed at
+// the source rather than only at the log.
+func TestATransportFailureDoesNotLeakTheKey(t *testing.T) {
+	const key = "09f7e02f1290be211da707a266f153b3"
+	// A server that is closed before the call, so Do fails at the transport.
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	base := srv.URL
+	srv.Close()
+
+	s := New(key, KindMovie, base)
+	_, _, err := s.Search(context.Background(), "Some.Movie.Name.2024.1080p-GRP")
+	if err == nil {
+		t.Fatal("expected a transport error")
+	}
+	if strings.Contains(err.Error(), key) {
+		t.Errorf("the api_key is in the error, and therefore in error_logs:\n%v", err)
+	}
+	if !strings.Contains(err.Error(), "REDACTED") {
+		t.Errorf("nothing was redacted, so the guard did not run:\n%v", err)
 	}
 }
