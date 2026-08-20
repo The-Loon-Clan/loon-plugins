@@ -92,6 +92,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		// Web resolves and settles claims; worker keeps event windows
 		// materialised ahead of time and expires lapsed grants.
 		Processes: []string{"web", "worker"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

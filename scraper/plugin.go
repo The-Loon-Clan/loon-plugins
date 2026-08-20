@@ -54,6 +54,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Generic metadata scraper: shared jobs over a registry of pluggable MetadataSource modules (anidb, tmdb, mangadex, …).",
 		// Worker-only: the scraper runs jobs, registers no routes.
 		Processes: []string{"worker"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

@@ -35,6 +35,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		// filter entirely when Process=="all", and the Provision/Start
 		// gates already handle it, so listing it would be inert.
 		Processes: []string{"web", "worker"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

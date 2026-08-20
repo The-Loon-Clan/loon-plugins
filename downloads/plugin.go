@@ -87,6 +87,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Download-client callback: a member's SABnzbd or NZBGet reports each job's outcome back to the index.",
 		Migrations:  migrations,
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

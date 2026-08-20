@@ -84,6 +84,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "MediaInfo, chapters and screenshots contributed by the members who downloaded a release — the things an NZB cannot tell you.",
 		Migrations:  migrations,
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

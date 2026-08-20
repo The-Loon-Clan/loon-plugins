@@ -39,6 +39,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "communities",
 		Version:     "1.0.0",
 		Description: "User-owned sub-forums (/c/*) with join gating, invites, points escrow, and per-community moderation.",
+		Flavours:    []string{core.FlavourAny},
 		// Tables ship via the core numbered migrations in the
 		// public schema until the PG17 baseline consolidation.
 	}

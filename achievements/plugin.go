@@ -96,6 +96,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		// from events emitted by background work. Event subscription has to
 		// live wherever events fire, and they fire on both.
 		Processes: []string{"web", "worker"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

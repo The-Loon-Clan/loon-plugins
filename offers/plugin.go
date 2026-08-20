@@ -31,6 +31,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Version:     "1.0.0",
 		Description: "Offer system — register deliverable content, file requests against buckets, external-agent claim/deliver API.",
 		Processes:   []string{"web", "worker", "api"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

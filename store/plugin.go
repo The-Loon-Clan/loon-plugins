@@ -134,6 +134,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "store",
 		Version:     "1.0.0",
 		Description: "Points store — spend points on catalog items; rank items granted via the ranks capability.",
+		Flavours:    []string{core.FlavourAny},
 		// Provisioned after ranks so the RankGranter capability is on
 		// the extension registry before this plugin's Lookup runs.
 		Requires: []string{"ranks"},

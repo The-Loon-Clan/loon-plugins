@@ -94,6 +94,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "wiki",
 		Version:     "1.0.0",
 		Description: "Knowledge base — topics containing long-form markdown articles (Help, FAQ, guides).",
+		Flavours:    []string{core.FlavourAny},
 		// Tables (wiki_topics, wiki_posts) still ship via the core
 		// numbered migrations in the public schema; Migrations stays
 		// empty until the PG17 baseline consolidation moves them

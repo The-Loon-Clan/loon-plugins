@@ -44,6 +44,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Public roadmap + changelog pages, the /flow collaborative planning canvas, and the periodic flow-snapshot job.",
 		// web serves the pages + canvas; worker runs the Flow Snapshots loop.
 		Processes: []string{"web", "worker"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

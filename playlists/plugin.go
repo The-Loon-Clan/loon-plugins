@@ -70,7 +70,7 @@ func SetDeps(d Deps) { deps = d }
 type Plugin struct {
 	// pg is the concrete store, held for the collection sink — which needs the
 	// database rather than the Store interface's per-playlist operations.
-	pg *PGStore
+	pg       *PGStore
 	core     *core.Core
 	handlers *Handlers
 }
@@ -82,6 +82,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "User-curated collections of indexed releases.",
 		Migrations:  playlistMigrations,
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

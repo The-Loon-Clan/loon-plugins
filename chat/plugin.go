@@ -24,6 +24,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Version:     "1.1.0",
 		Description: "Site shoutbox — Discord/IRC chat bridge with SSE live updates and webhook send-back.",
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

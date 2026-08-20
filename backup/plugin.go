@@ -90,6 +90,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		// would register three jobs it never runs (a Run button and a next_run
 		// that nothing honours) and Start would launch a second set of loops.
 		Processes:  []string{"web", "worker"},
+		Flavours:   []string{core.FlavourAny},
 		Migrations: migrations,
 	}
 }

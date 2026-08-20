@@ -67,6 +67,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Apply to join: a public application form, a staff queue, and an approval that issues a real invite.",
 		Migrations:  migrations,
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

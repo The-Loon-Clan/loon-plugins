@@ -41,6 +41,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Version:     "0.2.0",
 		Description: "Collects plugin StatContributor hooks into a cached snapshot and serves the site-stats page + widget.",
 		Processes:   []string{"web", "worker"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

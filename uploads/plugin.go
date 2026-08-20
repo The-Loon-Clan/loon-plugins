@@ -29,6 +29,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		// and the jobs that groom uploaded rows afterwards belong to the
 		// catalog and curation domains rather than to this one.
 		Processes: []string{"web"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

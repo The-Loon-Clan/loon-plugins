@@ -37,6 +37,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Version:     "1.0.0",
 		Description: "Member report queue — triage releases flagged as broken, mislabeled, or malware.",
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

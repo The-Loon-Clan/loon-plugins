@@ -31,6 +31,22 @@ others (one binary, so the compiler is the version check).
       `Description` (it renders on `/admin/plugins`), `Migrations`, and
       `Processes` limited to the legs that need it, with a comment saying why
       (tracker: web AND api because announce registers on both).
+- [ ] **MUST** — `Metadata.Flavours` states which half of a site the plugin
+      belongs to: `core.FlavourIndexer`, `core.FlavourTracker`, or
+      `core.FlavourAny` for the majority that do not care. **Say it even when
+      the answer is "any"** — an empty field behaves identically, which is the
+      whole problem: absence means both "belongs to both" and "nobody has
+      thought about it", and only one of those is a decision. A one-sided
+      declaration carries a comment saying what would run pointlessly without
+      it (hitrun on an indexer: an admin page, a nightly sweep and warnings
+      about a swarm that does not exist).
+- [ ] **SHOULD** — a capability an operator might not want is declared with
+      `core.RegisterFeature`, not left as a config key. Config flags are
+      invisible: nothing lists them and nothing says what switching one off
+      stops, so the feature ships permanently on. Name the key on the `View`
+      and `Widget` it governs, check it in the view model AND the handler (a
+      form outlives the page it came from), and write the `Description` for
+      the operator — say what stops and what is KEPT.
 - [ ] **MUST** — hard dependencies are in `Metadata.Requires`; soft ones are
       looked up defensively and DEGRADE with a message, never a panic.
       A host registration (not a sibling plugin) cannot be ordered by
@@ -53,7 +69,8 @@ others (one binary, so the compiler is the version check).
       INSIDE the existing writer, not alongside it.
 
 Verify: `go build ./...` (the compiler catches interface skew — pluginapi's
-versioning note), review of `plugin.go` against this list, and
+versioning note), `python scripts/audit_flavours.py --strict` (every plugin
+declares a half), review of `plugin.go` against this list, and
 `/admin/contracts` shows no unwired capability the plugin claims to consume.
 
 ## 2. Data & migrations
@@ -424,6 +441,18 @@ make check      # fmt, build, vet, golangci, sqllint, contrast, tests, coverage 
 make release    # + access, links, a11y, mobile against the running site
 make itest      # migrations + SQL semantics against a disposable Postgres/Redis
 ```
+
+From THIS repository, which the host's targets cannot see into:
+
+```
+python scripts/audit_flavours.py            # who declares which half (section 1)
+python scripts/audit_flavours.py --strict   # non-zero while any are undeclared
+```
+
+That one is a script rather than a review note for a specific reason worth
+repeating: an empty `Flavours` behaves exactly like `FlavourAny`, so the
+omission never surfaces as a bug and never stands out in a diff. It is only
+visible by asking the whole tree at once.
 
 Everything those commands cannot check is a review question above, and each
 review question names its exemplar. When an item graduates from `PENDING`

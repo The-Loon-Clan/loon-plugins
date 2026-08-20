@@ -21,6 +21,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Version:     "1.1.0",
 		Description: "Watchlists / collections — personal NZB lists, sharing, follows, bulk download, discovery grid.",
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

@@ -20,6 +20,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "tickets",
 		Version:     "1.0.0",
 		Description: "Support tickets — submission, replies, admin triage.",
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

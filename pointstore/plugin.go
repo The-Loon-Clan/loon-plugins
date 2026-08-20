@@ -39,6 +39,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Spend points on a profile flair — the counterpart to points earned elsewhere.",
 		Migrations:  migrations,
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

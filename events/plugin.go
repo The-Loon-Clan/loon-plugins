@@ -51,6 +51,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		// the generator. Both need the capability registered, because a consumer
 		// on the worker asking "is the season open" is the same question.
 		Processes: []string{"web", "worker"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

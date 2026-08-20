@@ -38,6 +38,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Version:     "0.1.0",
 		Description: "Season/episode inference for crawled releases: applies title, AniDB-entry and TMDB-season rules daily, and reports what it cannot infer.",
 		Processes:   []string{"web", "worker"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

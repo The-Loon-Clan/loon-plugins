@@ -110,6 +110,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "donations",
 		Version:     "1.0.0",
 		Description: "Donations — BTCPay invoices + webhook, points packages, admin cost/log management.",
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

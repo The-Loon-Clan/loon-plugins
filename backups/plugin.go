@@ -38,6 +38,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Version:     "0.1.0",
 		Description: "Weekly site backup: dumps the database and runs every plugin's Backupable hook into one archive.",
 		Processes:   []string{"worker"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

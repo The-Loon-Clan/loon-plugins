@@ -26,6 +26,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Release-group directory — group pages, ownership claims, news + followers, archive mirror, plus the nekoBT scraper + archive-sweep jobs.",
 		// web: the directory pages. worker: the two scraper/sweep loops.
 		Processes: []string{"web", "worker"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

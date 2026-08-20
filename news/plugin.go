@@ -85,6 +85,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "news",
 		Version:     "1.0.0",
 		Description: "Site news — public feed, per-post pages, admin editor.",
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

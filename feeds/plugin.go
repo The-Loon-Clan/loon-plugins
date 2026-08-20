@@ -107,6 +107,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		// (download-triggered resurrection). The importer itself gates on the
 		// worker below.
 		Processes: []string{"web", "worker", "api"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

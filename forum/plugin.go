@@ -102,6 +102,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "forum",
 		Version:     "1.0.0",
 		Description: "Site-wide discussion board — categories, threads, quote-replies, reactions.",
+		Flavours:    []string{core.FlavourAny},
 		// Tables ship via the host's numbered migrations in the
 		// public schema until the PG17 baseline consolidation —
 		// see README (Data) for the required tables.

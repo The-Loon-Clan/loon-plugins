@@ -49,6 +49,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		// nowhere to put them. The web leg registers the view; the worker leg
 		// runs the bot. ("all" runs both — boot skips the filter.)
 		Processes: []string{"web", "worker"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

@@ -78,6 +78,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Ask the members a question. Placed anywhere as a widget, one vote each, changeable while it is open.",
 		Migrations:  migrations,
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

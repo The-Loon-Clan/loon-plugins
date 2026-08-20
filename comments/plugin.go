@@ -75,6 +75,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Comments attached to whatever a page is about — releases today, anything that declares a subject tomorrow.",
 		Migrations:  migrations,
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

@@ -112,6 +112,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Messaging — unified inbox (DMs + announcements), DM flows, admin broadcast composer.",
 		// web only: no jobs, and the routes are page-shaped.
 		Processes: []string{"web"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

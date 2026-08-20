@@ -51,6 +51,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Database maintenance: online pg_repack + REINDEX CONCURRENTLY, plus the legacy maintenance-window VACUUM FULL.",
 		// Worker-only: no routes, just the scheduled loops.
 		Processes: []string{"worker"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

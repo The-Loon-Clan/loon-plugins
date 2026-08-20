@@ -82,6 +82,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Name effects, avatar frames, profile grounds and reviewed custom titles. The only rewards on the site anybody else can see.",
 		Migrations:  migrations,
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

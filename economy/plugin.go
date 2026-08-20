@@ -29,6 +29,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Version:     "1.0.0",
 		Description: "Points-economy worker job: the per-grab uploader bonus.",
 		Processes:   []string{"worker"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

@@ -62,6 +62,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Description: "Daily-login reward: claim once a day (behind a captcha) for points + a streak.",
 		Migrations:  migrations,
 		Processes:   []string{"web"},
+		Flavours:    []string{core.FlavourAny},
 	}
 }
 

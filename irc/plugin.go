@@ -49,6 +49,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		// UI. It sat in the host only because a worker-only plugin had nowhere
 		// to put a page fragment.
 		Processes: []string{"web", "worker"},
+		Flavours:  []string{core.FlavourAny},
 	}
 }
 

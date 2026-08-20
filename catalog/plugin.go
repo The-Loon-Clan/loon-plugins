@@ -42,6 +42,7 @@ func (p *Plugin) Metadata() core.Metadata {
 		Version:     "0.1.0",
 		Description: "Content taxonomy: the Newznab category tree + which categories the indexer surfaces.",
 		Processes:   []string{"web", "worker"},
+		Flavours:    []string{core.FlavourAny},
 		Migrations:  migrations,
 	}
 }
