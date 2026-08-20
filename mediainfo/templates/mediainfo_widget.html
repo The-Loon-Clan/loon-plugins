@@ -1,0 +1,191 @@
+{{/* What members have said about this release: MediaInfo, chapters, frames.
+
+     NO PANEL OF ITS OWN — the host frames a placed widget and titles it, so
+     what follows is body content. See the comments widget for the same note.
+
+     Everything here is SOMEBODY'S WORD, and the page says so in as many places
+     as it takes: every report carries its author and when they posted it, and
+     the footnote names what is derived instead. The host's "What is in it"
+     panel sits above this one and is read from the NZB itself. A reader must
+     never have to guess which of the two they are looking at. */}}
+
+{{if .Err}}
+<p class="notice notice--warning">
+    <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+    <span>
+        {{if eq .Err "unparsed"}}That did not look like MediaInfo output. Paste the whole thing, starting at the word General.
+        {{else if eq .Err "toolong"}}That paste is too long. MediaInfo for one release is a few dozen lines.
+        {{else if eq .Err "toomany"}}You have added as many screenshots to this release as one member can.
+        {{else if eq .Err "noshots"}}This site is not set up to store screenshots.
+        {{else if eq .Err "fetch"}}That screenshot could not be added.
+        {{else}}That did not work.{{end}}
+    </span>
+</p>
+{{end}}
+
+{{/* ------------------------------------------------------------- screenshots */}}
+{{if .Shots}}
+<ul class="shots">
+    {{$csrf := .CSRF}}{{$back := .Back}}
+    {{range .Shots}}
+    <li class="shots__item">
+        {{/* Served from THIS site, never from where the member found it — a
+             page that renders a remote image hands that host a log of who
+             reads what. loading=lazy because a set of 4K frames below the
+             fold is megabytes nobody asked for yet. */}}
+        <a class="shots__link" href="{{.URL}}" target="_blank" rel="noopener noreferrer">
+            <img class="shots__img" src="{{.URL}}" alt="Screenshot posted by {{.Author}}" loading="lazy" decoding="async">
+        </a>
+        <div class="shots__meta">
+            <span class="small text-muted">{{.Author}}</span>
+            {{if .CanRemove}}
+            <form method="post" action="/p/mediainfo/unshot">
+                <input type="hidden" name="_csrf" value="{{$csrf}}">
+                <input type="hidden" name="id" value="{{.ID}}">
+                <input type="hidden" name="back" value="{{$back}}">
+                <button class="button button--text button--sm" type="submit">Remove</button>
+            </form>
+            {{end}}
+        </div>
+    </li>
+    {{end}}
+</ul>
+{{end}}
+
+{{/* ----------------------------------------------------------------- reports */}}
+{{if .Reports}}
+{{$csrf := .CSRF}}{{$back := .Back}}
+{{range .Reports}}
+<article class="mi{{if .Deleted}} mi--removed{{end}}">
+    <header class="mi__head">
+        <strong class="mi__author">{{.Author}}</strong>
+        <span class="mi__when" title="{{.When.Format "2 Jan 2006 15:04"}}">{{ago .When}}</span>
+        {{if .Edited}}<span class="mi__edited">edited</span>{{end}}
+        {{if .Summary}}<span class="mi__summary">{{.Summary}}</span>{{end}}
+        {{if .CanRemove}}
+        <form class="mi__remove" method="post" action="/p/mediainfo/remove">
+            <input type="hidden" name="_csrf" value="{{$csrf}}">
+            <input type="hidden" name="id" value="{{.ID}}">
+            <input type="hidden" name="back" value="{{$back}}">
+            <button class="button button--text button--sm" type="submit">Remove</button>
+        </form>
+        {{end}}
+    </header>
+
+    {{if .Deleted}}
+    {{/* Staff only — see views.go. A moderator asked "why was this removed"
+         cannot answer from a row showing nothing. */}}
+    <p class="mi__note">Removed. Visible to staff only.</p>
+    {{end}}
+
+    <div class="mi__tracks">
+        {{if .General}}
+        <section class="mi__track">
+            <h3 class="mi__track-name">File</h3>
+            <dl class="mi__fields">
+                {{range .General}}<dt>{{.Name}}</dt><dd>{{.Value}}</dd>{{end}}
+            </dl>
+        </section>
+        {{end}}
+        {{range .Video}}
+        <section class="mi__track">
+            <h3 class="mi__track-name">{{.Label}}</h3>
+            <dl class="mi__fields">
+                {{range .Fields}}<dt>{{.Name}}</dt><dd>{{.Value}}</dd>{{end}}
+            </dl>
+        </section>
+        {{end}}
+        {{range .Audio}}
+        <section class="mi__track">
+            <h3 class="mi__track-name">{{.Label}}</h3>
+            <dl class="mi__fields">
+                {{range .Fields}}<dt>{{.Name}}</dt><dd>{{.Value}}</dd>{{end}}
+            </dl>
+        </section>
+        {{end}}
+        {{range .Text}}
+        <section class="mi__track">
+            <h3 class="mi__track-name">{{.Label}}</h3>
+            <dl class="mi__fields">
+                {{range .Fields}}<dt>{{.Name}}</dt><dd>{{.Value}}</dd>{{end}}
+            </dl>
+        </section>
+        {{end}}
+    </div>
+
+    {{/* Chapters, folded. A film has thirty and they would be the tallest
+         thing on the page — but somebody looking for the point where the
+         recap ends wants them, so they are one click away rather than gone. */}}
+    {{with .Chapters}}
+    <details class="mi__chapters">
+        <summary>{{len .}} chapter{{if ne (len .) 1}}s{{end}}</summary>
+        <ol class="mi__chapter-list">
+            {{range .}}
+            <li><span class="mi__chapter-at">{{.At}}</span><span>{{.Title}}</span></li>
+            {{end}}
+        </ol>
+    </details>
+    {{end}}
+</article>
+{{end}}
+{{else}}
+<p class="m-0 text-muted">
+    Nothing yet.{{if .CanPost}} If you have downloaded this, paste its MediaInfo below —
+    it is the only way this page can show bitrate, audio tracks or chapters.{{end}}
+</p>
+{{end}}
+
+{{/* -------------------------------------------------------------------- form */}}
+{{if .CanPost}}
+<details class="mi__add">
+    <summary>{{if .Mine}}Edit your MediaInfo{{else}}Add MediaInfo{{end}}</summary>
+    <form class="form" method="post" action="/p/mediainfo/post">
+        <input type="hidden" name="_csrf" value="{{.CSRF}}">
+        <input type="hidden" name="release" value="{{.ReleaseID}}">
+        <input type="hidden" name="back" value="{{.Back}}">
+        <div class="form__group">
+            <label class="form__label" for="mi-raw">MediaInfo output</label>
+            <textarea class="form__input mi__paste" id="mi-raw" name="raw" rows="8"
+                      maxlength="{{.Max}}"
+                      placeholder="General&#10;Format                    : Matroska&#10;...">{{.Mine}}</textarea>
+            <p class="form__hint">
+                The whole thing, starting at General. Clear the box and save to withdraw yours.
+            </p>
+        </div>
+        <button class="form__button form__button--filled" type="submit">
+            <svg class="icon" aria-hidden="true"><use href="#send"></use></svg>Save
+        </button>
+    </form>
+
+    {{/* Screenshots, only where the host offers intake AND the member has room
+         left. A field that fails on submit is worse than no field. */}}
+    {{if gt .ShotsLeft 0}}
+    <form class="form mt-2" method="post" action="/p/mediainfo/shot">
+        <input type="hidden" name="_csrf" value="{{.CSRF}}">
+        <input type="hidden" name="release" value="{{.ReleaseID}}">
+        <input type="hidden" name="back" value="{{.Back}}">
+        <div class="form__group">
+            <label class="form__label" for="mi-shot">Screenshot link</label>
+            <input class="form__input" id="mi-shot" name="url" type="url" inputmode="url"
+                   placeholder="https://…/frame.png">
+            <p class="form__hint">
+                An https link to an image. This site fetches it once and serves its own
+                copy, so it will not disappear or follow readers back to where you found it.
+                {{.ShotsLeft}} left on this release.
+            </p>
+        </div>
+        <button class="form__button form__button--outlined" type="submit">
+            <svg class="icon" aria-hidden="true"><use href="#image"></use></svg>Add screenshot
+        </button>
+    </form>
+    {{end}}
+</details>
+{{else}}
+<p class="m-0 small text-muted"><a href="/login">Sign in</a> to add MediaInfo or a screenshot.</p>
+{{end}}
+
+<p class="mi__foot small text-muted">
+    Posted by members who downloaded this release. Bitrate, audio tracks, muxed
+    subtitles and chapters are not in an NZB, so they cannot be checked from
+    here — what the post itself proves is in <em>What is in it</em>, above.
+</p>
