@@ -41,14 +41,19 @@ type RegistrationModeInfo struct {
 	Label       string
 	Description string
 
-	// AllowsSignup says whether the ordinary registration form works while
-	// this mode is active.
+	// AllowsSignup says whether the sign-up FORM is offered to a visitor who
+	// arrives with nothing.
 	//
-	// False is the interesting case and the reason this field exists: a mode
-	// like "apply first" does not want a sign-up form at all, it wants the
-	// visitor sent somewhere else. The host then renders the register page's
-	// closed state, and the plugin puts its own call to action in the
-	// "register" widget region — which is why that region exists.
+	// It governs the PAGE, not the endpoint — a distinction that cost a
+	// working feature the first time round. A mode like "apply first" sets it
+	// false because a stranger should be sent to the application form rather
+	// than shown a sign-up box; but the person who then gets approved arrives
+	// holding an invite, and registration must still accept them. Reading this
+	// flag as "nobody may register" refused exactly the people the mode exists
+	// to admit.
+	//
+	// So: false hides the form. RequiresInvite below is what decides whether a
+	// submission is accepted, and the two are independent.
 	AllowsSignup bool
 
 	// ActionHref and ActionLabel are where a visitor should go instead, for a
@@ -65,10 +70,11 @@ type RegistrationModeInfo struct {
 	// RequiresInvite says the form must carry a valid invite code, the same
 	// rule the built-in invite mode enforces.
 	//
-	// True with AllowsSignup makes "apply, get approved, receive an invite,
-	// then sign up with it" expressible as one mode: applications are how you
-	// get a code, and the code is still what the form checks. The plugin never
-	// has to reimplement redemption.
+	// True with AllowsSignup FALSE is the application shape: a stranger sees
+	// no form, an approved applicant arrives from the invite email with a code
+	// in the URL and completes the ordinary registration. The code is still
+	// what the host checks, so the plugin never reimplements redemption, the
+	// email lock or the race guard.
 	RequiresInvite bool
 }
 
