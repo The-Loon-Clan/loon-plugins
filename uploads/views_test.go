@@ -29,7 +29,7 @@ func fullVM() vm {
 		PrivateTorrentTotal: 1,
 		PrivateTorrentPager: "<nav>tpager</nav>",
 		CSRFToken:           "test-csrf",
-		Flash:               "upload updated",
+		Flash:               "uploadupdated",
 	}
 }
 
@@ -42,13 +42,33 @@ func render(t *testing.T, v vm) string {
 	return b.String()
 }
 
+// A failed save must not arrive in the success colour. It did for a long time:
+// the flash block was hardcoded to green, so "that did not save" and "upload
+// updated" looked identical at a glance, and a member would have read a lost
+// write as a saved one. The code is what lets the template tell them apart.
+func TestFailureFlashIsNotShownAsSuccess(t *testing.T) {
+	v := fullVM()
+	v.Flash = "savefailed"
+	out := render(t, v)
+	if !strings.Contains(out, "did not save") {
+		t.Error("a failed save said nothing")
+	}
+	if !strings.Contains(out, "notice--warning") {
+		t.Error("a failed save rendered as a success notice")
+	}
+	v.Flash = "uploadupdated"
+	if out := render(t, v); !strings.Contains(out, "notice--success") {
+		t.Error("a successful save did not render as a success notice")
+	}
+}
+
 func TestPageRenders(t *testing.T) {
 	out := render(t, fullVM())
 	for _, want := range []string{
 		"A Release", "/release/1", "1.5 GB", // size is humanised, not raw bytes
 		"10 Aug 2026", "queued",
 		"Hidden One", "anonymous",
-		"<nav>pager</nav>", "upload updated",
+		"<nav>pager</nav>", "Upload updated.",
 		"Delete", "Restore", // a live row offers delete, a deleted row offers restore
 	} {
 		if !strings.Contains(out, want) {

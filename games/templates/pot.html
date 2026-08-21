@@ -1,6 +1,16 @@
 {{/* The Pot — /p/pot. Rendered inside the host's site_page panel. */}}
-{{if .Msg}}<div class="notice notice--success"><span>{{.Msg}}</span></div>{{end}}
-{{if .Err}}<div class="notice notice--warning"><span>{{.Err}}</span></div>{{end}}
+{{/* The sentences live HERE, not in Go (CHECKLIST §10).
+
+     A handler redirects with a CODE and, where a sentence quotes a number,
+     that number as its own parameter -- never a sentence assembled in Go,
+     because word order differs by language. The refusals interpolate straight
+     from the view model, which already carries every figure they quote. */}}
+{{if .Msg}}<div class="notice notice--success"><span>
+    {{if eq .Msg "filled"}}Your {{.Pts}} points FILLED the pot &mdash; {{.Who}} takes {{.Won}} points, and a new pot is open!
+    {{else if eq .Msg "donated"}}{{.Pts}} points in the pot &mdash; good luck!
+    {{else}}Done.{{end}}
+</span></div>{{end}}
+{{if .Err}}<div class="notice notice--warning"><span>{{template "refusal" .Refusal}}</span></div>{{end}}
 
 <p class="text-muted">
     Drop points in &mdash; up to <strong>{{.DailyMax}}</strong> a day. When the pot reaches

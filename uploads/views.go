@@ -160,19 +160,19 @@ func (p *Plugin) bulkAction(c *gin.Context) {
 			// page for good. Gated on an explicit confirm field rather than the
 			// action alone, so a mis-click or a replayed form cannot do it.
 			if c.PostForm("confirm") != "permanent" {
-				p.redirect(c, "that action needs confirmation")
+				p.redirect(c, "needconfirm")
 				return
 			}
 			n, err = deps.Actions.SetAllTrueAnonymous(ctx, v.ID)
 		default:
-			p.redirect(c, "unknown action")
+			p.redirect(c, "unknownaction")
 			return
 		}
 		msg = fmt.Sprintf("%d upload(s) updated", n)
 	} else {
 		id, perr := strconv.ParseInt(idRaw, 10, 64)
 		if perr != nil || id <= 0 {
-			p.redirect(c, "bad id")
+			p.redirect(c, "badid")
 			return
 		}
 		switch action {
@@ -186,21 +186,21 @@ func (p *Plugin) bulkAction(c *gin.Context) {
 			err = deps.Actions.SetAnonymous(ctx, v.ID, id, false)
 		case "true-anonymous":
 			if c.PostForm("confirm") != "permanent" {
-				p.redirect(c, "that action needs confirmation")
+				p.redirect(c, "needconfirm")
 				return
 			}
 			err = deps.Actions.SetTrueAnonymous(ctx, v.ID, id)
 		default:
-			p.redirect(c, "unknown action")
+			p.redirect(c, "unknownaction")
 			return
 		}
-		msg = "upload updated"
+		msg = "uploadupdated"
 	}
 	if err != nil {
 		// Owner-scoped writes decide what a member can see and manage, so a
 		// failure is never silenced — the page must not imply it worked.
 		p.core.Errors.Report(ctx, "uploads/"+action, err)
-		p.redirect(c, "that did not save. It has been logged.")
+		p.redirect(c, "savefailed")
 		return
 	}
 	p.redirect(c, msg)
@@ -213,20 +213,24 @@ func (p *Plugin) torrentVisibility(c *gin.Context) {
 	}
 	id, err := strconv.ParseInt(c.PostForm("request_id"), 10, 64)
 	if err != nil || id <= 0 {
-		p.redirect(c, "bad id")
+		p.redirect(c, "badid")
 		return
 	}
 	keep := c.PostForm("keep_private") == "true" || c.PostForm("keep_private") == "1"
 	if err := deps.Actions.KeepPrivate(c.Request.Context(), v.ID, id, keep); err != nil {
 		p.core.Errors.Report(c.Request.Context(), "uploads/keep-private", err)
-		p.redirect(c, "that did not save. It has been logged.")
+		p.redirect(c, "savefailed")
 		return
 	}
-	p.redirect(c, "visibility updated")
+	p.redirect(c, "visibilityupdated")
 }
 
-func (p *Plugin) redirect(c *gin.Context, msg string) {
-	c.Redirect(http.StatusSeeOther, "/account-settings/uploads?msg="+urlQueryEscape(msg))
+// redirect sends the member back with a CODE, never a sentence
+// (CHECKLIST §10) -- uploads.html holds the words, and picks the right
+// notice from the code, which is why a failure no longer arrives in the
+// success colour.
+func (p *Plugin) redirect(c *gin.Context, code string) {
+	c.Redirect(http.StatusSeeOther, "/account-settings/uploads?msg="+urlQueryEscape(code))
 }
 
 // urlQueryEscape is spelled out rather than imported so the message cannot

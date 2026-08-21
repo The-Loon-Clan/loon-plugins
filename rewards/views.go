@@ -151,9 +151,11 @@ func (p *Plugin) parseTemplates() error {
 		},
 		"payouts": func(ps []Payout) string {
 			if len(ps) == 0 {
-				// Worth shouting about: this reward will be refused at grant
-				// time, and the admin table is where that becomes visible.
-				return "NONE — will not grant"
+				// The TEMPLATE says what an empty list means (CHECKLIST §10);
+				// it checks .Payouts before calling this. Returning "" here
+				// rather than a sentence keeps the one path that renders words
+				// in one place.
+				return ""
 			}
 			parts := make([]string, 0, len(ps))
 			for _, p := range ps {

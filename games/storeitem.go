@@ -144,14 +144,18 @@ func (c charityItemType) Grant(ctx context.Context, pur pluginapi.StorePurchase)
 	needy, err := c.p.recipients(ctx, pur.UserID, band)
 	if err != nil {
 		// "nobody currently matches that band" is the buyer's to act on — they
-		// can pick a wider one — so it reaches them as written. The store
+		// can pick a wider one — so it reaches them as a SENTENCE. The store
 		// refunds either way.
+		//
+		// Rendered here, from this plugin's templates, because the store shows
+		// the buyer whatever text this returns and cannot map a code it has no
+		// vocabulary for. messages.go carries the reasoning.
 		var bad errBadInput
 		if errors.As(err, &bad) {
-			return "", pluginapi.StoreRefusal(string(bad))
+			return "", pluginapi.StoreRefusal(c.p.refusalText(ctx, string(bad)))
 		}
 		return "", err
 	}
 	n := c.p.distribute(ctx, pur.UserID, int64(pur.Cost), band, needy)
-	return fmt.Sprintf("%d points shared between %d members", pur.Cost, n), nil
+	return c.p.grantedText(int64(pur.Cost), n), nil
 }

@@ -1,6 +1,23 @@
 {{define "uploads.html"}}
 <div class="uploads">
-    {{if .Flash}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Flash}}</div>{{end}}
+    {{/* The sentences live HERE, not in Go (CHECKLIST §10), and the notice
+         follows the CODE. This block used to be hardcoded to the success
+         colour, so a failed save arrived in green. */}}
+    {{if .Flash}}
+        {{if or (eq .Flash "uploadupdated") (eq .Flash "visibilityupdated")}}
+        <div class="notice notice--success"><span>
+            {{if eq .Flash "uploadupdated"}}Upload updated.{{else}}Visibility updated.{{end}}
+        </span></div>
+        {{else}}
+        <div class="notice notice--warning"><span>
+            {{if eq .Flash "savefailed"}}That did not save. It has been logged.
+            {{else if eq .Flash "needconfirm"}}That action needs confirmation.
+            {{else if eq .Flash "unknownaction"}}That action is not one this page offers.
+            {{else if eq .Flash "badid"}}That is not an upload this page can act on.
+            {{else}}Something went wrong.{{end}}
+        </span></div>
+        {{end}}
+    {{end}}
 
     <ul class="nav tabs mb-3">
         <li class="nav-item"><a class="nav-link {{if eq .ActiveTab "public"}}active{{end}}"

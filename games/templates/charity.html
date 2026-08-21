@@ -1,6 +1,15 @@
 {{/* Charity — /p/charity. */}}
-{{if .Msg}}<div class="notice notice--success"><span>{{.Msg}}</span></div>{{end}}
-{{if .Err}}<div class="notice notice--warning"><span>{{.Err}}</span></div>{{end}}
+{{/* The sentences live HERE, not in Go (CHECKLIST §10).
+
+     A handler redirects with a CODE and, where a sentence quotes a number,
+     that number as its own parameter -- never a sentence assembled in Go,
+     because word order differs by language. The refusals interpolate straight
+     from the view model, which already carries every figure they quote. */}}
+{{if .Msg}}<div class="notice notice--success"><span>
+    {{if eq .Msg "given"}}Your {{.Pts}} points reached {{.Members}} members. Thank you!
+    {{else}}Done.{{end}}
+</span></div>{{end}}
+{{if .Err}}<div class="notice notice--warning"><span>{{template "refusal" .Refusal}}</span></div>{{end}}
 
 <p class="text-muted">
     Charity goes directly to those in need, and it is absolutely up to you who

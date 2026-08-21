@@ -2,6 +2,7 @@ package games
 
 import (
 	"context"
+	"html/template"
 	"strings"
 	"testing"
 
@@ -89,7 +90,10 @@ func TestCharityItemDescribeShapesTheControlFromTheDef(t *testing.T) {
 func TestCharityItemGrantRefusesWithoutFigures(t *testing.T) {
 	// stats nil: the site cannot find need. The buyer's points are the
 	// store's to refund, and the sentence is theirs to read.
-	c := charityItemType{&Plugin{}}
+	// Templates loaded, because the SENTENCE is the thing under test: the
+	// store shows the buyer whatever text Grant returns, so a bare Plugin
+	// would fall back to the code and prove nothing about this path.
+	c := charityItemType{&Plugin{tmpl: testTemplates(t)}}
 	_, err := c.Grant(context.Background(), pluginapi.StorePurchase{
 		UserID: 1, ItemID: 7, Ref: "0.5", Cost: 2000,
 	})
@@ -103,4 +107,15 @@ func TestCharityItemGrantRefusesWithoutFigures(t *testing.T) {
 	if _, ok := any(err).(pluginapi.StoreRefusal); !ok {
 		t.Errorf("err is %T, want %T so the buyer reads it", err, refusal)
 	}
+}
+
+// testTemplates parses the plugin's own embedded set, the same call Provision
+// makes, so a message a test asserts on is the one a member reads.
+func testTemplates(t *testing.T) *template.Template {
+	t.Helper()
+	tmpl, err := template.ParseFS(tmplFS, "templates/*.html")
+	if err != nil {
+		t.Fatalf("templates: %v", err)
+	}
+	return tmpl
 }

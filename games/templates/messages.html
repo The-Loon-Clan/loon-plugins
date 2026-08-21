@@ -1,0 +1,25 @@
+{{/* The sentences, in ONE place (CHECKLIST §10).
+
+     Every refusal in this plugin is a code; this maps the codes to words. Both
+     surfaces call these defines -- pot.html and charity.html for the pages,
+     messages.go for the store, which shows the buyer text and cannot map a
+     code it does not know the vocabulary of. One copy, so a translator has one
+     place to work and the two surfaces cannot drift.
+
+     Numbers are interpolated HERE, from fields the caller fills, never
+     assembled in Go: word order differs by language, so "the daily limit is
+     %d points" cannot be translated as a fragment. */}}
+
+{{define "refusal"}}
+    {{- if eq .Code "noamount"}}Pick an amount.
+    {{- else if eq .Code "dailylimit"}}The daily limit is {{.DailyMax}} points &mdash; you have {{.LeftToday}} left today.
+    {{- else if eq .Code "charityoff"}}Charity is unavailable on this site &mdash; there are no member figures to find need with.
+    {{- else if eq .Code "noband"}}Pick one of the offered ratio bands.
+    {{- else if eq .Code "nomatch"}}Nobody currently matches that band &mdash; there is no one to give to.
+    {{- else if eq .Code "range"}}Charity is between {{.Min}} and {{.Max}} points.
+    {{- else if eq .Code "toopoor"}}You do not have that many points.
+    {{- else}}Something went wrong &mdash; try again shortly.
+    {{- end}}
+{{- end}}
+
+{{define "granted"}}{{.Pts}} points shared between {{.Members}} members.{{end}}

@@ -66,7 +66,18 @@ type potVM struct {
 	LastWinnerName string
 	LastWinnings   int64
 	Msg, Err       string
-	CSRFToken      string
+	// Values for the message, passed as their own parameters so the TEMPLATE
+	// composes the sentence. Pts is what you just gave; Who and Won are the
+	// winner and their winnings, set only when your points filled the pot.
+	Pts, Won  int64
+	Who       string
+	CSRFToken string
+}
+
+// Refusal packs the error code with the numbers the shared mapping quotes.
+// A method rather than a field so it cannot fall out of step with Err.
+func (vm potVM) Refusal() refusalVM {
+	return refusalVM{Code: vm.Err, DailyMax: vm.DailyMax, LeftToday: vm.LeftToday}
 }
 
 func (p *Plugin) renderPot(gc *gin.Context) (template.HTML, error) {
@@ -84,6 +95,7 @@ func (p *Plugin) renderPot(gc *gin.Context) (template.HTML, error) {
 		DailyMax: cfg.PotDailyMax, WinPct: cfg.PotWinPct,
 		RewardMin: cfg.PotRewardMin, RewardSlug: cfg.PotRewardSlug,
 		Msg: gc.Query("msg"), Err: gc.Query("err"),
+		Pts: queryInt(gc, "pts"), Won: queryInt(gc, "won"), Who: gc.Query("who"),
 		CSRFToken: p.csrfToken(gc),
 	}
 	if cyc.Target > 0 {
@@ -134,12 +146,13 @@ func (p *Plugin) actionDonate(gc *gin.Context) (template.HTML, error) {
 	out, err := p.donate(gc.Request.Context(), u.ID, amount)
 	switch {
 	case err == nil && out.Closed:
-		gc.Redirect(http.StatusSeeOther, "/p/pot?msg="+url.QueryEscape(
-			fmt.Sprintf("Your %d points FILLED the pot — %s takes %d points, and a new pot is open!",
-				out.Donated, p.username(gc, out.WonBy), out.Winnings)))
+		gc.Redirect(http.StatusSeeOther, "/p/pot?msg=filled"+
+			"&pts="+strconv.FormatInt(out.Donated, 10)+
+			"&won="+strconv.FormatInt(out.Winnings, 10)+
+			"&who="+url.QueryEscape(p.username(gc, out.WonBy)))
 	case err == nil:
-		gc.Redirect(http.StatusSeeOther, "/p/pot?msg="+url.QueryEscape(
-			fmt.Sprintf("%d points in the pot — good luck!", out.Donated)))
+		gc.Redirect(http.StatusSeeOther, "/p/pot?msg=donated"+
+			"&pts="+strconv.FormatInt(out.Donated, 10))
 	default:
 		gc.Redirect(http.StatusSeeOther, "/p/pot?err="+url.QueryEscape(memberErr(err)))
 	}
@@ -156,7 +169,14 @@ type charityVM struct {
 	PointsMoved int64
 	Available   bool
 	Msg, Err    string
-	CSRFToken   string
+	// Pts is what you gave, Members how many it reached. See potVM.
+	Pts, Members int64
+	CSRFToken    string
+}
+
+// Refusal packs the error code with the numbers the shared mapping quotes.
+func (vm charityVM) Refusal() refusalVM {
+	return refusalVM{Code: vm.Err, Min: vm.Min, Max: vm.Max}
 }
 
 func (p *Plugin) renderCharity(gc *gin.Context) (template.HTML, error) {
@@ -169,6 +189,7 @@ func (p *Plugin) renderCharity(gc *gin.Context) (template.HTML, error) {
 		Min: cfg.CharityMin, Max: cfg.CharityMax, FloorGB: cfg.CharityDLFloorGB,
 		Ratios: charityRatios, Available: p.stats != nil,
 		Msg: gc.Query("msg"), Err: gc.Query("err"),
+		Pts: queryInt(gc, "pts"), Members: queryInt(gc, "members"),
 		CSRFToken: p.csrfToken(gc),
 	}
 	if g, pts, err := p.st.CharityTotals(ctx); err == nil {
@@ -194,21 +215,32 @@ func (p *Plugin) actionGive(gc *gin.Context) (template.HTML, error) {
 		gc.Redirect(http.StatusSeeOther, "/p/charity?err="+url.QueryEscape(memberErr(err)))
 		return "", nil
 	}
-	gc.Redirect(http.StatusSeeOther, "/p/charity?msg="+url.QueryEscape(
-		fmt.Sprintf("Your %d points reached %d members. Thank you!", amount, n)))
+	gc.Redirect(http.StatusSeeOther, "/p/charity?msg=given"+
+		"&pts="+strconv.FormatInt(amount, 10)+
+		"&members="+strconv.FormatInt(int64(n), 10))
 	return "", nil
 }
 
-// memberErr shows a refusal's own sentence and hides everything else.
+// queryInt reads a number a redirect passed for the template to interpolate.
+// A missing or malformed one is 0, which renders as "0 points" rather than
+// breaking the page -- the message is already secondary to the state below it.
+func queryInt(gc *gin.Context, key string) int64 {
+	n, _ := strconv.ParseInt(gc.Query(key), 10, 64)
+	return n
+}
+
+// memberErr maps an error to the CODE the template turns into words, and
+// hides everything else behind one generic code. A system error must never
+// reach a member: it leaks table names and DSNs.
 func memberErr(err error) string {
 	var be errBadInput
 	if errors.As(err, &be) {
-		return string(be)
+		return string(be) // already a code
 	}
 	if errors.Is(err, core.ErrInsufficientPoints) || strings.Contains(err.Error(), "insufficient") {
-		return "you do not have that many points"
+		return "toopoor"
 	}
-	return "something went wrong — try again shortly"
+	return "failed"
 }
 
 // ── admin settings ──────────────────────────────────────────────────────

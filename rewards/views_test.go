@@ -53,7 +53,7 @@ func TestAdminTemplateRenders(t *testing.T) {
 		{"rewards_admin.html", []string{
 			"Rewards", "Recent grants",
 			"daily-login", "hollow",
-			"NONE — will not grant", // the payout-less reward
+			"None &mdash; will not grant", // the payout-less reward
 			// Both payout lines, asserted separately: html/template escapes the
 			// joining "+" to &#43;, so matching the rendered string would be
 			// testing the escaper rather than the page.

@@ -164,7 +164,7 @@ func (p *Plugin) donate(ctx context.Context, userID, amount int64) (potOutcome, 
 		return potOutcome{}, err
 	}
 	if amount <= 0 {
-		return potOutcome{}, errBadInput("pick an amount")
+		return potOutcome{}, errBadInput("noamount")
 	}
 	cyc, err := p.st.OpenCycle(ctx, cfg.PotTarget)
 	if err != nil {
@@ -179,7 +179,7 @@ func (p *Plugin) donate(ctx context.Context, userID, amount int64) (potOutcome, 
 		if left < 0 {
 			left = 0
 		}
-		return potOutcome{}, errBadInput(fmt.Sprintf("the daily limit is %d points — you have %d left today", cfg.PotDailyMax, left))
+		return potOutcome{}, errBadInput("dailylimit")
 	}
 
 	// Deduct BEFORE recording: a member whose balance refuses has donated
@@ -303,10 +303,10 @@ func validCharityRatio(r float64) bool {
 // its path must find and pay the same people without deducting again.
 func (p *Plugin) recipients(ctx context.Context, donorID int64, ratioMax float64) ([]int64, error) {
 	if p.stats == nil {
-		return nil, errBadInput("charity is unavailable on this site — there are no member figures to find need with")
+		return nil, errBadInput("charityoff")
 	}
 	if !validCharityRatio(ratioMax) {
-		return nil, errBadInput("pick one of the offered ratio bands")
+		return nil, errBadInput("noband")
 	}
 	cfg, err := p.st.Settings(ctx)
 	if err != nil {
@@ -327,7 +327,7 @@ func (p *Plugin) recipients(ctx context.Context, donorID int64, ratioMax float64
 		}
 	}
 	if len(needy) == 0 {
-		return nil, errBadInput("nobody currently matches that band — there is no one to give to")
+		return nil, errBadInput("nomatch")
 	}
 	// Poorest first, so the remainder of an uneven split lands on the
 	// members who need it most rather than on map order.
@@ -370,7 +370,7 @@ func (p *Plugin) give(ctx context.Context, donorID, amount int64, ratioMax float
 		return 0, err
 	}
 	if amount < cfg.CharityMin || amount > cfg.CharityMax {
-		return 0, errBadInput(fmt.Sprintf("charity is between %d and %d points", cfg.CharityMin, cfg.CharityMax))
+		return 0, errBadInput("range")
 	}
 	needy, err := p.recipients(ctx, donorID, ratioMax)
 	if err != nil {
@@ -401,7 +401,12 @@ func splitEven(amount int64, n int) []int64 {
 }
 
 // errBadInput is a member-facing refusal, distinct from a system error so
-// the handlers can show the sentence rather than "something went wrong".
+// the handlers can show THIS refusal rather than "something went wrong".
+//
+// It carries a CODE, not a sentence (CHECKLIST §10) -- pot.html and
+// charity.html hold the words. Where a refusal quotes a number, the template
+// reads it from the view model, which already has every one of them; nothing
+// is interpolated here.
 type errBadInput string
 
 func (e errBadInput) Error() string { return string(e) }
