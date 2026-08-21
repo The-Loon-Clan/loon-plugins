@@ -482,7 +482,11 @@ document.addEventListener('submit', function (e) {
   }).then(function (r) {
     if (!r.ok && r.status !== 204) throw new Error(r.status);
     var row = form.closest('tr');
-    var badge = row && row.querySelector('td .badge');
+    // '.tag', because that is what the markup says now. A JS SELECTOR is the
+    // other half of a class rename, and this one broke silently: the handler
+    // found nothing, so toggling a newsgroup stopped updating its badge while
+    // the page still looked converted.
+    var badge = row && row.querySelector('td .tag');
     if (badge) {
       badge.textContent = enabling ? 'enabled' : 'disabled';
       badge.className = 'tag ' + (enabling ? 'tag--success' : 'tag--sm');

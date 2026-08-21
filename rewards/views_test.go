@@ -100,7 +100,10 @@ func TestFindingsBannerRendersOnBothPages(t *testing.T) {
 		for _, want := range []string{
 			"Configuration check",
 			"has no payout lines", "no surface asks for it",
-			"bg-danger", "bg-warning", "bg-secondary", // severity is visible, not just worded
+			// Severity is VISIBLE, not just worded. The host's tag variants now,
+			// not Bootstrap's bg-*: a test that pins the shim keeps the page on
+			// vocabulary the theme only tolerates.
+			"tag--danger", "tag--warning", "tag--sm",
 			"add one", // the fix, which is what makes it actionable
 		} {
 			if !strings.Contains(out, want) {

@@ -4,20 +4,20 @@
      template findings". Kept as a define rather than inlined because the next
      page to want it should include it, not copy it. */}}
 {{define "findings"}}
-{{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
+{{if .Msg}}<div class="notice notice--success py-2">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="notice notice--danger py-2">{{.Err}}</div>{{end}}
 {{if .Findings}}
-<div class="card mb-3">
-  <div class="card-header"><strong>Configuration check</strong>
+<div class="panelV2 mb-3">
+  <div class="panel__header"><strong>Configuration check</strong>
     <span class="text-muted small">cross-table &mdash; each row is individually valid</span>
   </div>
-  <div class="table-responsive">
-    <table class="table table-sm mb-0">
+  <div class="data-table-wrapper">
+    <table class="data-table mb-0">
       <tbody>
       {{range .Findings}}
         <tr>
           <td style="width:5rem">
-            <span class="badge bg-{{if eq .Severity "error"}}danger{{else if eq .Severity "warn"}}warning text-dark{{else}}secondary{{end}}">{{.Severity}}</span>
+            <span class="tag {{if eq .Severity "error"}}tag--danger{{else if eq .Severity "warn"}}tag--warning{{else}}tag--sm{{end}}">{{.Severity}}</span>
           </td>
           <td style="width:14rem"><code>{{.Subject}}</code></td>
           <td>{{.Problem}}{{if .Fix}}<br><span class="text-muted small">&rarr; {{.Fix}}</span>{{end}}</td>
@@ -32,10 +32,10 @@
 
 {{define "rewards_admin.html"}}
 {{template "findings" .}}
-<div class="card mb-3">
-  <div class="card-header"><strong>Rewards</strong></div>
-  <div class="table-responsive">
-    <table class="table table-sm mb-0">
+<div class="panelV2 mb-3">
+  <div class="panel__header"><strong>Rewards</strong></div>
+  <div class="data-table-wrapper">
+    <table class="data-table mb-0">
       <thead><tr>
         <th>ID</th><th>Slug</th><th>Kind</th><th>Event</th><th>Trigger</th>
         <th>Delivery</th><th>Pays</th><th>Expires</th><th></th>
@@ -60,12 +60,12 @@
               <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="id" value="{{.ID}}">
               <input type="hidden" name="enabled" value="{{if .Enabled}}0{{else}}1{{end}}">
-              <button class="btn btn-sm btn-outline-secondary">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+              <button class="button button--sm button--outlined">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
             </form>
             <form method="post" action="/admin/p/rewards/test-grant" class="d-inline">
               <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="id" value="{{.ID}}">
-              <button class="btn btn-sm btn-outline-warning"{{if not .Enabled}} disabled{{end}}
+              <button class="button button--sm button--outlined"{{if not .Enabled}} disabled{{end}}
                       title="Grants this reward to YOU, right now, on your own balance. Enable the reward first &mdash; a claim goes through the real path, which refuses a disabled reward.">Test on me</button>
             </form>
           </td>
@@ -90,43 +90,43 @@
                 <input type="hidden" name="slug" value="{{.Slug}}">
                 {{/* Enabled is toggled by its own button, never by a save. */}}
                 <input type="hidden" name="was_enabled" value="{{if .Enabled}}1{{else}}0{{end}}">
-                <div class="col-md-2"><label class="form-label small mb-0">Name</label>
-                  <input aria-label="Name" name="name" class="form-control form-control-sm" value="{{.Name}}"></div>
-                <div class="col-md-2"><label class="form-label small mb-0">Kind</label>
-                  <select aria-label="Kind" name="kind" class="form-select form-select-sm">
+                <div class="col-md-2"><label class="form__label small mb-0">Name</label>
+                  <input aria-label="Name" name="name" class="form__input" value="{{.Name}}"></div>
+                <div class="col-md-2"><label class="form__label small mb-0">Kind</label>
+                  <select aria-label="Kind" name="kind" class="form__select">
                     {{$k := .Kind}}
                     <option value="one_off" {{if eq $k "one_off"}}selected{{end}}>one_off</option>
                     <option value="recurring" {{if eq $k "recurring"}}selected{{end}}>recurring</option>
                     <option value="per_unit" {{if eq $k "per_unit"}}selected{{end}}>per_unit</option>
                   </select></div>
-                <div class="col-md-2"><label class="form-label small mb-0">Event</label>
-                  <select aria-label="Event" name="scheduled_event_slug" class="form-select form-select-sm">
+                <div class="col-md-2"><label class="form__label small mb-0">Event</label>
+                  <select aria-label="Event" name="scheduled_event_slug" class="form__select">
                     {{$e := .EventSlug}}
                     <option value="">&mdash; none &mdash;</option>
                     {{range $.ScheduledEvents}}<option value="{{.Slug}}" {{if eq .Slug $e}}selected{{end}}>{{.Slug}}</option>{{end}}
                   </select></div>
-                <div class="col-md-2"><label class="form-label small mb-0">Trigger</label>
-                  <input aria-label="Trigger" name="trigger" class="form-control form-control-sm" value="{{.Trigger}}" list="trigger-options"></div>
-                <div class="col-md-2"><label class="form-label small mb-0">Delivery</label>
-                  <select aria-label="Delivery" name="delivery" class="form-select form-select-sm">
+                <div class="col-md-2"><label class="form__label small mb-0">Trigger</label>
+                  <input aria-label="Trigger" name="trigger" class="form__input" value="{{.Trigger}}" list="trigger-options"></div>
+                <div class="col-md-2"><label class="form__label small mb-0">Delivery</label>
+                  <select aria-label="Delivery" name="delivery" class="form__select">
                     {{$d := .Delivery}}
                     <option value="auto" {{if eq $d "auto"}}selected{{end}}>auto</option>
                     <option value="claim" {{if eq $d "claim"}}selected{{end}}>claim</option>
                   </select></div>
-                <div class="col-md-2"><label class="form-label small mb-0">Expires</label>
-                  <input aria-label="Expires" name="expires_after" class="form-control form-control-sm" value="{{durform .ExpiresAfter}}" placeholder="never"></div>
+                <div class="col-md-2"><label class="form__label small mb-0">Expires</label>
+                  <input aria-label="Expires" name="expires_after" class="form__input" value="{{durform .ExpiresAfter}}" placeholder="never"></div>
 
-                <div class="col-md-2"><label class="form-label small mb-0">Points</label>
-                  <input aria-label="Points" name="points" class="form-control form-control-sm" value="{{payoutamount .Payouts "points"}}"></div>
-                <div class="col-md-2"><label class="form-label small mb-0">Medal</label>
-                  <input aria-label="Medal" name="medal" class="form-control form-control-sm" value="{{payouttarget .Payouts "medal"}}"></div>
-                <div class="col-md-3"><label class="form-label small mb-0">Lootbox</label>
-                  <select aria-label="Lootbox" name="lootbox" class="form-select form-select-sm">
+                <div class="col-md-2"><label class="form__label small mb-0">Points</label>
+                  <input aria-label="Points" name="points" class="form__input" value="{{payoutamount .Payouts "points"}}"></div>
+                <div class="col-md-2"><label class="form__label small mb-0">Medal</label>
+                  <input aria-label="Medal" name="medal" class="form__input" value="{{payouttarget .Payouts "medal"}}"></div>
+                <div class="col-md-3"><label class="form__label small mb-0">Lootbox</label>
+                  <select aria-label="Lootbox" name="lootbox" class="form__select">
                     {{$b := payouttarget .Payouts "lootbox"}}
                     <option value="">&mdash; none &mdash;</option>
                     {{range $.Boxes}}<option value="{{.}}" {{if eq . $b}}selected{{end}}>{{.}}</option>{{end}}
                   </select></div>
-                <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Save changes</button></div>
+                <div class="col-md-2"><button class="button button--sm button--primary w-100">Save changes</button></div>
                 <div class="col-12"><span class="text-muted small">
                   Payout lines are replaced by what this form carries. Grants already
                   made keep what they froze.
@@ -141,13 +141,13 @@
       </tbody>
     </table>
   </div>
-  <div class="card-body border-top">
+  <div class="panel__body border-top">
     <form method="post" action="/admin/p/rewards/reward-create" class="row g-2 align-items-end">
               <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-      <div class="col-md-2"><label class="form-label small mb-0">Slug</label>
-        <input aria-label="Slug" name="slug" class="form-control form-control-sm" placeholder="test-login" required></div>
-      <div class="col-md-2"><label class="form-label small mb-0">Kind</label>
-        <select aria-label="Kind" name="kind" class="form-select form-select-sm">
+      <div class="col-md-2"><label class="form__label small mb-0">Slug</label>
+        <input aria-label="Slug" name="slug" class="form__input" placeholder="test-login" required></div>
+      <div class="col-md-2"><label class="form__label small mb-0">Kind</label>
+        <select aria-label="Kind" name="kind" class="form__select">
           <option value="recurring">recurring (once per window)</option>
           <option value="one_off">one_off (once ever)</option>
           <option value="per_unit">per_unit (the delta)</option>
@@ -158,8 +158,8 @@
            select can only offer events that exist, and shows each one's cron
            so "is there a schedule behind this?" is answerable here rather than
            on the other page. */}}
-      <div class="col-md-3"><label class="form-label small mb-0">Scheduled event <span class="text-muted">(gates when it can be earned)</span></label>
-        <select aria-label="Scheduled event (gates when it can be earned)" name="scheduled_event_slug" class="form-select form-select-sm">
+      <div class="col-md-3"><label class="form__label small mb-0">Scheduled event <span class="text-muted">(gates when it can be earned)</span></label>
+        <select aria-label="Scheduled event (gates when it can be earned)" name="scheduled_event_slug" class="form__select">
           <option value="">&mdash; none (not gated by a window) &mdash;</option>
           {{range .ScheduledEvents}}
             <option value="{{.Slug}}">
@@ -173,35 +173,35 @@
            full set. Suggestions come from what is already configured plus what
            a stock host fires. A typo here is silent — the reward saves, no
            surface ever asks for that string, and nobody is offered it. */}}
-      <div class="col-md-2"><label class="form-label small mb-0">Trigger <span class="text-muted">(surface that offers it)</span></label>
-        <input aria-label="Trigger (surface that offers it)" name="trigger" list="trigger-options" class="form-control form-control-sm"
+      <div class="col-md-2"><label class="form__label small mb-0">Trigger <span class="text-muted">(surface that offers it)</span></label>
+        <input aria-label="Trigger (surface that offers it)" name="trigger" list="trigger-options" class="form__input"
                placeholder="none — job-driven" autocomplete="off">
         <datalist id="trigger-options">
           {{range .Triggers}}<option value="{{.}}">{{end}}
         </datalist></div>
-      <div class="col-md-2"><label class="form-label small mb-0">Delivery</label>
-        <select aria-label="Delivery" name="delivery" class="form-select form-select-sm">
+      <div class="col-md-2"><label class="form__label small mb-0">Delivery</label>
+        <select aria-label="Delivery" name="delivery" class="form__select">
           <option value="auto">auto (credit immediately)</option>
           <option value="claim">claim (pending, member collects)</option>
         </select></div>
-      <div class="col-md-1"><label class="form-label small mb-0">Points</label>
-        <input aria-label="Points" name="points" class="form-control form-control-sm" placeholder="1"></div>
+      <div class="col-md-1"><label class="form__label small mb-0">Points</label>
+        <input aria-label="Points" name="points" class="form__input" placeholder="1"></div>
       {{/* The medal payout line. The create action has read this field since
            the payout kinds were declared; the form simply never offered it —
            a whole payout kind reachable only by hand-crafted POST. */}}
-      <div class="col-md-1"><label class="form-label small mb-0">Medal</label>
-        <input aria-label="Medal" name="medal" class="form-control form-control-sm" placeholder="slug"></div>
+      <div class="col-md-1"><label class="form__label small mb-0">Medal</label>
+        <input aria-label="Medal" name="medal" class="form__input" placeholder="slug"></div>
       {{/* A lootbox line, offered as a PICKER over the boxes that exist — a
            free-text slug here would be a fourth place to typo a name that
            only fails when a member opens the box. */}}
-      <div class="col-md-2"><label class="form-label small mb-0">Lootbox</label>
-        <select aria-label="Lootbox" name="lootbox" class="form-select form-select-sm">
+      <div class="col-md-2"><label class="form__label small mb-0">Lootbox</label>
+        <select aria-label="Lootbox" name="lootbox" class="form__select">
           <option value="">&mdash; none &mdash;</option>
           {{range .Boxes}}<option value="{{.}}">{{.}}</option>{{end}}
         </select></div>
-      <div class="col-md-1"><label class="form-label small mb-0">Expires</label>
-        <input aria-label="Expires" name="expires_after" class="form-control form-control-sm" placeholder="never"></div>
-      <div class="col-md-1"><button class="btn btn-sm btn-primary w-100">Create</button></div>
+      <div class="col-md-1"><label class="form__label small mb-0">Expires</label>
+        <input aria-label="Expires" name="expires_after" class="form__input" placeholder="never"></div>
+      <div class="col-md-1"><button class="button button--sm button--primary w-100">Create</button></div>
       <div class="col-12"><span class="text-muted small">
         Created <strong>disabled</strong> &mdash; check the payout line, then enable. A <code>medal</code> line needs a
         registered handler or the grant is refused; points work out of the box.
@@ -210,7 +210,7 @@
            by something different and the form cannot show it: per_unit is
            granted by a background job and needs NO trigger and NO event, which
            looks like a half-filled form unless it says so. */}}
-      <div class="col-12"><div class="alert alert-dark py-2 px-3 mb-0 small">
+      <div class="col-12"><div class="notice notice--info py-2 px-3 mb-0 small">
         <strong>What makes it fire</strong>
         <ul class="mb-0 ps-3">
           <li><code>recurring</code> / <code>one_off</code> &mdash; a surface offers it when the member
@@ -227,12 +227,12 @@
   </div>
 </div>
 
-<div class="card">
-  <div class="card-header"><strong>Recent grants</strong>
+<div class="panelV2">
+  <div class="panel__header"><strong>Recent grants</strong>
     <span class="text-muted small">newest 50. Same reference twice is impossible &mdash; that is the constraint doing its job.</span>
   </div>
-  <div class="table-responsive">
-    <table class="table table-sm mb-0">
+  <div class="data-table-wrapper">
+    <table class="data-table mb-0">
       <thead><tr>
         <th>ID</th><th>Reward</th><th>User</th><th>Reference</th>
         <th>Paid</th><th>State</th><th>Created</th><th>Settled</th>

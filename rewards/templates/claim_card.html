@@ -1,7 +1,7 @@
 {{define "claim_card.html"}}
-<div class="card mb-3" id="rw-claim-card">
-  <div class="card-header"><strong>Rewards to claim</strong></div>
-  <div class="card-body">
+<div class="panelV2 mb-3" id="rw-claim-card">
+  <div class="panel__header"><strong>Rewards to claim</strong></div>
+  <div class="panel__body">
     <p class="notice notice--success rw-claim-flash{{if not .Msg}} d-none{{end}}" data-flash="ok">{{.Msg}}</p>
     <p class="notice notice--danger rw-claim-flash{{if not .Err}} d-none{{end}}" data-flash="err">{{.Err}}</p>
     {{range .Grants}}
@@ -57,7 +57,11 @@
             if (!card.querySelector('.rw-claim-row')) {
               // The last one: the card's remaining content IS the flash, so it
               // reads "claimed" rather than an empty box with a green line.
-              var head = card.querySelector('.card-header strong');
+              // .panel__header, because that is what the markup says now. A
+              // JS SELECTOR is the other half of a class rename and no
+              // screenshot of a loaded page can catch it: the handler simply
+              // finds nothing and the title silently stops updating.
+              var head = card.querySelector('.panel__header strong');
               if (head) head.textContent = 'All rewards claimed';
             }
           } else {
