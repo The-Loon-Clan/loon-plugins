@@ -53,5 +53,8 @@ func (t titleItemType) Grant(ctx context.Context, pur pluginapi.StorePurchase) (
 	if err := t.p.st.Unlock(ctx, pur.UserID, titleUnlock, SourceStore, pur.Days); err != nil {
 		return "", err
 	}
+	t.p.emit(ctx, EventUnlocked, pur.UserID, Unlocked{
+		Slug: titleUnlock, Source: SourceStore, Days: pur.Days,
+	})
 	return "the right to a custom title — write one on your appearance page", nil
 }

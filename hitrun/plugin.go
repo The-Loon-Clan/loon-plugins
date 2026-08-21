@@ -88,6 +88,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.st = NewPGStore(c.Storage.SchemaDB("hitrun"))
 
+	if err := declareEvents(c); err != nil {
+		return fmt.Errorf("hitrun: declaring events: %w", err)
+	}
+
 	// Say out loud which way round it is. A rule system that silently does
 	// nothing looks exactly like one that is working and finding no offenders,
 	// and an operator should not have to read the database to tell them apart.
@@ -170,6 +174,16 @@ func (p *Plugin) runSweep(ctx context.Context) {
 	}
 	p.job.SetRunning()
 	res, err := Sweep(ctx, p.st, p.cfg, notifier(), SweepBatch, time.Now())
+	if err == nil {
+		// After the warnings are on the record, never during the pass: a
+		// subscriber that acted on one which then failed to write has no way
+		// to find out.
+		for _, w := range res.Issued {
+			p.emit(ctx, EventWarned, w.UserID, Warned{
+				InfoHash: w.InfoHash, TorrentName: w.TorrentName, Reason: w.Reason,
+			})
+		}
+	}
 	if err != nil {
 		p.job.SetError(err.Error())
 		if p.core.Errors != nil {

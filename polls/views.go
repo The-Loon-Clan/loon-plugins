@@ -173,7 +173,11 @@ func (p *Plugin) handleVote(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, back)
 		return
 	}
-	_, _ = p.st.Vote(ctx, poll.ID, u.ID, optionID)
+	if ok, err := p.st.Vote(ctx, poll.ID, u.ID, optionID); err == nil && ok {
+		// After the write. The option is not carried — see events.go on why a
+		// ballot's contents are not the event's business.
+		p.emit(ctx, EventVoted, u.ID, Voted{PollID: poll.ID, Slug: poll.Slug})
+	}
 	c.Redirect(http.StatusSeeOther, back)
 }
 

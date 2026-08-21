@@ -185,6 +185,16 @@ func (p *Plugin) handleThanks(c *gin.Context) {
 			p.logf("comments: award thanks: %v", err)
 		}
 	}
+	// The ADD leg only. Withdrawing announces nothing: a subscriber counting
+	// thanks cannot un-count reliably, and one that tries drifts the first
+	// time an event is missed.
+	//
+	// Announced whether or not the ledger paid — the thanks happened, and a
+	// subscriber should hear about the thing that happened rather than about
+	// whether an optional points service was wired.
+	if first {
+		p.emit(ctx, EventThanked, u.ID, Thanked{CommentID: id, AuthorID: target.UserID})
+	}
 	c.Redirect(http.StatusSeeOther, back)
 }
 

@@ -154,6 +154,10 @@ func (p *Plugin) equip(c *gin.Context) (template.HTML, error) {
 		// is the one refusal a member can act on.
 		return fail("notowned")
 	}
+	// The ON leg only — see events.go on why taking one off announces nothing.
+	if slug != "" {
+		p.emit(c.Request.Context(), EventEquipped, u.ID, Equipped{Slot: slot, Slug: slug})
+	}
 	c.Redirect(http.StatusSeeOther, pagePath)
 	return "", nil
 }

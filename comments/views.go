@@ -172,12 +172,18 @@ func (p *Plugin) handlePost(c *gin.Context) {
 	if len(body) > bodyMax {
 		body = body[:bodyMax]
 	}
-	if _, err := p.st.Add(c.Request.Context(), Comment{
+	newID, err := p.st.Add(c.Request.Context(), Comment{
 		SubjectKind: kind, SubjectID: id, UserID: u.ID, Body: body,
-	}); err != nil {
+	})
+	if err != nil {
 		c.Redirect(http.StatusSeeOther, back)
 		return
 	}
+	// After the write, never inside it: the event says a comment exists, and a
+	// subscriber that acted on one which then rolled away cannot find out.
+	p.emit(c.Request.Context(), EventPosted, u.ID, Posted{
+		CommentID: newID, SubjectKind: kind, SubjectID: id,
+	})
 	c.Redirect(http.StatusSeeOther, back)
 }
 

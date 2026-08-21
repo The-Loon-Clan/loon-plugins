@@ -92,7 +92,15 @@ is the best-tested thing in the package.
 `DownloadsBlocked`, `AtRisk` and `Owed` are the other pure answers, used by the
 widgets and the host.
 
-Declares no events — a real gap: nothing downstream can react to a warning.
+**Declares** `hitrun.warned` — a member event, **not countable**. core's own
+documentation names this case: an achievement scored on it would be a site
+rewarding the behaviour it is trying to stop. The payload carries the reason in
+the words the member was shown, for the same reason the column stores them —
+a rule change must not rewrite history.
+
+Emitted by `runSweep` after the warnings are on the record, never during the
+pass. `Sweep` itself stays a pure function with no mediator; it reports which
+warnings it issued and the plugin, which holds the Core, announces them.
 
 ## Lifecycle
 
@@ -126,5 +134,6 @@ into defaults, which is the one that would otherwise warn everybody.
 
 **Not covered:** the sweep's SQL, so "which snatches does an hour's pass
 actually select" is verified only through the in-memory double. The widgets'
-templates are not executed in a test. And there is no event, so no test could
-assert that anything downstream learns a warning happened.
+templates are not executed in a test. And nothing asserts end to end that a
+warning reaches a subscriber — the declaration and the not-countable flag are
+tested, the wiring from `res.Issued` to the mediator is not.

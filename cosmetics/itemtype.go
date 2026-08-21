@@ -93,9 +93,14 @@ func (t itemType) Grant(ctx context.Context, pur pluginapi.StorePurchase) (strin
 	if err := t.p.st.Unlock(ctx, pur.UserID, e.Slug, SourceStore, pur.Days); err != nil {
 		return "", err
 	}
+	t.p.emit(ctx, EventUnlocked, pur.UserID, Unlocked{
+		Slug: e.Slug, Source: SourceStore, Days: pur.Days,
+	})
 	worn, err := t.p.st.EquippedBy(ctx, pur.UserID, SlotName)
 	if err == nil && worn == "" {
-		if _, err := t.p.st.Equip(ctx, pur.UserID, SlotName, e.Slug); err != nil {
+		if _, err := t.p.st.Equip(ctx, pur.UserID, SlotName, e.Slug); err == nil {
+			t.p.emit(ctx, EventEquipped, pur.UserID, Equipped{Slot: SlotName, Slug: e.Slug})
+		} else {
 			// Not fatal: they own it, and the page they are about to be sent
 			// to is exactly where you put one on. Unwinding a completed sale
 			// over a failed convenience would be worse.

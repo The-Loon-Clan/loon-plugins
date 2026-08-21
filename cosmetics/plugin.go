@@ -94,6 +94,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.st = NewPGStore(db)
 
+	if err := declareEvents(c); err != nil {
+		return fmt.Errorf("cosmetics: declaring events: %w", err)
+	}
+
 	tmpl, err := template.New("cosmetics").Funcs(tmplFuncs()).ParseFS(tmplFS, "templates/*.html")
 	if err != nil {
 		return fmt.Errorf("cosmetics: parsing templates: %w", err)

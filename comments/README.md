@@ -78,6 +78,27 @@ you for commenting) and a withheld one (which must not still be earning).
 | `pluginapi.CSRFTokenFunc` | Every form. |
 | `core.WidgetItem` | Which subject the page is about. |
 
+## Events
+
+**Declares** `comments.posted` and `comments.thanked`, both countable member
+events, both emitted after the write commits.
+
+Countable is a judgement, and the sibling plugin decided the opposite: playlists
+declares its two events **not** countable, because both are free actions on rows
+nobody else has to accept, so a count measures clicking. A comment is free too —
+but it is PUBLIC and moderated, so farming one means posting visible rubbish
+where people and a mod queue can see it. forum's thread and post events are
+countable for the same reason. That is the line: public and moderated, or
+private and invisible.
+
+`comments.thanked` is the ADD leg of the toggle only. Withdrawing announces
+nothing, because a subscriber counting thanks cannot un-count reliably and one
+that tries drifts the first time an event is missed. `Event.UserID` is the
+THANKER; the author travels in the payload, since only one member can be an
+event's subject. Note the consequence: an achievement scored on this rewards
+GIVING thanks, which is the cheap half — see the thanks section above on why
+only the author is paid.
+
 ## Hooks & callbacks
 
 - **Consumes:** `csrf.token`, `core.Users`, `core.Points`, `core.WidgetItem`,

@@ -21,6 +21,19 @@ type SweepResult struct {
 	Warned     int
 	Expired    int
 	Blocked    int
+	// Issued is the warnings this pass actually gave out, so the caller can
+	// announce them. The counts above are for the log; a subscriber needs to
+	// know WHO and for WHAT, and Sweep stays a pure function with no mediator
+	// of its own — the plugin holds the Core and does the emitting.
+	Issued []IssuedWarning
+}
+
+// IssuedWarning is one warning this pass gave out.
+type IssuedWarning struct {
+	UserID      int64
+	InfoHash    string
+	TorrentName string
+	Reason      string
 }
 
 // Sweep runs one pass. now is a parameter for the same reason it is one in
@@ -88,6 +101,12 @@ func Sweep(ctx context.Context, st Store, p Policy, n Notifier, limit int, now t
 				return res, err
 			}
 			res.Warned++
+			res.Issued = append(res.Issued, IssuedWarning{
+				UserID:      c.Snatch.UserID,
+				InfoHash:    c.Snatch.InfoHash,
+				TorrentName: c.TorrentName,
+				Reason:      a.Reason,
+			})
 			touched[c.Snatch.UserID] = true
 			if n.Warn != nil {
 				n.Warn(ctx, c.Snatch.UserID, c.TorrentName, a.Reason)

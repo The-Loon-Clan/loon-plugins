@@ -87,6 +87,12 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.st = NewPGStore(db)
 
+	// Declared in Provision so the directory lists them at boot, whether or
+	// not anybody has commented yet.
+	if err := declareEvents(c); err != nil {
+		return fmt.Errorf("comments: declaring events: %w", err)
+	}
+
 	tmpl, err := template.New("comments").Funcs(tmplFuncs()).ParseFS(tmplFS, "templates/*.html")
 	if err != nil {
 		return fmt.Errorf("comments: parsing templates: %w", err)

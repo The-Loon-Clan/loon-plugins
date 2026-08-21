@@ -102,6 +102,24 @@ be a third place to disagree.
 | `pluginapi.CSRFTokenFunc` | Every form. |
 | A host that draws the classes | See the contract section. Absent: every purchase succeeds and nothing changes. |
 
+## Events
+
+**Declares** `cosmetics.unlocked` and `cosmetics.equipped`, and the pair is the
+clearest example in this repo of what the `Countable` flag is for.
+
+**Unlocked is countable.** It costs points or an admin's decision, so the count
+measures something that was spent and a member cannot manufacture more.
+
+**Equipped is not.** Putting an effect on is free and unlimited — a member can
+toggle it all afternoon, so a total measures fiddling with a dropdown. It is
+still worth *announcing*, because a subscriber may want to react to what
+somebody is wearing. That gap between "worth hearing" and "worth totalling" is
+the whole distinction.
+
+Both are the ON leg only; taking an effect off announces nothing, and what
+somebody is wearing now is a question the store answers directly rather than
+something to reconstruct from a stream.
+
 ## Hooks & callbacks
 
 - **Publishes:** `cosmetics.effects` (`pluginapi.CosmeticResolver`) —

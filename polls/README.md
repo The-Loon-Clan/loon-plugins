@@ -72,6 +72,22 @@ from people who care about the question, and paying for them buys the opposite â
 a room full of members clicking the first option to collect. The reward for
 voting is the result.
 
+## Events
+
+**Declares** `polls.voted`, a countable member event.
+
+Countable is unusually safe here: a member gets one vote per poll and cannot
+create polls, so the ceiling is set by staff rather than by the member. That is
+the same property that makes dailyreward's claim countable, arrived at from a
+different direction.
+
+**The payload does not carry the option.** The results policy exists to control
+exactly when a tally becomes visible, and an event stream carrying each member's
+choice would route around all of it and turn a ballot into a public record. That
+a member voted is the notable fact; what they chose is the poll's business. A
+test asserts it by reflection, so adding an `Option` field fails rather than
+passing a hand-written list nobody updated.
+
 ## Hooks & callbacks
 
 - **Consumes:** `csrf.token`.
