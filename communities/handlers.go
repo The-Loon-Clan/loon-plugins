@@ -199,13 +199,13 @@ func (h *Handlers) View(c *gin.Context) {
 
 	comm, err := h.store.GetCommunityBySlug(ctx, slug, userID)
 	if err != nil {
-		c.String(http.StatusNotFound, "community not found")
+		h.fail(c, http.StatusNotFound, "nocommunity")
 		return
 	}
 	// Hidden communities 404 for everyone except the owner + admins.
 	// OwnedBy, because userID is 0 for an anonymous viewer.
 	if comm.HiddenAt != nil && !pluginapi.VisibleTo(comm.OwnerUserID, userID, isAdmin) {
-		c.String(http.StatusNotFound, "community not found")
+		h.fail(c, http.StatusNotFound, "nocommunity")
 		return
 	}
 
@@ -308,7 +308,7 @@ func (h *Handlers) ToggleSubscribe(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
 	comm, err := h.store.GetCommunityBySlug(ctx, slug, userID)
 	if err != nil {
-		c.String(http.StatusNotFound, "community not found")
+		h.fail(c, http.StatusNotFound, "nocommunity")
 		return
 	}
 
@@ -420,7 +420,7 @@ func (h *Handlers) NewThreadForm(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
 	comm, err := h.store.GetCommunityBySlug(c.Request.Context(), slug, userID)
 	if err != nil {
-		c.String(http.StatusNotFound, "community not found")
+		h.fail(c, http.StatusNotFound, "nocommunity")
 		return
 	}
 	h.render(c, http.StatusOK, fmt.Sprintf("New thread in /c/%s", comm.Slug), "community_new_thread_c.html",
@@ -438,7 +438,7 @@ func (h *Handlers) CreateThread(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
 	comm, err := h.store.GetCommunityBySlug(c.Request.Context(), slug, userID)
 	if err != nil {
-		c.String(http.StatusNotFound, "community not found")
+		h.fail(c, http.StatusNotFound, "nocommunity")
 		return
 	}
 	title := strings.TrimSpace(c.PostForm("title"))
@@ -469,7 +469,7 @@ func (h *Handlers) ViewThread(c *gin.Context) {
 
 	thread, err := h.store.GetCommunityThread(ctx, threadID)
 	if err != nil {
-		c.String(http.StatusNotFound, "thread not found")
+		h.fail(c, http.StatusNotFound, "nothread")
 		return
 	}
 	// Cross-check the slug param against the thread's actual
@@ -481,7 +481,7 @@ func (h *Handlers) ViewThread(c *gin.Context) {
 	}
 	comm, err := h.store.GetCommunityBySlug(ctx, thread.CommunitySlug, userID)
 	if err != nil {
-		c.String(http.StatusNotFound, "community not found")
+		h.fail(c, http.StatusNotFound, "nocommunity")
 		return
 	}
 	role, _ := h.store.GetCommunityViewerRole(ctx, comm.ID, userID)
@@ -493,7 +493,7 @@ func (h *Handlers) ViewThread(c *gin.Context) {
 	// everyone else.
 	if (thread.RemovedAt != nil || thread.HiddenAt != nil) &&
 		!pluginapi.VisibleTo(thread.UserID, userID, role.CanModerate()) {
-		c.String(http.StatusNotFound, "thread not found")
+		h.fail(c, http.StatusNotFound, "nothread")
 		return
 	}
 
@@ -562,7 +562,7 @@ func (h *Handlers) Reply(c *gin.Context) {
 	}
 	thread, err := h.store.GetCommunityThread(c.Request.Context(), threadID)
 	if err != nil {
-		c.String(http.StatusNotFound, "thread not found")
+		h.fail(c, http.StatusNotFound, "nothread")
 		return
 	}
 	if thread.Locked {
@@ -611,7 +611,7 @@ func (h *Handlers) PinThread(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
 	comm, err := h.modCheck(c, slug)
 	if err != nil {
-		c.String(http.StatusForbidden, "not a moderator")
+		h.fail(c, http.StatusForbidden, "notmod")
 		return
 	}
 	threadID, _ := strconv.Atoi(c.Param("id"))
@@ -628,7 +628,7 @@ func (h *Handlers) LockThread(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
 	comm, err := h.modCheck(c, slug)
 	if err != nil {
-		c.String(http.StatusForbidden, "not a moderator")
+		h.fail(c, http.StatusForbidden, "notmod")
 		return
 	}
 	threadID, _ := strconv.Atoi(c.Param("id"))
@@ -647,7 +647,7 @@ func (h *Handlers) RemoveThread(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
 	comm, err := h.modCheck(c, slug)
 	if err != nil {
-		c.String(http.StatusForbidden, "not a moderator")
+		h.fail(c, http.StatusForbidden, "notmod")
 		return
 	}
 	threadID, _ := strconv.Atoi(c.Param("id"))
@@ -664,7 +664,7 @@ func (h *Handlers) RemovePost(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
 	comm, err := h.modCheck(c, slug)
 	if err != nil {
-		c.String(http.StatusForbidden, "not a moderator")
+		h.fail(c, http.StatusForbidden, "notmod")
 		return
 	}
 	threadID, _ := strconv.Atoi(c.Param("id"))
@@ -690,7 +690,7 @@ func (h *Handlers) RequestQueue(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
 	comm, err := h.modCheck(c, slug)
 	if err != nil {
-		c.String(http.StatusForbidden, "not a moderator")
+		h.fail(c, http.StatusForbidden, "notmod")
 		return
 	}
 	pending, _ := h.store.ListPendingJoinRequests(c.Request.Context(), comm.ID)
@@ -706,7 +706,7 @@ func (h *Handlers) ApproveRequest(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
 	comm, err := h.modCheck(c, slug)
 	if err != nil {
-		c.String(http.StatusForbidden, "not a moderator")
+		h.fail(c, http.StatusForbidden, "notmod")
 		return
 	}
 	rid, _ := strconv.Atoi(c.Param("rid"))
@@ -729,7 +729,7 @@ func (h *Handlers) DenyRequest(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
 	comm, err := h.modCheck(c, slug)
 	if err != nil {
-		c.String(http.StatusForbidden, "not a moderator")
+		h.fail(c, http.StatusForbidden, "notmod")
 		return
 	}
 	rid, _ := strconv.Atoi(c.Param("rid"))
@@ -761,7 +761,7 @@ func (h *Handlers) CreateInvite(c *gin.Context) {
 	slug := strings.ToLower(c.Param("slug"))
 	comm, err := h.modCheck(c, slug)
 	if err != nil {
-		c.String(http.StatusForbidden, "not a moderator")
+		h.fail(c, http.StatusForbidden, "notmod")
 		return
 	}
 	maxUses, _ := strconv.Atoi(c.PostForm("max_uses"))
@@ -798,7 +798,7 @@ func (h *Handlers) RedeemInvite(c *gin.Context) {
 	code := strings.TrimSpace(c.Param("code"))
 	communityID, err := h.store.RedeemCommunityInvite(c.Request.Context(), code, userID)
 	if err != nil {
-		c.String(http.StatusForbidden, "This invite is no longer valid (expired or fully used).")
+		h.fail(c, http.StatusForbidden, "badinvite")
 		return
 	}
 	comm, err := h.store.GetCommunityByID(c.Request.Context(), communityID)
@@ -820,7 +820,7 @@ func (h *Handlers) Settings(c *gin.Context) {
 	userID := h.viewerID(c)
 	comm, err := h.store.GetCommunityBySlug(c.Request.Context(), slug, userID)
 	if err != nil {
-		c.String(http.StatusNotFound, "community not found")
+		h.fail(c, http.StatusNotFound, "nocommunity")
 		return
 	}
 	if !pluginapi.VisibleTo(comm.OwnerUserID, userID, isAdmin) {
@@ -841,7 +841,7 @@ func (h *Handlers) SaveSettings(c *gin.Context) {
 	userID := h.viewerID(c)
 	comm, err := h.store.GetCommunityBySlug(c.Request.Context(), slug, userID)
 	if err != nil {
-		c.String(http.StatusNotFound, "community not found")
+		h.fail(c, http.StatusNotFound, "nocommunity")
 		return
 	}
 	if !pluginapi.VisibleTo(comm.OwnerUserID, userID, isAdmin) {

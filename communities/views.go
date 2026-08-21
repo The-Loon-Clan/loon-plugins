@@ -157,6 +157,24 @@ type communitySettingsVM struct {
 	Flash     string
 }
 
+// errorVM feeds community_error.html — a CODE, never a sentence.
+type errorVM struct {
+	chromeVM
+	Reason string
+}
+
+// fail renders a refusal in the site's chrome instead of writing a bare string.
+//
+// Twenty handlers used to answer c.String(404, "community not found") and the
+// like: plain text on a blank page, and a user-visible sentence living in Go
+// where the translation seam could never reach it. The reason travels as a
+// code and community_error.html holds the words.
+func (h *Handlers) fail(c *gin.Context, status int, reason string) {
+	h.render(c, status, "Communities", "community_error.html",
+		&errorVM{Reason: reason},
+		gin.H{"Reason": reason})
+}
+
 // render draws one page: fragment from the plugin's set, chrome from the
 // host.
 //

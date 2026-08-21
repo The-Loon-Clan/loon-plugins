@@ -1,0 +1,26 @@
+{{define "community_error.html"}}
+{{/* The sentences live HERE, not in Go.
+
+     A handler calls fail(c, status, "notmod") and this maps the code to words.
+     CHECKLIST §10: a user-visible string belongs in a template, so the seam
+     that lands later is a mechanical wrap rather than a rewrite. Twenty bare
+     c.String responses used to say these four things in Go, and said them in
+     plain text with none of the site's chrome around them.
+
+     Same shape as applications and medals. */}}
+<section class="panelV2">
+    <div class="panel__body">
+        <div class="notice notice--warning">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+            <span>
+                {{if eq .Reason "nocommunity"}}That community does not exist, or it is hidden.
+                {{else if eq .Reason "nothread"}}That thread does not exist.
+                {{else if eq .Reason "notmod"}}You are not a moderator of this community.
+                {{else if eq .Reason "badinvite"}}This invite is no longer valid &mdash; it has expired, or it has been fully used.
+                {{else}}Something went wrong.{{end}}
+            </span>
+        </div>
+        <p class="mt-3 mb-0"><a class="button button--outlined button--sm" href="/communities">Back to communities</a></p>
+    </div>
+</section>
+{{end}}
