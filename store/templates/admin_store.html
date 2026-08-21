@@ -36,8 +36,8 @@
                                 </select>
                             </div>
                             <div class="col-sm-2">
-                                <label class="form__label" style="font-size:0.85rem;">Flavour</label>
-                                <select name="flavour" class="form__select">
+                                <label class="form__label" style="font-size:0.85rem;" for="new-flavour">Flavour</label>
+                                <select id="new-flavour" name="flavour" class="form__select">
                                     <option value="both">Both</option>
                                     <option value="tracker">Tracker</option>
                                     <option value="indexer">Indexer</option>
@@ -127,8 +127,12 @@
                                 <form method="POST" action="/admin/store/{{.ID}}/update" class="d-flex gap-2 align-items-end flex-wrap p-2">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                     <div>
+                                        {{/* aria-label, not for/id: this row is inside a
+                                             {{range}}, so one id would appear once per
+                                             item and duplicate ids break every label-for
+                                             on the page. */}}
                                         <label style="font-size:0.72rem;">Name</label>
-                                        <input type="text" name="name" class="form__input" value="{{.Name}}" style="width:150px;">
+                                        <input aria-label="Name" type="text" name="name" class="form__input" value="{{.Name}}" style="width:150px;">
                                     </div>
                                     <div>
                                         <label style="font-size:0.72rem;">Description</label>
