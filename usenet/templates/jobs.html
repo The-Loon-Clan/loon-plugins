@@ -3,20 +3,20 @@
      NZB-health cards moved here from the dashboard). The poller below keeps
      status badges, next-run times, and logs live while this tab is open. */}}
 {{if .WorkerStale}}
-<div class="alert alert-warning py-2 mt-3 mb-0">
+<div class="notice notice--warning py-2 mt-3 mb-0">
   The worker has not published telemetry since <strong>{{.WorkerLastSeen}}</strong> — it is down or wedged.
   Everything below is its last report, not live state.
 </div>
 {{end}}
-<div class="card mt-3">
-  <div class="card-header">Jobs</div>
-  <div class="card-body">
+<div class="panelV2 mt-3">
+  <div class="panel__header">Jobs</div>
+  <div class="panel__body">
     <ul class="nav nav-pills mb-3" role="tablist" style="gap:.35rem">
       {{range $i, $j := .Jobs}}
       <li class="nav-item">
         <button class="nav-link py-1{{if eq $i 0}} active{{end}}" data-bs-toggle="pill" data-bs-target="#job-pane-{{$j.Slug}}" type="button">
           {{$j.Short}}
-          <span data-job-pill="{{$j.Name}}" class="badge ms-1 {{if $j.Running}}bg-success{{else}}bg-secondary{{end}}">{{if $j.Running}}running{{else}}{{$j.Status}}{{end}}</span>
+          <span data-job-pill="{{$j.Name}}" class="tag ms-1 {{if $j.Running}}tag--success{{else}}tag--sm{{end}}">{{if $j.Running}}running{{else}}{{$j.Status}}{{end}}</span>
         </button>
       </li>
       {{end}}
@@ -25,13 +25,13 @@
       {{range $i, $j := .Jobs}}
       <div class="tab-pane{{if eq $i 0}} active{{end}}" id="job-pane-{{$j.Slug}}" data-job="{{$j.Name}}">
         <div class="d-flex align-items-center gap-3 flex-wrap mb-2" style="font-size:.9rem">
-          {{if $j.Running}}<span data-role="status" class="badge bg-success">running</span>
-          {{else}}<span data-role="status" class="badge bg-secondary">{{$j.Status}}</span>{{end}}
+          {{if $j.Running}}<span data-role="status" class="tag tag--success">running</span>
+          {{else}}<span data-role="status" class="tag tag--sm">{{$j.Status}}</span>{{end}}
           <span class="text-muted small">next run: <span data-role="next">{{if $j.Next}}{{$j.Next}}{{else}}—{{end}}</span></span>
           {{if $j.DutyLabel}}<span class="text-muted small">{{$j.DutyLabel}}</span>{{end}}
           <form method="post" action="/admin/p/usenet/{{$j.Action}}" class="ms-auto">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-            <button class="btn btn-sm btn-outline-primary py-0" type="submit">Run now</button>
+            <button class="button button--sm button--outlined" type="submit">Run now</button>
           </form>
         </div>
 
@@ -70,7 +70,7 @@
              at 30s+ with disk spilling at 33M rows), so it is a button rather
              than something every page view pays for. */}}
         <p class="text-muted small mb-2">
-          <a class="btn btn-sm btn-outline-secondary py-0" href="?builder=1#jobs">Show staging detail</a>
+          <a class="button button--sm button--outlined" href="?builder=1#jobs">Show staging detail</a>
           <span class="ms-2">aggregates the whole staging table — seconds to minutes at scale, so it is not loaded automatically</span>
         </p>
         {{end}}
@@ -82,8 +82,8 @@
         </p>
         {{end}}
 {{if $.Census}}
-<div class="card bg-dark border-secondary mb-3">
-  <div class="card-header d-flex justify-content-between align-items-center">
+<div class="panelV2 mb-3">
+  <div class="panel__header d-flex justify-content-between align-items-center">
     <span>Staging health{{if $.Schema}} <span class="text-muted small">(plugin schema {{$.Schema}})</span>{{end}}</span>
     {{$now := index $.Census 0}}
     {{if $now.MaxMemoryPolicy}}
@@ -92,7 +92,7 @@
       </span>
     {{end}}
   </div>
-  <div class="card-body">
+  <div class="panel__body">
     <p class="text-muted small mb-2">
       One row per build pass. The columns that matter are the deltas: <b>evicted</b> rising means Redis is
       destroying keys to stay under maxmemory — forming releases die before they can complete. <b>Fossils</b>
@@ -102,8 +102,8 @@
       <b>evicted</b> that must not. <b>Ready</b> far
       above <b>drew</b>, pass after pass, means arrivals outpace the drain.
     </p>
-    <div class="table-responsive">
-      <table class="table table-dark table-sm align-middle">
+    <div class="data-table-wrapper">
+      <table class="data-table">
         <thead><tr>
           <th>At</th>
           <th class="text-end">Ready</th><th class="text-end">Drew</th>
@@ -136,8 +136,8 @@
 {{end}}
         {{if $.Pending}}
         <p class="text-muted small mb-2">Largest incomplete releases (still missing articles — later passes complete them; stale ones are evicted):</p>
-        <div class="table-responsive">
-          <table class="table table-dark table-sm align-middle">
+        <div class="data-table-wrapper">
+          <table class="data-table">
             <thead><tr><th>Release</th><th>Group</th><th class="text-end">Articles have / need</th><th class="text-end">Missing</th><th class="text-end">Files</th><th class="text-end">Article span</th></tr></thead>
             <tbody>
             {{range $.Pending}}
@@ -218,7 +218,7 @@
             var s = row.querySelector('[data-role=status]');
             if (s) {
               s.textContent = j.running ? 'running' : j.status;
-              s.className = 'badge ' + (j.running ? 'bg-success' : 'bg-secondary');
+              s.className = 'tag ' + (j.running ? 'tag--success' : 'tag--sm');
             }
             var n = row.querySelector('[data-role=next]');
             if (n) n.textContent = j.next_run || '—';
@@ -232,7 +232,7 @@
           var pill = document.querySelector('[data-job-pill="' + j.name + '"]');
           if (pill) {
             pill.textContent = j.running ? 'running' : j.status;
-            pill.className = 'badge ms-1 ' + (j.running ? 'bg-success' : 'bg-secondary');
+            pill.className = 'tag ms-1 ' + (j.running ? 'tag--success' : 'tag--sm');
           }
         });
         var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };

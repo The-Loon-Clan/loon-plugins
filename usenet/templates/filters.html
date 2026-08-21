@@ -1,17 +1,17 @@
-{{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
+{{if .Msg}}<div class="notice notice--success py-2">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="notice notice--danger py-2">{{.Err}}</div>{{end}}
 
 {{/* Junk-rule ORDER editor.
      Hit counts and evaluation order both existed before this card, but on
      separate screens — which is how a rule catching 3.5 billion articles came
      to sit thirteenth, behind one costing 81% of the engine's CPU for 0.3% of
      the catches. Showing them together is the point. */}}
-<div class="card mt-3">
-    <div class="card-header d-flex justify-content-between align-items-center">
+<div class="panelV2 mt-3">
+    <div class="panel__header d-flex justify-content-between align-items-center">
         <span>Junk rules — evaluation order</span>
         {{if .JunkRules}}<span class="text-muted small">{{len .JunkRules}} rule(s)</span>{{end}}
     </div>
-    <div class="card-body">
+    <div class="panel__body">
         <p class="text-muted small">
             Rules run <strong>in this order</strong> and matching <strong>stops at the first
             hit</strong>. Most articles a busy feed ingests are junk, so a high-volume rule
@@ -21,8 +21,8 @@
             (the expensive direction), <span style="color:var(--text-muted)">-n</span> earlier.
         </p>
         {{if .JunkRules}}
-        <div class="table-responsive">
-            <table class="table table-dark table-sm align-middle">
+        <div class="data-table-wrapper">
+            <table class="data-table">
                 <thead><tr>
                     <th style="width:3rem">#</th><th>Rule</th>
                     <th class="text-end">Hits</th><th class="text-end">Share</th>
@@ -52,19 +52,19 @@
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                                 <input type="hidden" name="name" value="{{.Name}}">
                                 <input type="hidden" name="dir" value="up">
-                                <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="run earlier">&uarr;</button>
+                                <button class="button button--sm button--outlined" type="submit" title="run earlier">&uarr;</button>
                             </form>
                             <form method="post" action="/admin/p/usenet/junk-move" style="display:inline">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                                 <input type="hidden" name="name" value="{{.Name}}">
                                 <input type="hidden" name="dir" value="down">
-                                <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="run later">&darr;</button>
+                                <button class="button button--sm button--outlined" type="submit" title="run later">&darr;</button>
                             </form>
                             <form method="post" action="/admin/p/usenet/junk-toggle" style="display:inline">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                                 <input type="hidden" name="name" value="{{.Name}}">
                                 <input type="hidden" name="enabled" value="{{if .Enabled}}false{{else}}true{{end}}">
-                                <button class="btn btn-sm py-0 {{if .Enabled}}btn-success{{else}}btn-outline-secondary{{end}}"
+                                <button class="button button--sm {{if .Enabled}}button--primary{{else}}button--outlined{{end}}"
                                         type="submit">{{if .Enabled}}on{{else}}off{{end}}</button>
                             </form>
                         </td>
@@ -75,9 +75,9 @@
         </div>
         <form method="post" action="/admin/p/usenet/junk-order" class="d-flex gap-2 align-items-center mt-2">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-            <input type="text" name="confirm" class="form-control form-control-sm" style="max-width:12rem"
+            <input type="text" name="confirm" class="form__input" style="max-width:12rem"
                    placeholder="type reorder" autocomplete="off">
-            <button class="btn btn-sm btn-primary" type="submit">Apply recommended order</button>
+            <button class="button button--sm button--primary" type="submit">Apply recommended order</button>
             <span class="text-muted small">
                 Sorts every enabled rule by hits, highest first (sized rules keep their own
                 trailing band). Advisory, not automatic: hit counts describe the PAST, and
@@ -91,9 +91,9 @@
     </div>
 </div>
 
-<div class="card mt-3">
-    <div class="card-header">Blacklist</div>
-    <div class="card-body">
+<div class="panelV2 mt-3">
+    <div class="panel__header">Blacklist</div>
+    <div class="panel__body">
     <p class="text-muted small">
         Your own rules, checked when a release is assembled. A match drops the release
         and its staged articles — it is never indexed. Separate from the shipped junk
@@ -105,23 +105,23 @@
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <div class="col-md-6">
             <label class="form-label small mb-1">Pattern (Go regex)</label>
-            <input aria-label="Pattern (Go regex)" name="pattern" class="form-control form-control-sm" required
+            <input aria-label="Pattern (Go regex)" name="pattern" class="form__input" required
                    placeholder="(?i)^\[?spam-poster\]?">
         </div>
         <div class="col-md-3">
             <label class="form-label small mb-1">Match against</label>
-            <select aria-label="Match against" name="field" class="form-select form-select-sm">
+            <select aria-label="Match against" name="field" class="form__select">
                 {{range .Fields}}<option value="{{.}}">{{.}}</option>{{end}}
             </select>
         </div>
         <div class="col-md-3">
-            <button class="btn btn-sm btn-primary" type="submit">Add rule</button>
+            <button class="button button--sm button--primary" type="submit">Add rule</button>
         </div>
     </form>
 
     {{if .Rules}}
-    <div class="table-responsive">
-        <table class="table table-dark table-sm align-middle">
+    <div class="data-table-wrapper">
+        <table class="data-table">
             <thead><tr>
                 <th>Pattern</th><th>Field</th><th>Enabled</th><th></th>
             </tr></thead>
@@ -139,7 +139,7 @@
                         <form method="post" action="/admin/p/usenet/filter-toggle" style="display:inline">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="id" value="{{.ID}}">
-                            <button class="btn btn-sm py-0 {{if .Enabled}}btn-success{{else}}btn-outline-secondary{{end}}"
+                            <button class="button button--sm {{if .Enabled}}button--primary{{else}}button--outlined{{end}}"
                                     type="submit">{{if .Enabled}}on{{else}}off{{end}}</button>
                         </form>
                     </td>
@@ -148,7 +148,7 @@
                               onsubmit="return confirm('Delete this rule? Releases it was blocking will be indexed from the next build pass.')">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="id" value="{{.ID}}">
-                            <button class="btn btn-sm btn-outline-danger py-0" type="submit">&times;</button>
+                            <button class="button button--sm button--outlined button--danger" type="submit">&times;</button>
                         </form>
                     </td>
                 </tr>
@@ -162,9 +162,9 @@
     </div>
 </div>
 
-<div class="card mt-3">
-    <div class="card-header">Filter hits</div>
-    <div class="card-body">
+<div class="panelV2 mt-3">
+    <div class="panel__header">Filter hits</div>
+    <div class="panel__body">
     <p class="text-muted small">
         What each <strong>rule</strong> has actually dropped, accumulated across restarts.
         Read it two ways: a rule near zero is probably not earning its cost, and a rule at
@@ -174,8 +174,8 @@
     </p>
 
     {{if .Hits}}
-    <div class="table-responsive">
-        <table class="table table-dark table-sm align-middle">
+    <div class="data-table-wrapper">
+        <table class="data-table">
             <thead><tr>
                 <th>Kind</th><th>Rule</th>
                 <th class="text-end">Dropped</th><th class="text-end">Share</th>
@@ -184,7 +184,7 @@
             <tbody>
             {{range .Hits}}
                 <tr>
-                    <td><span class="badge {{if eq .Kind "blacklist"}}bg-warning text-dark{{else}}bg-secondary{{end}}">{{.Kind}}</span></td>
+                    <td><span class="tag {{if eq .Kind "blacklist"}}tag--warning{{else}}tag--sm{{end}}">{{.Kind}}</span></td>
                     <td><code>{{.Rule}}</code></td>
                     <td class="text-end">{{.Count}}</td>
                     <td class="text-end small text-muted">{{printf "%.1f" .Pct}}%</td>
@@ -200,7 +200,7 @@
         <form method="post" action="/admin/p/usenet/filter-reset"
               onsubmit="return confirm('Clear all counters? Totals from before a rule was rewritten answer a question nobody asked, so this is worth doing after tuning.')">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-            <button class="btn btn-sm btn-outline-secondary py-0" type="submit">Reset counters</button>
+            <button class="button button--sm button--outlined" type="submit">Reset counters</button>
         </form>
     </div>
     {{else}}
@@ -215,12 +215,12 @@
      the rules made 26 rules look like thousands, so they page separately —
      the population is unbounded (one row per distinct stem). */}}
 {{if .Diag.TotalRows}}
-<div class="card mt-3">
-    <div class="card-header d-flex justify-content-between align-items-center">
+<div class="panelV2 mt-3">
+    <div class="panel__header d-flex justify-content-between align-items-center">
         <span>Grouping diagnostics</span>
         <span class="text-muted small">{{.Diag.Range}}</span>
     </div>
-    <div class="card-body">
+    <div class="panel__body">
         <p class="text-muted small">
             <strong>Nothing here was dropped.</strong> These are observations from the
             grouping watch, counted per normalised stem (digits become <code>#</code>).
@@ -235,22 +235,22 @@
             <code>1.0</code> are under-estimates — the direction that would junk a real release.
         </p>
         <div class="mb-2">
-            <a class="btn btn-sm py-0 {{if .Diag.Kind}}btn-outline-secondary{{else}}btn-primary{{end}}"
+            <a class="button button--sm {{if .Diag.Kind}}button--outlined{{else}}button--primary{{end}}"
                href="{{.Diag.AllURL}}">all</a>
             {{range .Diag.Kinds}}
-            <a class="btn btn-sm py-0 {{if .Active}}btn-primary{{else}}btn-outline-secondary{{end}}"
+            <a class="button button--sm {{if .Active}}button--primary{{else}}button--outlined{{end}}"
                href="{{.URL}}">{{.Kind}} <span class="tab-count">{{.Rows}}</span></a>
             {{end}}
         </div>
-        <div class="table-responsive">
-            <table class="table table-dark table-sm align-middle mb-2">
+        <div class="data-table-wrapper">
+            <table class="data-table mb-2">
                 <thead><tr>
                     <th>Kind</th><th>Stem</th><th class="text-end">Seen</th><th>Last sample</th><th>Last seen</th>
                 </tr></thead>
                 <tbody>
                 {{range .Diag.Rows}}
                     <tr>
-                        <td><span class="badge bg-info text-dark">{{.Kind}}</span></td>
+                        <td><span class="tag tag--info">{{.Kind}}</span></td>
                         <td><code>{{.Rule}}</code></td>
                         <td class="text-end">{{.Count}}</td>
                         <td class="small text-muted" style="max-width:28rem;overflow-wrap:anywhere">{{.Sample}}</td>
@@ -263,10 +263,10 @@
         <div class="d-flex justify-content-between align-items-center">
             <span class="text-muted small">{{.Diag.TotalHits}} observation(s), page {{.Diag.Page}} of {{.Diag.Pages}}.</span>
             <span>
-                {{if .Diag.PrevURL}}<a class="btn btn-sm py-0 btn-outline-secondary" href="{{.Diag.PrevURL}}">prev</a>
-                {{else}}<button class="btn btn-sm py-0 btn-outline-secondary" disabled>prev</button>{{end}}
-                {{if .Diag.NextURL}}<a class="btn btn-sm py-0 btn-outline-secondary" href="{{.Diag.NextURL}}">next</a>
-                {{else}}<button class="btn btn-sm py-0 btn-outline-secondary" disabled>next</button>{{end}}
+                {{if .Diag.PrevURL}}<a class="button button--sm button--outlined" href="{{.Diag.PrevURL}}">prev</a>
+                {{else}}<button class="button button--sm button--outlined" disabled>prev</button>{{end}}
+                {{if .Diag.NextURL}}<a class="button button--sm button--outlined" href="{{.Diag.NextURL}}">next</a>
+                {{else}}<button class="button button--sm button--outlined" disabled>next</button>{{end}}
             </span>
         </div>
     </div>
@@ -278,19 +278,19 @@
      Ingest hits above = "what we dropped"; this = "what got past ingest and
      had to be swept out of the catalogue afterwards". */}}
 {{if .Sweep}}
-<div class="card mt-3">
-    <div class="card-header">Catalog sweep (host)</div>
+<div class="panelV2 mt-3">
+    <div class="panel__header">Catalog sweep (host)</div>
 
 
-    <div class="card-body">
+    <div class="panel__body">
     <p class="text-muted small">
         The host's junk sweep tags already-indexed releases the ingest filter missed —
         its counters attribute each removal to the rule that matched. A rule that only
         ever fires HERE is a gap in the ingest engine worth closing; a rule near zero
         here and busy above is working exactly where it should.
     </p>
-    <div class="table-responsive">
-        <table class="table table-dark table-sm align-middle">
+    <div class="data-table-wrapper">
+        <table class="data-table">
             <thead><tr>
                 <th>Rule</th>
                 <th class="text-end">Tagged</th><th class="text-end">Share</th>
@@ -320,9 +320,9 @@
      away, what were they? The rules judge a SUBJECT, and an obfuscated post's
      subject is the part the poster scrambled -- so a drop can be right about the
      subject and wrong about the posting. Nothing here is indexed. */}}
-<div class="card mt-3">
-  <div class="card-header">Junk drops — what the body says</div>
-  <div class="card-body">
+<div class="panelV2 mt-3">
+  <div class="panel__header">Junk drops — what the body says</div>
+  <div class="panel__body">
     <p class="text-muted small mb-2">
       Postings the junk rules discarded, with the filename from the article's yEnc
       header where we have asked for it. Obfuscation commonly scrambles the subject
@@ -331,7 +331,7 @@
       subjects, so this is evidence rather than a queue — and reading a body
       spends provider bytes, which is why it is off until you turn it on.
     </p>
-    {{if .Drops.Note}}<div class="alert alert-secondary small py-2">{{.Drops.Note}}</div>{{end}}
+    {{if .Drops.Note}}<div class="notice notice--info small py-2">{{.Drops.Note}}</div>{{end}}
     {{if .Drops.Probed}}
     <p class="small mb-2">
       <strong>{{.Drops.Rate}}</strong> of the drops we asked about named a real file
@@ -340,8 +340,8 @@
     </p>
     {{end}}
     {{if .Drops.Rows}}
-    <div class="table-responsive">
-      <table class="table table-sm align-middle mb-0">
+    <div class="data-table-wrapper">
+      <table class="data-table mb-0">
         <thead><tr>
           <th>Subject (dropped)</th><th>Rule</th><th>Body says</th><th>Verdict</th><th>Seen</th>
         </tr></thead>
@@ -370,9 +370,9 @@
      the first had an answer. A poster producing a hundred releases a day showed
      four in the catalogue and nothing anywhere said at which stage the rest
      died. */}}
-<div class="card mt-3">
-  <div class="card-header">Watched posters</div>
-  <div class="card-body">
+<div class="panelV2 mt-3">
+  <div class="panel__header">Watched posters</div>
+  <div class="panel__body">
     <p class="text-muted small mb-2">
       Trace one poster end to end: how many of their articles are staged, and which
       rule or stage drops the rest. Matched case-insensitively as a substring of the
@@ -386,11 +386,11 @@
     </p>
     <form method="post" action="/admin/p/usenet/poster-watch" class="d-flex mb-3" style="gap:.5rem;flex-wrap:wrap">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-      <input class="form-control form-control-sm" type="text" name="pattern"
+      <input class="form__input" type="text" name="pattern"
              placeholder="tsukihime" style="max-width:16rem" required>
-      <input class="form-control form-control-sm" type="text" name="note"
+      <input class="form__input" type="text" name="note"
              placeholder="why (optional)" style="max-width:20rem">
-      <button class="btn btn-sm btn-outline-primary" type="submit">Watch</button>
+      <button class="button button--sm button--outlined" type="submit">Watch</button>
     </form>
 
     {{if .Watched}}
@@ -399,7 +399,7 @@
       <form method="post" action="/admin/p/usenet/poster-watch-del" style="display:inline">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <input type="hidden" name="pattern" value="{{.}}">
-        <button class="btn btn-sm py-0 btn-outline-secondary" type="submit"
+        <button class="button button--sm button--outlined" type="submit"
                 title="stop watching this poster">{{.}} &times;</button>
       </form>
       {{end}}
@@ -409,8 +409,8 @@
     {{end}}
 
     {{if .PosterHits}}
-    <div class="table-responsive">
-      <table class="table table-sm align-middle mb-1">
+    <div class="data-table-wrapper">
+      <table class="data-table mb-1">
         <thead><tr>
           <th>Poster</th><th>Stage</th><th>Outcome</th>
           <th class="text-end">Count</th><th>Last sample</th><th>Last seen</th>

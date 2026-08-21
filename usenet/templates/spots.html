@@ -2,9 +2,9 @@
      below it are honestly zero until an importer exists and a page of zeros
      reads as broken rather than unfinished. */}}
 
-<div class="card mt-3">
-  <div class="card-header">Spotnet</div>
-  <div class="card-body">
+<div class="panelV2 mt-3">
+  <div class="panel__header">Spotnet</div>
+  <div class="panel__body">
     <p style="opacity:.75;font-size:.85rem;margin:0 0 .8rem">
       Spotnet is a decentralised index that lives <em>on</em> usenet: a human
       &ldquo;spots&rdquo; an upload and posts a signed description to
@@ -13,16 +13,16 @@
       inferred from a subject line. We read it; we do not post to it.
     </p>
 
-    <table class="table table-sm mb-0" style="font-size:.85rem">
+    <table class="data-table mb-0" style="font-size:.85rem">
       <tbody>
         <tr>
           <td style="width:11rem">Header + document parser</td>
-          <td><span class="badge bg-success bg-opacity-25 text-success">ready</span></td>
+          <td><span class="tag tag--success">ready</span></td>
           <td style="opacity:.7">XOVER listing fields and the repeated <code>X-Xml</code> document.</td>
         </tr>
         <tr>
           <td>Signature verification</td>
-          <td><span class="badge bg-success bg-opacity-25 text-success">ready</span></td>
+          <td><span class="tag tag--success">ready</span></td>
           <td style="opacity:.7">
             Pinned against live spots. A spot signs its <em>message-id</em>, so a
             valid signature identifies the poster and covers none of the payload
@@ -32,8 +32,8 @@
         <tr>
           <td>Index (headers)</td>
           <td>
-            {{if .Indexing}}<span class="badge bg-success bg-opacity-25 text-success">indexing</span>
-            {{else}}<span class="badge bg-secondary bg-opacity-25 text-secondary">off</span>{{end}}
+            {{if .Indexing}}<span class="tag tag--success">indexing</span>
+            {{else}}<span class="tag tag--sm">off</span>{{end}}
           </td>
           <td style="opacity:.7">
             Reads <code>{{.Group}}</code> forward, then backfills its history.
@@ -44,8 +44,8 @@
         <tr>
           <td>Fetch (documents)</td>
           <td>
-            {{if .FetchWired}}<span class="badge bg-success bg-opacity-25 text-success">running</span>
-            {{else}}<span class="badge bg-secondary bg-opacity-25 text-secondary">not built</span>{{end}}
+            {{if .FetchWired}}<span class="tag tag--success">running</span>
+            {{else}}<span class="tag tag--sm">not built</span>{{end}}
           </td>
           <td style="opacity:.7">
             Two article reads per spot: the description, then the NZB from
@@ -60,15 +60,15 @@
   </div>
 </div>
 
-<div class="card mt-3">
-  <div class="card-header">Operation health &mdash; last 7 days</div>
-  <div class="card-body">
+<div class="panelV2 mt-3">
+  <div class="panel__header">Operation health &mdash; last 7 days</div>
+  <div class="panel__body">
     <p style="opacity:.75;font-size:.85rem;margin:0 0 .8rem">
       Successes as well as failures. A failure count on its own cannot be acted
       on: 1,435 overview errors is an outage at ten thousand attempts and noise
       at ten million, and the error log only ever sees the bad half.
     </p>
-    <table class="table table-sm mb-0" style="font-size:.85rem">
+    <table class="data-table mb-0" style="font-size:.85rem">
       <thead><tr><th>operation</th><th>attempts</th><th>success</th><th>failures by reason</th></tr></thead>
       <tbody>
         {{range .OpStats}}
@@ -92,9 +92,9 @@
   </div>
 </div>
 
-<div class="card mt-3">
-  <div class="card-header">Index progress</div>
-  <div class="card-body">
+<div class="panelV2 mt-3">
+  <div class="panel__header">Index progress</div>
+  <div class="panel__body">
     {{if .Indexing}}
     <div class="row g-2 mb-3">
       <div class="col-6 col-md-3">
@@ -123,7 +123,7 @@
       </div>
     </div>
 
-    <table class="table table-sm mb-0" style="font-size:.85rem">
+    <table class="data-table mb-0" style="font-size:.85rem">
       <thead><tr><th>group</th><th>history read</th><th>remaining</th><th></th></tr></thead>
       <tbody>
         {{range .Groups}}
@@ -132,8 +132,8 @@
           <td>{{.Indexed}} ({{.Percent}}%)</td>
           <td>{{if .Done}}&mdash;{{else}}{{.Remaining}}{{end}}</td>
           <td>
-            {{if .Done}}<span class="badge bg-success bg-opacity-25 text-success">backfill complete</span>
-            {{else}}<span class="badge bg-info bg-opacity-25 text-info">backfilling</span>{{end}}
+            {{if .Done}}<span class="tag tag--success">backfill complete</span>
+            {{else}}<span class="tag tag--info">backfilling</span>{{end}}
           </td>
         </tr>
         {{else}}
@@ -150,18 +150,18 @@
     </p>
     <form method="post" action="/admin/p/usenet/spot-enable">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-      <button class="btn btn-sm btn-outline-primary">Index {{.Group}}</button>
+      <button class="button button--sm button--outlined">Index {{.Group}}</button>
     </form>
     {{end}}
   </div>
 </div>
 
-<div class="card mt-3">
-  <div class="card-header d-flex align-items-center">
+<div class="panelV2 mt-3">
+  <div class="panel__header d-flex align-items-center">
     <span>Live sample of {{.Group}}</span>
     <span class="ms-auto" style="font-size:.8rem;opacity:.6">{{.ProbeAge}}</span>
   </div>
-  <div class="card-body">
+  <div class="panel__body">
     <p style="opacity:.75;font-size:.85rem;margin:0 0 .8rem">
       Reads the newest articles in <code>{{.Group}}</code> and checks each
       signature. On demand rather than on page load: the probe fetches one
@@ -171,9 +171,9 @@
 
     {{if .HaveProbe}}
       {{if .Probe.Err}}
-        <div class="alert alert-warning py-2" style="font-size:.85rem">{{.Probe.Err}}</div>
+        <div class="notice notice--warning py-2" style="font-size:.85rem">{{.Probe.Err}}</div>
       {{else if not .Probe.Carried}}
-        <div class="alert alert-warning py-2" style="font-size:.85rem">
+        <div class="notice notice--warning py-2" style="font-size:.85rem">
           <strong>{{.Probe.Server}} does not carry {{.Group}}.</strong>
           Spots cannot be read from this provider; a second source would be needed.
         </div>
@@ -205,7 +205,7 @@
           </div>
         </div>
 
-        <table class="table table-sm mb-2" style="font-size:.85rem">
+        <table class="data-table mb-2" style="font-size:.85rem">
           <tbody>
             <tr>
               <td style="width:11rem">verified</td>
@@ -274,8 +274,8 @@
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
       <label style="font-size:.85rem;opacity:.7" for="spot-sample">sample</label>
       <input id="spot-sample" type="number" name="sample" value="25" min="1" max="200"
-             class="form-control form-control-sm" style="width:6rem">
-      <button class="btn btn-sm btn-outline-primary" {{if not .HaveProvider}}disabled{{end}}>
+             class="form__input" style="width:6rem">
+      <button class="button button--sm button--outlined" {{if not .HaveProvider}}disabled{{end}}>
         Probe {{.Group}}
       </button>
       {{if not .HaveProvider}}

@@ -1,8 +1,8 @@
 {{/* Override for the "Usenet" job-group card on the host jobs page: the two
      crawl jobs with live activity, the index totals, and quick controls that
      post to the crawlers page's actions. */}}
-<div class="table-responsive">
-    <table class="table table-dark table-sm align-middle">
+<div class="data-table-wrapper">
+    <table class="data-table">
         {{/* Named: a screen reader announces a table by its caption, and this
              page carries several. */}}
         <caption class="visually-hidden">Usenet jobs, with status and last activity</caption>
@@ -11,7 +11,7 @@
         {{range .Jobs}}
             <tr>
                 <td><code>{{.Name}}</code></td>
-                <td>{{if .Running}}<span class="badge bg-success">running</span>{{else}}<span class="badge bg-secondary">{{.Status}}</span>{{end}}</td>
+                <td>{{if .Running}}<span class="tag tag--success">running</span>{{else}}<span class="tag tag--sm">{{.Status}}</span>{{end}}</td>
                 <td class="small text-muted">{{if .Activity}}{{.Activity}}{{else}}—{{end}}</td>
             </tr>
         {{end}}
@@ -25,12 +25,12 @@
     <div style="margin-left:auto;display:flex;gap:.5rem">
         <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-            <button class="btn btn-sm btn-outline-primary py-0" type="submit">Run crawl</button>
+            <button class="button button--sm button--outlined" type="submit">Run crawl</button>
         </form>
         <form method="post" action="/admin/p/usenet/backfill" style="display:inline">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-            <button class="btn btn-sm btn-outline-primary py-0" type="submit">Run backfill</button>
+            <button class="button button--sm button--outlined" type="submit">Run backfill</button>
         </form>
-        <a class="btn btn-sm btn-outline-secondary py-0" href="/admin/p/usenet#crawlers">details →</a>
+        <a class="button button--sm button--outlined" href="/admin/p/usenet#crawlers">details →</a>
     </div>
 </div>

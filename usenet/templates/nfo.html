@@ -1,6 +1,6 @@
 {{define "nfo.html"}}
-<div class="card mt-3">
-  <div class="card-body">
+<div class="panelV2 mt-3">
+  <div class="panel__body">
     <h6 class="mb-1">NFO extraction</h6>
     <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.75rem;">
       Reads the <code>.nfo</code> article of releases whose document walk found one, and
@@ -10,14 +10,14 @@
     </p>
 
     {{if .NoStore}}
-    <div class="alert alert-secondary" style="font-size:0.82rem;">
+    <div class="notice notice--info" style="font-size:0.82rem;">
       This host has not registered an NFO store, so there is nowhere for the text to go.
       The job will report the same and do nothing.
     </div>
     {{else}}
 
     {{if not .Enabled}}
-    <div class="alert alert-warning py-2" style="font-size:0.82rem;">
+    <div class="notice notice--warning py-2" style="font-size:0.82rem;">
       <strong>Off.</strong> Set <code>nfo_enabled</code> in this plugin's config to start reading.
       It is off by default because it is the one job here that spends provider bytes —
       everything else is bookkeeping over data already paid for.
@@ -53,8 +53,8 @@
     </p>
 
     {{if .Rows}}
-    <div class="table-responsive">
-      <table class="table table-sm mb-0" style="font-size:0.8rem;">
+    <div class="data-table-wrapper">
+      <table class="data-table mb-0" style="font-size:0.8rem;">
         <thead>
           <tr>
             <th style="width:6rem;">Release</th>

@@ -1,11 +1,11 @@
 {{if .Msg}}{{if .WorkerStale}}
-<div class="alert alert-warning py-2 mt-3 mb-0">
+<div class="notice notice--warning py-2 mt-3 mb-0">
   The worker has not published telemetry since <strong>{{.WorkerLastSeen}}</strong> — it is down or wedged.
   Pass cards and job states below are its last report, not live state.
 </div>
 {{end}}
-<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
+<div class="notice notice--success py-2">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="notice notice--danger py-2">{{.Err}}</div>{{end}}
 
 {{/* Card order mirrors the legacy host crawler page the operator knows:
      Providers, Index stats, Health, then the live activity/pass readouts,
@@ -15,18 +15,18 @@
      connected-or-not and how many connections are open. Everything else
      (creds, role, backbone, priority, test) lives on the Providers tab,
      reachable via the pencil. */}}
-<div class="card mt-3">
-  <div class="card-header">Providers</div>
-  <div class="card-body">
+<div class="panelV2 mt-3">
+  <div class="panel__header">Providers</div>
+  <div class="panel__body">
     {{if .Fleet}}
     <div class="d-flex flex-column" style="gap:.35rem">
       {{range .Fleet}}
       <div class="d-flex align-items-center" style="gap:.6rem;font-size:.9rem" data-provider="{{.ID}}">
         <strong>{{.Name}}</strong>
-        {{if not .Enabled}}<span data-role="pbadge" class="badge bg-secondary">off</span>
-        {{else if .Down}}<span data-role="pbadge" class="badge bg-warning text-dark">benched</span>
-        {{else if .Dialled}}<span data-role="pbadge" class="badge bg-success">connected</span>
-        {{else}}<span data-role="pbadge" class="badge bg-secondary">idle</span>{{end}}
+        {{if not .Enabled}}<span data-role="pbadge" class="tag tag--sm">off</span>
+        {{else if .Down}}<span data-role="pbadge" class="tag tag--warning">benched</span>
+        {{else if .Dialled}}<span data-role="pbadge" class="tag tag--success">connected</span>
+        {{else}}<span data-role="pbadge" class="tag tag--sm">idle</span>{{end}}
         {{/* Resets was computed and thrown away for months. It is the one
              number that says whether the pool is healthy-but-busy or
              thrashing, which is the difference between "the provider is slow"
@@ -46,9 +46,9 @@
 </div>
 
 {{with .IndexStats}}
-<div class="card mt-3">
-    <div class="card-header">Index stats</div>
-    <div class="card-body">
+<div class="panelV2 mt-3">
+    <div class="panel__header">Index stats</div>
+    <div class="panel__body">
     <dl class="row mb-0" style="font-size:.9rem">
         <dt class="col-sm-4">Newsgroups (active / total)</dt>
         <dd class="col-sm-8">{{.GroupsActive}} / {{.GroupsTotal}}</dd>
@@ -79,21 +79,21 @@
 {{/* The live pass card is the dashboard's heart: the run buttons live in its
      header and the totals line above the pass numbers. Per-job status, logs,
      and the Builder/health panels live on the Jobs tab. */}}
-<div class="card mt-3" id="pass-card">
-  <div class="card-header d-flex align-items-center">
+<div class="panelV2 mt-3" id="pass-card">
+  <div class="panel__header d-flex align-items-center">
     <span id="pass-title">{{if .Pass.Running}}Crawl in progress{{else if .Pass.Any}}Last crawl pass{{else}}Crawler{{end}}</span>
     <div class="ms-auto d-flex" style="gap:.5rem">
       <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-        <button class="btn btn-sm btn-outline-primary py-0" type="submit">Crawl now</button>
+        <button class="button button--sm button--outlined" type="submit">Crawl now</button>
       </form>
       <form method="post" action="/admin/p/usenet/backfill" style="display:inline">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-        <button class="btn btn-sm btn-outline-primary py-0" type="submit">Backfill now</button>
+        <button class="button button--sm button--outlined" type="submit">Backfill now</button>
       </form>
     </div>
   </div>
-  <div class="card-body">
+  <div class="panel__body">
     {{/* Rendered from statsTotals — the same estimate source the 5s poll
          writes back into these ids — so the figures never flip between an
          exact count and a planner estimate five seconds after page load. */}}
@@ -148,11 +148,11 @@
 </div>
 
 {{if .Errors}}
-<div class="card mt-3">
-  <div class="card-header">Recent errors ({{len .Errors}})</div>
-  <div class="card-body">
+<div class="panelV2 mt-3">
+  <div class="panel__header">Recent errors ({{len .Errors}})</div>
+  <div class="panel__body">
     <div style="max-height:14rem;overflow:auto;font-size:.85rem">
-      <table class="table" style="margin:0">
+      <table class="data-table" style="margin:0">
         <tbody>
         {{range .Errors}}
           <tr>
@@ -171,9 +171,9 @@
 </div>
 {{end}}
 
-<div class="card mt-3">
-    <div class="card-header">Newsgroups</div>
-    <div class="card-body">
+<div class="panelV2 mt-3">
+    <div class="panel__header">Newsgroups</div>
+    <div class="panel__body">
     {{/* Legend matches the cells bar below: green intensity is the fetched
          share of each slice, grey is unfetched (which on an adopted install
          includes history a previous crawler indexed). */}}
@@ -192,7 +192,7 @@
     <div class="small text-muted mt-3 mb-1">Not yet crawled — these groups have no crawl state on any backbone (newly enabled, or waiting for their first pass).</div>
     {{end}}
     {{end}}
-    <div class="table-responsive">
+    <div class="data-table-wrapper">
         {{/* The legacy host table's shape, on the operator's request: one
              Coverage cell carrying the whole story — the bar, the fetched-run
              ticks, and the watermark line "↩ back-at · ↑ fwd-at (+N new)".
@@ -205,7 +205,7 @@
              to print ServerHigh - HighWatermark raw, which meant a caught-up
              group showed the headroom as backlog — every row reading the same
              "+6,000 new" forever. See renderCrawlers. */}}
-        <table class="table table-dark table-sm align-middle">
+        <table class="data-table">
             <thead><tr>
                 <th>Group</th><th style="min-width:240px">Coverage</th>
                 {{/* Per-group release counts. The plugin's own table answers in
@@ -274,9 +274,9 @@
     </div>
 </div>
 
-<div class="card mt-3">
-    <div class="card-header">Recently built</div>
-    <div class="card-body">
+<div class="panelV2 mt-3">
+    <div class="panel__header">Recently built</div>
+    <div class="panel__body">
     <p class="text-muted small">
         Releases THIS crawler assembled, newest first — from the worker's
         telemetry, so agent uploads never appear here whatever the sink mode.
@@ -284,8 +284,8 @@
         shows the crawler is actually producing. Resets on worker restart.
     </p>
     {{if .RecentNzbs}}
-    <div class="table-responsive" style="max-height:22rem;overflow-y:auto">
-        <table class="table table-dark table-sm align-middle">
+    <div class="data-table-wrapper" style="max-height:22rem;overflow-y:auto">
+        <table class="data-table">
             <thead><tr><th>Release</th><th>Group</th><th class="text-end">Size</th><th>Built</th></tr></thead>
             <tbody>
             {{range .RecentNzbs}}
@@ -304,10 +304,10 @@
 </div>
 
 {{if .Workers}}
-<div class="card mt-3">
-  <div class="card-header">Crawler hosts</div>
-  <div class="card-body">
-    <table class="table" style="font-size:.88rem;margin:0">
+<div class="panelV2 mt-3">
+  <div class="panel__header">Crawler hosts</div>
+  <div class="panel__body">
+    <table class="data-table" style="font-size:.88rem;margin:0">
       <thead><tr><th>Worker</th><th>Groups held</th></tr></thead>
       <tbody>
       {{range .Workers}}
@@ -351,7 +351,7 @@
       var b = row.querySelector('[data-role=pbadge]');
       if (b) {
         b.textContent = label;
-        b.className = 'badge ' + (label === 'connected' ? 'bg-success'
+        b.className = 'tag ' + (label === 'connected' ? 'tag--success'
           : label === 'benched' ? 'bg-warning text-dark' : 'bg-secondary');
       }
       var c = row.querySelector('[data-role=pconns]');
