@@ -111,7 +111,7 @@ func (h *Handlers) ViewList(c *gin.Context) {
 	listID, _ := strconv.Atoi(c.Param("id"))
 	list, err := deps.ByID(c.Request.Context(), listID)
 	if err != nil || list == nil {
-		c.String(http.StatusNotFound, "list not found")
+		fail(c, http.StatusNotFound, "notfound")
 		return
 	}
 	// Only owner can view private lists.
@@ -121,7 +121,7 @@ func (h *Handlers) ViewList(c *gin.Context) {
 	// lets anonymous through in the site's public access mode.
 	userID, _, _ := deps.Viewer(c)
 	if !list.Public && !pluginapi.OwnedBy(list.UserID, userID) {
-		c.String(http.StatusForbidden, "this list is private")
+		fail(c, http.StatusForbidden, "private")
 		return
 	}
 	items, _ := deps.Items(c.Request.Context(), listID)
@@ -145,24 +145,23 @@ func (h *Handlers) DownloadAllList(c *gin.Context) {
 	userID, _, _ := deps.Viewer(c)
 
 	if !deps.DownloadAllowed(c) {
-		deps.RenderError(c, http.StatusForbidden,
-			"Download blocked: your IP does not match your pinned browse IP.")
+		fail(c, http.StatusForbidden, "ippinned")
 		return
 	}
 
 	list, err := deps.ByID(ctx, listID)
 	if err != nil || list == nil {
-		c.String(http.StatusNotFound, "list not found")
+		fail(c, http.StatusNotFound, "notfound")
 		return
 	}
 	if !list.Public && !pluginapi.OwnedBy(list.UserID, userID) {
-		c.String(http.StatusForbidden, "this list is private")
+		fail(c, http.StatusForbidden, "private")
 		return
 	}
 
 	items, err := deps.Items(ctx, listID)
 	if err != nil || len(items) == 0 {
-		c.String(http.StatusNotFound, "no items in list")
+		fail(c, http.StatusNotFound, "empty")
 		return
 	}
 

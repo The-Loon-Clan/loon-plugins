@@ -1,0 +1,27 @@
+{{/* A refusal from the lists plugin.
+
+     The sentences live HERE, not in Go (CHECKLIST §10). A handler calls
+     fail(c, status, "private") and this maps the code to words. A fragment,
+     not a whole page: the host supplies the chrome through RenderPage.
+
+     These replaced bare c.String responses — plain text on a blank page, with
+     no chrome, no nav and no way back — and two messages that travelled to the
+     host as strings through RenderError. */}}
+{{define "list_error.html"}}
+<section class="panelV2">
+    <div class="panel__body">
+        <div class="notice notice--warning">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+            <span>
+                {{if eq .Reason "notfound"}}That list does not exist, or it is private.
+                {{else if eq .Reason "private"}}That list is private.
+                {{else if eq .Reason "empty"}}There is nothing in that list yet.
+                {{else if eq .Reason "ippinned"}}Download blocked &mdash; your IP does not match the one your session is pinned to.
+                {{else if eq .Reason "renderfailed"}}This page failed to render. It has been logged.
+                {{else}}Something went wrong.{{end}}
+            </span>
+        </div>
+        <p class="mt-3 mb-0"><a class="button button--outlined button--sm" href="/lists">Back to lists</a></p>
+    </div>
+</section>
+{{end}}

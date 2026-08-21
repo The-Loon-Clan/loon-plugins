@@ -78,6 +78,26 @@ func render(name string, vm any) (template.HTML, error) {
 	return template.HTML(sb.String()), nil
 }
 
+// fail renders this plugin's error fragment with a CODE the template turns
+// into words (CHECKLIST §10), and hands it to the host for chrome.
+//
+// NOT deps.RenderError, which takes a sentence. That seam is shared by several
+// plugins and a host cannot map codes it has no vocabulary for — the same
+// reason games renders its own store refusals. Keeping the words here keeps
+// them translatable.
+//
+// A render failure inside the error page falls back to the host's plain error
+// rather than recursing.
+func fail(c *gin.Context, status int, code string) {
+	frag, err := render("list_error.html", map[string]any{"Reason": code})
+	if err != nil {
+		deps.RenderError(c, status, code)
+		return
+	}
+	c.Status(status)
+	deps.RenderPage(c, "Lists", frag)
+}
+
 // page renders a fragment and hands it to the host for chrome. A render
 // failure becomes the site's error page rather than a truncated 200.
 // csrfToken is the host's per-request token, for the forms on these pages.
@@ -86,7 +106,7 @@ func csrfToken(c *gin.Context) string { return pluginapi.CSRFToken(deps.Core, c)
 func page(c *gin.Context, title, name string, vm any) {
 	frag, err := render(name, vm)
 	if err != nil {
-		deps.RenderError(c, 500, "this page failed to render")
+		fail(c, 500, "renderfailed")
 		return
 	}
 	deps.RenderPage(c, title, frag)

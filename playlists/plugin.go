@@ -172,7 +172,7 @@ func (h *Handlers) Index(c *gin.Context) {
 	rows, total, err := h.store.ListVisible(ctx, h.viewer(c), pageSize, deps.PageOffset(page, pageSize))
 	if err != nil {
 		c.HTML(http.StatusInternalServerError, "playlists_index.html", deps.BaseData(c, gin.H{
-			"Error": "Could not load playlists.",
+			"Error": "loadfailed",
 		}))
 		return
 	}
@@ -184,11 +184,35 @@ func (h *Handlers) Index(c *gin.Context) {
 	}))
 }
 
+// fail renders the site's error page with a CODE the template turns into
+// words (CHECKLIST §10). playlist_error.html, in the HOST's plugin template
+// set, holds the sentences — this plugin has no templates of its own, which is
+// exactly why its messages stayed in Go longer than everyone else's.
+//
+// It replaces bare c.String responses, which answered a member with plain text
+// on a blank page: no chrome, no nav, no way back. That is a UX bug as much as
+// an i18n one, and it is why these are worth converting rather than merely
+// counting.
+func (h *Handlers) fail(c *gin.Context, status int, code string) {
+	// No BaseData means no host chrome to render into — Provision refuses to
+	// start without it, so this is the unit-test path rather than a live one.
+	// The fallback writes the CODE, not a sentence: machine-readable, and
+	// still identical for two callers who passed the same code, which is what
+	// TestOwnedAnswersTheSameForMissingAndNotYours depends on. A response that
+	// differs between "not yours" and "does not exist" is an oracle for
+	// whether a private playlist exists.
+	if deps.BaseData == nil {
+		c.String(status, code)
+		return
+	}
+	c.HTML(status, "playlist_error.html", deps.BaseData(c, gin.H{"Reason": code}))
+}
+
 func (h *Handlers) Show(c *gin.Context) {
 	ctx := c.Request.Context()
 	p, err := h.store.BySlug(ctx, c.Param("slug"))
 	if err != nil || p == nil {
-		c.String(http.StatusNotFound, "playlist not found")
+		h.fail(c, http.StatusNotFound, "notfound")
 		return
 	}
 	me := h.viewer(c)
@@ -200,12 +224,12 @@ func (h *Handlers) Show(c *gin.Context) {
 	// anonymous through in the site's public access mode. The IsOwner line
 	// below already got this right; this one did not, two lines apart.
 	if !p.Public && !pluginapi.OwnedBy(p.UserID, me) {
-		c.String(http.StatusNotFound, "playlist not found")
+		h.fail(c, http.StatusNotFound, "notfound")
 		return
 	}
 	items, err := h.store.ListItems(ctx, p.ID)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "could not load playlist")
+		h.fail(c, http.StatusInternalServerError, "loadfailed")
 		return
 	}
 	h.resolveItems(ctx, items)
@@ -226,7 +250,7 @@ func (h *Handlers) Create(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("name"))
 	if name == "" {
 		c.HTML(http.StatusBadRequest, "playlist_form.html", deps.BaseData(c, gin.H{
-			"Action": "Create", "Error": "A name is required.",
+			"Action": "Create", "Error": "noname",
 		}))
 		return
 	}
@@ -241,12 +265,12 @@ func (h *Handlers) Create(c *gin.Context) {
 	switch err := h.store.Create(c.Request.Context(), p); {
 	case err == ErrSlugTaken:
 		c.HTML(http.StatusBadRequest, "playlist_form.html", deps.BaseData(c, gin.H{
-			"Action": "Create", "Error": "That name is already taken. Try another.",
+			"Action": "Create", "Error": "nametaken",
 			"Name": name, "Description": p.Description, "CoverURL": p.CoverURL, "Public": p.Public,
 		}))
 	case err != nil:
 		c.HTML(http.StatusInternalServerError, "playlist_form.html", deps.BaseData(c, gin.H{
-			"Action": "Create", "Error": "Could not create the playlist.",
+			"Action": "Create", "Error": "createfailed",
 		}))
 	default:
 		h.emit(c.Request.Context(), EventPlaylistCreated, p.UserID,
@@ -280,7 +304,7 @@ func (h *Handlers) Update(c *gin.Context) {
 		return
 	}
 	if err := h.store.Update(c.Request.Context(), p); err != nil {
-		c.String(http.StatusInternalServerError, "could not save")
+		h.fail(c, http.StatusInternalServerError, "savefailed")
 		return
 	}
 	c.Redirect(http.StatusFound, "/playlists/"+p.Slug+"?saved=1")
@@ -292,7 +316,7 @@ func (h *Handlers) Destroy(c *gin.Context) {
 		return
 	}
 	if err := h.store.Delete(c.Request.Context(), p.ID, p.UserID); err != nil {
-		c.String(http.StatusInternalServerError, "could not delete")
+		h.fail(c, http.StatusInternalServerError, "deletefailed")
 		return
 	}
 	c.Redirect(http.StatusFound, "/playlists")
@@ -309,7 +333,7 @@ func (h *Handlers) AddItem(c *gin.Context) {
 		return
 	}
 	if err := h.store.AddItem(c.Request.Context(), p.ID, releaseID, strings.TrimSpace(c.PostForm("note"))); err != nil {
-		c.String(http.StatusInternalServerError, "could not add")
+		h.fail(c, http.StatusInternalServerError, "addfailed")
 		return
 	}
 	h.emit(c.Request.Context(), EventItemAdded, p.UserID, ItemAdded{PlaylistID: p.ID, ReleaseID: releaseID})
@@ -323,7 +347,7 @@ func (h *Handlers) RemoveItem(c *gin.Context) {
 	}
 	itemID, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err := h.store.RemoveItem(c.Request.Context(), p.ID, itemID); err != nil {
-		c.String(http.StatusInternalServerError, "could not remove")
+		h.fail(c, http.StatusInternalServerError, "removefailed")
 		return
 	}
 	c.Redirect(http.StatusFound, "/playlists/"+p.Slug)
@@ -336,7 +360,7 @@ func (h *Handlers) RemoveItem(c *gin.Context) {
 func (h *Handlers) owned(c *gin.Context) (*Playlist, bool) {
 	p, err := h.store.BySlug(c.Request.Context(), c.Param("slug"))
 	if err != nil || p == nil {
-		c.String(http.StatusNotFound, "playlist not found")
+		h.fail(c, http.StatusNotFound, "notfound")
 		return nil, false
 	}
 	// viewer() returns 0 for anonymous, and 0 is a REAL value in the comparison
@@ -347,7 +371,7 @@ func (h *Handlers) owned(c *gin.Context) (*Playlist, bool) {
 	// pluginapi.OwnedBy rather than in each caller's memory.
 	if !pluginapi.OwnedBy(p.UserID, h.viewer(c)) {
 		// 404 rather than 403, for the same reason Show uses one.
-		c.String(http.StatusNotFound, "playlist not found")
+		h.fail(c, http.StatusNotFound, "notfound")
 		return nil, false
 	}
 	return p, true
