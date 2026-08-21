@@ -128,7 +128,7 @@
                 <form class="ct-reply-form" method="POST" action="/c/{{.Community.Slug}}/thread/{{.Thread.ID}}/reply">
                     <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                     <label class="form-label" style="font-size:0.85rem;">Reply</label>
-                    <textarea name="body" required placeholder="Write a reply..."></textarea>
+                    <textarea aria-label="Reply" name="body" required placeholder="Write a reply..."></textarea>
                     <div class="d-flex justify-content-end mt-2">
                         <button class="btn btn-sm btn-primary" type="submit">Post reply</button>
                     </div>

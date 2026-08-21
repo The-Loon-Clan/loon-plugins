@@ -25,15 +25,15 @@
                 <div class="card-body">
                     <div class="mb-3">
                         <label class="form-label" style="font-size:0.85rem;">Name</label>
-                        <input type="text" name="name" class="form-control" maxlength="80" value="{{.Community.Name}}">
+                        <input aria-label="Name" type="text" name="name" class="form-control" maxlength="80" value="{{.Community.Name}}">
                     </div>
                     <div class="mb-3">
                         <label class="form-label" style="font-size:0.85rem;">Description (card tagline)</label>
-                        <textarea name="description" class="form-control" rows="2" maxlength="500">{{.Community.Description}}</textarea>
+                        <textarea aria-label="Description (card tagline)" name="description" class="form-control" rows="2" maxlength="500">{{.Community.Description}}</textarea>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" style="font-size:0.85rem;">Sidebar (markdown)</label>
-                        <textarea name="sidebar_md" class="form-control" rows="5" placeholder="Rendered in the community sidebar. Markdown supported.">{{.Community.SidebarMD}}</textarea>
+                        <textarea aria-label="Sidebar (markdown)" name="sidebar_md" class="form-control" rows="5" placeholder="Rendered in the community sidebar. Markdown supported.">{{.Community.SidebarMD}}</textarea>
                     </div>
                     <div class="row g-3">
                         <div class="col-md-6">
@@ -100,7 +100,7 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label" style="font-size:0.8rem;">Min rank</label>
-                            <select name="min_role_level" class="form-select form-select-sm">
+                            <select aria-label="Min rank" name="min_role_level" class="form-select form-select-sm">
                                 <option value="0" {{if eq .Community.MinRoleLevel 0}}selected{{end}}>Any (user)</option>
                                 <option value="1" {{if eq .Community.MinRoleLevel 1}}selected{{end}}>Contributor+</option>
                                 <option value="2" {{if eq .Community.MinRoleLevel 2}}selected{{end}}>Mod+</option>
@@ -108,7 +108,7 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label" style="font-size:0.8rem;">Points to join (spent)</label>
-                            <input type="number" name="join_points_cost" class="form-control form-control-sm" min="0" value="{{.Community.JoinPointsCost}}">
+                            <input aria-label="Points to join (spent)" type="number" name="join_points_cost" class="form-control form-control-sm" min="0" value="{{.Community.JoinPointsCost}}">
                         </div>
                     </div>
                     <div class="form-text" style="font-size:0.72rem;margin-top:0.4rem;">
