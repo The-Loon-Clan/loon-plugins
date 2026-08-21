@@ -1,8 +1,8 @@
-{{if .Msg}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Msg}}</div>{{end}}
-<div class="card">
+{{if .Msg}}<div class="notice" style="border-color:var(--success);color:var(--success)">{{.Msg}}</div>{{end}}
+<div class="panelV2">
     <p class="text-muted small">Everything is listed — disable the categories you don't want the indexer to surface (Newznab caps + browse). New releases are auto-categorized from their group + title.</p>
-    <div class="table-responsive">
-        <table class="table table-dark table-sm align-middle">
+    <div class="data-table-wrapper">
+        <table class="data-table">
             {{/* Named, because a screen reader announces a table by its
                  caption and "table with 3 columns" is not a name. */}}
             <caption class="visually-hidden">Catalogue categories and their subcategories</caption>

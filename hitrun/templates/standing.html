@@ -12,14 +12,14 @@
     </header>
     <div class="panel__body">
         {{if .Blocked}}
-        <p class="alert alert-danger">
+        <p class="notice notice--danger">
             <strong>Downloads are disabled.</strong>
             You have {{.ActiveWarnings}} active warnings, which is the limit of {{.Policy.MaxWarnings}}.
             Seeding still works, and warnings expire {{.ExpireDays}} days after they are issued —
             so this lifts on its own.
         </p>
         {{else if .ActiveWarnings}}
-        <p class="alert alert-warning">
+        <p class="notice notice--warning">
             You have {{.ActiveWarnings}} of {{.Policy.MaxWarnings}} warnings.
             Downloads are disabled at {{.Policy.MaxWarnings}}.
         </p>

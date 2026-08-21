@@ -29,8 +29,8 @@
             You have no tokens. They are bought with points in the <a href="/store">store</a>.
         </p>
         {{end}}
-        {{if .Message}}<p class="alert alert-info">{{.Message}}</p>{{end}}
-        {{if .Error}}<p class="alert alert-warning">{{.Error}}</p>{{end}}
+        {{if .Message}}<p class="notice notice--info">{{.Message}}</p>{{end}}
+        {{if .Error}}<p class="notice notice--warning">{{.Error}}</p>{{end}}
     </div>
 </section>
 
@@ -72,7 +72,7 @@
                             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="info_hash" value="{{.InfoHash}}">
                             <input type="hidden" name="kind" value="{{.Kind}}">
-                            <button class="btn btn-sm btn-outline-primary" type="submit">{{.Label}}</button>
+                            <button class="button button--sm button--outlined" type="submit">{{.Label}}</button>
                         </form>
                         {{end}}
                     </td>

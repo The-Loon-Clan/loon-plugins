@@ -62,7 +62,7 @@ func TestRenderQueue(t *testing.T) {
 	for _, want := range []string{
 		"Open Reports",
 		"Release.malware.1080p", "Release.broken.1080p", "Release.mislabeled.1080p",
-		"bg-danger", "bg-warning", // malware and broken keep their colours
+		"tag--danger", "tag--warning", // malware and broken keep their colours
 		"/release/10",   // links back to the release
 		`<nav id="pg">`, // host-rendered pager landed
 		`action="/admin/p/reports/resolve"`,

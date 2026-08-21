@@ -105,12 +105,12 @@
     <form method="post" action="/admin/p/usenet/filter-add" class="row g-2 align-items-end mb-3">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <div class="col-md-6">
-            <label class="form-label small mb-1">Pattern (Go regex)</label>
+            <label class="form__label small mb-1">Pattern (Go regex)</label>
             <input aria-label="Pattern (Go regex)" name="pattern" class="form__input" required
                    placeholder="(?i)^\[?spam-poster\]?">
         </div>
         <div class="col-md-3">
-            <label class="form-label small mb-1">Match against</label>
+            <label class="form__label small mb-1">Match against</label>
             <select aria-label="Match against" name="field" class="form__select">
                 {{range .Fields}}<option value="{{.}}">{{.}}</option>{{end}}
             </select>

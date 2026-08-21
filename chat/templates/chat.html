@@ -195,7 +195,7 @@
                 <span class="desc">Live bridge from Discord</span>
                 {{if .DiscordInviteURL}}
                 <a href="{{.DiscordInviteURL}}" target="_blank" rel="noopener noreferrer"
-                   class="btn btn-sm btn-primary ms-auto"
+                   class="button button--sm button--primary ms-auto"
                    style="background:#5865F2;border-color:#5865F2;font-size:0.75rem;padding:2px 10px;display:inline-flex;align-items:center;gap:0.35rem;"
                    title="Open the Discord server in a new tab">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -210,12 +210,12 @@
             </div>
             <div style="padding:0.5rem 1rem;border-top:1px solid var(--border);display:flex;gap:0.5rem;">
                 {{if .IsAnon}}
-                <a href="/login" class="btn btn-outline-primary btn-sm w-100" style="flex-shrink:0;">Log in to chat</a>
+                <a href="/login" class="button button--outlined button--sm w-100" style="flex-shrink:0;">Log in to chat</a>
                 {{else}}
-                <input type="text" id="chat-input" class="form-control form-control-sm"
+                <input type="text" id="chat-input" class="form__input"
                        placeholder="Type a message…" autocomplete="off" maxlength="2000"
                        style="background:var(--bg-elevated);border-color:var(--border);color:var(--text);">
-                <button id="chat-send" class="btn btn-primary btn-sm" style="flex-shrink:0;">Send</button>
+                <button id="chat-send" class="button button--primary button--sm" style="flex-shrink:0;">Send</button>
                 {{end}}
             </div>
             <div class="chat-status">
@@ -314,9 +314,9 @@
                 var rc = m.rank_color || 'var(--text-muted)';
                 badges += '<span style="font-size:0.55rem;padding:0 4px;border-radius:3px;vertical-align:middle;margin-left:3px;border:1px solid ' + escapeHTML(rc) + ';color:' + escapeHTML(rc) + ';">' + escapeHTML(m.rank_name) + '</span>';
             }
-            if (m.role === 'admin') badges += '<span class="badge bg-danger" style="font-size:0.55rem;vertical-align:middle;margin-left:3px;">Admin</span>';
-            else if (m.role === 'mod') badges += '<span class="badge bg-warning text-dark" style="font-size:0.55rem;vertical-align:middle;margin-left:3px;">Mod</span>';
-            else if (m.role === 'contributor') badges += '<span class="badge bg-info" style="font-size:0.55rem;vertical-align:middle;margin-left:3px;">Contrib</span>';
+            if (m.role === 'admin') badges += '<span class="tag tag--danger" style="font-size:0.55rem;vertical-align:middle;margin-left:3px;">Admin</span>';
+            else if (m.role === 'mod') badges += '<span class="tag tag--warning" style="font-size:0.55rem;vertical-align:middle;margin-left:3px;">Mod</span>';
+            else if (m.role === 'contributor') badges += '<span class="tag tag--info" style="font-size:0.55rem;vertical-align:middle;margin-left:3px;">Contrib</span>';
 
             div.innerHTML =
                 avatarHTML +

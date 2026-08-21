@@ -4,12 +4,12 @@
             <a href="/admin/p/reports" class="btn btn-sm {{if not .Resolved}}btn-primary{{else}}btn-outline-secondary{{end}}">Open</a>
             <a href="/admin/p/reports?resolved=1" class="btn btn-sm {{if .Resolved}}btn-primary{{else}}btn-outline-secondary{{end}}">Resolved</a>
         </div>
-        <div class="card">
-            <div class="card-header d-flex justify-content-between">
+        <div class="panelV2">
+            <div class="panel__header d-flex justify-content-between">
                 <span>{{if .Resolved}}Resolved Reports{{else}}Open Reports{{end}}</span>
                 <small style="color:var(--text-muted);">{{.Total}} total</small>
             </div>
-            <table class="table mb-0">
+            <table class="data-table mb-0">
                 <thead>
                     <tr>
                         <th>Release</th>
@@ -25,10 +25,10 @@
                     <tr>
                         <td><a href="/release/{{.NzbID}}" style="color:var(--blue);">{{.NzbTitle}}</a></td>
                         <td>
-                            {{if eq .Reason "malware"}}<span class="badge bg-danger">Malware</span>
-                            {{else if eq .Reason "broken"}}<span class="badge bg-warning text-dark">Broken</span>
-                            {{else if eq .Reason "mislabeled"}}<span class="badge bg-secondary">Mislabeled</span>
-                            {{else}}<span class="badge bg-secondary">{{.Reason}}</span>{{end}}
+                            {{if eq .Reason "malware"}}<span class="tag tag--danger">Malware</span>
+                            {{else if eq .Reason "broken"}}<span class="tag tag--warning">Broken</span>
+                            {{else if eq .Reason "mislabeled"}}<span class="tag tag--sm">Mislabeled</span>
+                            {{else}}<span class="tag tag--sm">{{.Reason}}</span>{{end}}
                         </td>
                         <td style="font-size:0.85rem;">{{.Username}}</td>
                         <td style="font-size:0.85rem;color:var(--text-muted);">{{.Detail}}</td>
@@ -40,7 +40,7 @@
                                 <input type="hidden" name="id" value="{{.ID}}">
                                 {{if $.Resolved}}<input type="hidden" name="resolved" value="1">{{end}}
                                 <input type="hidden" name="page" value="{{$.Page}}">
-                                <button class="btn btn-sm btn-outline-success">Resolve</button>
+                                <button class="button button--sm button--outlined">Resolve</button>
                             </form>
                         </td>
                         {{end}}
