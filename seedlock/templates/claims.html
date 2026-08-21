@@ -15,7 +15,18 @@
             — so stopping a torrent, or simply leaving it, frees it on its own.
             Clear one here if you have moved machines and do not want to wait.
         </p>
-        {{if .Message}}<p class="alert alert-info">{{.Message}}</p>{{end}}
+        {{/* A CODE, not a sentence — the words live here (CHECKLIST §10). The
+             class is the host's notice, not Bootstrap's alert. */}}
+        {{if .Message}}
+        <div class="notice notice--{{if eq .Message "cleared"}}success{{else}}warning{{end}}">
+            <span>
+                {{if eq .Message "cleared"}}Lock cleared &mdash; your other client can take this torrent on its next announce.
+                {{else if eq .Message "clearfailed"}}That lock could not be cleared. Please try again shortly.
+                {{else if eq .Message "readfailed"}}Your seeding locks could not be read just now. Please try again shortly.
+                {{else}}Something went wrong.{{end}}
+            </span>
+        </div>
+        {{end}}
     </div>
 </section>
 

@@ -83,7 +83,9 @@ type claimRowVM struct {
 // ClaimsPage lists a member's locked torrents.
 func (h *Handlers) ClaimsPage(c *gin.Context) { h.render(c, "") }
 
-func (h *Handlers) render(c *gin.Context, msg string) {
+// render draws the claims page. The argument is a message CODE, never a
+// sentence — claims.html holds the words (CHECKLIST §10).
+func (h *Handlers) render(c *gin.Context, msgCode string) {
 	u, ok := h.auth.CurrentUser(c)
 	if !ok || u == nil {
 		c.Redirect(http.StatusSeeOther, "/login")
@@ -93,10 +95,12 @@ func (h *Handlers) render(c *gin.Context, msg string) {
 
 	claims, err := h.plugin.Claims(ctx, u.ID)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "Could not read your seeding locks. Try again shortly.")
-		return
+		// The page, with the failure said in it, rather than plain text on a
+		// blank one. An empty claim list under a "could not read" notice is
+		// honest; a bare 500 string tells a member nothing they can act on.
+		claims, msgCode = nil, "readfailed"
 	}
-	vm := claimsVM{WindowText: h.plugin.cfg.LockWindow().String(), Message: msg}
+	vm := claimsVM{WindowText: h.plugin.cfg.LockWindow().String(), Message: msgCode}
 	if fn := deps().CSRFToken; fn != nil {
 		vm.CSRF = fn(c)
 	}
@@ -120,7 +124,11 @@ func (h *Handlers) render(c *gin.Context, msg string) {
 
 	var buf bytes.Buffer
 	if err := h.tmpl.ExecuteTemplate(&buf, "claims.html", vm); err != nil {
-		c.String(http.StatusInternalServerError, "Could not read your seeding locks. Try again shortly.")
+		// html/template streams, so a partly-rendered page must not go out as
+		// though it were whole. This one stays a bare string deliberately: it
+		// fires only when this plugin's own template is broken, which is a bug
+		// to fix rather than a sentence to translate.
+		c.String(http.StatusInternalServerError, "seedlock: template failed")
 		return
 	}
 	if fn := deps().RenderPage; fn != nil {
@@ -176,10 +184,10 @@ func (h *Handlers) ClearAction(c *gin.Context) {
 	// never from the form, so a member cannot clear somebody else's lock by
 	// editing the request.
 	if err := h.plugin.ClearClaim(c.Request.Context(), u.ID, hash); err != nil {
-		c.String(http.StatusInternalServerError, "Could not clear that lock. Try again shortly.")
+		h.render(c, "clearfailed")
 		return
 	}
-	h.render(c, "Lock cleared — your other client can take this torrent on its next announce.")
+	h.render(c, "cleared")
 }
 
 func min(a, b int) int {
