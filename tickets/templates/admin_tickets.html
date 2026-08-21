@@ -1,20 +1,20 @@
 {{define "admin_tickets.html"}}
 
     <div class="container mt-4 site-container">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="panelV2">
+            <div class="panel__header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span>Support Tickets <span class="text-muted" style="font-size:0.85rem;">({{.Total}})</span></span>
                 <div class="d-flex gap-2 flex-wrap align-items-center">
-                    <div class="btn-group btn-group-sm">
-                        <a href="/admin/tickets" class="btn {{if eq .StatusFilter ""}}btn-secondary{{else}}btn-outline-secondary{{end}}">All</a>
-                        <a href="/admin/tickets?status=open" class="btn {{if eq .StatusFilter "open"}}btn-warning{{else}}btn-outline-secondary{{end}}">Open</a>
-                        <a href="/admin/tickets?status=in_progress" class="btn {{if eq .StatusFilter "in_progress"}}btn-info{{else}}btn-outline-secondary{{end}}">In Progress</a>
-                        <a href="/admin/tickets?status=closed" class="btn {{if eq .StatusFilter "closed"}}btn-success{{else}}btn-outline-secondary{{end}}">Closed</a>
+                    <div class="panel__actions">
+                        <a href="/admin/tickets" class="button button--sm {{if eq .StatusFilter ""}}button--primary{{else}}button--outlined{{end}}">All</a>
+                        <a href="/admin/tickets?status=open" class="button button--sm {{if eq .StatusFilter "open"}}button--primary{{else}}button--outlined{{end}}">Open</a>
+                        <a href="/admin/tickets?status=in_progress" class="button button--sm {{if eq .StatusFilter "in_progress"}}button--primary{{else}}button--outlined{{end}}">In Progress</a>
+                        <a href="/admin/tickets?status=closed" class="button button--sm {{if eq .StatusFilter "closed"}}button--primary{{else}}button--outlined{{end}}">Closed</a>
                     </div>
                     {{.PaginationHTML}}
                 </div>
             </div>
-            <table class="table mb-0">
+            <table class="data-table mb-0">
                 <thead>
                     <tr>
                         <th style="font-size:0.85rem;">#</th>
@@ -34,14 +34,14 @@
                             <div style="font-size:0.88rem;font-weight:500;">{{.Subject}}</div>
                         </td>
                         <td>
-                            {{if eq .Priority "high"}}<span class="badge bg-danger">High</span>
-                            {{else if eq .Priority "low"}}<span class="badge bg-secondary">Low</span>
-                            {{else}}<span class="badge bg-primary">Normal</span>{{end}}
+                            {{if eq .Priority "high"}}<span class="tag tag--danger">High</span>
+                            {{else if eq .Priority "low"}}<span class="tag tag--sm">Low</span>
+                            {{else}}<span class="tag tag--info">Normal</span>{{end}}
                         </td>
                         <td>
-                            {{if eq .Status "open"}}<span class="badge bg-warning text-dark">Open</span>
-                            {{else if eq .Status "in_progress"}}<span class="badge bg-info text-dark">In Progress</span>
-                            {{else}}<span class="badge bg-success">Closed</span>{{end}}
+                            {{if eq .Status "open"}}<span class="tag tag--warning">Open</span>
+                            {{else if eq .Status "in_progress"}}<span class="tag tag--info">In Progress</span>
+                            {{else}}<span class="tag tag--success">Closed</span>{{end}}
                         </td>
                         <td style="color:var(--text-muted);font-size:0.82rem;white-space:nowrap;">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
                     </tr>

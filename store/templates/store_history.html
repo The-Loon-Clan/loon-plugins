@@ -3,7 +3,7 @@
 
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h5 class="mb-0" style="font-weight:600;">Points</h5>
-            <span class="badge bg-warning text-dark" style="font-size:0.82rem;">{{.Balance}} pts</span>
+            <span class="tag tag--warning" style="font-size:0.82rem;">{{.Balance}} pts</span>
         </div>
 
         {{/* Page links rather than Bootstrap's JS tabs: the ledger pages
@@ -27,12 +27,12 @@
         </ul>
         {{end}}
 
-        {{if .Error}}<div class="alert alert-danger py-1 mb-3" style="font-size:0.82rem;">{{.Error}}</div>{{end}}
+        {{if .Error}}<div class="notice notice--danger py-1 mb-3" style="font-size:0.82rem;">{{.Error}}</div>{{end}}
 
         {{if .Entries}}
-        <div class="card">
-            <div class="table-responsive">
-                <table class="table table-sm mb-0" style="font-size:0.78rem;">
+        <div class="panelV2">
+            <div class="data-table-wrapper">
+                <table class="data-table mb-0" style="font-size:0.78rem;">
                     <thead>
                         <tr>
                             <th>Description</th>
@@ -61,7 +61,7 @@
         </div>
         {{.PaginationHTML}}
         {{else}}
-        <div class="card"><div class="card-body" style="color:var(--text-muted);font-size:0.85rem;">
+        <div class="panelV2"><div class="panel__body" style="color:var(--text-muted);font-size:0.85rem;">
             No transactions yet. Points come in from uploads, grabs, reviews and wiki edits.
         </div></div>
         {{end}}

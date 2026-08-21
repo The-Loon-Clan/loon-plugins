@@ -41,11 +41,11 @@
 
         <div class="d-flex align-items-center gap-3 mb-3">
             <h6 class="mb-0" style="color:var(--text-muted);">{{.Action}} Post</h6>
-            <a href="/admin/wiki" class="btn btn-outline-secondary btn-sm ms-auto">← Back</a>
+            <a href="/admin/wiki" class="button button--outlined button--sm ms-auto">← Back</a>
         </div>
 
-        <div class="card">
-            <div class="card-body">
+        <div class="panelV2">
+            <div class="panel__body">
                 {{if eq .Action "Edit"}}
                 <form method="POST" action="/admin/wiki/posts/{{.Post.ID}}/update" id="post-form">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
@@ -57,14 +57,14 @@
                 {{end}}
 
                     <div class="mb-3">
-                        <label class="form-label" style="font-size:0.85rem;">Title <span class="text-danger">*</span></label>
-                        <input aria-label="Title" type="text" class="form-control" name="title" required maxlength="512"
+                        <label class="form__label" style="font-size:0.85rem;">Title <span class="text-danger">*</span></label>
+                        <input aria-label="Title" type="text" class="form__input" name="title" required maxlength="512"
                                value="{{if .Post}}{{.Post.Title}}{{end}}">
                     </div>
 
                     <div class="mb-1">
                         <div class="d-flex justify-content-between align-items-center mb-1">
-                            <label class="form-label mb-0" style="font-size:0.85rem;">Content (HTML)</label>
+                            <label class="form__label mb-0" style="font-size:0.85rem;">Content (HTML)</label>
                             <div style="font-size:0.75rem;color:var(--text-muted);">Editor ↔ Live Preview</div>
                         </div>
 
@@ -97,8 +97,8 @@
                     </div>
 
                     <div class="d-flex gap-2 mt-3">
-                        <button type="submit" class="btn btn-primary btn-sm">{{.Action}} Post</button>
-                        <a href="/admin/wiki" class="btn btn-outline-secondary btn-sm">Cancel</a>
+                        <button type="submit" class="button button--primary button--sm">{{.Action}} Post</button>
+                        <a href="/admin/wiki" class="button button--outlined button--sm">Cancel</a>
                     </div>
                 </form>
             </div>

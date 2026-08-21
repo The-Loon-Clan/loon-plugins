@@ -4,33 +4,33 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="mb-0" style="color:var(--text-muted);">Wiki Groups &amp; Posts</h6>
-            <button class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#new-group-form">
+            <button class="button button--primary button--sm" data-bs-toggle="collapse" data-bs-target="#new-group-form">
                 + New Group
             </button>
         </div>
 
         {{/* ── New Group form ── */}}
         <div class="collapse mb-4" id="new-group-form">
-            <div class="card">
-                <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">New Group</div>
-                <div class="card-body">
+            <div class="panelV2">
+                <div class="panel__header" style="font-size:0.85rem;color:var(--text-muted);">New Group</div>
+                <div class="panel__body">
                     <form method="POST" action="/admin/wiki/topics">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         <div class="row g-3 mb-3">
                             <div class="col-sm-6">
-                                <label class="form-label" style="font-size:0.85rem;">Name <span class="text-danger">*</span></label>
-                                <input aria-label="Name" type="text" name="name" class="form-control" required maxlength="200">
+                                <label class="form__label" style="font-size:0.85rem;">Name <span class="text-danger">*</span></label>
+                                <input aria-label="Name" type="text" name="name" class="form__input" required maxlength="200">
                             </div>
                             <div class="col-sm-4">
-                                <label class="form-label" style="font-size:0.85rem;">Sort Order</label>
-                                <input aria-label="Sort Order" type="number" name="sort_order" class="form-control" value="0">
+                                <label class="form__label" style="font-size:0.85rem;">Sort Order</label>
+                                <input aria-label="Sort Order" type="number" name="sort_order" class="form__input" value="0">
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label" style="font-size:0.85rem;">Description</label>
-                            <textarea aria-label="Description" name="description" class="form-control" rows="2" maxlength="500"></textarea>
+                            <label class="form__label" style="font-size:0.85rem;">Description</label>
+                            <textarea aria-label="Description" name="description" class="form__input" rows="2" maxlength="500"></textarea>
                         </div>
-                        <button type="submit" class="btn btn-primary btn-sm">Create Group</button>
+                        <button type="submit" class="button button--primary button--sm">Create Group</button>
                     </form>
                 </div>
             </div>
@@ -39,20 +39,20 @@
         {{/* ── Groups list ── */}}
         {{if .Topics}}
         {{range .Topics}}
-        <div class="card mb-3">
+        <div class="panelV2 mb-3">
             {{/* Group header */}}
-            <div class="card-header d-flex align-items-center gap-2" style="overflow:visible;">
+            <div class="panel__header d-flex align-items-center gap-2" style="overflow:visible;">
                 <span style="font-weight:600;flex-grow:1;">{{.Name}}</span>
                 {{if .Description}}
                 <span style="font-size:0.78rem;color:var(--text-muted);">{{.Description}}</span>
                 {{end}}
-                <span class="badge bg-secondary ms-1">{{.PostCount}} post{{if ne .PostCount 1}}s{{end}}</span>
-                <a href="/admin/wiki/posts/new?topic_id={{.ID}}" class="btn btn-sm btn-outline-primary ms-2">+ New Post</a>
-                <a href="/admin/wiki/topics/{{.ID}}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+                <span class="tag tag--sm ms-1">{{.PostCount}} post{{if ne .PostCount 1}}s{{end}}</span>
+                <a href="/admin/wiki/posts/new?topic_id={{.ID}}" class="button button--sm button--outlined ms-2">+ New Post</a>
+                <a href="/admin/wiki/topics/{{.ID}}/edit" class="button button--sm button--outlined">Edit</a>
                 <form method="POST" action="/admin/wiki/topics/{{.ID}}/delete" class="d-inline"
                       onsubmit="return confirm('Delete this group and all its posts?')">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                    <button type="submit" class="button button--sm button--outlined button--danger">Delete</button>
                 </form>
             </div>
 
@@ -60,7 +60,7 @@
             {{$topicSlug := .Slug}}
             {{$posts := index $.PostsByTopic .ID}}
             {{if $posts}}
-            <table class="table table-sm mb-0">
+            <table class="data-table mb-0">
                 <thead>
                     <tr>
                         <th style="font-size:0.8rem;">Title</th>
@@ -79,11 +79,11 @@
                             {{.UpdatedAt.Format "Jan 02, 2006"}}
                         </td>
                         <td class="text-end">
-                            <a href="/admin/wiki/posts/{{.ID}}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+                            <a href="/admin/wiki/posts/{{.ID}}/edit" class="button button--sm button--outlined">Edit</a>
                             <form method="POST" action="/admin/wiki/posts/{{.ID}}/delete" class="d-inline"
                                   onsubmit="return confirm('Delete this post?')">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                <button type="submit" class="button button--sm button--outlined button--danger">Delete</button>
                             </form>
                         </td>
                     </tr>

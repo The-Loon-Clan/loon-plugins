@@ -3,44 +3,44 @@
     <div class="container mt-4 site-container">
 
         {{with .Error}}
-        <div class="alert alert-danger">{{.}}</div>
+        <div class="notice notice--danger">{{.}}</div>
         {{end}}
         {{if eq .Submitted "1"}}
-        <div class="alert alert-success">Ticket submitted! We'll get back to you as soon as possible.</div>
+        <div class="notice notice--success">Ticket submitted! We'll get back to you as soon as possible.</div>
         {{end}}
 
         <!-- Submit new ticket -->
-        <div class="card mb-4">
-            <div class="card-header">Submit a Support Ticket</div>
-            <div class="card-body">
+        <div class="panelV2 mb-4">
+            <div class="panel__header">Submit a Support Ticket</div>
+            <div class="panel__body">
                 <form method="POST" action="/support">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-3">
-                        <label class="form-label" for="ticket-subject">Subject</label>
-                        <input type="text" name="subject" id="ticket-subject" class="form-control" maxlength="200" required placeholder="Brief summary of your issue">
+                        <label class="form__label" for="ticket-subject">Subject</label>
+                        <input type="text" name="subject" id="ticket-subject" class="form__input" maxlength="200" required placeholder="Brief summary of your issue">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Description</label>
+                        <label class="form__label">Description</label>
                         {{.EditorHTML}}
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="ticket-priority">Priority</label>
-                        <select name="priority" id="ticket-priority" class="form-select" style="width:160px;">
+                        <label class="form__label" for="ticket-priority">Priority</label>
+                        <select name="priority" id="ticket-priority" class="form__select" style="width:160px;">
                             <option value="low">Low</option>
                             <option value="normal" selected>Normal</option>
                             <option value="high">High</option>
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary">Submit Ticket</button>
+                    <button type="submit" class="button button--primary">Submit Ticket</button>
                 </form>
             </div>
         </div>
 
         <!-- Existing tickets -->
         {{if .Tickets}}
-        <div class="card">
-            <div class="card-header">Your Tickets</div>
-            <table class="table mb-0">
+        <div class="panelV2">
+            <div class="panel__header">Your Tickets</div>
+            <table class="data-table mb-0">
                 <thead>
                     <tr>
                         <th>#</th>
@@ -58,14 +58,14 @@
                             <a href="/support/{{.ID}}" style="color:var(--text-primary);text-decoration:none;font-weight:500;">{{.Subject}}</a>
                         </td>
                         <td>
-                            {{if eq .Priority "high"}}<span class="badge bg-danger">High</span>
-                            {{else if eq .Priority "low"}}<span class="badge bg-secondary">Low</span>
-                            {{else}}<span class="badge bg-primary">Normal</span>{{end}}
+                            {{if eq .Priority "high"}}<span class="tag tag--danger">High</span>
+                            {{else if eq .Priority "low"}}<span class="tag tag--sm">Low</span>
+                            {{else}}<span class="tag tag--info">Normal</span>{{end}}
                         </td>
                         <td>
-                            {{if eq .Status "open"}}<span class="badge bg-warning text-dark">Open</span>
-                            {{else if eq .Status "in_progress"}}<span class="badge bg-info text-dark">In Progress</span>
-                            {{else}}<span class="badge bg-success">Closed</span>{{end}}
+                            {{if eq .Status "open"}}<span class="tag tag--warning">Open</span>
+                            {{else if eq .Status "in_progress"}}<span class="tag tag--info">In Progress</span>
+                            {{else}}<span class="tag tag--success">Closed</span>{{end}}
                         </td>
                         <td style="color:var(--text-muted);font-size:0.85rem;white-space:nowrap;">{{.CreatedAt.Format "2006-01-02"}}</td>
                     </tr>
