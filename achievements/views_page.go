@@ -116,10 +116,10 @@ func (p *Plugin) renderMemberPage(gc *gin.Context) (template.HTML, error) {
 	return template.HTML(sb.String()), nil
 }
 
-// pageError is the banner text after a failed action, from either marker.
+// pageError is the banner CODE after a failed action, from either marker.
 //
 // Two of them, because two different writers set one. The action's own refusal
-// redirects to ?err=<text>, the msg/err convention every plugin here uses. But
+// redirects to ?err=<code>, the msg/err convention every plugin here uses. But
 // an action that RETURNS an error never reaches its own redirect: the host's
 // site-page wrapper catches it, logs it, and sends the member back with a bare
 // marker of the host's choosing — prod uses ?error=1, and it carries no text
@@ -129,12 +129,16 @@ func (p *Plugin) renderMemberPage(gc *gin.Context) (template.HTML, error) {
 // save a page with no message at all, which they would read as success. A
 // generic sentence is not much, but "something went wrong" is the difference
 // between retrying and believing you are hidden when you are not.
+//
+// A CODE either way, never a sentence — achievements_page.html holds the words.
+// The ?err= value is a code this plugin's own actions chose; the host's bare
+// marker has none, so it earns one here.
 func pageError(gc *gin.Context) string {
-	if msg := gc.Query("err"); msg != "" {
-		return msg
+	if code := gc.Query("err"); code != "" {
+		return code
 	}
 	if gc.Query("error") != "" {
-		return "That did not save. Please try again."
+		return "savefailed"
 	}
 	return ""
 }

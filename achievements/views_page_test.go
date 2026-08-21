@@ -250,8 +250,15 @@ func TestMemberPageShowsAFailedSaveUnderEitherMarker(t *testing.T) {
 	p, m := pageFixture(t, 5)
 	earn(t, m, 5)
 
-	if page := renderPageWithQuery(t, p, "err=Nope"); !strings.Contains(page, "Nope") {
-		t.Error("the page dropped the action's own error text")
+	// An UNKNOWN code, which is the case that matters: the marker is set by a
+	// writer this page does not control, so it must never fall through to
+	// silence. It no longer echoes the query back — the words are the
+	// template's, and a code nobody mapped still has to say a failure happened.
+	if page := renderPageWithQuery(t, p, "err=Nope"); !strings.Contains(page, "may not have saved") {
+		t.Error("an error code this page does not know reported nothing")
+	}
+	if page := renderPageWithQuery(t, p, "err=unavailable"); !strings.Contains(page, "not available right now") {
+		t.Error("a known error code did not reach its sentence")
 	}
 	page := renderPageWithQuery(t, p, "error=1")
 	if !strings.Contains(page, "did not save") {
