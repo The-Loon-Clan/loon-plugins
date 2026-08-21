@@ -114,7 +114,7 @@ func (h *Handlers) Forums(c *gin.Context) {
 	ctx := c.Request.Context()
 	cats, err := h.store.GetForumCategories(ctx)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to load forums")
+		h.fail(c, http.StatusInternalServerError, "loadfailed")
 		return
 	}
 	// See gates: unseeable categories vanish from the listing, the totals,
@@ -190,7 +190,7 @@ func (h *Handlers) ForumCategory(c *gin.Context) {
 	}
 	threads, total, err := h.store.GetForumThreads(c.Request.Context(), id, forumPageSize, offset)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to load threads")
+		h.fail(c, http.StatusInternalServerError, "loadfailed")
 		return
 	}
 	totalPages := (total + forumPageSize - 1) / forumPageSize
@@ -251,7 +251,7 @@ func (h *Handlers) ForumThread(c *gin.Context) {
 	offset := pageOffset(page, forumPageSize)
 	posts, total, err := h.store.GetForumPosts(c.Request.Context(), id, forumPageSize, offset, currentUserID, canSeeAllReplies)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to load posts")
+		h.fail(c, http.StatusInternalServerError, "loadfailed")
 		return
 	}
 	totalPages := (total + forumPageSize - 1) / forumPageSize
@@ -267,7 +267,7 @@ func (h *Handlers) ForumThread(c *gin.Context) {
 		offset = (page - 1) * forumPageSize
 		posts, total, err = h.store.GetForumPosts(c.Request.Context(), id, forumPageSize, offset, currentUserID, canSeeAllReplies)
 		if err != nil {
-			c.String(http.StatusInternalServerError, "failed to load posts")
+			h.fail(c, http.StatusInternalServerError, "loadfailed")
 			return
 		}
 	}
@@ -366,7 +366,7 @@ func (h *Handlers) CreateThread(c *gin.Context) {
 
 	thread, err := h.store.CreateForumThread(c.Request.Context(), catID, userID, title, body, threadType)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to create thread")
+		h.fail(c, http.StatusInternalServerError, "createfailed")
 		return
 	}
 	// After the write, not before: the row exists now.
@@ -420,7 +420,7 @@ func (h *Handlers) ReplyThread(c *gin.Context) {
 
 	post, err := h.store.CreateForumPost(c.Request.Context(), threadID, userID, body, quotedID)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to post reply")
+		h.fail(c, http.StatusInternalServerError, "replyfailed")
 		return
 	}
 	h.emit(c, EventPostCreated, userID, strconv.FormatInt(post.ID, 10),

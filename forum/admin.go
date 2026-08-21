@@ -18,7 +18,7 @@ import (
 func (h *Handlers) AdminCategories(c *gin.Context) {
 	cats, err := h.store.GetForumCategories(c.Request.Context())
 	if err != nil {
-		c.String(http.StatusInternalServerError, "list forum categories: %v", err)
+		h.fail(c, http.StatusInternalServerError, "loadfailed")
 		return
 	}
 	h.render(c, http.StatusOK, "Forum categories", "admin_forum_categories.html", gin.H{

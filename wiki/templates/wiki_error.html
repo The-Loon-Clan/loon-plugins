@@ -1,0 +1,26 @@
+{{define "wiki_error.html"}}
+{{/* The sentences live HERE, not in Go.
+
+     A handler calls fail(c, status, "notopic") and this maps the code to
+     words. CHECKLIST §10: a user-visible string belongs in a template, so the
+     translation seam landing later is a mechanical wrap rather than a rewrite.
+
+     A FRAGMENT, because this plugin's host wires Deps.RenderPage and the
+     chrome comes from there. forum's equivalent is a whole page, because that
+     one is still on the legacy contract — the shape follows the contract, not
+     the plugin. */}}
+<section class="panelV2">
+    <div class="panel__body">
+        <div class="notice notice--warning">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+            <span>
+                {{if eq .Reason "notopic"}}That wiki topic does not exist.
+                {{else if eq .Reason "nopost"}}That wiki page does not exist.
+                {{else if eq .Reason "loadfailed"}}The wiki could not be loaded just now. Please try again shortly.
+                {{else}}Something went wrong.{{end}}
+            </span>
+        </div>
+        <p class="mt-3 mb-0"><a class="button button--outlined button--sm" href="/wiki">Back to the wiki</a></p>
+    </div>
+</section>
+{{end}}

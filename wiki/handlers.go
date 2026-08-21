@@ -79,7 +79,7 @@ func (h *Handlers) Index(c *gin.Context) {
 	ctx := c.Request.Context()
 	topics, err := h.store.Topics(ctx)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to get wiki topics")
+		h.fail(c, http.StatusInternalServerError, "loadfailed")
 		return
 	}
 	// Both panels are best-effort: failure hides the affected card
@@ -132,12 +132,12 @@ func (h *Handlers) Topic(c *gin.Context) {
 	topicSlug := c.Param("topic")
 	topic, err := h.store.TopicBySlug(ctx, topicSlug)
 	if err != nil {
-		c.String(http.StatusNotFound, "topic not found")
+		h.fail(c, http.StatusNotFound, "notopic")
 		return
 	}
 	posts, err := h.store.PostsByTopic(ctx, topic.ID)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to get wiki posts")
+		h.fail(c, http.StatusInternalServerError, "loadfailed")
 		return
 	}
 	render(c, http.StatusOK, "Wiki", "wiki_topic.html", gin.H{
@@ -152,12 +152,12 @@ func (h *Handlers) Post(c *gin.Context) {
 	postSlug := c.Param("post")
 	topic, err := h.store.TopicBySlug(ctx, topicSlug)
 	if err != nil {
-		c.String(http.StatusNotFound, "topic not found")
+		h.fail(c, http.StatusNotFound, "notopic")
 		return
 	}
 	post, err := h.store.PostBySlug(ctx, topic.ID, postSlug)
 	if err != nil {
-		c.String(http.StatusNotFound, "post not found")
+		h.fail(c, http.StatusNotFound, "nopost")
 		return
 	}
 	// Fire-and-forget view bump. Drives the Popular Articles card on
@@ -179,7 +179,7 @@ func (h *Handlers) Post(c *gin.Context) {
 func (h *Handlers) AdminIndex(c *gin.Context) {
 	topics, err := h.store.Topics(c.Request.Context())
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to get wiki topics")
+		h.fail(c, http.StatusInternalServerError, "loadfailed")
 		return
 	}
 	postsByTopic := make(map[int]interface{})

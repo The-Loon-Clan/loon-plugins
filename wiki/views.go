@@ -75,6 +75,19 @@ func wikiExcerpt(s string) string {
 }
 
 // render executes one fragment and hands it to the host for chrome.
+// fail renders a refusal in the site's chrome instead of a bare string.
+//
+// Six handlers used to answer c.String(404, "topic not found") and the like: a
+// user-visible sentence living in Go where the translation seam could never
+// reach it, served as plain text on a blank page. The reason travels as a code
+// and wiki_error.html holds the words.
+//
+// A method rather than a package function only so handlers read h.fail(...)
+// beside h.store; it delegates straight to render.
+func (h *Handlers) fail(c *gin.Context, status int, reason string) {
+	render(c, status, "Wiki", "wiki_error.html", gin.H{"Reason": reason})
+}
+
 func render(c *gin.Context, status int, title, name string, data gin.H) {
 	if data == nil {
 		data = gin.H{}

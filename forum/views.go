@@ -99,6 +99,18 @@ func initial(s string) string {
 // lock and delete controls quietly missing, with nothing logged. They used to
 // arrive from the host's BaseData, where forgetting was not possible; a
 // per-page copy would have made it possible again.
+// fail renders a refusal in the site's chrome instead of a bare string.
+//
+// Six handlers used to answer c.String(500, "failed to load posts") and the
+// like — a user-visible sentence living in Go where the translation seam could
+// never reach it, served as plain text on a blank page. One of them,
+// AdminCategories, printed the raw Go error with %v.
+//
+// The reason travels as a code and forum_error.html holds the words.
+func (h *Handlers) fail(c *gin.Context, status int, reason string) {
+	h.render(c, status, "Forums", "forum_error.html", gin.H{"Reason": reason})
+}
+
 func (h *Handlers) render(c *gin.Context, status int, title, name string, data gin.H) {
 	if data == nil {
 		data = gin.H{}
