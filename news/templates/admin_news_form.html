@@ -12,12 +12,12 @@
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-3">
                         <label class="form-label" style="font-size:0.85rem;">Title</label>
-                        <input type="text" name="title" class="form-control" required maxlength="255"
+                        <input aria-label="Title" type="text" name="title" class="form-control" required maxlength="255"
                                value="{{.Post.Title}}">
                     </div>
                     <div class="mb-3">
                         <label class="form-label" style="font-size:0.85rem;">Slug</label>
-                        <input type="text" name="slug" class="form-control" maxlength="255"
+                        <input aria-label="Slug" type="text" name="slug" class="form-control" maxlength="255"
                                value="{{.Post.Slug}}" placeholder="e.g. new-feature-announcement">
                         <div style="font-size:0.75rem;color:var(--text-muted);margin-top:3px;">
                             URL: /news/{{.Post.Slug}}
@@ -25,7 +25,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label" style="font-size:0.85rem;">Body (HTML allowed)</label>
-                        <textarea name="body" class="form-control" rows="12" required
+                        <textarea aria-label="Body (HTML allowed)" name="body" class="form-control" rows="12" required
                             style="font-family:monospace;font-size:0.82rem;">{{.Post.Body}}</textarea>
                         <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
                             You can use HTML tags: &lt;p&gt;, &lt;strong&gt;, &lt;em&gt;, &lt;a href=""&gt;, &lt;ul&gt;, &lt;li&gt;, etc.

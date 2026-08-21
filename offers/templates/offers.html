@@ -42,12 +42,12 @@
                     {{if eq .Tab "fulfilled"}}<input type="hidden" name="tab" value="fulfilled">{{end}}
                     <div style="flex:1;min-width:180px;">
                         <label class="form-label small mb-1">Search</label>
-                        <input type="search" name="q" value="{{.Query}}" class="form-control form-control-sm"
+                        <input aria-label="Search" type="search" name="q" value="{{.Query}}" class="form-control form-control-sm"
                                placeholder="Search offers by title &mdash; e.g. Frieren">
                     </div>
                     <div>
                         <label class="form-label small mb-1">Type</label>
-                        <select name="type" class="form-select form-select-sm">
+                        <select aria-label="Type" name="type" class="form-select form-select-sm">
                             {{$t := .EntityType}}
                             <option value="anime" {{if eq $t "anime"}}selected{{end}}>Anime</option>
                             <option value="manga" {{if eq $t "manga"}}selected{{end}}>Manga</option>
@@ -57,7 +57,7 @@
                     </div>
                     <div>
                         <label class="form-label small mb-1">Size</label>
-                        <select name="size" class="form-select form-select-sm">
+                        <select aria-label="Size" name="size" class="form-select form-select-sm">
                             {{$s := .SizeBucket}}
                             <option value=""        {{if eq $s ""}}selected{{end}}>Any</option>
                             <option value="<500MB"  {{if eq $s "<500MB"}}selected{{end}}>&lt;500MB</option>

@@ -76,12 +76,12 @@
         <div class="row g-2">
             <div class="col-md-7">
                 <label class="form-label small">Title</label>
-                <input type="text" name="title" class="form-control form-control-sm" required
+                <input aria-label="Title" type="text" name="title" class="form-control form-control-sm" required
                        value="{{if .Item}}{{.Item.Title}}{{end}}" maxlength="200">
             </div>
             <div class="col-md-3">
                 <label class="form-label small">Status</label>
-                <select name="status" class="form-select form-select-sm">
+                <select aria-label="Status" name="status" class="form-select form-select-sm">
                     {{$cur := ""}}{{if .Item}}{{$cur = .Item.Status}}{{end}}
                     <option value="in_flight" {{if eq $cur "in_flight"}}selected{{end}}>in flight</option>
                     <option value="backlog"   {{if or (eq $cur "backlog") (eq $cur "")}}selected{{end}}>backlog</option>
@@ -90,17 +90,17 @@
             </div>
             <div class="col-md-2">
                 <label class="form-label small">Sort order</label>
-                <input type="number" name="sort_order" class="form-control form-control-sm"
+                <input aria-label="Sort order" type="number" name="sort_order" class="form-control form-control-sm"
                        value="{{if .Item}}{{.Item.SortOrder}}{{else}}100{{end}}">
             </div>
             <div class="col-12">
                 <label class="form-label small">Description</label>
-                <textarea name="description" class="form-control form-control-sm" rows="3"
+                <textarea aria-label="Description" name="description" class="form-control form-control-sm" rows="3"
                           maxlength="2000">{{if .Item}}{{.Item.Description}}{{end}}</textarea>
             </div>
             <div class="col-12">
                 <label class="form-label small">Link to /flow proposal (optional)</label>
-                <select name="flow_node_id" class="form-select form-select-sm">
+                <select aria-label="Link to /flow proposal (optional)" name="flow_node_id" class="form-select form-select-sm">
                     {{$curNode := int64 0}}{{if and .Item .Item.FlowNodeID}}{{$curNode = deref64 .Item.FlowNodeID}}{{end}}
                     <option value="0">— no link —</option>
                     {{range .FlowNodes}}

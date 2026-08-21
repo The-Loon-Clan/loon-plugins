@@ -122,31 +122,31 @@
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
       <div class="col-md-3">
         <label class="form-label small mb-0">Slug</label>
-        <input name="slug" class="form-control form-control-sm" required placeholder="summer-2026" value="{{with $.Edit}}{{.Slug}}{{end}}"{{if $.Edit}} readonly{{end}}>
+        <input aria-label="Slug" name="slug" class="form-control form-control-sm" required placeholder="summer-2026" value="{{with $.Edit}}{{.Slug}}{{end}}"{{if $.Edit}} readonly{{end}}>
         <div class="form-text">How other systems reference it. Changing it detaches them.</div>
       </div>
       <div class="col-md-3">
         <label class="form-label small mb-0">Name</label>
-        <input name="name" class="form-control form-control-sm" placeholder="Summer 2026" value="{{with $.Edit}}{{.Name}}{{end}}">
+        <input aria-label="Name" name="name" class="form-control form-control-sm" placeholder="Summer 2026" value="{{with $.Edit}}{{.Name}}{{end}}">
       </div>
       <div class="col-md-6">
         <label class="form-label small mb-0">Description</label>
-        <input name="description" class="form-control form-control-sm" value="{{with $.Edit}}{{.Description}}{{end}}">
+        <input aria-label="Description" name="description" class="form-control form-control-sm" value="{{with $.Edit}}{{.Description}}{{end}}">
       </div>
 
       <div class="col-md-3">
         <label class="form-label small mb-0">Cron</label>
-        <input name="cron" class="form-control form-control-sm" placeholder="0 0 * * *" value="{{with $.Edit}}{{.Cron}}{{end}}">
+        <input aria-label="Cron" name="cron" class="form-control form-control-sm" placeholder="0 0 * * *" value="{{with $.Edit}}{{.Cron}}{{end}}">
         <div class="form-text">Leave blank for a one-off, and set a start date instead.</div>
       </div>
       <div class="col-md-3">
         <label class="form-label small mb-0">Start (one-off)</label>
-        <input type="datetime-local" name="starts_at" class="form-control form-control-sm">
+        <input aria-label="Start (one-off)" type="datetime-local" name="starts_at" class="form-control form-control-sm">
         <div class="form-text">Read in the timezone below, not UTC.</div>
       </div>
       <div class="col-md-3">
         <label class="form-label small mb-0">Duration (minutes)</label>
-        <input name="duration_minutes" class="form-control form-control-sm" placeholder="blank" value="{{with $.Edit}}{{.DurationMinutes}}{{end}}">
+        <input aria-label="Duration (minutes)" name="duration_minutes" class="form-control form-control-sm" placeholder="blank" value="{{with $.Edit}}{{.DurationMinutes}}{{end}}">
         <div class="form-text">
           Blank on a recurring event means each window runs until the next firing.
           Blank on a one-off means it <strong>never closes</strong>.
@@ -154,7 +154,7 @@
       </div>
       <div class="col-md-2">
         <label class="form-label small mb-0">Timezone</label>
-        <input name="timezone" class="form-control form-control-sm" value="{{if $.Edit}}{{$.Edit.Timezone}}{{else}}UTC{{end}}">
+        <input aria-label="Timezone" name="timezone" class="form-control form-control-sm" value="{{if $.Edit}}{{$.Edit.Timezone}}{{else}}UTC{{end}}">
       </div>
       <div class="col-md-1 d-flex align-items-end">
         <div class="form-check">

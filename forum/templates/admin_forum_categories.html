@@ -20,25 +20,25 @@
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="col-md-2">
                         <label class="form-label">Name</label>
-                        <input type="text" name="name" class="form-control" required maxlength="64">
+                        <input aria-label="Name" type="text" name="name" class="form-control" required maxlength="64">
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Description</label>
-                        <input type="text" name="description" class="form-control" maxlength="256">
+                        <input aria-label="Description" type="text" name="description" class="form-control" maxlength="256">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Icon <a href="https://icons.getbootstrap.com/" target="_blank" rel="noopener" style="font-size:0.75rem;">(names)</a></label>
-                        <input type="text" name="icon" class="form-control" value="chat-square-text" maxlength="48">
+                        <input aria-label="Icon (names)" type="text" name="icon" class="form-control" value="chat-square-text" maxlength="48">
                     </div>
                     <div class="col-md-1">
                         <label class="form-label">Color</label>
-                        <select name="color" class="form-select">
+                        <select aria-label="Color" name="color" class="form-select">
                             {{range $c := .Colors}}<option value="{{$c}}">{{$c}}</option>{{end}}
                         </select>
                     </div>
                     <div class="col-md-1">
                         <label class="form-label">Order</label>
-                        <input type="number" name="ordinal" class="form-control" value="0">
+                        <input aria-label="Order" type="number" name="ordinal" class="form-control" value="0">
                     </div>
                     <div class="col-md-2">
                         <button class="btn btn-primary w-100">Create</button>

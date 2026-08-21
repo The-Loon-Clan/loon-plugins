@@ -91,37 +91,37 @@
                 {{/* Enabled is toggled by its own button, never by a save. */}}
                 <input type="hidden" name="was_enabled" value="{{if .Enabled}}1{{else}}0{{end}}">
                 <div class="col-md-2"><label class="form-label small mb-0">Name</label>
-                  <input name="name" class="form-control form-control-sm" value="{{.Name}}"></div>
+                  <input aria-label="Name" name="name" class="form-control form-control-sm" value="{{.Name}}"></div>
                 <div class="col-md-2"><label class="form-label small mb-0">Kind</label>
-                  <select name="kind" class="form-select form-select-sm">
+                  <select aria-label="Kind" name="kind" class="form-select form-select-sm">
                     {{$k := .Kind}}
                     <option value="one_off" {{if eq $k "one_off"}}selected{{end}}>one_off</option>
                     <option value="recurring" {{if eq $k "recurring"}}selected{{end}}>recurring</option>
                     <option value="per_unit" {{if eq $k "per_unit"}}selected{{end}}>per_unit</option>
                   </select></div>
                 <div class="col-md-2"><label class="form-label small mb-0">Event</label>
-                  <select name="scheduled_event_slug" class="form-select form-select-sm">
+                  <select aria-label="Event" name="scheduled_event_slug" class="form-select form-select-sm">
                     {{$e := .EventSlug}}
                     <option value="">&mdash; none &mdash;</option>
                     {{range $.ScheduledEvents}}<option value="{{.Slug}}" {{if eq .Slug $e}}selected{{end}}>{{.Slug}}</option>{{end}}
                   </select></div>
                 <div class="col-md-2"><label class="form-label small mb-0">Trigger</label>
-                  <input name="trigger" class="form-control form-control-sm" value="{{.Trigger}}" list="trigger-options"></div>
+                  <input aria-label="Trigger" name="trigger" class="form-control form-control-sm" value="{{.Trigger}}" list="trigger-options"></div>
                 <div class="col-md-2"><label class="form-label small mb-0">Delivery</label>
-                  <select name="delivery" class="form-select form-select-sm">
+                  <select aria-label="Delivery" name="delivery" class="form-select form-select-sm">
                     {{$d := .Delivery}}
                     <option value="auto" {{if eq $d "auto"}}selected{{end}}>auto</option>
                     <option value="claim" {{if eq $d "claim"}}selected{{end}}>claim</option>
                   </select></div>
                 <div class="col-md-2"><label class="form-label small mb-0">Expires</label>
-                  <input name="expires_after" class="form-control form-control-sm" value="{{durform .ExpiresAfter}}" placeholder="never"></div>
+                  <input aria-label="Expires" name="expires_after" class="form-control form-control-sm" value="{{durform .ExpiresAfter}}" placeholder="never"></div>
 
                 <div class="col-md-2"><label class="form-label small mb-0">Points</label>
-                  <input name="points" class="form-control form-control-sm" value="{{payoutamount .Payouts "points"}}"></div>
+                  <input aria-label="Points" name="points" class="form-control form-control-sm" value="{{payoutamount .Payouts "points"}}"></div>
                 <div class="col-md-2"><label class="form-label small mb-0">Medal</label>
-                  <input name="medal" class="form-control form-control-sm" value="{{payouttarget .Payouts "medal"}}"></div>
+                  <input aria-label="Medal" name="medal" class="form-control form-control-sm" value="{{payouttarget .Payouts "medal"}}"></div>
                 <div class="col-md-3"><label class="form-label small mb-0">Lootbox</label>
-                  <select name="lootbox" class="form-select form-select-sm">
+                  <select aria-label="Lootbox" name="lootbox" class="form-select form-select-sm">
                     {{$b := payouttarget .Payouts "lootbox"}}
                     <option value="">&mdash; none &mdash;</option>
                     {{range $.Boxes}}<option value="{{.}}" {{if eq . $b}}selected{{end}}>{{.}}</option>{{end}}
@@ -145,9 +145,9 @@
     <form method="post" action="/admin/p/rewards/reward-create" class="row g-2 align-items-end">
               <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
       <div class="col-md-2"><label class="form-label small mb-0">Slug</label>
-        <input name="slug" class="form-control form-control-sm" placeholder="test-login" required></div>
+        <input aria-label="Slug" name="slug" class="form-control form-control-sm" placeholder="test-login" required></div>
       <div class="col-md-2"><label class="form-label small mb-0">Kind</label>
-        <select name="kind" class="form-select form-select-sm">
+        <select aria-label="Kind" name="kind" class="form-select form-select-sm">
           <option value="recurring">recurring (once per window)</option>
           <option value="one_off">one_off (once ever)</option>
           <option value="per_unit">per_unit (the delta)</option>
@@ -159,7 +159,7 @@
            so "is there a schedule behind this?" is answerable here rather than
            on the other page. */}}
       <div class="col-md-3"><label class="form-label small mb-0">Scheduled event <span class="text-muted">(gates when it can be earned)</span></label>
-        <select name="scheduled_event_slug" class="form-select form-select-sm">
+        <select aria-label="Scheduled event (gates when it can be earned)" name="scheduled_event_slug" class="form-select form-select-sm">
           <option value="">&mdash; none (not gated by a window) &mdash;</option>
           {{range .ScheduledEvents}}
             <option value="{{.Slug}}">
@@ -174,33 +174,33 @@
            a stock host fires. A typo here is silent — the reward saves, no
            surface ever asks for that string, and nobody is offered it. */}}
       <div class="col-md-2"><label class="form-label small mb-0">Trigger <span class="text-muted">(surface that offers it)</span></label>
-        <input name="trigger" list="trigger-options" class="form-control form-control-sm"
+        <input aria-label="Trigger (surface that offers it)" name="trigger" list="trigger-options" class="form-control form-control-sm"
                placeholder="none — job-driven" autocomplete="off">
         <datalist id="trigger-options">
           {{range .Triggers}}<option value="{{.}}">{{end}}
         </datalist></div>
       <div class="col-md-2"><label class="form-label small mb-0">Delivery</label>
-        <select name="delivery" class="form-select form-select-sm">
+        <select aria-label="Delivery" name="delivery" class="form-select form-select-sm">
           <option value="auto">auto (credit immediately)</option>
           <option value="claim">claim (pending, member collects)</option>
         </select></div>
       <div class="col-md-1"><label class="form-label small mb-0">Points</label>
-        <input name="points" class="form-control form-control-sm" placeholder="1"></div>
+        <input aria-label="Points" name="points" class="form-control form-control-sm" placeholder="1"></div>
       {{/* The medal payout line. The create action has read this field since
            the payout kinds were declared; the form simply never offered it —
            a whole payout kind reachable only by hand-crafted POST. */}}
       <div class="col-md-1"><label class="form-label small mb-0">Medal</label>
-        <input name="medal" class="form-control form-control-sm" placeholder="slug"></div>
+        <input aria-label="Medal" name="medal" class="form-control form-control-sm" placeholder="slug"></div>
       {{/* A lootbox line, offered as a PICKER over the boxes that exist — a
            free-text slug here would be a fourth place to typo a name that
            only fails when a member opens the box. */}}
       <div class="col-md-2"><label class="form-label small mb-0">Lootbox</label>
-        <select name="lootbox" class="form-select form-select-sm">
+        <select aria-label="Lootbox" name="lootbox" class="form-select form-select-sm">
           <option value="">&mdash; none &mdash;</option>
           {{range .Boxes}}<option value="{{.}}">{{.}}</option>{{end}}
         </select></div>
       <div class="col-md-1"><label class="form-label small mb-0">Expires</label>
-        <input name="expires_after" class="form-control form-control-sm" placeholder="never"></div>
+        <input aria-label="Expires" name="expires_after" class="form-control form-control-sm" placeholder="never"></div>
       <div class="col-md-1"><button class="btn btn-sm btn-primary w-100">Create</button></div>
       <div class="col-12"><span class="text-muted small">
         Created <strong>disabled</strong> &mdash; check the payout line, then enable. A <code>medal</code> line needs a

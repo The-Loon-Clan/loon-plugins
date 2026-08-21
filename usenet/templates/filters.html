@@ -105,12 +105,12 @@
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <div class="col-md-6">
             <label class="form-label small mb-1">Pattern (Go regex)</label>
-            <input name="pattern" class="form-control form-control-sm" required
+            <input aria-label="Pattern (Go regex)" name="pattern" class="form-control form-control-sm" required
                    placeholder="(?i)^\[?spam-poster\]?">
         </div>
         <div class="col-md-3">
             <label class="form-label small mb-1">Match against</label>
-            <select name="field" class="form-select form-select-sm">
+            <select aria-label="Match against" name="field" class="form-select form-select-sm">
                 {{range .Fields}}<option value="{{.}}">{{.}}</option>{{end}}
             </select>
         </div>

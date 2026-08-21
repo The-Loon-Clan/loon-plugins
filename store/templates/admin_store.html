@@ -18,11 +18,11 @@
                         <div class="row g-3 mb-3">
                             <div class="col-sm-4">
                                 <label class="form-label" style="font-size:0.85rem;">Name <span class="text-danger">*</span></label>
-                                <input type="text" name="name" class="form-control form-control-sm" required maxlength="80" placeholder="e.g. VIP for 30 days">
+                                <input aria-label="Name" type="text" name="name" class="form-control form-control-sm" required maxlength="80" placeholder="e.g. VIP for 30 days">
                             </div>
                             <div class="col-sm-2">
                                 <label class="form-label" style="font-size:0.85rem;">Cost (pts) <span class="text-danger">*</span></label>
-                                <input type="number" name="points_cost" class="form-control form-control-sm" value="100" min="1">
+                                <input aria-label="Cost (pts)" type="number" name="points_cost" class="form-control form-control-sm" value="100" min="1">
                             </div>
                             <div class="col-sm-2">
                                 <label class="form-label" style="font-size:0.85rem;" for="new-reward-type">Reward</label>
@@ -57,22 +57,22 @@
                             </div>
                             <div class="col-sm-2">
                                 <label class="form-label" style="font-size:0.85rem;">Days</label>
-                                <input type="number" name="reward_days" class="form-control form-control-sm" value="30" min="0">
+                                <input aria-label="Days" type="number" name="reward_days" class="form-control form-control-sm" value="30" min="0">
                             </div>
                         </div>
                         <div class="row g-3 mb-3">
                             <div class="col-sm-6">
                                 <label class="form-label" style="font-size:0.85rem;">Description</label>
-                                <input type="text" name="description" class="form-control form-control-sm" maxlength="240" placeholder="Shown on the store card">
+                                <input aria-label="Description" type="text" name="description" class="form-control form-control-sm" maxlength="240" placeholder="Shown on the store card">
                             </div>
                             <div class="col-sm-2">
                                 <label class="form-label" style="font-size:0.85rem;">Stock</label>
-                                <input type="number" name="stock" class="form-control form-control-sm" placeholder="&#8734;">
+                                <input aria-label="Stock" type="number" name="stock" class="form-control form-control-sm" placeholder="&#8734;">
                                 <div style="font-size:0.68rem;color:var(--text-muted);">blank = unlimited</div>
                             </div>
                             <div class="col-sm-2">
                                 <label class="form-label" style="font-size:0.85rem;">Sort Order</label>
-                                <input type="number" name="sort_order" class="form-control form-control-sm" value="0" min="0">
+                                <input aria-label="Sort Order" type="number" name="sort_order" class="form-control form-control-sm" value="0" min="0">
                             </div>
                             <div class="col-sm-2 d-flex align-items-end">
                                 <div class="form-check">
@@ -131,11 +131,11 @@
                                     </div>
                                     <div>
                                         <label style="font-size:0.72rem;">Description</label>
-                                        <input type="text" name="description" class="form-control form-control-sm" value="{{.Description}}" style="width:200px;">
+                                        <input aria-label="Description" type="text" name="description" class="form-control form-control-sm" value="{{.Description}}" style="width:200px;">
                                     </div>
                                     <div>
                                         <label style="font-size:0.72rem;">Cost</label>
-                                        <input type="number" name="points_cost" class="form-control form-control-sm" value="{{.PointsCost}}" style="width:70px;">
+                                        <input aria-label="Cost" type="number" name="points_cost" class="form-control form-control-sm" value="{{.PointsCost}}" style="width:70px;">
                                     </div>
                                     <div>
                                         <label style="font-size:0.72rem;" for="rt-{{.ID}}">Reward</label>
@@ -145,7 +145,7 @@
                                     </div>
                                     <div>
                                         <label style="font-size:0.72rem;">Flavour</label>
-                                        <select name="flavour" class="form-select form-select-sm" style="width:90px;">
+                                        <select aria-label="Flavour" name="flavour" class="form-select form-select-sm" style="width:90px;">
                                             <option value="both" {{if eq .Flavour "both"}}selected{{end}}>Both</option>
                                             <option value="tracker" {{if eq .Flavour "tracker"}}selected{{end}}>Tracker</option>
                                             <option value="indexer" {{if eq .Flavour "indexer"}}selected{{end}}>Indexer</option>
@@ -153,19 +153,19 @@
                                     </div>
                                     <div>
                                         <label style="font-size:0.72rem;">Ref</label>
-                                        <input type="text" name="reward_ref" class="form-control form-control-sm" value="{{.RewardRef}}" style="width:70px;">
+                                        <input aria-label="Ref" type="text" name="reward_ref" class="form-control form-control-sm" value="{{.RewardRef}}" style="width:70px;">
                                     </div>
                                     <div>
                                         <label style="font-size:0.72rem;">Days</label>
-                                        <input type="number" name="reward_days" class="form-control form-control-sm" value="{{.RewardDays}}" style="width:60px;">
+                                        <input aria-label="Days" type="number" name="reward_days" class="form-control form-control-sm" value="{{.RewardDays}}" style="width:60px;">
                                     </div>
                                     <div>
                                         <label style="font-size:0.72rem;">Stock (-1=&#8734;)</label>
-                                        <input type="number" name="stock" class="form-control form-control-sm" value="{{.Stock}}" style="width:80px;">
+                                        <input aria-label="Stock (-1=&#8734;)" type="number" name="stock" class="form-control form-control-sm" value="{{.Stock}}" style="width:80px;">
                                     </div>
                                     <div>
                                         <label style="font-size:0.72rem;">Order</label>
-                                        <input type="number" name="sort_order" class="form-control form-control-sm" value="{{.SortOrder}}" style="width:60px;">
+                                        <input aria-label="Order" type="number" name="sort_order" class="form-control form-control-sm" value="{{.SortOrder}}" style="width:60px;">
                                     </div>
                                     <div class="form-check">
                                         <input type="checkbox" name="active" class="form-check-input" id="act-{{.ID}}" {{if .Active}}checked{{end}}>

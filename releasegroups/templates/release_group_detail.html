@@ -325,7 +325,7 @@
 
                             <div class="mb-3">
                                 <label class="form-label" style="font-size:0.8rem;">Verification URL</label>
-                                <input type="url" name="verification_url" class="form-control form-control-sm"
+                                <input aria-label="Verification URL" type="url" name="verification_url" class="form-control form-control-sm"
                                     value="{{.Group.WebsiteURL}}"
                                     placeholder="https://nekobt.to/yourhandle or your own site"
                                     required>
@@ -335,7 +335,7 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label" style="font-size:0.8rem;">Optional note <span class="text-muted">(visible to admins + voters)</span></label>
-                                <textarea name="claim_message" class="form-control form-control-sm" rows="2" maxlength="1000"
+                                <textarea aria-label="Optional note (visible to admins + voters)" name="claim_message" class="form-control form-control-sm" rows="2" maxlength="1000"
                                     placeholder="I run @ToonsHub. We'll put the snippet in our pinned bio."></textarea>
                             </div>
                         </div>
@@ -724,7 +724,7 @@
                     </div>
                     <div class="modal-body">
                         <div class="mb-2"><label class="form-label small">Name *</label><input class="form-control form-control-sm" name="name" id="edit-name" value="{{.Group.Name}}" required></div>
-                        <div class="mb-2"><label class="form-label small">Website URL</label><input class="form-control form-control-sm" name="website_url" type="url" value="{{.Group.WebsiteURL}}"></div>
+                        <div class="mb-2"><label class="form-label small">Website URL</label><input aria-label="Website URL" class="form-control form-control-sm" name="website_url" type="url" value="{{.Group.WebsiteURL}}"></div>
                         <div class="mb-2">
                             <label class="form-label small">Logo URL</label>
                             <div class="input-group input-group-sm">
@@ -733,10 +733,10 @@
                             </div>
                             <div id="edit-logo-status" class="form-text" style="font-size:0.72rem;"></div>
                         </div>
-                        <div class="mb-2"><label class="form-label small">Description</label><textarea class="form-control form-control-sm" name="description" rows="4">{{.Group.Description}}</textarea></div>
+                        <div class="mb-2"><label class="form-label small">Description</label><textarea aria-label="Logo URL Scrape Description" class="form-control form-control-sm" name="description" rows="4">{{.Group.Description}}</textarea></div>
                         <div class="mb-2">
                             <label class="form-label small">nekoBT group ID</label>
-                            <input class="form-control form-control-sm" name="nekobt_group_id" type="text" value="{{.Group.NekobtGroupID}}" placeholder="e.g. 11101956255038">
+                            <input aria-label="nekoBT group ID" class="form-control form-control-sm" name="nekobt_group_id" type="text" value="{{.Group.NekobtGroupID}}" placeholder="e.g. 11101956255038">
                             <div class="form-text" style="font-size:0.7rem;">
                                 Upstream snowflake from <code style="font-size:0.7rem;">https://nekobt.to/groups/&lt;id&gt;</code>. Takes priority for both archive scraping AND claim verification.
                             </div>
@@ -745,7 +745,7 @@
                             <legend class="form-label small" style="float:none;width:auto;padding:0 0.3rem;font-size:0.78rem;">Alternate archive source</legend>
                             <div class="mb-2">
                                 <label class="form-label small">Scrape source</label>
-                                <select class="form-select form-select-sm" name="scrape_source">
+                                <select aria-label="Scrape source" class="form-select form-select-sm" name="scrape_source">
                                     {{$cur := .Group.ScrapeSource}}
                                     <option value=""    {{if eq $cur ""}}selected{{end}}>— none (nekoBT only, if set above) —</option>
                                     <option value="nyaa" {{if eq $cur "nyaa"}}selected{{end}}>nyaa</option>
@@ -753,7 +753,7 @@
                             </div>
                             <div class="mb-1">
                                 <label class="form-label small">Scrape URL</label>
-                                <input class="form-control form-control-sm" name="scrape_url" type="url" value="{{.Group.ScrapeURL}}" placeholder="https://nyaa.si/user/subsplease">
+                                <input aria-label="Scrape URL" class="form-control form-control-sm" name="scrape_url" type="url" value="{{.Group.ScrapeURL}}" placeholder="https://nyaa.si/user/subsplease">
                                 <div class="form-text" style="font-size:0.7rem;">
                                     Used only when the nekoBT ID above is empty. For Nyaa, paste the user page URL.
                                 </div>

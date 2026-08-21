@@ -8,7 +8,7 @@
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-3">
                         <label class="form-label">To</label>
-                        <select name="target" class="form-select">
+                        <select aria-label="To" name="target" class="form-select">
                             <option value="all">Everyone</option>
                             <option value="admin">All Admins</option>
                             {{range .Users}}
@@ -18,11 +18,11 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Title</label>
-                        <input type="text" name="title" class="form-control" required>
+                        <input aria-label="Title" type="text" name="title" class="form-control" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Message</label>
-                        <textarea name="body" class="form-control" rows="4" required></textarea>
+                        <textarea aria-label="Message" name="body" class="form-control" rows="4" required></textarea>
                     </div>
                     <button type="submit" class="btn btn-primary">Send Message</button>
                 </form>

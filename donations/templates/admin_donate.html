@@ -60,40 +60,40 @@
                         <div class="row g-2">
                             <div class="col-md-4">
                                 <label class="form-label" style="font-size:0.78rem;">Label</label>
-                                <input type="text" name="label" class="form-control form-control-sm" required maxlength="200"
+                                <input aria-label="Label" type="text" name="label" class="form-control form-control-sm" required maxlength="200"
                                        value="{{if .Edit}}{{.Edit.Label}}{{end}}" placeholder="e.g. VPS, Eweka block">
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label" style="font-size:0.78rem;">Goal group</label>
-                                <input type="text" name="goal_group" class="form-control form-control-sm" maxlength="40"
+                                <input aria-label="Goal group" type="text" name="goal_group" class="form-control form-control-sm" maxlength="40"
                                        value="{{if .Edit}}{{.Edit.GoalGroup}}{{else}}site{{end}}" placeholder="site">
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label" style="font-size:0.78rem;">Period</label>
-                                <select name="period" class="form-select form-select-sm">
+                                <select aria-label="Period" name="period" class="form-select form-select-sm">
                                     <option value="monthly" {{if and .Edit (eq .Edit.Period "monthly")}}selected{{end}}>monthly</option>
                                     <option value="yearly"  {{if and .Edit (eq .Edit.Period "yearly")}}selected{{end}}>yearly</option>
                                 </select>
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label" style="font-size:0.78rem;">Amount USD</label>
-                                <input type="number" step="0.01" min="0" name="amount_usd" class="form-control form-control-sm" required
+                                <input aria-label="Amount USD" type="number" step="0.01" min="0" name="amount_usd" class="form-control form-control-sm" required
                                        value="{{if .Edit}}{{printf "%.2f" .Edit.AmountUSD}}{{end}}">
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label" style="font-size:0.78rem;">Category</label>
-                                <input type="text" name="category" class="form-control form-control-sm" maxlength="40"
+                                <input aria-label="Category" type="text" name="category" class="form-control form-control-sm" maxlength="40"
                                        value="{{if .Edit}}{{.Edit.Category}}{{else}}other{{end}}">
                             </div>
                         </div>
                         <div class="row g-2 mt-1">
                             <div class="col-md-8">
                                 <label class="form-label" style="font-size:0.78rem;">Notes</label>
-                                <input type="text" name="notes" class="form-control form-control-sm" maxlength="500" value="{{if .Edit}}{{.Edit.Notes}}{{end}}">
+                                <input aria-label="Notes" type="text" name="notes" class="form-control form-control-sm" maxlength="500" value="{{if .Edit}}{{.Edit.Notes}}{{end}}">
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label" style="font-size:0.78rem;">Sort order</label>
-                                <input type="number" name="sort_order" class="form-control form-control-sm" value="{{if .Edit}}{{.Edit.SortOrder}}{{else}}0{{end}}">
+                                <input aria-label="Sort order" type="number" name="sort_order" class="form-control form-control-sm" value="{{if .Edit}}{{.Edit.SortOrder}}{{else}}0{{end}}">
                             </div>
                             <div class="col-md-2 d-flex align-items-end">
                                 <div class="form-check">
@@ -174,18 +174,18 @@
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label" style="font-size:0.78rem;">Multiplier per $10</label>
-                                    <input type="number" step="0.01" min="1.0" max="3.0" name="multiplier_per_10" class="form-control form-control-sm"
+                                    <input aria-label="Multiplier per $10" type="number" step="0.01" min="1.0" max="3.0" name="multiplier_per_10" class="form-control form-control-sm"
                                            value="{{printf "%.2f" .Config.MultiplierPer10}}">
                                     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">1.0 = linear; 1.2 = mild bonus; capped at 3.0.</div>
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label" style="font-size:0.78rem;">Donator title threshold (USD lifetime)</label>
-                                    <input type="number" step="0.01" min="0" name="donator_threshold_usd" class="form-control form-control-sm"
+                                    <input aria-label="Donator title threshold (USD lifetime)" type="number" step="0.01" min="0" name="donator_threshold_usd" class="form-control form-control-sm"
                                            value="{{printf "%.2f" .Config.DonatorThresholdUSD}}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label" style="font-size:0.78rem;">Locking goal-groups (CSV)</label>
-                                    <input type="text" name="locking_groups" class="form-control form-control-sm"
+                                    <input aria-label="Locking goal-groups (CSV)" type="text" name="locking_groups" class="form-control form-control-sm"
                                            value="{{.LockingGroups}}" placeholder="site">
                                     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">
                                         Groups whose fully-funded state hides the donate addresses.
@@ -231,36 +231,36 @@
                         <div class="row g-2 mb-3">
                             <div class="col-md-4">
                                 <label class="form-label" style="font-size:0.78rem;">Bitcoin (BTC)</label>
-                                <input type="text" name="addr_btc" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "btc"}}" placeholder="bc1...">
+                                <input aria-label="Bitcoin (BTC)" type="text" name="addr_btc" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "btc"}}" placeholder="bc1...">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label" style="font-size:0.78rem;">Ethereum (ETH)</label>
-                                <input type="text" name="addr_eth" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "eth"}}" placeholder="0x...">
+                                <input aria-label="Ethereum (ETH)" type="text" name="addr_eth" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "eth"}}" placeholder="0x...">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label" style="font-size:0.78rem;">Monero (XMR)</label>
-                                <input type="text" name="addr_xmr" class="form-control form-control-sm" maxlength="200" value="{{index .Wallet "xmr"}}" placeholder="4...">
+                                <input aria-label="Monero (XMR)" type="text" name="addr_xmr" class="form-control form-control-sm" maxlength="200" value="{{index .Wallet "xmr"}}" placeholder="4...">
                             </div>
                         </div>
                         <h6 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-top:1rem;">BTCPay Server</h6>
                         <div class="row g-2">
                             <div class="col-md-6">
                                 <label class="form-label" style="font-size:0.78rem;">Server URL</label>
-                                <input type="text" name="btcpay_url" class="form-control form-control-sm" maxlength="200" value="{{index .Wallet "btcpay_url"}}" placeholder="https://btcpay.example.com">
+                                <input aria-label="Server URL" type="text" name="btcpay_url" class="form-control form-control-sm" maxlength="200" value="{{index .Wallet "btcpay_url"}}" placeholder="https://btcpay.example.com">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label" style="font-size:0.78rem;">Store ID</label>
-                                <input type="text" name="btcpay_store_id" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "btcpay_store_id"}}">
+                                <input aria-label="Store ID" type="text" name="btcpay_store_id" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "btcpay_store_id"}}">
                             </div>
                         </div>
                         <div class="row g-2 mt-1">
                             <div class="col-md-6">
                                 <label class="form-label" style="font-size:0.78rem;">API key</label>
-                                <input type="password" name="btcpay_api_key" class="form-control form-control-sm" maxlength="200" value="" autocomplete="off" placeholder="{{if index .Wallet "btcpay_api_key"}}configured — leave blank to keep{{else}}BTCPay API key{{end}}">
+                                <input aria-label="API key" type="password" name="btcpay_api_key" class="form-control form-control-sm" maxlength="200" value="" autocomplete="off" placeholder="{{if index .Wallet "btcpay_api_key"}}configured — leave blank to keep{{else}}BTCPay API key{{end}}">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label" style="font-size:0.78rem;">Webhook secret <span style="color:var(--text-muted);font-weight:400;">(HMAC-SHA256; empty = webhook off)</span></label>
-                                <input type="password" name="btcpay_webhook_secret" class="form-control form-control-sm" maxlength="200" value="" autocomplete="off" placeholder="{{if index .Wallet "btcpay_secret"}}configured — leave blank to keep{{else}}HMAC-SHA256 secret{{end}}">
+                                <input aria-label="Webhook secret (HMAC-SHA256; empty = webhook off)" type="password" name="btcpay_webhook_secret" class="form-control form-control-sm" maxlength="200" value="" autocomplete="off" placeholder="{{if index .Wallet "btcpay_secret"}}configured — leave blank to keep{{else}}HMAC-SHA256 secret{{end}}">
                             </div>
                         </div>
                         <button type="submit" class="btn btn-primary btn-sm mt-3">Save wallet &amp; BTCPay</button>
@@ -351,29 +351,29 @@
                                 <div class="row g-2 mb-2">
                                     <div class="col-md-7">
                                         <label class="form-label" style="font-size:0.78rem;">Label</label>
-                                        <input type="text" name="label" class="form-control form-control-sm" maxlength="80" required value="{{if .EditPkg}}{{.EditPkg.Label}}{{end}}" placeholder="Server Patron 2026">
+                                        <input aria-label="Label" type="text" name="label" class="form-control form-control-sm" maxlength="80" required value="{{if .EditPkg}}{{.EditPkg.Label}}{{end}}" placeholder="Server Patron 2026">
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label" style="font-size:0.78rem;">Amount USD</label>
-                                        <input type="number" step="0.01" min="0.01" name="amount_usd" class="form-control form-control-sm" required value="{{if .EditPkg}}{{printf "%.2f" .EditPkg.AmountUSD}}{{end}}" placeholder="250">
+                                        <input aria-label="Amount USD" type="number" step="0.01" min="0.01" name="amount_usd" class="form-control form-control-sm" required value="{{if .EditPkg}}{{printf "%.2f" .EditPkg.AmountUSD}}{{end}}" placeholder="250">
                                     </div>
                                     <div class="col-md-2">
                                         <label class="form-label" style="font-size:0.78rem;">Stock</label>
-                                        <input type="number" min="1" name="stock_total" class="form-control form-control-sm" required value="{{if .EditPkg}}{{.EditPkg.StockTotal}}{{end}}" placeholder="2">
+                                        <input aria-label="Stock" type="number" min="1" name="stock_total" class="form-control form-control-sm" required value="{{if .EditPkg}}{{.EditPkg.StockTotal}}{{end}}" placeholder="2">
                                     </div>
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label" style="font-size:0.78rem;">Description <span style="color:var(--text-muted);font-weight:400;">(short, public)</span></label>
-                                    <input type="text" name="description" class="form-control form-control-sm" maxlength="200" value="{{if .EditPkg}}{{.EditPkg.Description}}{{end}}" placeholder="Covers one year of VPS hosting.">
+                                    <input aria-label="Description (short, public)" type="text" name="description" class="form-control form-control-sm" maxlength="200" value="{{if .EditPkg}}{{.EditPkg.Description}}{{end}}" placeholder="Covers one year of VPS hosting.">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label" style="font-size:0.78rem;">Reward <span style="color:var(--text-muted);font-weight:400;">(what they get)</span></label>
-                                    <input type="text" name="reward" class="form-control form-control-sm" maxlength="200" value="{{if .EditPkg}}{{.EditPkg.Reward}}{{end}}" placeholder="Permanent 'Server Patron 2026' badge + Hall of Fame slot.">
+                                    <input aria-label="Reward (what they get)" type="text" name="reward" class="form-control form-control-sm" maxlength="200" value="{{if .EditPkg}}{{.EditPkg.Reward}}{{end}}" placeholder="Permanent 'Server Patron 2026' badge + Hall of Fame slot.">
                                 </div>
                                 <div class="row g-2 mb-3">
                                     <div class="col-md-3">
                                         <label class="form-label" style="font-size:0.78rem;">Sort order</label>
-                                        <input type="number" name="sort_order" class="form-control form-control-sm" value="{{if .EditPkg}}{{.EditPkg.SortOrder}}{{else}}0{{end}}">
+                                        <input aria-label="Sort order" type="number" name="sort_order" class="form-control form-control-sm" value="{{if .EditPkg}}{{.EditPkg.SortOrder}}{{else}}0{{end}}">
                                     </div>
                                     <div class="col-md-9 d-flex align-items-end">
                                         <div class="form-check">
@@ -449,11 +449,11 @@
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label" style="font-size:0.78rem;">Target USD</label>
-                                <input type="number" step="0.01" min="0" name="goal_{{$slot}}_target_usd" class="form-control form-control-sm" value="{{index $.TipJar (printf "goal_%d_target_usd" $slot)}}" placeholder="250">
+                                <input aria-label="Target USD" type="number" step="0.01" min="0" name="goal_{{$slot}}_target_usd" class="form-control form-control-sm" value="{{index $.TipJar (printf "goal_%d_target_usd" $slot)}}" placeholder="250">
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label" style="font-size:0.78rem;">Raised USD</label>
-                                <input type="number" step="0.01" min="0" name="goal_{{$slot}}_raised_usd" class="form-control form-control-sm" value="{{index $.TipJar (printf "goal_%d_raised_usd" $slot)}}" placeholder="0">
+                                <input aria-label="Raised USD" type="number" step="0.01" min="0" name="goal_{{$slot}}_raised_usd" class="form-control form-control-sm" value="{{index $.TipJar (printf "goal_%d_raised_usd" $slot)}}" placeholder="0">
                             </div>
                         </div>
                         {{end}}
@@ -476,7 +476,7 @@
                                 <div class="row g-2">
                                     <div class="col-6">
                                         <label class="form-label" style="font-size:0.78rem;">Asset</label>
-                                        <select name="asset" class="form-select form-select-sm">
+                                        <select aria-label="Asset" name="asset" class="form-select form-select-sm">
                                             <option value="fiat" selected>fiat</option>
                                             <option value="BTC">BTC</option>
                                             <option value="ETH">ETH</option>
@@ -485,24 +485,24 @@
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label" style="font-size:0.78rem;">Amount USD</label>
-                                        <input type="number" step="0.01" min="0" name="amount_usd" class="form-control form-control-sm" required>
+                                        <input aria-label="Amount USD" type="number" step="0.01" min="0" name="amount_usd" class="form-control form-control-sm" required>
                                     </div>
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label" style="font-size:0.78rem;">Native amount <span style="color:var(--text-muted);font-weight:400;">(optional, defaults to USD)</span></label>
-                                    <input type="number" step="0.00000001" min="0" name="amount_native" class="form-control form-control-sm">
+                                    <input aria-label="Native amount (optional, defaults to USD)" type="number" step="0.00000001" min="0" name="amount_native" class="form-control form-control-sm">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label" style="font-size:0.78rem;">Donor username <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
-                                    <input type="text" name="donor_username" class="form-control form-control-sm" placeholder="leave blank for anon">
+                                    <input aria-label="Donor username (optional)" type="text" name="donor_username" class="form-control form-control-sm" placeholder="leave blank for anon">
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label" style="font-size:0.78rem;">Display label</label>
-                                    <input type="text" name="donor_label" class="form-control form-control-sm" maxlength="80" placeholder="how the public sees them">
+                                    <input aria-label="Display label" type="text" name="donor_label" class="form-control form-control-sm" maxlength="80" placeholder="how the public sees them">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label" style="font-size:0.78rem;">Note (admin only)</label>
-                                    <textarea name="note" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
+                                    <textarea aria-label="Note (admin only)" name="note" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
                                 </div>
                                 <button type="submit" class="btn btn-primary btn-sm">Record donation</button>
                             </form>

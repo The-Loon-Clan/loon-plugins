@@ -92,18 +92,18 @@
         <div class="row g-2">
             <div class="col-md-5">
                 <label class="form-label small">Name</label>
-                <input type="text" name="name" class="form-control form-control-sm" required maxlength="120"
+                <input aria-label="Name" type="text" name="name" class="form-control form-control-sm" required maxlength="120"
                        value="{{if .Tracker}}{{.Tracker.Name}}{{end}}">
             </div>
             <div class="col-md-3">
                 <label class="form-label small">Short name (slug)</label>
-                <input type="text" name="short_name" class="form-control form-control-sm" required maxlength="40"
+                <input aria-label="Short name (slug)" type="text" name="short_name" class="form-control form-control-sm" required maxlength="40"
                        value="{{if .Tracker}}{{.Tracker.ShortName}}{{end}}"
                        pattern="[a-z0-9_-]+" placeholder="e.g. ab, ptp">
             </div>
             <div class="col-md-2">
                 <label class="form-label small">Visibility</label>
-                <select name="visibility" class="form-select form-select-sm">
+                <select aria-label="Visibility" name="visibility" class="form-select form-select-sm">
                     {{$cur := "private"}}{{if .Tracker}}{{$cur = .Tracker.Visibility}}{{end}}
                     <option value="private"  {{if eq $cur "private"}}selected{{end}}>private</option>
                     <option value="public"   {{if eq $cur "public"}}selected{{end}}>public</option>
@@ -112,7 +112,7 @@
             </div>
             <div class="col-md-2">
                 <label class="form-label small">Status</label>
-                <select name="status" class="form-select form-select-sm">
+                <select aria-label="Status" name="status" class="form-select form-select-sm">
                     {{$st := "unvetted"}}{{if .Tracker}}{{$st = .Tracker.Status}}{{end}}
                     <option value="unvetted" {{if eq $st "unvetted"}}selected{{end}}>unvetted</option>
                     <option value="active"   {{if eq $st "active"}}selected{{end}}>active</option>
@@ -121,14 +121,14 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label small">Scrape min seconds</label>
-                <input type="number" name="scrape_min_seconds" class="form-control form-control-sm"
+                <input aria-label="Scrape min seconds" type="number" name="scrape_min_seconds" class="form-control form-control-sm"
                        min="30" max="3600" step="30"
                        value="{{if .Tracker}}{{.Tracker.ScrapeMinSeconds}}{{else}}180{{end}}">
                 <div class="form-text" style="font-size:0.7rem;">Per-page delay floor for the indexer-agent scraper. 180s = one page every 3 min.</div>
             </div>
             <div class="col-12">
                 <label class="form-label small">Rules (markdown)</label>
-                <textarea name="rules_md" class="form-control form-control-sm" rows="4" maxlength="8000"
+                <textarea aria-label="Rules (markdown)" name="rules_md" class="form-control form-control-sm" rows="4" maxlength="8000"
                           placeholder="Posting rules, ratio requirements, banned content types…">{{if .Tracker}}{{.Tracker.RulesMarkdown}}{{end}}</textarea>
             </div>
             <div class="col-12 mt-2">

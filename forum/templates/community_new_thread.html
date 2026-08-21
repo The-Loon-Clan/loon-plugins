@@ -27,7 +27,7 @@
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-3">
                         <label class="form-label" style="font-size:0.85rem;">Category</label>
-                        <select name="category_id" class="form-select" required>
+                        <select aria-label="Category" name="category_id" class="form-select" required>
                             <option value="">Select a category…</option>
                             {{range .Categories}}
                             <option value="{{.ID}}" {{if eq .ID $.SelectedCategory}}selected{{end}}>{{.Name}}</option>
@@ -36,7 +36,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label" style="font-size:0.85rem;">Title</label>
-                        <input type="text" name="title" class="form-control" required maxlength="200" placeholder="Thread title">
+                        <input aria-label="Title" type="text" name="title" class="form-control" required maxlength="200" placeholder="Thread title">
                     </div>
                     {{/* Thread type selector. Discussion = default
                          forum behaviour (every reply visible to

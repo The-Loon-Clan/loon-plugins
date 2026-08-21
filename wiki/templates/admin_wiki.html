@@ -19,16 +19,16 @@
                         <div class="row g-3 mb-3">
                             <div class="col-sm-6">
                                 <label class="form-label" style="font-size:0.85rem;">Name <span class="text-danger">*</span></label>
-                                <input type="text" name="name" class="form-control" required maxlength="200">
+                                <input aria-label="Name" type="text" name="name" class="form-control" required maxlength="200">
                             </div>
                             <div class="col-sm-4">
                                 <label class="form-label" style="font-size:0.85rem;">Sort Order</label>
-                                <input type="number" name="sort_order" class="form-control" value="0">
+                                <input aria-label="Sort Order" type="number" name="sort_order" class="form-control" value="0">
                             </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label" style="font-size:0.85rem;">Description</label>
-                            <textarea name="description" class="form-control" rows="2" maxlength="500"></textarea>
+                            <textarea aria-label="Description" name="description" class="form-control" rows="2" maxlength="500"></textarea>
                         </div>
                         <button type="submit" class="btn btn-primary btn-sm">Create Group</button>
                     </form>
