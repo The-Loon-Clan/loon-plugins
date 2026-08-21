@@ -34,8 +34,8 @@
      are demo-only — the host theme never defines them, which rendered the
      flash as a colorless box. alert-success/-danger is the host's own flash
      convention and both sites load Bootstrap. */}}
-{{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
+{{if .Msg}}<div class="notice notice--success">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="notice notice--danger">{{.Err}}</div>{{end}}
 {{/* Native admin-page header: h4 title + muted one-liner + Back, then flat
      sections — the site's admin pages don't box every section in a card, so
      the tabs group and headings separate. */}}
@@ -47,7 +47,7 @@
         </div>
     </div>
     <div>
-        <a href="/admin" class="btn btn-sm btn-outline-secondary">Back</a>
+        <a href="/admin" class="button button--sm button--outlined">Back</a>
     </div>
 </div>
 
@@ -110,28 +110,28 @@
         <td>
           <input type="hidden" form="prov-{{.ID}}" name="id" value="{{.ID}}">
           <input type="hidden" form="prov-del-{{.ID}}" name="id" value="{{.ID}}">
-          <input aria-label="Label" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="name" value="{{.Name}}" placeholder="label">
+          <input aria-label="Label" class="form__input" form="prov-{{.ID}}" type="text" name="name" value="{{.Name}}" placeholder="label">
         </td>
-        <td><input aria-label="Host" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="host" value="{{.Host}}" style="min-width:11rem" required></td>
-        <td><input aria-label="Port" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="port" value="{{.Port}}"></td>
+        <td><input aria-label="Host" class="form__input" form="prov-{{.ID}}" type="text" name="host" value="{{.Host}}" style="min-width:11rem" required></td>
+        <td><input aria-label="Port" class="form__input" form="prov-{{.ID}}" type="text" name="port" value="{{.Port}}"></td>
         <td class="text-center"><input aria-label="TLS" form="prov-{{.ID}}" type="checkbox" name="tls" {{if .TLS}}checked{{end}}></td>
-        <td><input aria-label="Username" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="username" value="{{.Username}}"></td>
-        <td><input aria-label="Password" class="form-control form-control-sm" form="prov-{{.ID}}" type="password" name="password" value="" placeholder="unchanged"></td>
-        <td><select aria-label="Role" class="form-select form-select-sm" form="prov-{{.ID}}" name="role">
+        <td><input aria-label="Username" class="form__input" form="prov-{{.ID}}" type="text" name="username" value="{{.Username}}"></td>
+        <td><input aria-label="Password" class="form__input" form="prov-{{.ID}}" type="password" name="password" value="" placeholder="unchanged"></td>
+        <td><select aria-label="Role" class="form__select" form="prov-{{.ID}}" name="role">
               <option value="active" {{if ne .Role "backup"}}selected{{end}}>active</option>
               <option value="backup" {{if eq .Role "backup"}}selected{{end}}>backup</option>
             </select></td>
-        <td><input aria-label="Priority" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="priority" value="{{.Priority}}"></td>
-        <td><input aria-label="Conns" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="connections" value="{{.Connections}}"></td>
-        <td><input aria-label="Cap" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="account_cap" value="{{.AccountCap}}"></td>
-        <td><input aria-label="Backbone" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" style="min-width:7rem"></td>
+        <td><input aria-label="Priority" class="form__input" form="prov-{{.ID}}" type="text" name="priority" value="{{.Priority}}"></td>
+        <td><input aria-label="Conns" class="form__input" form="prov-{{.ID}}" type="text" name="connections" value="{{.Connections}}"></td>
+        <td><input aria-label="Cap" class="form__input" form="prov-{{.ID}}" type="text" name="account_cap" value="{{.AccountCap}}"></td>
+        <td><input aria-label="Backbone" class="form__input" form="prov-{{.ID}}" type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" style="min-width:7rem"></td>
         <td style="white-space:nowrap">
           <label class="me-1" title="unchecked providers keep their credentials but are not crawled"><input form="prov-{{.ID}}" type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> on</label>
-          <button class="btn btn-sm btn-primary py-0" form="prov-{{.ID}}" type="submit">Save</button>
-          <button class="btn btn-sm btn-outline-secondary py-0" form="prov-{{.ID}}" type="submit" formaction="/admin/p/usenet/provider-test">Test</button>
-          <button class="btn btn-sm btn-outline-secondary py-0" form="prov-{{.ID}}" type="submit" formaction="/admin/p/usenet/provider-probe"
+          <button class="button button--sm button--primary" form="prov-{{.ID}}" type="submit">Save</button>
+          <button class="button button--sm button--outlined" form="prov-{{.ID}}" type="submit" formaction="/admin/p/usenet/provider-test">Test</button>
+          <button class="button button--sm button--outlined" form="prov-{{.ID}}" type="submit" formaction="/admin/p/usenet/provider-probe"
                   title="compare this server's article numbering against your reference provider — same numbers means same backbone (share the label), different means keep its own">Detect backbone</button>
-          <button class="btn btn-sm btn-outline-danger py-0" form="prov-del-{{.ID}}" type="submit" title="remove — crawl history kept">&times;</button>
+          <button class="button button--sm button--outlined button--danger" form="prov-del-{{.ID}}" type="submit" title="remove — crawl history kept">&times;</button>
         </td>
       </tr>
       {{else}}
@@ -140,24 +140,24 @@
       <tr>
         <td>
           <input type="hidden" form="prov-new" name="id" value="0">
-          <input aria-label="Label" class="form-control form-control-sm" form="prov-new" type="text" name="name" placeholder="label (optional)">
+          <input aria-label="Label" class="form__input" form="prov-new" type="text" name="name" placeholder="label (optional)">
         </td>
-        <td><input aria-label="Host" class="form-control form-control-sm" form="prov-new" type="text" name="host" placeholder="news.example.com" style="min-width:11rem" required></td>
-        <td><input aria-label="Port" class="form-control form-control-sm" form="prov-new" type="text" name="port" value="119"></td>
+        <td><input aria-label="Host" class="form__input" form="prov-new" type="text" name="host" placeholder="news.example.com" style="min-width:11rem" required></td>
+        <td><input aria-label="Port" class="form__input" form="prov-new" type="text" name="port" value="119"></td>
         <td class="text-center"><input aria-label="TLS" form="prov-new" type="checkbox" name="tls"></td>
-        <td><input aria-label="Username" class="form-control form-control-sm" form="prov-new" type="text" name="username" placeholder="user"></td>
-        <td><input aria-label="Password" class="form-control form-control-sm" form="prov-new" type="password" name="password" placeholder="password"></td>
-        <td><select aria-label="Role" class="form-select form-select-sm" form="prov-new" name="role">
+        <td><input aria-label="Username" class="form__input" form="prov-new" type="text" name="username" placeholder="user"></td>
+        <td><input aria-label="Password" class="form__input" form="prov-new" type="password" name="password" placeholder="password"></td>
+        <td><select aria-label="Role" class="form__select" form="prov-new" name="role">
               <option value="active">active</option>
               <option value="backup">backup</option>
             </select></td>
-        <td><input aria-label="Priority" class="form-control form-control-sm" form="prov-new" type="text" name="priority" value="100"></td>
-        <td><input aria-label="Conns" class="form-control form-control-sm" form="prov-new" type="text" name="connections" value="0"></td>
-        <td><input aria-label="Cap" class="form-control form-control-sm" form="prov-new" type="text" name="account_cap" value="0"></td>
-        <td><input aria-label="Backbone" class="form-control form-control-sm" form="prov-new" type="text" name="backbone" placeholder="auto"></td>
+        <td><input aria-label="Priority" class="form__input" form="prov-new" type="text" name="priority" value="100"></td>
+        <td><input aria-label="Conns" class="form__input" form="prov-new" type="text" name="connections" value="0"></td>
+        <td><input aria-label="Cap" class="form__input" form="prov-new" type="text" name="account_cap" value="0"></td>
+        <td><input aria-label="Backbone" class="form__input" form="prov-new" type="text" name="backbone" placeholder="auto"></td>
         <td style="white-space:nowrap">
-          <button class="btn btn-sm btn-primary py-0" form="prov-new" type="submit">Add</button>
-          <button class="btn btn-sm btn-outline-secondary py-0" form="prov-new" type="submit" formaction="/admin/p/usenet/provider-test">Test</button>
+          <button class="button button--sm button--primary" form="prov-new" type="submit">Add</button>
+          <button class="button button--sm button--outlined" form="prov-new" type="submit" formaction="/admin/p/usenet/provider-test">Test</button>
         </td>
       </tr>
       </tbody>
@@ -192,7 +192,7 @@
                      ("keep forever", "no cap") — and a saved 0 reads as "use
                      the built-in default" for the rest (withOverrides only
                      applies values > 0). */}}
-                <input class="form-control" type="number" min="0" name="{{.Key}}" value="{{.Value}}">
+                <input class="form__input" type="number" min="0" name="{{.Key}}" value="{{.Value}}">
                 <div class="text-muted" style="font-size:.75rem;margin-top:.2rem">{{.Help}}</div>
             </div>
             {{end}}
@@ -246,7 +246,7 @@
             <input type="checkbox" name="rot18_repair_enabled" {{if .Rot18RepairEnabled}}checked{{end}}> Repair ROT18 titles (rewrites catalogue titles stored before the crawler could decode rotated subjects &mdash; only rows matching a literal marker, and never one already decoded. Spends no provider bytes; it walks the catalogue once)
         </label>
         <div style="margin-top:.5rem">
-            <button class="btn btn-primary" type="submit">Save settings</button>
+            <button class="button button--primary" type="submit">Save settings</button>
             <span class="text-muted small">applied on each job's next run (intervals take effect next cycle)</span>
         </div>
     </form>
@@ -279,12 +279,12 @@
         <form method="post" action="/admin/p/usenet/fetch-groups" style="display:inline"
               onsubmit="return confirm('Fetch the FULL group list from the provider?\n\nThis adds every newsgroup the provider carries — often 100,000+ — as disabled entries. Existing groups and their crawl state are untouched, and you can remove the additions afterwards, but the list will be very long.\n\nTo find one group you already have, use the search box instead.');">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-            <button class="btn btn-outline-primary btn-sm" type="submit"
+            <button class="button button--outlined button--sm" type="submit"
                     title="NNTP LIST against the primary provider — adds EVERY group it carries as disabled; existing groups untouched">Fetch full group list…</button>
         </form>
         <form method="get" action="/admin/p/usenet" style="display:flex;gap:.5rem;flex:1;min-width:220px">
-            <input class="form-control form-control-sm" type="search" name="gq" value="{{.GroupQuery}}" placeholder="search groups…" style="flex:1">
-            <button class="btn btn-outline-secondary btn-sm" type="submit">Search</button>
+            <input class="form__input" type="search" name="gq" value="{{.GroupQuery}}" placeholder="search groups…" style="flex:1">
+            <button class="button button--outlined button--sm" type="submit">Search</button>
         </form>
     </div>
     {{if .Groups}}
@@ -301,15 +301,15 @@
                     {{/* Explicit state badge — the toggle button alone read as
                          ambiguous ("active" a state or an action?). Badge =
                          state, button = the action that changes it. */}}
-                    <td>{{if .Active}}<span class="badge bg-success">enabled</span>{{else}}<span class="badge bg-secondary">disabled</span>{{end}}</td>
+                    <td>{{if .Active}}<span class="tag tag--success">enabled</span>{{else}}<span class="tag tag--sm">disabled</span>{{end}}</td>
                     <td class="text-end">{{.NZBs}}</td>
                     <form method="post" action="/admin/p/usenet/group-tune" id="tune-{{.Name}}" class="js-group-tune">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}"></form>
-                    <td><input aria-label="Depth (d)" class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="retention_days" value="{{if .RetentionDays}}{{.RetentionDays}}{{end}}"
+                    <td><input aria-label="Depth (d)" class="form__input" form="tune-{{.Name}}" type="text" name="retention_days" value="{{if .RetentionDays}}{{.RetentionDays}}{{end}}"
                                placeholder="site" title="blank = follow the site-wide crawl depth" style="width:4.5rem"></td>
-                    <td><input aria-label="Throttle (ms)" class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="throttle_ms" value="{{.ThrottleMs}}"
+                    <td><input aria-label="Throttle (ms)" class="form__input" form="tune-{{.Name}}" type="text" name="throttle_ms" value="{{.ThrottleMs}}"
                                title="pause after each batch for this group" style="width:4.5rem"></td>
-                    <td><select aria-label="Low pri" class="form-select form-select-sm" form="tune-{{.Name}}" name="tier"
+                    <td><select aria-label="Low pri" class="form__select" form="tune-{{.Name}}" name="tier"
                                 title="critical is crawled first every pass; low only with capacity left over"
                                 style="width:7rem">
                             {{$t := .Tier}}{{range $.Tiers}}<option value="{{.}}" {{if eq (printf "%s" .) $t}}selected{{end}}>{{.Label}}</option>{{end}}
@@ -318,12 +318,12 @@
                         <form method="post" action="/admin/p/usenet/group-move" style="display:inline">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="dir" value="up">
-                            <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="crawl earlier">&uarr;</button>
+                            <button class="button button--sm button--outlined" type="submit" title="crawl earlier">&uarr;</button>
                         </form>
                         <form method="post" action="/admin/p/usenet/group-move" style="display:inline">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="dir" value="down">
-                            <button class="btn btn-sm py-0 btn-outline-secondary" type="submit" title="crawl later">&darr;</button>
+                            <button class="button button--sm button--outlined" type="submit" title="crawl later">&darr;</button>
                         </form>
                         {{/* Type-to-confirm, not a yes/no: this queues a re-read of
                              everything the crawler has fetched for the group, which
@@ -335,7 +335,7 @@
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="confirm" value="">
-                            <button class="btn btn-sm py-0 btn-outline-danger" type="submit"
+                            <button class="button button--sm button--outlined button--danger" type="submit"
                                     title="re-read the {{.ResetArticles}} article(s) this crawler already fetched (after a parser fix)">&#8635;</button>
                         </form>
                         {{else}}
@@ -357,7 +357,7 @@
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="scope" value="history">
                             <input type="hidden" name="confirm" value="">
-                            <button class="btn btn-sm py-0 btn-outline-danger" type="submit"
+                            <button class="button button--sm button--outlined button--danger" type="submit"
                                     title="reopen the backfill over the {{.ResetHistoryArticles}} article(s) below the forward mark that are not recorded as fetched">&#8681;</button>
                         </form>
                         {{else}}
@@ -366,19 +366,19 @@
                     </td>
                     <td style="white-space:nowrap">
                         <input form="tune-{{.Name}}" type="hidden" name="name" value="{{.Name}}">
-                        <button form="tune-{{.Name}}" class="btn btn-sm py-0 btn-outline-primary" type="submit">Save</button>
+                        <button form="tune-{{.Name}}" class="button button--sm button--outlined" type="submit">Save</button>
                         <form method="post" action="/admin/p/usenet/group" style="display:inline" class="js-group-toggle">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="active" value="{{if .Active}}false{{else}}true{{end}}">
                             <input type="hidden" name="gq" value="{{$.GroupQuery}}">
-                            <button class="btn btn-sm py-0 {{if .Active}}btn-outline-warning{{else}}btn-success{{end}}" type="submit">{{if .Active}}disable{{else}}enable{{end}}</button>
+                            <button class="button button--sm {{if .Active}}button--outlined{{else}}button--primary{{end}}" type="submit">{{if .Active}}disable{{else}}enable{{end}}</button>
                         </form>
                         <form method="post" action="/admin/p/usenet/group-del" style="display:inline"
                               onsubmit="return confirm('Remove {{.Name}} from the catalogue? Its crawl history is kept.')">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}">
-                            <button class="btn btn-sm py-0 btn-outline-danger" type="submit">&times;</button>
+                            <button class="button button--sm button--outlined button--danger" type="submit">&times;</button>
                         </form>
                     </td>
                 </tr>
@@ -389,7 +389,7 @@
     <form method="post" action="/admin/p/usenet/groups-purge" class="mt-2"
           onsubmit="return confirm('Remove every inactive group? Crawl history is kept.')">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-        <button class="btn btn-sm btn-outline-danger" type="submit">Remove all inactive groups</button>
+        <button class="button button--sm button--outlined button--danger" type="submit">Remove all inactive groups</button>
         <span class="text-muted small ms-2">Clears the long tail left by a full group-list fetch.</span>
     </form>
     <p class="text-muted small mt-3">
@@ -477,12 +477,12 @@ document.addEventListener('submit', function (e) {
     var badge = row && row.querySelector('td .badge');
     if (badge) {
       badge.textContent = enabling ? 'enabled' : 'disabled';
-      badge.className = 'badge ' + (enabling ? 'bg-success' : 'bg-secondary');
+      badge.className = 'tag ' + (enabling ? 'tag--success' : 'tag--sm');
     }
     if (row) row.classList.toggle('text-muted', !enabling);
     activeInput.value = enabling ? 'false' : 'true';
     btn.textContent = enabling ? 'disable' : 'enable';
-    btn.className = 'btn btn-sm py-0 ' + (enabling ? 'btn-outline-warning' : 'btn-success');
+    btn.className = 'button button--sm ' + (enabling ? 'button--outlined' : 'button--primary');
     btn.disabled = false;
   }).catch(function () {
     form.submit(); // never leave the operator stuck — degrade to the old path
@@ -506,10 +506,10 @@ function tuneSave(form) {
       btn.disabled = false;
       var old = btn.textContent;
       btn.textContent = 'saved';
-      btn.classList.replace('btn-outline-primary', 'btn-success');
+      btn.classList.replace('button--outlined', 'button--primary');
       setTimeout(function () {
         btn.textContent = old;
-        btn.classList.replace('btn-success', 'btn-outline-primary');
+        btn.classList.replace('button--primary', 'button--outlined');
       }, 1200);
     }
   }).catch(function () {
