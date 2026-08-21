@@ -37,8 +37,11 @@
                  key rather than indexed straight, so a caller that never heard
                  of widgets renders plain cards instead of failing mid-page. */}}
             {{$w := false}}{{if $.Widgets}}{{$w = index $.Widgets $it.ID}}{{end}}
-            <div class="panelV2">
-                <div class="panel__body d-flex flex-column">
+            {{/* h-100 on both: .panelV2 is height:fit-content, so without it
+                 the cards in a row stop matching and mt-auto on the form has
+                 no full-height column to push the button to the bottom of. */}}
+            <div class="panelV2 h-100">
+                <div class="panel__body h-100 d-flex flex-column">
                         <div class="d-flex justify-content-between align-items-start mb-1">
                             {{/* The icon comes from the item's reward type, not
                                  from a column — see Item.Icon. aria-hidden
