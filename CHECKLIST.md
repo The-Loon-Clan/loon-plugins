@@ -258,13 +258,33 @@ plugin building on this one subscribe to, and is it declared?"
       forever and the scheduler never re-triggers it — the promotion sweep
       shipped this exact bug and every manual trigger returned 200 and did
       nothing.
-- [ ] **MUST** — the interval constant and the `SetIdle` horizon are one
-      declaration, so `/admin/jobs`'s "next run" cannot drift from reality.
+- [ ] **SHOULD** — the interval constant and the `SetIdle` horizon are one
+      declaration.
+
+      Downgraded from MUST after checking what it buys: `ServiceLoop` calls
+      `AnnounceNextRun` after every tick with the interval it is *actually*
+      about to sleep, deliberately overriding whatever the tick function set —
+      "the displayed time was a guess by the one component that does not decide
+      it". So a drifting horizon, and even `SetIdle(time.Time{})`, is corrected
+      before an operator sees it. Worth keeping tidy; not worth a MUST.
 - [ ] **MUST** — sweeps read the whole population in ONE call, and treat
       ABSENCE from the result as "no data, leave alone", never as zero. A
       half-returned query must not demote half the membership.
-- [ ] **MUST** — the manual trigger works while the loop is idle, and pause
-      is respected on both paths.
+- [ ] **MUST** — the manual trigger works while the loop is idle. **Pause is
+      respected on both paths, and a plugin no longer has to do anything for
+      that** — `schedule.TriggerJob` gates on it, beside the already-running
+      and write gates.
+
+      It did not, until 20 Aug 2026, and this line said it did. `ServiceLoop`
+      checked `IsPaused` ahead of every scheduled tick; the manual path does
+      not go through the loop and was covered by nothing, so **33 triggers
+      across 18 plugins ran regardless of pause**. Each was expected to ask for
+      itself. Writing the rule down is not the same as enforcing it, and the
+      enforcement belongs where one gate covers everyone — the same argument
+      the loop's own comment makes.
+
+      A per-plugin `IsPaused` check is now redundant. Harmless, and several
+      plugins have one; do not add more.
 - [ ] **MUST** — a DAEMON job — a held connection (irc, discord), not a sweep
       — is the exception to the SetIdle rule: "running" IS its honest steady
       state, with `SetError` on disconnect. Grading the first sweep of this
