@@ -1,6 +1,26 @@
 {{/* Medals — /p/medals: the catalogue and your cabinet in one view. */}}
-{{if .Msg}}<div class="notice notice--success"><span>{{.Msg}}</span></div>{{end}}
-{{if .Err}}<div class="notice notice--warning"><span>{{.Err}}</span></div>{{end}}
+{{/* The sentences live HERE, not in Go.
+
+     A handler redirects with a CODE — ?err=toopoor — and this maps it to
+     words. CHECKLIST §10: a user-visible string belongs in a template, and no
+     sentence is assembled from concatenated fragments, because word order
+     differs by language and `"The " + name + " medal is yours"` cannot be
+     translated without being rewritten first. Where a name is needed it
+     travels as its own parameter and the template interpolates it.
+
+     Same shape as applications/templates/applications_apply.html. */}}
+{{if .Msg}}<div class="notice notice--success"><span>
+    {{if eq .Msg "bought"}}The {{.MsgName}} medal is yours &mdash; it is on your profile now.
+    {{else if eq .Msg "saved"}}Saved &mdash; your profile shows what you chose.
+    {{else}}Done.{{end}}
+</span></div>{{end}}
+{{if .Err}}<div class="notice notice--warning"><span>
+    {{if eq .Err "notforsale"}}That medal is not for sale.
+    {{else if eq .Err "alreadyheld"}}You already hold that medal.
+    {{else if eq .Err "toopoor"}}You do not have that many points.
+    {{else if eq .Err "savefailed"}}That did not save. Please try again.
+    {{else}}Something went wrong &mdash; try again shortly.{{end}}
+</span></div>{{end}}
 
 <p class="text-muted">
     Medals you hold can be worn on your profile &mdash; tick the ones to show and

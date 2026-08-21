@@ -78,9 +78,13 @@ func (p *Plugin) renderMedals(gc *gin.Context) (template.HTML, error) {
 	}
 	var buf bytes.Buffer
 	if err := p.tmpl.ExecuteTemplate(&buf, "medals.html", map[string]any{
-		"Medals":    vms,
-		"Msg":       gc.Query("msg"),
-		"Err":       gc.Query("err"),
+		"Medals": vms,
+		"Msg":    gc.Query("msg"),
+		"Err":    gc.Query("err"),
+		// The name a message interpolates, carried separately so the SENTENCE
+		// stays in the template. See the note at the top of the template on
+		// why a concatenated sentence cannot be translated.
+		"MsgName":   gc.Query("name"),
 		"CSRFToken": p.csrfToken(gc),
 	}); err != nil {
 		return "", err
@@ -98,20 +102,20 @@ func (p *Plugin) actionBuy(gc *gin.Context) (template.HTML, error) {
 	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
 	m, err := p.st.Get(ctx, id)
 	if err != nil || !m.Enabled || m.Price <= 0 {
-		gc.Redirect(http.StatusSeeOther, "/p/medals?err="+url.QueryEscape("that medal is not for sale"))
+		gc.Redirect(http.StatusSeeOther, "/p/medals?err="+"notforsale")
 		return "", nil
 	}
 	owned, err := p.st.Owned(ctx, u.ID)
 	if err == nil {
 		if _, has := owned[m.ID]; has {
-			gc.Redirect(http.StatusSeeOther, "/p/medals?err="+url.QueryEscape("you already hold that medal"))
+			gc.Redirect(http.StatusSeeOther, "/p/medals?err="+"alreadyheld")
 			return "", nil
 		}
 	}
 	// Deduct, then grant; a failed grant refunds — the store's unwind.
 	if _, err := p.core.Points.Deduct(ctx, u.ID, int(m.Price), "spend_medal",
 		fmt.Sprintf("Bought the %q medal", m.Name), m.ID); err != nil {
-		gc.Redirect(http.StatusSeeOther, "/p/medals?err="+url.QueryEscape("you do not have that many points"))
+		gc.Redirect(http.StatusSeeOther, "/p/medals?err="+"toopoor")
 		return "", nil
 	}
 	if err := p.st.Grant(ctx, u.ID, m.ID); err != nil {
@@ -119,10 +123,10 @@ func (p *Plugin) actionBuy(gc *gin.Context) (template.HTML, error) {
 			"Medal purchase failed — refunded", m.ID); rerr != nil {
 			return "", rerr
 		}
-		gc.Redirect(http.StatusSeeOther, "/p/medals?err="+url.QueryEscape("something went wrong — try again shortly"))
+		gc.Redirect(http.StatusSeeOther, "/p/medals?err="+"failed")
 		return "", nil
 	}
-	gc.Redirect(http.StatusSeeOther, "/p/medals?msg="+url.QueryEscape("The "+m.Name+" medal is yours — it is on your profile now"))
+	gc.Redirect(http.StatusSeeOther, "/p/medals?msg="+"bought&name="+url.QueryEscape(m.Name))
 	return "", nil
 }
 
@@ -141,13 +145,13 @@ func (p *Plugin) actionWear(gc *gin.Context) (template.HTML, error) {
 			for id := range owned {
 				shown := gc.Request.PostForm.Get("wear/"+strconv.FormatInt(id, 10)) != ""
 				if err := p.st.SetShown(ctx, u.ID, id, shown); err != nil {
-					gc.Redirect(http.StatusSeeOther, "/p/medals?err="+url.QueryEscape("save failed"))
+					gc.Redirect(http.StatusSeeOther, "/p/medals?err="+"savefailed")
 					return "", nil
 				}
 			}
 		}
 	}
-	gc.Redirect(http.StatusSeeOther, "/p/medals?msg="+url.QueryEscape("Saved — your profile shows what you chose"))
+	gc.Redirect(http.StatusSeeOther, "/p/medals?msg="+"saved")
 	return "", nil
 }
 
@@ -170,6 +174,10 @@ func (p *Plugin) renderAdmin(gc *gin.Context) (template.HTML, error) {
 		"Icons":     p.iconChoices(),
 		"Msg":       gc.Query("msg"),
 		"Err":       gc.Query("err"),
+		// The name a message interpolates, carried separately so the SENTENCE
+		// stays in the template. See the note at the top of the template on
+		// why a concatenated sentence cannot be translated.
+		"MsgName":   gc.Query("name"),
 		"CSRFToken": p.csrfToken(gc),
 	}); err != nil {
 		return "", err
@@ -187,7 +195,7 @@ func (p *Plugin) actionCreate(gc *gin.Context) (template.HTML, error) {
 		Enabled:         true,
 	}
 	if !slugPattern.MatchString(m.Slug) {
-		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+url.QueryEscape("slugs are lowercase with dashes"))
+		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+"badslug")
 		return "", nil
 	}
 	if m.Name == "" {
@@ -203,10 +211,10 @@ func (p *Plugin) actionCreate(gc *gin.Context) (template.HTML, error) {
 		m.Ordinal = n
 	}
 	if err := p.st.Create(gc.Request.Context(), m); err != nil {
-		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+url.QueryEscape("create failed — is the slug taken?"))
+		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+"createfailed")
 		return "", nil
 	}
-	gc.Redirect(http.StatusSeeOther, "/admin/p/medals?msg="+url.QueryEscape("Created "+m.Slug))
+	gc.Redirect(http.StatusSeeOther, "/admin/p/medals?msg="+"created&name="+url.QueryEscape(m.Slug))
 	return "", nil
 }
 
@@ -216,12 +224,12 @@ func (p *Plugin) actionCreate(gc *gin.Context) (template.HTML, error) {
 func (p *Plugin) actionUpdate(gc *gin.Context) (template.HTML, error) {
 	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
 	if id <= 0 {
-		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+url.QueryEscape("no such medal"))
+		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+"nosuch")
 		return "", nil
 	}
 	cur, err := p.st.Get(gc.Request.Context(), id)
 	if err != nil {
-		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+url.QueryEscape("no such medal"))
+		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+"nosuch")
 		return "", nil
 	}
 	// Read over the CURRENT row rather than building a fresh one: the edit
@@ -249,10 +257,10 @@ func (p *Plugin) actionUpdate(gc *gin.Context) (template.HTML, error) {
 		cur.Ordinal = n
 	}
 	if err := p.st.Update(gc.Request.Context(), cur); err != nil {
-		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+url.QueryEscape("save failed"))
+		gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+"savefailed")
 		return "", nil
 	}
-	gc.Redirect(http.StatusSeeOther, "/admin/p/medals?msg="+url.QueryEscape("Saved "+cur.Slug))
+	gc.Redirect(http.StatusSeeOther, "/admin/p/medals?msg="+"savedone&name="+url.QueryEscape(cur.Slug))
 	return "", nil
 }
 

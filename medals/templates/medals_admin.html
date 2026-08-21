@@ -1,6 +1,26 @@
 {{/* Admin → Medals: the catalogue. */}}
-{{if .Msg}}<div class="notice notice--success"><span>{{.Msg}}</span></div>{{end}}
-{{if .Err}}<div class="notice notice--warning"><span>{{.Err}}</span></div>{{end}}
+{{/* The sentences live HERE, not in Go.
+
+     A handler redirects with a CODE — ?err=toopoor — and this maps it to
+     words. CHECKLIST §10: a user-visible string belongs in a template, and no
+     sentence is assembled from concatenated fragments, because word order
+     differs by language and `"The " + name + " medal is yours"` cannot be
+     translated without being rewritten first. Where a name is needed it
+     travels as its own parameter and the template interpolates it.
+
+     Same shape as applications/templates/applications_apply.html. */}}
+{{if .Msg}}<div class="notice notice--success"><span>
+    {{if eq .Msg "created"}}Created {{.MsgName}}.
+    {{else if eq .Msg "savedone"}}Saved {{.MsgName}}.
+    {{else}}Done.{{end}}
+</span></div>{{end}}
+{{if .Err}}<div class="notice notice--warning"><span>
+    {{if eq .Err "badslug"}}Slugs are lowercase with dashes.
+    {{else if eq .Err "createfailed"}}That did not create &mdash; is the slug taken?
+    {{else if eq .Err "nosuch"}}No such medal.
+    {{else if eq .Err "savefailed"}}That did not save. Please try again.
+    {{else}}Something went wrong &mdash; try again shortly.{{end}}
+</span></div>{{end}}
 
 <div class="data-table-wrapper">
     <table class="data-table">
