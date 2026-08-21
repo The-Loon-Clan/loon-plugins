@@ -74,13 +74,20 @@ that wires `usenet`, `scraper`, `catalog`, `backups`, `stats`, `dailyreward`, an
 
 ## Development
 
-```
-go build ./...
-go vet ./...
-go test ./...
+```sh
+make help      # the targets
+make check     # what CI runs: vet, sqllint, sentinels, test
+make itest     # the tests that need a real Postgres, against a disposable one
 ```
 
-loon is resolved as `../loon`; keep it checked out beside this repo.
+The toolchain runs in a container (`scripts/go.sh` says why), and that script
+mounts the PARENT directory: `go.mod` carries `replace
+github.com/the-loon-clan/loon => ../loon`, so keep loon checked out beside this
+repo or the module graph will not resolve.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers what each check exists for and where
+member-facing words belong. [SECURITY.md](SECURITY.md) covers reporting, and
+what the shared guards do and do not promise.
 
 ## License
 
