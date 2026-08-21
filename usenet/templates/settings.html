@@ -196,12 +196,15 @@
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem">
             {{range .Knobs}}
             <div>
-                <label title="{{.Help}}">{{.Label}}</label>
+                {{/* for/id keyed on .Key, which is unique per knob — so clicking
+                     the label focuses its field, and the visible words ARE the
+                     accessible name rather than a second copy that can drift. */}}
+                <label title="{{.Help}}" for="knob-{{.Key}}">{{.Label}}</label>
                 {{/* min=0, not 1: several knobs use 0 as a meaningful value
                      ("keep forever", "no cap") — and a saved 0 reads as "use
                      the built-in default" for the rest (withOverrides only
                      applies values > 0). */}}
-                <input class="form__input" type="number" min="0" name="{{.Key}}" value="{{.Value}}">
+                <input class="form__input" type="number" min="0" id="knob-{{.Key}}" name="{{.Key}}" value="{{.Value}}">
                 <div class="text-muted" style="font-size:.75rem;margin-top:.2rem">{{.Help}}</div>
             </div>
             {{end}}
