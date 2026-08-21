@@ -206,6 +206,7 @@
              group showed the headroom as backlog — every row reading the same
              "+6,000 new" forever. See renderCrawlers. */}}
         <table class="data-table">
+            <caption class="visually-hidden">Crawl coverage per newsgroup</caption>
             <thead><tr>
                 <th>Group</th><th style="min-width:240px">Coverage</th>
                 {{/* Per-group release counts. The plugin's own table answers in
@@ -286,6 +287,7 @@
     {{if .RecentNzbs}}
     <div class="data-table-wrapper" style="max-height:22rem;overflow-y:auto">
         <table class="data-table">
+            <caption class="visually-hidden">Releases built most recently</caption>
             <thead><tr><th>Release</th><th>Group</th><th class="text-end">Size</th><th>Built</th></tr></thead>
             <tbody>
             {{range .RecentNzbs}}
@@ -308,6 +310,7 @@
   <div class="panel__header">Crawler hosts</div>
   <div class="panel__body">
     <table class="data-table" style="font-size:.88rem;margin:0">
+            <caption class="visually-hidden">Crawler workers and the groups each holds</caption>
       <thead><tr><th>Worker</th><th>Groups held</th></tr></thead>
       <tbody>
       {{range .Workers}}

@@ -69,6 +69,7 @@
       at ten million, and the error log only ever sees the bad half.
     </p>
     <table class="data-table mb-0" style="font-size:.85rem">
+            <caption class="visually-hidden">Spot operations, and why each failed</caption>
       <thead><tr><th>operation</th><th>attempts</th><th>success</th><th>failures by reason</th></tr></thead>
       <tbody>
         {{range .OpStats}}
@@ -124,6 +125,7 @@
     </div>
 
     <table class="data-table mb-0" style="font-size:.85rem">
+            <caption class="visually-hidden">History read per newsgroup</caption>
       <thead><tr><th>group</th><th>history read</th><th>remaining</th><th></th></tr></thead>
       <tbody>
         {{range .Groups}}

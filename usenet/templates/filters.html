@@ -23,6 +23,7 @@
         {{if .JunkRules}}
         <div class="data-table-wrapper">
             <table class="data-table">
+            <caption class="visually-hidden">Filter rules by how often each fired</caption>
                 <thead><tr>
                     <th style="width:3rem">#</th><th>Rule</th>
                     <th class="text-end">Hits</th><th class="text-end">Share</th>
@@ -122,6 +123,7 @@
     {{if .Rules}}
     <div class="data-table-wrapper">
         <table class="data-table">
+            <caption class="visually-hidden">Blacklist patterns an operator added</caption>
             <thead><tr>
                 <th>Pattern</th><th>Field</th><th>Enabled</th><th></th>
             </tr></thead>
@@ -176,6 +178,7 @@
     {{if .Hits}}
     <div class="data-table-wrapper">
         <table class="data-table">
+            <caption class="visually-hidden">What each junk rule dropped</caption>
             <thead><tr>
                 <th>Kind</th><th>Rule</th>
                 <th class="text-end">Dropped</th><th class="text-end">Share</th>
@@ -244,6 +247,7 @@
         </div>
         <div class="data-table-wrapper">
             <table class="data-table mb-2">
+            <caption class="visually-hidden">Junk stems seen, and when each was last sampled</caption>
                 <thead><tr>
                     <th>Kind</th><th>Stem</th><th class="text-end">Seen</th><th>Last sample</th><th>Last seen</th>
                 </tr></thead>
@@ -291,6 +295,7 @@
     </p>
     <div class="data-table-wrapper">
         <table class="data-table">
+            <caption class="visually-hidden">What each rule tagged, and when it last did</caption>
             <thead><tr>
                 <th>Rule</th>
                 <th class="text-end">Tagged</th><th class="text-end">Share</th>
@@ -342,6 +347,7 @@
     {{if .Drops.Rows}}
     <div class="data-table-wrapper">
       <table class="data-table mb-0">
+            <caption class="visually-hidden">Dropped subjects, and the rule that dropped each</caption>
         <thead><tr>
           <th>Subject (dropped)</th><th>Rule</th><th>Body says</th><th>Verdict</th><th>Seen</th>
         </tr></thead>
@@ -411,6 +417,7 @@
     {{if .PosterHits}}
     <div class="data-table-wrapper">
       <table class="data-table mb-1">
+            <caption class="visually-hidden">Poster outcomes by crawl stage</caption>
         <thead><tr>
           <th>Poster</th><th>Stage</th><th>Outcome</th>
           <th class="text-end">Count</th><th>Last sample</th><th>Last seen</th>

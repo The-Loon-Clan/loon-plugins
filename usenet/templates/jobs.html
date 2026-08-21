@@ -104,6 +104,7 @@
     </p>
     <div class="data-table-wrapper">
       <table class="data-table">
+            <caption class="visually-hidden">Recent crawl passes</caption>
         <thead><tr>
           <th>At</th>
           <th class="text-end">Ready</th><th class="text-end">Drew</th>
@@ -138,6 +139,7 @@
         <p class="text-muted small mb-2">Largest incomplete releases (still missing articles — later passes complete them; stale ones are evicted):</p>
         <div class="data-table-wrapper">
           <table class="data-table">
+            <caption class="visually-hidden">Releases still missing articles</caption>
             <thead><tr><th>Release</th><th>Group</th><th class="text-end">Articles have / need</th><th class="text-end">Missing</th><th class="text-end">Files</th><th class="text-end">Article span</th></tr></thead>
             <tbody>
             {{range $.Pending}}
