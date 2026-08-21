@@ -51,7 +51,7 @@ quietest failure this architecture has.
 | `…Name` | **one** provider answers | `CatalogName = "catalog.taxonomy"` |
 | `…Prefix` | **many** contribute and all are collected | `MetricSourcePrefix = "metrics.source."` |
 
-There are **62** declared contracts as of 20 Aug 2026 — recount rather than
+There are **63** declared contracts as of 20 Aug 2026 — recount rather than
 trusting that, exactly as SEAMS.md says, because it drifted from 41 to 52
 without anyone noticing:
 

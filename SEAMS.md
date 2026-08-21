@@ -17,7 +17,7 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **58** of them, counted from the `…Name` and
+importing the other. There are **63** of them, counted from the `…Name` and
 `…Prefix` constants in `pluginapi` on 20 Aug 2026. They are discoverable: an
 author reading `pluginapi` sees what exists, the compiler catches interface
 skew, and `/admin/contracts` can report an unwired one.
@@ -81,6 +81,7 @@ consumer); the rest are single values.
 | Key | Contract | For |
 |---|---|---|
 | `csrf.token` | `CSRFTokenFunc` | The host's per-request token. **Every POST form needs it** — see CHECKLIST §3. |
+| `admin.nav.` | `AdminNavSource` | **Prefix.** A link to a plugin's own admin routes. For a surface that is a route GROUP and so cannot be a single `SlotAdminPage` view — without it the pages are served and in no nav, findable only by URL. See CHECKLIST §7. |
 | `invites.granter` | `InviteGranter` | Credit invites to a member. |
 | `ranks.granter` | `RankGranter` | Grant a rank for a duration. |
 | `ranks.stats` | `RankStats` | Every member's traffic figures, in one call. The one definition of "who is poor". |

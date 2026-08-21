@@ -309,6 +309,23 @@ and read each page; the message must name the state.
 - [ ] **MUST** — one oversight page as a `SlotAdminPage` view: slug, Title,
       Description, `MinRole`, `NavHint` group. It appears in the hub because
       the hub ranges over registered views — never a hand-added link.
+- [ ] **MUST** — an admin surface that is a route GROUP rather than one page
+      calls `pluginapi.RegisterAdminNav`, beside the routes it describes.
+
+      `SlotAdminPage` mounts one GET plus POST actions. A plugin with editors
+      or sub-pages — wiki's topics and posts, donations' costs/log/points,
+      news' edit page — cannot be that view, and contorting it into one to
+      satisfy the menu is the wrong trade. Contribute the LINK instead.
+
+      Not cosmetic. On 20 Aug 2026 seventeen admin routes were served and in
+      no nav, and an unlinked page is not merely hard to find — it is outside
+      every check that walks the site. `/admin/donate` had been truncating
+      mid-render for as long as it existed (`index` on a `*int`, a 200 that
+      stops halfway) and nothing caught it, because the link crawler had no
+      way to reach it.
+
+      Verify: `make adminnav` from the host, which fails on any admin route
+      that no nav entry reaches.
 - [ ] **MUST** — `Metadata.Description` reads as the plugin's one-line README:
       it is what `/admin/plugins` shows an operator deciding what this thing
       is.
