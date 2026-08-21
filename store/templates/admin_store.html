@@ -1,15 +1,20 @@
 {{define "admin_store.html"}}
     <div class="container mt-4 page">
 
+        {{/* <details>, not data-bs-toggle="collapse" (CHECKLIST §8: "prefer
+             <details> and CSS over scripts"). This host ships neither Bootstrap's
+             JS nor its CSS — bootstrap.min.css here is a 790-byte reset that says
+             so itself — so .collapse styled nothing and the toggle did nothing:
+             the create form was permanently open and "+ New Item" was inert. */}}
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2 class="h5 mb-0" style="font-weight:600;">Store Catalog</h2>
-            <button class="button button--primary button--sm" data-bs-toggle="collapse" data-bs-target="#create-item-form">+ New Item</button>
         </div>
 
         {{if .Error}}<div class="notice notice--danger py-1 mb-3" style="font-size:0.82rem;">{{.Error}}</div>{{end}}
         {{if .Ok}}<div class="notice notice--success py-1 mb-3" style="font-size:0.82rem;">Item saved.</div>{{end}}
 
-        <div class="collapse mb-4" id="create-item-form">
+        <details class="mb-4" id="create-item-form">
+            <summary class="button button--primary button--sm" style="display:inline-block;margin-bottom:.6rem;">+ New Item</summary>
             <div class="panelV2">
                 <div class="panel__header" style="font-size:0.85rem;">Create Item</div>
                 <div class="panel__body">
@@ -85,7 +90,7 @@
                     </form>
                 </div>
             </div>
-        </div>
+        </details>
 
         <div class="panelV2">
             <div class="panel__body p-0">
@@ -113,8 +118,9 @@
                             <td class="text-center">{{if .Active}}<span class="tag tag--success">yes</span>{{else}}<span class="tag tag--sm">no</span>{{end}}</td>
                             <td class="text-center" style="color:var(--text-muted);">{{.SortOrder}}</td>
                             <td class="text-end">
-                                <button class="button button--sm button--outlined px-1" style="font-size:0.7rem;"
-                                        data-bs-toggle="collapse" data-bs-target="#edit-{{.ID}}">Edit</button>
+                                {{/* The Edit control is the <summary> in the row below —
+                                     a data-bs-toggle button here did nothing, because
+                                     this host ships no Bootstrap JS. */}}
                                 <form method="POST" action="/admin/store/{{.ID}}/delete" class="d-inline"
                                       onsubmit="return confirm('Delete {{.Name}}?')">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
@@ -122,8 +128,13 @@
                                 </form>
                             </td>
                         </tr>
-                        <tr class="collapse" id="edit-{{.ID}}">
+                        <tr id="edit-{{.ID}}">
                             <td colspan="7" style="background:var(--bg-elevated);">
+                                {{/* <details>, the same shape rewards_admin.html uses:
+                                     a <tr> cannot be wrapped in <details>, but the cell
+                                     can hold one. */}}
+                                <details>
+                                <summary class="text-muted small" style="cursor:pointer;">Edit {{.Name}}</summary>
                                 <form method="POST" action="/admin/store/{{.ID}}/update" class="d-flex gap-2 align-items-end flex-wrap p-2">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                     <div>
@@ -178,6 +189,7 @@
                                     </div>
                                     <button type="submit" class="button button--sm button--primary">Save</button>
                                 </form>
+                                </details>
                             </td>
                         </tr>
                         {{end}}
