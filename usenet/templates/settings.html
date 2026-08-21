@@ -1,9 +1,17 @@
 {{/* The width tiers are compound selectors (.container.page), so the container
      class is required alongside the tier — a bare tier class renders
-     full-bleed. .page (~1200px) matches the rest of the admin; wide tables
-     scroll inside .table-responsive. Sections use the host's card-header /
-     card-body pattern — the same box the settings page's Registration card
-     uses — so the page reads as native. */}}
+     full-bleed. .page (~1200px) matches the rest of the admin.
+
+     Wide tables scroll inside .data-table-wrapper, and the "scroll" is load
+     bearing: this said .table-responsive for a long time, and THIS PROJECT
+     defines only that class's scrollbar appearance — no overflow-x anywhere —
+     so it never scrolled, it clipped. It had been one wide row away from
+     shearing a button in half the whole time, and giving the inputs the host's
+     size is what finally did it.
+
+     Sections use the host's panelV2 / panel__header / panel__body components
+     rather than Bootstrap's card, so the page reads as native rather than as
+     something the theme shims. */}}
 <div class="container page" style="padding-top:1.25rem">
 <style>
 /* Plugin-owned component CSS. These classes exist in no host theme (they were
@@ -37,7 +45,7 @@
 {{if .Msg}}<div class="notice notice--success">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="notice notice--danger">{{.Err}}</div>{{end}}
 {{/* Native admin-page header: h4 title + muted one-liner + Back, then flat
-     sections — the site's admin pages don't box every section in a card, so
+     sections — the site's admin pages don't box every section in a panel, so
      the tabs group and headings separate. */}}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
@@ -69,9 +77,9 @@
 <div class="tab-content">
 
 <div class="tab-pane active" id="providers">
-<div class="card mt-3">
-    <div class="card-header">Providers</div>
-    <div class="card-body">
+<div class="panelV2 mt-3">
+    <header class="panel__header"><h2 class="panel__heading">Providers</h2></header>
+    <div class="panel__body">
     <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
       Active providers are crawled every pass; backups stay idle until an active
       provider fails. <strong>Test</strong> dials a row's credentials without
@@ -93,8 +101,8 @@
     <form id="prov-new" method="post" action="/admin/p/usenet/provider">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}"></form>
 
-    <div class="table-responsive">
-    <table class="table table-sm align-middle" style="font-size:.88rem;min-width:1100px">
+    <div class="data-table-wrapper">
+    <table class="data-table" style="font-size:.88rem;min-width:1100px">
       <thead><tr>
         <th>Label</th><th>Host</th><th style="width:5.5rem">Port</th><th>TLS</th>
         <th>Username</th><th>Password</th><th>Role</th>
@@ -179,9 +187,9 @@
 </div>
 
 <div class="tab-pane" id="indexing">
-<div class="card mt-3">
-    <div class="card-header">Indexing</div>
-    <div class="card-body">
+<div class="panelV2 mt-3">
+    <header class="panel__header"><h2 class="panel__heading">Indexing</h2></header>
+    <div class="panel__body">
     <form method="post" action="/admin/p/usenet/knobs">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem">
@@ -255,9 +263,9 @@
 </div>
 
 <div class="tab-pane" id="newsgroups">
-<div class="card mt-3">
-    <div class="card-header">Newsgroups</div>
-    <div class="card-body">
+<div class="panelV2 mt-3">
+    <header class="panel__header"><h2 class="panel__heading">Newsgroups</h2></header>
+    <div class="panel__body">
     <p style="opacity:.7;font-size:.85rem;margin:0 0 .6rem">
       Only <strong>active</strong> groups are crawled. <strong>Fetch group
       list</strong> asks the primary provider for its complete newsgroup
@@ -288,8 +296,8 @@
         </form>
     </div>
     {{if .Groups}}
-    <div class="table-responsive">
-        <table class="table table-dark table-sm align-middle">
+    <div class="data-table-wrapper">
+        <table class="data-table">
             <thead><tr>
                 <th>Group</th><th>Enabled</th><th class="text-end">NZBs</th>
                 <th>Depth (d)</th><th>Throttle (ms)</th><th>Low pri</th><th>Order</th><th></th>
