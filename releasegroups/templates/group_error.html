@@ -1,0 +1,25 @@
+{{define "group_error.html"}}
+{{/* Codes, not sentences — CHECKLIST §10. A handler calls
+     fail(c, status, "nogroup") and the words live here, so the translation
+     seam landing later is a mechanical wrap rather than a rewrite.
+
+     A FRAGMENT: this plugin renders through Deps.RenderPage, which supplies
+     the chrome. Eighteen bare c.String responses said five things between
+     them, fourteen of those the same sentence. */}}
+<section class="panelV2">
+    <div class="panel__body">
+        <div class="notice notice--warning">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+            <span>
+                {{if eq .Reason "nogroup"}}That release group does not exist.
+                {{else if eq .Reason "loadfailed"}}The release groups could not be loaded just now. Please try again shortly.
+                {{else if eq .Reason "releasesfailed"}}That group&rsquo;s releases could not be loaded just now. Please try again shortly.
+                {{else if eq .Reason "nameneeded"}}A name is required when proposing a new group.
+                {{else if eq .Reason "suggestfailed"}}That suggestion could not be submitted. Please try again.
+                {{else}}Something went wrong.{{end}}
+            </span>
+        </div>
+        <p class="mt-3 mb-0"><a class="button button--outlined button--sm" href="/release-groups">Back to release groups</a></p>
+    </div>
+</section>
+{{end}}

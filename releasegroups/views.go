@@ -58,6 +58,17 @@ func parseTemplates() error {
 // render draws one page: fragment from the plugin's own set, chrome from the
 // host. The viewer keys the fragments read (CSRFToken, User, IsAdmin,
 // BaseURL, ActiveNav) are injected here, once.
+// fail renders a refusal in the site's chrome instead of a bare string.
+//
+// Eighteen handlers used to answer c.String(404, "release group not found")
+// and the like — fourteen of them that same sentence — as plain text on a
+// blank page, with the words living in Go where the translation seam could
+// never reach them. The reason travels as a code and group_error.html holds
+// them.
+func (h *Handlers) fail(c *gin.Context, status int, reason string) {
+	h.render(c, status, "Release groups", "group_error.html", gin.H{"Reason": reason})
+}
+
 func (h *Handlers) render(c *gin.Context, status int, title, name string, data gin.H) {
 	if data == nil {
 		data = gin.H{}

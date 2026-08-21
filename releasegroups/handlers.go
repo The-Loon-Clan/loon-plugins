@@ -67,7 +67,7 @@ func (h *Handlers) ReleaseGroupsList(c *gin.Context) {
 
 	groups, total, err := h.deps.Groups.ListReleaseGroups(ctx, tab, query, releaseGroupPageSize, offset)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to load release groups")
+		h.fail(c, http.StatusInternalServerError, "loadfailed")
 		return
 	}
 
@@ -122,7 +122,7 @@ func (h *Handlers) ReleaseGroupDetail(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 
@@ -136,7 +136,7 @@ func (h *Handlers) ReleaseGroupDetail(c *gin.Context) {
 	showNSFW := user != nil && user.ShowNSFW
 	nzbs, _, err := h.deps.GroupNzbCards(ctx, group.ID, showNSFW, pageSize, offset)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to load releases")
+		h.fail(c, http.StatusInternalServerError, "releasesfailed")
 		return
 	}
 
@@ -240,7 +240,7 @@ func (h *Handlers) ClaimReleaseGroup(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 	target := "/release-groups/" + slug
@@ -313,7 +313,7 @@ func (h *Handlers) PostReleaseGroupNews(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 	target := "/release-groups/" + slug
@@ -413,7 +413,7 @@ func (h *Handlers) DeleteReleaseGroupNewsPost(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 	target := "/release-groups/" + slug
@@ -467,7 +467,7 @@ func (h *Handlers) ToggleReleaseGroupFollow(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 
@@ -514,7 +514,7 @@ func (h *Handlers) VerifyReleaseGroupClaim(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 	target := "/release-groups/" + slug
@@ -566,7 +566,7 @@ func (h *Handlers) SuggestReleaseGroupForm(c *gin.Context) {
 	if slug != "" {
 		g, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 		if err != nil || g == nil {
-			c.String(http.StatusNotFound, "release group not found")
+			h.fail(c, http.StatusNotFound, "nogroup")
 			return
 		}
 		group = g
@@ -600,7 +600,7 @@ func (h *Handlers) SubmitReleaseGroupSuggestion(c *gin.Context) {
 	if slug != "" {
 		g, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 		if err != nil || g == nil {
-			c.String(http.StatusNotFound, "release group not found")
+			h.fail(c, http.StatusNotFound, "nogroup")
 			return
 		}
 		groupID = &g.ID
@@ -608,7 +608,7 @@ func (h *Handlers) SubmitReleaseGroupSuggestion(c *gin.Context) {
 
 	name := strings.TrimSpace(c.PostForm("name"))
 	if groupID == nil && name == "" {
-		c.String(http.StatusBadRequest, "name is required when proposing a new group")
+		h.fail(c, http.StatusBadRequest, "nameneeded")
 		return
 	}
 
@@ -624,7 +624,7 @@ func (h *Handlers) SubmitReleaseGroupSuggestion(c *gin.Context) {
 	}
 	if _, err := h.deps.Groups.CreateReleaseGroupSuggestion(ctx, sug); err != nil {
 		log.Printf("releasegroups/suggest: %v", err)
-		c.String(http.StatusInternalServerError, "failed to submit the suggestion")
+		h.fail(c, http.StatusInternalServerError, "suggestfailed")
 		return
 	}
 
@@ -640,7 +640,7 @@ func (h *Handlers) ReleaseGroupArchive(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 
@@ -704,7 +704,7 @@ func (h *Handlers) RefreshReleaseGroupArchive(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 	target := "/release-groups/" + slug + "/archive"
@@ -780,7 +780,7 @@ func (h *Handlers) HideArchiveTorrent(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 	target := "/release-groups/" + slug
@@ -835,7 +835,7 @@ func (h *Handlers) BulkRequestMissingFromArchive(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 	target := "/release-groups/" + slug + "/archive"
@@ -928,7 +928,7 @@ func (h *Handlers) EditReleaseGroupBio(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 	// Gate: must be an owner (or mod). Same check the news-post
@@ -960,7 +960,7 @@ func (h *Handlers) SaveReleaseGroupBio(c *gin.Context) {
 	slug := c.Param("slug")
 	group, err := h.deps.Groups.GetReleaseGroupBySlug(ctx, slug)
 	if err != nil || group == nil {
-		c.String(http.StatusNotFound, "release group not found")
+		h.fail(c, http.StatusNotFound, "nogroup")
 		return
 	}
 	target := "/release-groups/" + slug
