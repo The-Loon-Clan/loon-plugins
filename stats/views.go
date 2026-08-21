@@ -16,9 +16,10 @@ import (
 
 var pageTmpl = template.Must(template.New("page").Parse(`
 {{if .Stats}}
-<div class="card">
-    <div class="table-responsive">
-        <table class="table table-dark table-striped table-sm align-middle">
+<div class="panelV2">
+    <div class="data-table-wrapper">
+        <table class="data-table">
+            <caption class="visually-hidden">Site statistics, most recent snapshot</caption>
             <thead><tr><th>Metric</th><th class="text-end">Value</th></tr></thead>
             <tbody>
             {{range .Stats}}
@@ -30,7 +31,7 @@ var pageTmpl = template.Must(template.New("page").Parse(`
     <p class="text-muted small mt-3">Snapshot from {{.At}} — refreshed hourly by the Stats Cache job.</p>
 </div>
 {{else}}
-<div class="empty">No snapshot yet — the Stats Cache job runs about a minute after boot (or trigger it from the Jobs page).</div>
+<div class="notice notice--info">No snapshot yet — the Stats Cache job runs about a minute after boot (or trigger it from the Jobs page).</div>
 {{end}}
 `))
 
