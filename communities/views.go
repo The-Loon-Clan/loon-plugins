@@ -107,7 +107,7 @@ type communityViewVM struct {
 	Role            CommunityViewerRole
 	MyRequest       *CommunityJoinRequest
 	PendingCount    int
-	Flash           string
+	Flash           Flash
 	SidebarHTML     template.HTML
 	DescriptionHTML template.HTML
 }
@@ -148,13 +148,13 @@ type communityJoinRequestsVM struct {
 	Community *Community
 	Requests  []*CommunityJoinRequest
 	Invites   []*CommunityInvite
-	Flash     string
+	Flash     Flash
 }
 
 type communitySettingsVM struct {
 	chromeVM
 	Community *Community
-	Flash     string
+	Flash     Flash
 }
 
 // errorVM feeds community_error.html — a CODE, never a sentence.

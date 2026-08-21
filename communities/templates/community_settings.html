@@ -14,7 +14,7 @@
         </nav>
         <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:1rem;">Settings — {{.Community.Name}}</h1>
 
-        {{if .Flash}}<div class="alert alert-info py-2" style="font-size:0.85rem;">{{.Flash}}</div>{{end}}
+        {{template "c-flash" .Flash}}
 
         <form method="POST" action="/c/{{.Community.Slug}}/settings" enctype="multipart/form-data">
             <input type="hidden" name="_csrf" value="{{.CSRFToken}}">

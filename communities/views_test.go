@@ -162,10 +162,13 @@ func TestPagesRender(t *testing.T) {
 		Role:            CommunityViewerRole{IsSubscriber: true},
 		MyRequest:       nil,
 		PendingCount:    0,
-		Flash:           "Settings saved.",
+		Flash:           Flash{Code: "saved"},
 		SidebarHTML:     template.HTML("<p>side</p>"),
 		DescriptionHTML: template.HTML("<p>desc</p>"),
 	})
+	// "Settings saved." is now the TEMPLATE's words, reached through the flash
+	// CODE — which is what makes this assertion worth more than it was: it
+	// proves the code resolved to a sentence rather than rendering blank.
 	for _, marker := range []string{"First episode discussion", "Be kind", "mod-one", "Settings saved."} {
 		if !strings.Contains(out, marker) {
 			t.Errorf("community view missing %q", marker)
@@ -202,7 +205,7 @@ func TestPagesRender(t *testing.T) {
 		Community: sampleCommunity(),
 		Requests:  []*CommunityJoinRequest{sampleRequest()},
 		Invites:   []*CommunityInvite{sampleInvite()},
-		Flash:     "",
+		Flash:     Flash{},
 	})
 	for _, marker := range []string{"applicant", "let me in please", "abcd1234", "100 pts held"} {
 		if !strings.Contains(out, marker) {
@@ -212,7 +215,7 @@ func TestPagesRender(t *testing.T) {
 
 	out = testRender(t, "community_settings.html", &communitySettingsVM{
 		Community: sampleCommunity(),
-		Flash:     "Settings saved.",
+		Flash:     Flash{Code: "saved"},
 	})
 	if !strings.Contains(out, "Anime Fans") || !strings.Contains(out, "bp-range") {
 		t.Error("settings page missing the community name or the banner-position slider")

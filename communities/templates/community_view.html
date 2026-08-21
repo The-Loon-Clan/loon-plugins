@@ -177,9 +177,7 @@
             </div>
         </div>
 
-        {{if .Flash}}
-        <div class="alert alert-info py-2" style="font-size:0.85rem;margin: 0 0 1rem;">{{.Flash}}</div>
-        {{end}}
+        {{template "c-flash" .Flash}}
 
         {{/* Requirement hint for non-members on a gated community. */}}
         {{if and .User (not .Community.IsSubscribed) (not .Role.HasPendingRequest)}}

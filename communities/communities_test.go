@@ -80,9 +80,17 @@ func TestJoinRequirementError(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			msg := joinRequirementError(tc.user, tc.balance, tc.comm)
-			if (msg != "") != tc.wantErr {
-				t.Errorf("joinRequirementError = %q, wantErr=%v", msg, tc.wantErr)
+			f := joinRequirementError(tc.user, tc.balance, tc.comm)
+			if (f.Code != "") != tc.wantErr {
+				t.Errorf("joinRequirementError = %+v, wantErr=%v", f, tc.wantErr)
+			}
+			// A refusal that quotes a number must CARRY it. The sentence lives
+			// in the template now, so a missing argument renders "You need
+			// points to join" — grammatical, wrong, and invisible in Go.
+			if f.Code == "tooyoung" || f.Code == "toopoor" {
+				if len(f.Args) != 2 {
+					t.Errorf("%s carries %d args, want 2", f.Code, len(f.Args))
+				}
 			}
 		})
 	}

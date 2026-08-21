@@ -282,16 +282,20 @@ func (h *Handlers) View(c *gin.Context) {
 
 // popFlash reads + clears the one-shot community flash message set
 // by redirectWithFlash. Returns "" when none is set.
-func (h *Handlers) popFlash(c *gin.Context) string {
+func (h *Handlers) popFlash(c *gin.Context) Flash {
 	session := sessions.Default(c)
 	v := session.Get("community_flash")
 	if v == nil {
-		return ""
+		return Flash{}
 	}
 	session.Delete("community_flash")
 	_ = session.Save()
-	msg, _ := v.(string)
-	return msg
+	raw, _ := v.(string)
+	if raw == "" {
+		return Flash{}
+	}
+	parts := strings.Split(raw, flashSep)
+	return Flash{Code: parts[0], Args: parts[1:]}
 }
 
 // ToggleSubscribe — POST /c/:slug/subscribe. Owners can't
@@ -325,20 +329,20 @@ func (h *Handlers) ToggleSubscribe(c *gin.Context) {
 	switch comm.JoinType {
 	case CommunityJoinTypeInviteOnly:
 		// No public join path; an invite link is the only way in.
-		h.redirectWithFlash(c, slug, "This community is invite-only. You need an invite link to join.")
+		h.redirectWithFlash(c, slug, "inviteonly")
 		return
 
 	case CommunityJoinTypeRequest:
 		// Gate first; queue second. Points are escrowed at request
 		// time (spent now, refunded on deny / withdraw).
-		if msg := joinRequirementError(user, balance, comm); msg != "" {
-			h.redirectWithFlash(c, slug, msg)
+		if f := joinRequirementError(user, balance, comm); f.Code != "" {
+			h.redirectWithFlash(c, slug, f.Code, f.Args...)
 			return
 		}
 		held := 0
 		if comm.JoinPointsCost > 0 {
 			if _, err := h.points.Deduct(ctx, user.ID, comm.JoinPointsCost, ledgerSpendJoin, "Applied to /c/"+slug, 0); err != nil {
-				h.redirectWithFlash(c, slug, fmt.Sprintf("You need %d points to apply to this community.", comm.JoinPointsCost))
+				h.redirectWithFlash(c, slug, "applycost", strconv.Itoa(comm.JoinPointsCost))
 				return
 			}
 			held = comm.JoinPointsCost
@@ -353,20 +357,20 @@ func (h *Handlers) ToggleSubscribe(c *gin.Context) {
 					h.errs.Report(ctx, "communities/refund-dup", err)
 				}
 			}
-			h.redirectWithFlash(c, slug, "You already have a pending request for this community.")
+			h.redirectWithFlash(c, slug, "alreadypending")
 			return
 		}
-		h.redirectWithFlash(c, slug, "Request submitted — a moderator will review it.")
+		h.redirectWithFlash(c, slug, "requested")
 		return
 
 	default: // open
-		if msg := joinRequirementError(user, balance, comm); msg != "" {
-			h.redirectWithFlash(c, slug, msg)
+		if f := joinRequirementError(user, balance, comm); f.Code != "" {
+			h.redirectWithFlash(c, slug, f.Code, f.Args...)
 			return
 		}
 		if comm.JoinPointsCost > 0 {
 			if _, err := h.points.Deduct(ctx, user.ID, comm.JoinPointsCost, ledgerSpendJoin, "Joined /c/"+slug, 0); err != nil {
-				h.redirectWithFlash(c, slug, fmt.Sprintf("You need %d points to join this community.", comm.JoinPointsCost))
+				h.redirectWithFlash(c, slug, "joincost", strconv.Itoa(comm.JoinPointsCost))
 				return
 			}
 		}
@@ -375,33 +379,67 @@ func (h *Handlers) ToggleSubscribe(c *gin.Context) {
 	}
 }
 
-// joinRequirementError returns a non-empty user-facing message when
-// the user fails any of the community's join gates (account age,
-// role, points-balance). Empty string = all gates pass. Points
-// affordability is double-checked here for a friendly message; the
-// actual debit's balance guard is the real enforcement.
-func joinRequirementError(user *core.User, balance int, comm *Community) string {
+// joinRequirementError reports which join gate the user fails (account age,
+// role, points balance), as a CODE and the numbers its sentence quotes. A zero
+// Flash means every gate passes.
+//
+// Points affordability is double-checked here so the refusal can say WHICH
+// gate stopped them; the actual debit's balance guard is the real enforcement.
+func joinRequirementError(user *core.User, balance int, comm *Community) Flash {
 	if comm.MinAccountAgeDays > 0 {
 		ageDays := int(time.Since(user.CreatedAt).Hours() / 24)
 		if ageDays < comm.MinAccountAgeDays {
-			return fmt.Sprintf("Your account must be at least %d days old to join (yours is %d).", comm.MinAccountAgeDays, ageDays)
+			return Flash{"tooyoung", []string{
+				strconv.Itoa(comm.MinAccountAgeDays), strconv.Itoa(ageDays)}}
 		}
 	}
 	if comm.MinRoleLevel > 0 && int(user.Role) < comm.MinRoleLevel {
-		return "Your account rank doesn't meet this community's minimum to join."
+		return Flash{Code: "lowrank"}
 	}
 	if comm.JoinPointsCost > 0 && balance < comm.JoinPointsCost {
-		return fmt.Sprintf("You need %d points to join this community (you have %d).", comm.JoinPointsCost, balance)
+		return Flash{"toopoor", []string{
+			strconv.Itoa(comm.JoinPointsCost), strconv.Itoa(balance)}}
 	}
-	return ""
+	return Flash{}
 }
 
 // redirectWithFlash stashes a one-shot message in the session and
 // redirects back to the community page. The View handler reads +
 // clears it. Avoids threading error state through query params.
-func (h *Handlers) redirectWithFlash(c *gin.Context, slug, msg string) {
+// Flash is one message waiting for the next page render: a CODE, and the
+// values its sentence quotes.
+//
+// A CODE AND NOT A SENTENCE (CHECKLIST §10). The words live in the templates,
+// which is what makes them translatable -- and where a sentence quotes a
+// number, the number is an ARGUMENT rather than something formatted into the
+// text, because word order differs by language and a sentence assembled in Go
+// has to be rewritten rather than translated.
+//
+// This is the only message channel in the tree that is not a query parameter,
+// which is why it took longest to convert: the Go-sentence audit looks at
+// redirect literals and could not see any of these.
+type Flash struct {
+	Code string
+	Args []string
+}
+
+// Arg returns the i'th value, or "" — a template that asks for one the sender
+// did not provide renders a gap rather than failing the whole page.
+func (f Flash) Arg(i int) string {
+	if i < 0 || i >= len(f.Args) {
+		return ""
+	}
+	return f.Args[i]
+}
+
+// flashSep joins the code to its arguments inside the session's single string.
+// The unit separator cannot occur in an identifier, a decimal number or an
+// invite code, so the split needs no escaping and cannot be spoofed by a value.
+const flashSep = "\x1f"
+
+func (h *Handlers) redirectWithFlash(c *gin.Context, slug, code string, args ...string) {
 	session := sessions.Default(c)
-	session.Set("community_flash", msg)
+	session.Set("community_flash", strings.Join(append([]string{code}, args...), flashSep))
 	_ = session.Save()
 	c.Redirect(http.StatusFound, "/c/"+slug)
 }
@@ -783,7 +821,7 @@ func (h *Handlers) CreateInvite(c *gin.Context) {
 		h.errs.HandlerError(c, "community/create-invite", err)
 		return
 	}
-	h.redirectWithFlash(c, slug, "Invite created: "+baseURL(c)+"/c/join/"+code)
+	h.redirectWithFlash(c, slug, "invited", code)
 	c.Redirect(http.StatusFound, "/c/"+slug+"/requests")
 }
 
@@ -883,14 +921,14 @@ func (h *Handlers) SaveSettings(c *gin.Context) {
 	// aborts the save so the user can correct it rather than
 	// silently dropping the image.
 	if url, err := saveCommunityImage(c, bannerKind, comm.Slug); err != nil {
-		h.redirectWithFlash(c, slug, "Banner upload failed: "+err.Error())
+		h.redirectWithFlash(c, slug, "bannerfailed")
 		c.Redirect(http.StatusFound, "/c/"+slug+"/settings")
 		return
 	} else if url != "" {
 		comm.BannerURL = url
 	}
 	if url, err := saveCommunityImage(c, iconKind, comm.Slug); err != nil {
-		h.redirectWithFlash(c, slug, "Icon upload failed: "+err.Error())
+		h.redirectWithFlash(c, slug, "iconfailed")
 		c.Redirect(http.StatusFound, "/c/"+slug+"/settings")
 		return
 	} else if url != "" {
@@ -904,7 +942,7 @@ func (h *Handlers) SaveSettings(c *gin.Context) {
 		h.errs.HandlerError(c, "community/save-customization", err)
 		return
 	}
-	h.redirectWithFlash(c, slug, "Settings saved.")
+	h.redirectWithFlash(c, slug, "saved")
 	c.Redirect(http.StatusFound, "/c/"+slug+"/settings")
 }
 
