@@ -352,7 +352,7 @@
       if (b) {
         b.textContent = label;
         b.className = 'tag ' + (label === 'connected' ? 'tag--success'
-          : label === 'benched' ? 'bg-warning text-dark' : 'bg-secondary');
+          : label === 'benched' ? 'tag--warning' : 'tag--sm');
       }
       var c = row.querySelector('[data-role=pconns]');
       if (c) {
