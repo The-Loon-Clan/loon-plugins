@@ -4,13 +4,13 @@
         <div class="forum-category-hero-copy">
             <nav class="forum-category-breadcrumb" aria-label="Breadcrumb">
                 <a href="/community/forums">Forums</a>
-                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <svg class="icon" aria-hidden="true"><use href="#chevron-right"></use></svg>
                 <span>{{.Category.Name}}</span>
             </nav>
 
             <div class="forum-category-heading">
                 <span class="forum-category-hero-icon forum-cat-icon-{{or .Category.Color "blue"}}">
-                    <i class="bi bi-{{or .Category.Icon "chat-square-text"}}" aria-hidden="true"></i>
+                    <svg class="icon" aria-hidden="true"><use href="#forums"></use></svg>
                 </span>
                 <div>
                     <h1 id="forum-category-title">{{.Category.Name}}</h1>
@@ -19,14 +19,14 @@
             </div>
 
             <div class="forum-category-totals" aria-label="Category totals">
-                <span><i class="bi bi-chat-square-text" aria-hidden="true"></i><strong>{{.Category.ThreadCount}}</strong> threads</span>
-                <span><i class="bi bi-card-text" aria-hidden="true"></i><strong>{{.Category.PostCount}}</strong> posts</span>
+                <span><svg class="icon" aria-hidden="true"><use href="#comment"></use></svg><strong>{{.Category.ThreadCount}}</strong> threads</span>
+                <span><svg class="icon" aria-hidden="true"><use href="#book"></use></svg><strong>{{.Category.PostCount}}</strong> posts</span>
             </div>
         </div>
 
         {{if not .AccessDenied}}
         <a href="/community/forums/new?category={{.Category.ID}}" class="btn btn-primary forum-category-new-thread">
-            <i class="bi bi-plus-lg" aria-hidden="true"></i>
+            <svg class="icon" aria-hidden="true"><use href="#plus"></use></svg>
             New Thread
         </a>
         {{end}}
@@ -37,7 +37,7 @@
          AccessDenied set. */}}
     {{if .AccessDenied}}
     <div class="alert alert-warning forum-category-access-note">
-        <i class="bi bi-lock" aria-hidden="true"></i>
+        <svg class="icon" aria-hidden="true"><use href="#lock"></use></svg>
         <span>This forum is restricted. Your account does not meet its access requirements yet.</span>
     </div>
     {{end}}
@@ -67,11 +67,11 @@
                     <a href="/community/forums/thread/{{.ID}}" class="forum-thread-row">
                         <span class="forum-thread-state {{if .Pinned}}is-pinned{{else if .Locked}}is-locked{{else if eq .ThreadType "recruitment"}}is-recruitment{{else}}is-discussion{{end}}" aria-hidden="true">
                             {{if .Pinned}}
-                            <i class="bi bi-pin-angle-fill"></i>
+                            
                             {{else if .Locked}}
-                            <i class="bi bi-lock-fill"></i>
+                            <svg class="icon" aria-hidden="true"><use href="#lock"></use></svg>
                             {{else if eq .ThreadType "recruitment"}}
-                            <i class="bi bi-person-lock"></i>
+                            <svg class="icon" aria-hidden="true"><use href="#shield"></use></svg>
                             {{else}}
                             <span></span>
                             {{end}}
@@ -137,7 +137,7 @@
             {{else}}
             <div class="forum-thread-empty">
                 <span class="forum-category-hero-icon forum-cat-icon-{{or .Category.Color "blue"}}">
-                    <i class="bi bi-{{or .Category.Icon "chat-square-text"}}" aria-hidden="true"></i>
+                    <svg class="icon" aria-hidden="true"><use href="#forums"></use></svg>
                 </span>
                 <strong>No threads yet</strong>
                 <p>Be the first person to start a discussion in {{.Category.Name}}.</p>
@@ -151,7 +151,7 @@
             </footer>
             {{else}}
             <div class="forum-thread-locked">
-                <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                <svg class="icon" aria-hidden="true"><use href="#shield"></use></svg>
                 <strong>Restricted forum</strong>
                 <p>The thread list becomes available when your account meets this forum's access requirements.</p>
             </div>

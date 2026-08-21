@@ -6,13 +6,13 @@
             <h1 id="forum-title">Forums</h1>
             <p>Join the discussion with the community.</p>
             <div class="forum-hero-totals" aria-label="Forum totals">
-                <span><i class="bi bi-grid" aria-hidden="true"></i><strong>{{len .Categories}}</strong> categories</span>
-                <span><i class="bi bi-chat-square-text" aria-hidden="true"></i><strong>{{.TotalThreads}}</strong> threads</span>
-                <span><i class="bi bi-card-text" aria-hidden="true"></i><strong>{{.TotalPosts}}</strong> posts</span>
+                <span><svg class="icon" aria-hidden="true"><use href="#folder"></use></svg><strong>{{len .Categories}}</strong> categories</span>
+                <span><svg class="icon" aria-hidden="true"><use href="#comment"></use></svg><strong>{{.TotalThreads}}</strong> threads</span>
+                <span><svg class="icon" aria-hidden="true"><use href="#book"></use></svg><strong>{{.TotalPosts}}</strong> posts</span>
             </div>
         </div>
         <a href="/community/forums/new" class="btn btn-primary forum-new-thread">
-            <i class="bi bi-plus-lg" aria-hidden="true"></i>
+            <svg class="icon" aria-hidden="true"><use href="#plus"></use></svg>
             New Thread
         </a>
     </section>
@@ -31,7 +31,7 @@
                     {{range .Categories}}
                     <a href="/community/forums/category/{{.ID}}" class="forum-category-row">
                         <span class="forum-cat-icon forum-cat-icon-{{or .Color "blue"}}">
-                            <i class="bi bi-{{or .Icon "chat-square-text"}}" aria-hidden="true"></i>
+                            <svg class="icon" aria-hidden="true"><use href="#forums"></use></svg>
                         </span>
 
                         <span class="forum-category-copy">
@@ -98,7 +98,7 @@
 
                             <span class="forum-recent-category" aria-label="Forum category" title="Forum category">
                                 <span class="forum-cat-icon forum-cat-icon-{{or .CategoryColor "blue"}}">
-                                    <i class="bi bi-{{or .CategoryIcon "chat-square-text"}}" aria-hidden="true"></i>
+                                    <svg class="icon" aria-hidden="true"><use href="#forums"></use></svg>
                                 </span>
                             </span>
 
@@ -123,12 +123,12 @@
                 </div>
                 <div class="forum-stats-grid">
                     <div>
-                        <i class="bi bi-chat-square-text" aria-hidden="true"></i>
+                        <svg class="icon" aria-hidden="true"><use href="#comment"></use></svg>
                         <strong>{{.TotalThreads}}</strong>
                         <span>Threads</span>
                     </div>
                     <div>
-                        <i class="bi bi-card-text" aria-hidden="true"></i>
+                        <svg class="icon" aria-hidden="true"><use href="#book"></use></svg>
                         <strong>{{.TotalPosts}}</strong>
                         <span>Posts</span>
                     </div>
@@ -164,15 +164,15 @@
                     <h2 id="forum-guide-title">Forum Guide</h2>
                 </div>
                 <ul class="forum-guide-list">
-                    <li><i class="bi bi-pin-angle" aria-hidden="true"></i><span>Pinned threads stay at the top</span></li>
-                    <li><i class="bi bi-lock" aria-hidden="true"></i><span>Restricted forums show a lock</span></li>
-                    <li><i class="bi bi-person-badge" aria-hidden="true"></i><span>Name colors reflect member roles</span></li>
-                    <li><i class="bi bi-grid" aria-hidden="true"></i><span>Icons identify forum categories</span></li>
+                    <li><span>Pinned threads stay at the top</span></li>
+                    <li><svg class="icon" aria-hidden="true"><use href="#lock"></use></svg><span>Restricted forums show a lock</span></li>
+                    <li><svg class="icon" aria-hidden="true"><use href="#user"></use></svg><span>Name colors reflect member roles</span></li>
+                    <li><svg class="icon" aria-hidden="true"><use href="#folder"></use></svg><span>Icons identify forum categories</span></li>
                 </ul>
             </section>
 
             <section class="forum-panel forum-help-panel" aria-labelledby="forum-help-title">
-                <div class="forum-help-icon"><i class="bi bi-life-preserver" aria-hidden="true"></i></div>
+                <div class="forum-help-icon"><svg class="icon" aria-hidden="true"><use href="#info"></use></svg></div>
                 <div>
                     <h2 id="forum-help-title">Need Help?</h2>
                     <p>Visit support for account, download, or site questions.</p>

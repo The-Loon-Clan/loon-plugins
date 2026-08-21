@@ -4,14 +4,14 @@
         <div class="forum-thread-hero-copy">
             <nav class="forum-thread-breadcrumb" aria-label="Breadcrumb">
                 <a href="/community/forums">Forums</a>
-                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <svg class="icon" aria-hidden="true"><use href="#chevron-right"></use></svg>
                 <a href="/community/forums/category/{{.Thread.CategoryID}}">{{.Thread.CategoryName}}</a>
-                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <svg class="icon" aria-hidden="true"><use href="#chevron-right"></use></svg>
                 <span>Thread</span>
             </nav>
 
             <div class="forum-thread-heading">
-                <span class="forum-thread-hero-icon" aria-hidden="true"><i class="bi bi-chat-square-text"></i></span>
+                <span class="forum-thread-hero-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#comment"></use></svg></span>
                 <div>
                     <div class="forum-thread-labels">
                         <a href="/community/forums/category/{{.Thread.CategoryID}}" class="forum-thread-category-label">{{.Thread.CategoryName}}</a>
@@ -36,7 +36,7 @@
         <div class="forum-thread-hero-actions">
             {{if not .Thread.Locked}}
             <a href="#reply-form" class="btn btn-primary forum-thread-reply-cta">
-                <i class="bi bi-reply-fill" aria-hidden="true"></i>
+                <svg class="icon" aria-hidden="true"><use href="#comment"></use></svg>
                 Reply
             </a>
             {{end}}
@@ -44,25 +44,25 @@
             {{if .IsAdmin}}
             <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/pin">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                <button class="btn btn-outline-secondary"><i class="bi bi-pin-angle" aria-hidden="true"></i> {{if .Thread.Pinned}}Unpin{{else}}Pin{{end}}</button>
+                <button class="btn btn-outline-secondary"> {{if .Thread.Pinned}}Unpin{{else}}Pin{{end}}</button>
             </form>
             <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/lock">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                <button class="btn btn-outline-secondary"><i class="bi bi-lock" aria-hidden="true"></i> {{if .Thread.Locked}}Unlock{{else}}Lock{{end}}</button>
+                <button class="btn btn-outline-secondary"><svg class="icon" aria-hidden="true"><use href="#lock"></use></svg> {{if .Thread.Locked}}Unlock{{else}}Lock{{end}}</button>
             </form>
             {{end}}
 
             {{if or .IsAdmin (eq .Thread.UserID .CurrentUserID)}}
             <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/delete" onsubmit="return confirm('Delete this thread and all its posts?')">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                <button class="btn btn-outline-danger" title="Delete thread"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete thread</span></button>
+                <button class="btn btn-outline-danger" title="Delete thread"><span class="visually-hidden">Delete thread</span></button>
             </form>
             {{end}}
 
             {{if and .CurrentUserID (ne .Thread.UserID .CurrentUserID)}}
             <button type="button" class="btn btn-outline-secondary report-content"
                     data-target-type="forum_thread" data-target-id="{{.Thread.ID}}" title="Report thread">
-                <i class="bi bi-flag" aria-hidden="true"></i><span class="visually-hidden">Report thread</span>
+                <span class="visually-hidden">Report thread</span>
             </button>
             {{end}}
         </div>
@@ -70,7 +70,7 @@
 
     {{if .IsRecruitment}}
     <div class="forum-thread-privacy-note">
-        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <svg class="icon" aria-hidden="true"><use href="#shield"></use></svg>
         <div>
             <strong>Recruitment thread</strong>
             {{if .CanSeeAllReplies}}
@@ -158,7 +158,7 @@
                             </button>
                             {{end}}
                             {{if $.CurrentUserID}}
-                            <button type="button" class="reaction-add" title="Add reaction"><i class="bi bi-emoji-smile" aria-hidden="true"></i><span class="visually-hidden">Add reaction</span></button>
+                            <button type="button" class="reaction-add" title="Add reaction"><span class="visually-hidden">Add reaction</span></button>
                             <span class="reaction-picker" role="menu">
                                 <button type="button" data-emoji="👍" title="Like">👍</button>
                                 <button type="button" data-emoji="❤️" title="Love">❤️</button>
@@ -174,24 +174,24 @@
                             {{if and $.CurrentUserID (not $.Thread.Locked)}}
                             <button type="button" class="quote-trigger"
                                     data-post-id="{{.ID}}" data-username="{{.Username}}" data-excerpt="{{.Body}}">
-                                <i class="bi bi-reply" aria-hidden="true"></i> Quote
+                                <svg class="icon" aria-hidden="true"><use href="#comment"></use></svg> Quote
                             </button>
                             {{end}}
                             {{if eq .UserID $.CurrentUserID}}
-                            <button type="button" class="forum-post-action" onclick="startEdit({{.ID}})"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button>
+                            <button type="button" class="forum-post-action" onclick="startEdit({{.ID}})"><svg class="icon" aria-hidden="true"><use href="#settings"></use></svg> Edit</button>
                             {{end}}
                             {{if or (eq .UserID $.CurrentUserID) $.IsAdmin}}
                             <form method="POST" action="/community/forums/post/{{.ID}}/delete" class="d-inline"
                                   onsubmit="return confirm('Delete this post?')">
                                 <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="thread_id" value="{{$.Thread.ID}}">
-                                <button class="forum-post-action is-danger"><i class="bi bi-trash" aria-hidden="true"></i> Delete</button>
+                                <button class="forum-post-action is-danger"> Delete</button>
                             </form>
                             {{end}}
                             {{if and $.CurrentUserID (ne .UserID $.CurrentUserID)}}
                             <button type="button" class="forum-post-action report-content"
                                     data-target-type="forum_post" data-target-id="{{.ID}}">
-                                <i class="bi bi-flag" aria-hidden="true"></i> Report
+                                 Report
                             </button>
                             {{end}}
                         </div>
@@ -234,13 +234,13 @@
                         {{.ReplyEditorHTML}}
                         <div class="forum-reply-actions">
                             <span>Keep replies helpful and on topic.</span>
-                            <button type="submit" class="btn btn-primary"><i class="bi bi-send" aria-hidden="true"></i> Post Reply</button>
+                            <button type="submit" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#send"></use></svg> Post Reply</button>
                         </div>
                     </form>
                 </div>
             </section>
             {{else}}
-            <div class="forum-thread-locked-note"><i class="bi bi-lock-fill" aria-hidden="true"></i> This thread is locked</div>
+            <div class="forum-thread-locked-note"><svg class="icon" aria-hidden="true"><use href="#lock"></use></svg> This thread is locked</div>
             {{end}}
         </div>
 

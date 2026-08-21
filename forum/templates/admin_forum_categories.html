@@ -73,7 +73,7 @@
                             <form method="POST" action="/admin/forum-categories/{{.ID}}" class="p-2" style="margin:0;">
                                 <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <div class="d-flex gap-2 align-items-center">
-                                    <span class="forum-cat-icon forum-cat-icon-{{.Color}}" style="width:28px;height:28px;border-radius:7px;font-size:0.85rem;flex-shrink:0;"><i class="bi bi-{{.Icon}}"></i></span>
+                                    <span class="forum-cat-icon forum-cat-icon-{{.Color}}" style="width:28px;height:28px;border-radius:7px;font-size:0.85rem;flex-shrink:0;"><svg class="icon" aria-hidden="true"><use href="#forums"></use></svg></span>
                                     <input type="text"   name="name"        class="form-control form-control-sm" value="{{.Name}}" required maxlength="64" style="max-width:140px;">
                                     <input type="text"   name="description" class="form-control form-control-sm" value="{{.Description}}" maxlength="256">
                                     <input type="text"   name="icon"        class="form-control form-control-sm" value="{{.Icon}}" maxlength="48" style="max-width:150px;" title="Bootstrap Icons name">
