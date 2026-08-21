@@ -1,23 +1,23 @@
 {{define "events_admin.html"}}
-{{if .Msg}}<div class="alert alert-success py-2">{{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert alert-danger py-2">{{.Err}}</div>{{end}}
+{{if .Msg}}<div class="notice notice--success py-2">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="notice notice--danger py-2">{{.Err}}</div>{{end}}
 
 {{/* Window health, above the table. Every row below can look perfectly valid
      while the generator has been stopped for a month and nothing gated on any
      of these events has opened since -- that failure is silence, so it needs a
      surface of its own rather than a column an operator has to interpret. */}}
 {{if .Findings}}
-<div class="card mb-3">
-  <div class="card-header"><strong>Window health</strong>
+<div class="panelV2 mb-3">
+  <div class="panel__header"><strong>Window health</strong>
     <span class="text-muted small">each event's rows are individually valid</span>
   </div>
-  <div class="table-responsive">
-    <table class="table table-sm mb-0">
+  <div class="data-table-wrapper">
+    <table class="data-table mb-0">
       <tbody>
       {{range .Findings}}
         <tr>
           <td style="width:5rem">
-            <span class="badge bg-{{if eq .Severity "error"}}danger{{else if eq .Severity "warn"}}warning text-dark{{else}}secondary{{end}}">{{.Severity}}</span>
+            <span class="tag {{if eq .Severity "error"}}tag--danger{{else if eq .Severity "warn"}}tag--warning{{else}}tag--sm{{end}}">{{.Severity}}</span>
           </td>
           <td style="width:14rem"><code>{{.Subject}}</code></td>
           <td>{{.Problem}}{{if .Fix}}<br><span class="text-muted small">&rarr; {{.Fix}}</span>{{end}}</td>
@@ -29,13 +29,13 @@
 </div>
 {{end}}
 
-<div class="card mb-3">
-  <div class="card-header d-flex justify-content-between align-items-center">
+<div class="panelV2 mb-3">
+  <div class="panel__header d-flex justify-content-between align-items-center">
     <strong>Scheduled events</strong>
     <span class="text-muted small">windows are materialised by the <em>Event Windows</em> job &mdash; trigger it from /admin/jobs to see them immediately</span>
   </div>
-  <div class="table-responsive">
-    <table class="table table-sm mb-0 align-middle">
+  <div class="data-table-wrapper">
+    <table class="data-table mb-0">
       <thead><tr>
         <th>Slug</th><th>Name</th><th>Shape</th><th>Cron</th><th>TZ</th>
         <th>Windows</th><th>Open now</th><th>Next opens</th><th>Covered to</th><th></th>
@@ -50,9 +50,9 @@
           <td>{{.Timezone}}</td>
           <td><a href="?event={{.Slug}}">{{.Windows}}</a></td>
           <td>
-            {{if not .Enabled}}<span class="badge bg-secondary">disabled</span>
-            {{else if .OpenNow}}<span class="badge bg-success">open</span>
-            {{else}}<span class="badge bg-secondary">closed</span>{{end}}
+            {{if not .Enabled}}<span class="tag tag--sm">disabled</span>
+            {{else if .OpenNow}}<span class="tag tag--success">open</span>
+            {{else}}<span class="tag tag--sm">closed</span>{{end}}
           </td>
           <td>{{ts .NextOpen}}</td>
           <td>{{ts .LastEnds}}</td>
@@ -61,14 +61,14 @@
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="slug" value="{{.Slug}}">
               <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
-              <button class="btn btn-sm btn-outline-secondary">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+              <button class="button button--sm button--outlined">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
             </form>
-            <a class="btn btn-sm btn-outline-secondary" href="?edit={{.Slug}}#event-form">Edit</a>
+            <a class="button button--sm button--outlined" href="?edit={{.Slug}}#event-form">Edit</a>
             <form method="post" action="/admin/p/events/event-delete" class="d-inline"
                   onsubmit="return confirm('Delete {{.Slug}} and all its windows? Anything referencing this slug will see it as absent.');">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="slug" value="{{.Slug}}">
-              <button class="btn btn-sm btn-outline-danger">Delete</button>
+              <button class="button button--sm button--outlined button--danger">Delete</button>
             </form>
           </td>
         </tr>
@@ -81,19 +81,19 @@
 </div>
 
 {{if .Picked}}
-<div class="card mb-3">
-  <div class="card-header"><strong>Windows</strong>
+<div class="panelV2 mb-3">
+  <div class="panel__header"><strong>Windows</strong>
     <span class="text-muted small">of <code>{{.Picked}}</code> &mdash; newest first</span>
   </div>
-  <div class="table-responsive">
-    <table class="table table-sm mb-0">
+  <div class="data-table-wrapper">
+    <table class="data-table mb-0">
       <thead><tr><th>Starts</th><th>Ends</th><th>State</th></tr></thead>
       <tbody>
       {{range .Windows}}
         <tr>
           <td>{{ts .Starts}}</td>
           <td>{{ts .Ends}}</td>
-          <td>{{if .Contains $.Now}}<span class="badge bg-success">open now</span>
+          <td>{{if .Contains $.Now}}<span class="tag tag--success">open now</span>
               {{else if .Starts.After $.Now}}<span class="text-muted">future</span>
               {{else}}<span class="text-muted">past</span>{{end}}</td>
         </tr>
@@ -108,8 +108,8 @@
 </div>
 {{end}}
 
-<div class="card">
-  <div class="card-header"><strong>Create or update an event</strong>
+<div class="panelV2">
+  <div class="panel__header"><strong>Create or update an event</strong>
     {{/* PREFILLED when ?edit= names an event. It used to be blank always,
          while the save is an upsert on slug — so "editing" meant retyping
          every field from memory, and any field left alone was silently
@@ -117,44 +117,44 @@
          did not retype is worse than no editor. */}}
     <span class="text-muted small">{{if .Edit}}editing <code>{{.Edit.Slug}}</code> &mdash; <a href="?">start a new one</a>{{else}}saving an existing slug replaces it{{end}}</span>
   </div>
-  <div class="card-body" id="event-form">
+  <div class="panel__body" id="event-form">
     <form method="post" action="/admin/p/events/event-save" class="row g-2">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
       <div class="col-md-3">
-        <label class="form-label small mb-0">Slug</label>
-        <input aria-label="Slug" name="slug" class="form-control form-control-sm" required placeholder="summer-2026" value="{{with $.Edit}}{{.Slug}}{{end}}"{{if $.Edit}} readonly{{end}}>
+        <label class="form__label small mb-0">Slug</label>
+        <input aria-label="Slug" name="slug" class="form__input" required placeholder="summer-2026" value="{{with $.Edit}}{{.Slug}}{{end}}"{{if $.Edit}} readonly{{end}}>
         <div class="form-text">How other systems reference it. Changing it detaches them.</div>
       </div>
       <div class="col-md-3">
-        <label class="form-label small mb-0">Name</label>
-        <input aria-label="Name" name="name" class="form-control form-control-sm" placeholder="Summer 2026" value="{{with $.Edit}}{{.Name}}{{end}}">
+        <label class="form__label small mb-0">Name</label>
+        <input aria-label="Name" name="name" class="form__input" placeholder="Summer 2026" value="{{with $.Edit}}{{.Name}}{{end}}">
       </div>
       <div class="col-md-6">
-        <label class="form-label small mb-0">Description</label>
-        <input aria-label="Description" name="description" class="form-control form-control-sm" value="{{with $.Edit}}{{.Description}}{{end}}">
+        <label class="form__label small mb-0">Description</label>
+        <input aria-label="Description" name="description" class="form__input" value="{{with $.Edit}}{{.Description}}{{end}}">
       </div>
 
       <div class="col-md-3">
-        <label class="form-label small mb-0">Cron</label>
-        <input aria-label="Cron" name="cron" class="form-control form-control-sm" placeholder="0 0 * * *" value="{{with $.Edit}}{{.Cron}}{{end}}">
+        <label class="form__label small mb-0">Cron</label>
+        <input aria-label="Cron" name="cron" class="form__input" placeholder="0 0 * * *" value="{{with $.Edit}}{{.Cron}}{{end}}">
         <div class="form-text">Leave blank for a one-off, and set a start date instead.</div>
       </div>
       <div class="col-md-3">
-        <label class="form-label small mb-0">Start (one-off)</label>
-        <input aria-label="Start (one-off)" type="datetime-local" name="starts_at" class="form-control form-control-sm">
+        <label class="form__label small mb-0">Start (one-off)</label>
+        <input aria-label="Start (one-off)" type="datetime-local" name="starts_at" class="form__input">
         <div class="form-text">Read in the timezone below, not UTC.</div>
       </div>
       <div class="col-md-3">
-        <label class="form-label small mb-0">Duration (minutes)</label>
-        <input aria-label="Duration (minutes)" name="duration_minutes" class="form-control form-control-sm" placeholder="blank" value="{{with $.Edit}}{{.DurationMinutes}}{{end}}">
+        <label class="form__label small mb-0">Duration (minutes)</label>
+        <input aria-label="Duration (minutes)" name="duration_minutes" class="form__input" placeholder="blank" value="{{with $.Edit}}{{.DurationMinutes}}{{end}}">
         <div class="form-text">
           Blank on a recurring event means each window runs until the next firing.
           Blank on a one-off means it <strong>never closes</strong>.
         </div>
       </div>
       <div class="col-md-2">
-        <label class="form-label small mb-0">Timezone</label>
-        <input aria-label="Timezone" name="timezone" class="form-control form-control-sm" value="{{if $.Edit}}{{$.Edit.Timezone}}{{else}}UTC{{end}}">
+        <label class="form__label small mb-0">Timezone</label>
+        <input aria-label="Timezone" name="timezone" class="form__input" value="{{if $.Edit}}{{$.Edit.Timezone}}{{else}}UTC{{end}}">
       </div>
       <div class="col-md-1 d-flex align-items-end">
         <div class="form-check">
@@ -164,7 +164,7 @@
       </div>
 
       <div class="col-12">
-        <button class="btn btn-sm btn-primary">{{if .Edit}}Save changes{{else}}Create event{{end}}</button>
+        <button class="button button--sm button--primary">{{if .Edit}}Save changes{{else}}Create event{{end}}</button>
       </div>
     </form>
   </div>

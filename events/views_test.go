@@ -93,7 +93,10 @@ func TestAdminPageRendersEveryEventShape(t *testing.T) {
 	}
 
 	// The launch event started yesterday and never closes, so it must be open.
-	if !strings.Contains(html, "bg-success") {
+	// The host's tag variant, not Bootstrap's bg-*: the assertion is about the
+	// state being VISIBLE, and pinning it to the shim keeps the page on
+	// vocabulary the theme only tolerates.
+	if !strings.Contains(html, "tag--success") {
 		t.Error("nothing is shown as open, though a perpetual window opened yesterday")
 	}
 	// And the disabled one must be reported as disabled rather than merely closed.
@@ -168,7 +171,9 @@ func TestFindingsBannerRenders(t *testing.T) {
 		"Window health",
 		"no windows at all", "run out in 72h", "no window yet",
 		// Severity must be VISIBLE, not merely worded — an operator scans colour.
-		"bg-danger", "bg-warning", "bg-secondary",
+		// Severity is VISIBLE, not just worded, and named in the host's
+		// vocabulary rather than the shim it used to assert.
+		"tag--danger", "tag--warning", "tag--sm",
 		"trigger the job", // the fix, which is what makes it actionable
 	} {
 		if !strings.Contains(out, want) {

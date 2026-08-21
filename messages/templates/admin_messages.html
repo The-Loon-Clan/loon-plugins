@@ -1,14 +1,14 @@
 {{define "admin_messages.html"}}
 
     <div class="container mt-4 site-container">
-        <div class="card mb-4">
-            <div class="card-header">Compose Message</div>
-            <div class="card-body">
+        <div class="panelV2 mb-4">
+            <div class="panel__header">Compose Message</div>
+            <div class="panel__body">
                 <form method="POST" action="/admin/messages">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-3">
-                        <label class="form-label">To</label>
-                        <select aria-label="To" name="target" class="form-select">
+                        <label class="form__label">To</label>
+                        <select aria-label="To" name="target" class="form__select">
                             <option value="all">Everyone</option>
                             <option value="admin">All Admins</option>
                             {{range .Users}}
@@ -17,24 +17,24 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Title</label>
-                        <input aria-label="Title" type="text" name="title" class="form-control" required>
+                        <label class="form__label">Title</label>
+                        <input aria-label="Title" type="text" name="title" class="form__input" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Message</label>
-                        <textarea aria-label="Message" name="body" class="form-control" rows="4" required></textarea>
+                        <label class="form__label">Message</label>
+                        <textarea aria-label="Message" name="body" class="form__input" rows="4" required></textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary">Send Message</button>
+                    <button type="submit" class="button button--primary">Send Message</button>
                 </form>
             </div>
         </div>
 
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="panelV2">
+            <div class="panel__header d-flex justify-content-between align-items-center">
                 <span>Sent Messages</span>
                 <small style="color:var(--text-muted);">{{.Total}} total</small>
             </div>
-            <table class="table mb-0">
+            <table class="data-table mb-0">
                 <thead>
                     <tr>
                         <th>From</th>
@@ -54,7 +54,7 @@
                         <td>
                             <form method="POST" action="/admin/messages/{{.ID}}/delete" style="display:inline;">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                <button type="submit" class="button button--sm button--danger">Delete</button>
                             </form>
                         </td>
                     </tr>

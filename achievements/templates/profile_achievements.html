@@ -3,8 +3,8 @@
      only on your own profile, because on someone else's it is a list of things
      they have not done. */}}
 {{define "profile_achievements.html"}}
-<div class="card mb-3" style="background:var(--bg-elevated); border:1px solid var(--border);">
-  <div class="card-header d-flex justify-content-between align-items-center py-2">
+<div class="panelV2 mb-3" style="background:var(--bg-elevated); border:1px solid var(--border);">
+  <div class="panel__header d-flex justify-content-between align-items-center py-2">
     {{/* The title is a link because this card is a summary of something, and
          until it had one, a reader who wanted to know what these badges were
          or how to get one had nowhere to go. /p/<slug> is the host's mounting
@@ -14,12 +14,12 @@
       {{.Unlocked}} earned{{if .Pending}} &middot; {{.Pending}} pending{{end}}
     </span>
   </div>
-  <div class="card-body py-2">
+  <div class="panel__body py-2">
 
     {{if .Earned}}
     <div class="d-flex flex-wrap gap-2">
       {{range .Earned}}
-      <span class="badge rounded-pill"
+      <span class="tag rounded-pill"
             style="background:var(--bg-surface); border:1px solid var(--border); color:var(--text); font-weight:500; padding:0.4rem 0.7rem;"
             title="{{.Description}}{{if not .EarnedAt.IsZero}} — earned {{ts .EarnedAt}}{{end}}">
         {{.Name}}

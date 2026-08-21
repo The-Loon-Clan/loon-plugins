@@ -2,11 +2,11 @@
      anything is TAKING the backup comes first, because that is the failure
      that hides. */}}
 
-<div class="card mb-3">
-    <div class="card-header">Off-site copies</div>
-    <div class="card-body">
+<div class="panelV2 mb-3">
+    <div class="panel__header">Off-site copies</div>
+    <div class="panel__body">
         {{if .NoAck}}
-            <div class="alert mb-2" style="border-color:var(--danger);color:var(--danger)">
+            <div class="notice mb-2" style="border-color:var(--danger);color:var(--danger)">
                 <strong>No puller has ever reported a complete copy.</strong>
                 Everything below describes what this server would hand over — not
                 what anything has taken. A backup nothing collects is not a backup.
@@ -34,7 +34,7 @@
                         </div>
                     </div>
                     <div class="progress" style="height:14px;background:var(--bg-elevated,#222)">
-                        <div class="progress-bar{{if not .Current}} bg-warning{{end}}"
+                        <div class="progress-bar{{if not .Current}} bg-warning{{end}}"  {{/* .progress-bar and .bg-warning are BOTH host-defined (theme.css); the bar is already the host's vocabulary and converting it would be churn. */}}
                              role="progressbar" style="width:{{.Pct}}%"
                              aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"></div>
                     </div>
@@ -59,9 +59,9 @@
     </div>
 </div>
 
-<div class="card mb-3">
-    <div class="card-header">Coverage by class</div>
-    <div class="card-body">
+<div class="panelV2 mb-3">
+    <div class="panel__header">Coverage by class</div>
+    <div class="panel__body">
         {{if .HasSealed}}
         <p class="text-muted small">
             Generation <strong>{{.Latest.ID}}</strong>, sealed {{ago .Latest.SealedAt.Time}} —
@@ -70,8 +70,8 @@
             Classes are listed in the order they are indexed and served: irreplaceable first, so an
             interrupted pass or pull keeps what cannot be re-fetched.
         </p>
-        <div class="table-responsive">
-            <table class="table table-dark table-sm align-middle">
+        <div class="data-table-wrapper">
+            <table class="data-table">
                 <thead><tr><th>Class</th><th class="text-end">Files</th><th class="text-end">Change</th><th class="text-end">Size</th><th class="text-end">Packs</th><th></th></tr></thead>
                 <tbody>
                 {{range .Classes}}
@@ -108,12 +108,12 @@
     </div>
 </div>
 
-<div class="card mb-3">
-    <div class="card-header">Database dumps <span class="text-muted small">{{.DumpDir}}</span></div>
-    <div class="card-body">
+<div class="panelV2 mb-3">
+    <div class="panel__header">Database dumps <span class="text-muted small">{{.DumpDir}}</span></div>
+    <div class="panel__body">
         {{if .Dumps}}
-        <div class="table-responsive">
-            <table class="table table-dark table-sm align-middle mb-2">
+        <div class="data-table-wrapper">
+            <table class="data-table mb-2">
                 <thead><tr><th>Dump</th><th class="text-end">Files</th><th class="text-end">Size</th><th class="text-end">Tables</th><th>Postgres</th></tr></thead>
                 <tbody>
                 {{range .Dumps}}
@@ -143,11 +143,11 @@
     </div>
 </div>
 
-<div class="card mb-3">
-    <div class="card-header">Index history</div>
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-dark table-sm align-middle mb-2">
+<div class="panelV2 mb-3">
+    <div class="panel__header">Index history</div>
+    <div class="panel__body">
+        <div class="data-table-wrapper">
+            <table class="data-table mb-2">
                 <thead><tr><th>Gen</th><th>Started</th><th>Sealed</th><th class="text-end">Files</th><th class="text-end">Size</th><th class="text-end">Re-hashed</th><th></th></tr></thead>
                 <tbody>
                 {{range .Generations}}
@@ -178,12 +178,12 @@
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header">Suspect files</div>
-    <div class="card-body">
+<div class="panelV2">
+    <div class="panel__header">Suspect files</div>
+    <div class="panel__body">
         {{if .Suspects}}
-        <div class="table-responsive">
-            <table class="table table-dark table-sm align-middle mb-2">
+        <div class="data-table-wrapper">
+            <table class="data-table mb-2">
                 <thead><tr><th>Path</th><th>Class</th><th>Why</th><th class="text-end">Seen</th><th>Last</th></tr></thead>
                 <tbody>
                 {{range .Suspects}}
