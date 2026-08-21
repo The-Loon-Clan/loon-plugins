@@ -27,14 +27,29 @@ import (
 	"github.com/the-loon-clan/loon/core"
 )
 
+// MOVED TO core, AND ALIASED HERE. The definitions below now live in
+// loon/core/csrf.go, because plugins stopped being the only thing that renders
+// a form: loon-baseline supplies the account, API-key, inbox, admin-users and
+// maintenance pages, and it depends on loon but must not depend on this module.
+//
+// While the seam lived here, those eight forms had no token and answered 403
+// to everyone who clicked them.
+//
+// ALIASES, NOT DEFINITIONS. `type X = core.Y` makes the two names denote the
+// SAME type, so the host's existing pluginapi.CSRFTokenFunc registration
+// produces a value that core's resolver and this one both recognise. A
+// `type X core.Y` definition would create a DISTINCT type and every
+// registration in the tree would quietly stop resolving — the failure being,
+// again, a form field that renders empty.
+
 // CSRFTokenName is where a host publishes its per-request token minter, as
 // CSRFTokenFunc. Registered BEFORE Boot, like every seam a plugin resolves at
 // Provision.
-const CSRFTokenName = "csrf.token"
+const CSRFTokenName = core.CSRFTokenName
 
 // CSRFTokenFunc mints the token for one request. Registered AS this type — a
 // bare func never survives the registry's type assertion.
-type CSRFTokenFunc func(*gin.Context) string
+type CSRFTokenFunc = core.CSRFTokenFunc
 
 // CSRFToken resolves the token for this request, empty when no host published
 // one.
@@ -48,25 +63,7 @@ type CSRFTokenFunc func(*gin.Context) string
 // legacy key — so a host that wired only "medals.csrf" keeps working while a
 // host that wired the shared key serves every plugin at once.
 func CSRFToken(c *core.Core, gc *gin.Context, legacyKeys ...string) string {
-	if c == nil || gc == nil {
-		return ""
-	}
-	for _, key := range append([]string{CSRFTokenName}, legacyKeys...) {
-		v, ok := c.Lookup(key)
-		if !ok {
-			continue
-		}
-		// Both the declared type and the bare func: the three legacy keys were
-		// registered as plain func(*gin.Context) string, before this type
-		// existed, and a host that has not been updated must keep working.
-		if fn, ok := v.(CSRFTokenFunc); ok {
-			return fn(gc)
-		}
-		if fn, ok := v.(func(*gin.Context) string); ok {
-			return fn(gc)
-		}
-	}
-	return ""
+	return core.CSRFToken(c, gc, legacyKeys...)
 }
 
 // ── carrying the token through a context ────────────────────────────────────
