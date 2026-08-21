@@ -115,3 +115,96 @@ jobs:
         # NOT a -run subset. A hardcoded list means an integration test added
         # later never runs and nobody is told.
         run: go test -tags integration -count=1 ./...
+
+  # Everything that compiles against this repo, built from THIS commit.
+  #
+  # loon's CI already does the reverse. This direction was missing, and it is
+  # the one that matters more: loon-plugins can break loon-demo-site
+  # unilaterally — remove an exported helper, rename a field, widen an
+  # interface — and every one of those compiles fine here and nowhere else.
+  # scripts/check-consumers.sh has done this locally for a while; this is the
+  # same check where nobody has to remember to run it.
+  #
+  # `go vet` AND NOT JUST `go build`, which is the detail this would otherwise
+  # get wrong: build ignores _test.go files, and a consumer's test FAKE
+  # implements our interfaces. Widening one breaks the fake and leaves the
+  # build green. That happened on 2026-08-07 — AdminStore gained a method,
+  # every consumer reported "ok", and the host's fakeRewardsAdmin had been
+  # broken for two commits. vet type-checks tests, which is the cheapest way to
+  # see it.
+  consumers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: loon-plugins
+      - uses: actions/checkout@v4
+        with:
+          repository: ameNZB/loon
+          path: loon
+      - uses: actions/checkout@v4
+        with:
+          repository: ameNZB/loon-baseline
+          path: loon-baseline
+      - uses: actions/checkout@v4
+        with:
+          repository: ameNZB/loon-demo-site
+          path: loon-demo-site
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: loon-plugins/go.mod
+
+      # The host pins its siblings by pseudo-version, not by `replace`, so
+      # without this it would compile against the LAST PUSHED loon-plugins and
+      # say nothing about this commit. All three siblings are redirected, not
+      # just this one: mixing a working-tree loon-plugins with a pinned loon is
+      # a combination nobody ever runs, and a failure there would be noise.
+      - name: Point the host at these working trees
+        working-directory: loon-demo-site
+        run: |
+          go mod edit \
+            -replace github.com/the-loon-clan/loon=../loon \
+            -replace github.com/the-loon-clan/loon-plugins=../loon-plugins \
+            -replace github.com/the-loon-clan/loon-baseline=../loon-baseline
+        env:
+          GOWORK: "off"
+
+      - name: loon-demo-site builds against this commit
+        working-directory: loon-demo-site
+        run: go build ./...
+        env:
+          GOWORK: "off"
+          GOFLAGS: "-buildvcs=false -mod=mod"
+
+      - name: ...and its tests still compile
+        working-directory: loon-demo-site
+        run: go vet ./...
+        env:
+          GOWORK: "off"
+          GOFLAGS: "-buildvcs=false -mod=mod"
+
+  # Every plugin must say which half of a site it belongs to (CHECKLIST §1).
+  #
+  # REPORTING, NOT FAILING, and deliberately. The three plugins without a
+  # Flavours declaration — agent, ranks, requests — belong to another
+  # workstream, and turning their build red for it would be handing somebody
+  # else a broken CI over a change they did not make. The number is visible in
+  # the job summary instead, so it can be handed over rather than imposed.
+  #
+  # Make this a failing step once those three declare, and delete this comment
+  # with it.
+  flavours:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Flavours declared
+        run: |
+          python3 scripts/audit_flavours.py | tee /tmp/flavours.txt || true
+          {
+            echo "### Plugin flavours"
+            echo
+            echo '```'
+            tail -1 /tmp/flavours.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

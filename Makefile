@@ -5,13 +5,17 @@
 
 GO ?= bash scripts/go.sh
 
+# python3 first, then python: bare `python` is absent on many Linux distros
+# and on a CI runner that has not installed it deliberately.
+PYTHON ?= $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null || echo python3)
+
 # The throwaway Postgres `itest` starts. Port 5598 rather than 5432 so it cannot
 # be confused with a development database, and one digit from the host repo's
 # 5599 so both can be up at once.
 ITEST_DB_PORT ?= 5598
 ITEST_DB_NAME ?= loon_plugins_test
 
-.PHONY: help test itest vet fmt sqllint check
+.PHONY: help test itest vet fmt sqllint consumers flavours check
 
 ## help: list the targets
 help:
@@ -73,6 +77,28 @@ sqllint:
 ## missing. Baselined like sqllint.
 sentinels:
 	$(GO) run ./scripts/audit-sentinels ./...
+
+## consumers: build everything that compiles against this repo
+##
+## CI runs this too (the `consumers` job). Not part of `check` because it needs
+## the sibling checkouts on disk and takes a consumer build to answer; the
+## script SKIPS a sibling it cannot find rather than failing, so a partial
+## checkout still gets what it can.
+##
+## `go vet` as well as `go build`, which is the part that is easy to get wrong:
+## build ignores _test.go files, and a consumer's test FAKE implements our
+## interfaces. Widening one breaks the fake and leaves the build green — that
+## happened on 2026-08-07 and went unnoticed for two commits.
+consumers:
+	@bash scripts/check-consumers.sh
+
+## flavours: every plugin declares which half of a site it belongs to
+##
+## Reporting rather than failing, in CI as well: the three plugins without a
+## declaration belong to another workstream, and turning their build red over
+## a change they did not make would be somebody else's problem imposed.
+flavours:
+	@$(PYTHON) scripts/audit_flavours.py || true
 
 ## check: everything CI runs except itest
 check: vet sqllint sentinels test
