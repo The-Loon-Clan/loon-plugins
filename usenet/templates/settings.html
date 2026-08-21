@@ -110,21 +110,21 @@
         <td>
           <input type="hidden" form="prov-{{.ID}}" name="id" value="{{.ID}}">
           <input type="hidden" form="prov-del-{{.ID}}" name="id" value="{{.ID}}">
-          <input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="name" value="{{.Name}}" placeholder="label">
+          <input aria-label="Label" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="name" value="{{.Name}}" placeholder="label">
         </td>
-        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="host" value="{{.Host}}" style="min-width:11rem" required></td>
-        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="port" value="{{.Port}}"></td>
-        <td class="text-center"><input form="prov-{{.ID}}" type="checkbox" name="tls" {{if .TLS}}checked{{end}}></td>
-        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="username" value="{{.Username}}"></td>
-        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="password" name="password" value="" placeholder="unchanged"></td>
-        <td><select class="form-select form-select-sm" form="prov-{{.ID}}" name="role">
+        <td><input aria-label="Host" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="host" value="{{.Host}}" style="min-width:11rem" required></td>
+        <td><input aria-label="Port" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="port" value="{{.Port}}"></td>
+        <td class="text-center"><input aria-label="TLS" form="prov-{{.ID}}" type="checkbox" name="tls" {{if .TLS}}checked{{end}}></td>
+        <td><input aria-label="Username" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="username" value="{{.Username}}"></td>
+        <td><input aria-label="Password" class="form-control form-control-sm" form="prov-{{.ID}}" type="password" name="password" value="" placeholder="unchanged"></td>
+        <td><select aria-label="Role" class="form-select form-select-sm" form="prov-{{.ID}}" name="role">
               <option value="active" {{if ne .Role "backup"}}selected{{end}}>active</option>
               <option value="backup" {{if eq .Role "backup"}}selected{{end}}>backup</option>
             </select></td>
-        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="priority" value="{{.Priority}}"></td>
-        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="connections" value="{{.Connections}}"></td>
-        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="account_cap" value="{{.AccountCap}}"></td>
-        <td><input class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" style="min-width:7rem"></td>
+        <td><input aria-label="Priority" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="priority" value="{{.Priority}}"></td>
+        <td><input aria-label="Conns" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="connections" value="{{.Connections}}"></td>
+        <td><input aria-label="Cap" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="account_cap" value="{{.AccountCap}}"></td>
+        <td><input aria-label="Backbone" class="form-control form-control-sm" form="prov-{{.ID}}" type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" style="min-width:7rem"></td>
         <td style="white-space:nowrap">
           <label class="me-1" title="unchecked providers keep their credentials but are not crawled"><input form="prov-{{.ID}}" type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> on</label>
           <button class="btn btn-sm btn-primary py-0" form="prov-{{.ID}}" type="submit">Save</button>
@@ -140,21 +140,21 @@
       <tr>
         <td>
           <input type="hidden" form="prov-new" name="id" value="0">
-          <input class="form-control form-control-sm" form="prov-new" type="text" name="name" placeholder="label (optional)">
+          <input aria-label="Label" class="form-control form-control-sm" form="prov-new" type="text" name="name" placeholder="label (optional)">
         </td>
-        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="host" placeholder="news.example.com" style="min-width:11rem" required></td>
-        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="port" value="119"></td>
-        <td class="text-center"><input form="prov-new" type="checkbox" name="tls"></td>
-        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="username" placeholder="user"></td>
-        <td><input class="form-control form-control-sm" form="prov-new" type="password" name="password" placeholder="password"></td>
-        <td><select class="form-select form-select-sm" form="prov-new" name="role">
+        <td><input aria-label="Host" class="form-control form-control-sm" form="prov-new" type="text" name="host" placeholder="news.example.com" style="min-width:11rem" required></td>
+        <td><input aria-label="Port" class="form-control form-control-sm" form="prov-new" type="text" name="port" value="119"></td>
+        <td class="text-center"><input aria-label="TLS" form="prov-new" type="checkbox" name="tls"></td>
+        <td><input aria-label="Username" class="form-control form-control-sm" form="prov-new" type="text" name="username" placeholder="user"></td>
+        <td><input aria-label="Password" class="form-control form-control-sm" form="prov-new" type="password" name="password" placeholder="password"></td>
+        <td><select aria-label="Role" class="form-select form-select-sm" form="prov-new" name="role">
               <option value="active">active</option>
               <option value="backup">backup</option>
             </select></td>
-        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="priority" value="100"></td>
-        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="connections" value="0"></td>
-        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="account_cap" value="0"></td>
-        <td><input class="form-control form-control-sm" form="prov-new" type="text" name="backbone" placeholder="auto"></td>
+        <td><input aria-label="Priority" class="form-control form-control-sm" form="prov-new" type="text" name="priority" value="100"></td>
+        <td><input aria-label="Conns" class="form-control form-control-sm" form="prov-new" type="text" name="connections" value="0"></td>
+        <td><input aria-label="Cap" class="form-control form-control-sm" form="prov-new" type="text" name="account_cap" value="0"></td>
+        <td><input aria-label="Backbone" class="form-control form-control-sm" form="prov-new" type="text" name="backbone" placeholder="auto"></td>
         <td style="white-space:nowrap">
           <button class="btn btn-sm btn-primary py-0" form="prov-new" type="submit">Add</button>
           <button class="btn btn-sm btn-outline-secondary py-0" form="prov-new" type="submit" formaction="/admin/p/usenet/provider-test">Test</button>
@@ -305,11 +305,11 @@
                     <td class="text-end">{{.NZBs}}</td>
                     <form method="post" action="/admin/p/usenet/group-tune" id="tune-{{.Name}}" class="js-group-tune">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}"></form>
-                    <td><input class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="retention_days" value="{{if .RetentionDays}}{{.RetentionDays}}{{end}}"
+                    <td><input aria-label="Depth (d)" class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="retention_days" value="{{if .RetentionDays}}{{.RetentionDays}}{{end}}"
                                placeholder="site" title="blank = follow the site-wide crawl depth" style="width:4.5rem"></td>
-                    <td><input class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="throttle_ms" value="{{.ThrottleMs}}"
+                    <td><input aria-label="Throttle (ms)" class="form-control form-control-sm" form="tune-{{.Name}}" type="text" name="throttle_ms" value="{{.ThrottleMs}}"
                                title="pause after each batch for this group" style="width:4.5rem"></td>
-                    <td><select class="form-select form-select-sm" form="tune-{{.Name}}" name="tier"
+                    <td><select aria-label="Low pri" class="form-select form-select-sm" form="tune-{{.Name}}" name="tier"
                                 title="critical is crawled first every pass; low only with capacity left over"
                                 style="width:7rem">
                             {{$t := .Tier}}{{range $.Tiers}}<option value="{{.}}" {{if eq (printf "%s" .) $t}}selected{{end}}>{{.Label}}</option>{{end}}
