@@ -93,6 +93,17 @@ once.
 the URL a member supplies, through the host, and stores the result locally.
 Nothing is ever sent outward.
 
+## Events
+
+**Declares** `mediainfo.report.posted` and `mediainfo.shot.added`, both
+countable member events. Both are real contributions — somebody went and got
+something the indexer could not — which is the shape worth counting.
+
+The ceilings differ and a site scoring on them should know: a report is one per
+member per release (the unique key says so, and re-posting replaces rather than
+accumulates), while a screenshot is keyed on (release, source URL), so one
+member can legitimately add several to a release by supplying different links.
+
 ## Hooks & callbacks
 
 - **Consumes:** `media.intake`, `csrf.token`, `core.Users`, `core.WidgetItem`.

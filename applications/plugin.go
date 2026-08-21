@@ -79,6 +79,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.st = NewPGStore(db)
 
+	if err := declareEvents(c); err != nil {
+		return fmt.Errorf("applications: declaring events: %w", err)
+	}
+
 	tmpl, err := template.New("applications").ParseFS(tmplFS, "templates/*.html")
 	if err != nil {
 		return fmt.Errorf("applications: parsing templates: %w", err)

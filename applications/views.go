@@ -140,6 +140,8 @@ func (p *Plugin) submit(c *gin.Context) (template.HTML, error) {
 	}); err != nil {
 		return fail("failed")
 	}
+	// No email and no IP hash travel with it — see events.go.
+	p.emit(ctx, EventSubmitted, Submitted{})
 	c.Redirect(303, "/p/apply?sent=1")
 	return "", nil
 }
@@ -213,6 +215,9 @@ func (p *Plugin) decide(c *gin.Context) (template.HTML, error) {
 		if _, err := p.st.Decide(ctx, id, StatusRejected, actor, note, ""); err != nil {
 			return "", err
 		}
+		p.emit(ctx, EventDecided, Decided{
+			ApplicationID: id, Status: StatusRejected, DecidedBy: actor,
+		})
 		c.Redirect(303, "/admin/p/applications")
 		return "", nil
 	}
@@ -239,6 +244,11 @@ func (p *Plugin) decide(c *gin.Context) (template.HTML, error) {
 	if _, err := p.st.Decide(ctx, id, StatusAccepted, actor, note, issued.Code); err != nil {
 		return "", err
 	}
+	// The invite CODE is not announced. It is a credential, and an event is
+	// the one place on this site a value reaches several plugins at once.
+	p.emit(ctx, EventDecided, Decided{
+		ApplicationID: id, Status: StatusAccepted, DecidedBy: actor,
+	})
 	c.Redirect(303, "/admin/p/applications")
 	return "", nil
 }

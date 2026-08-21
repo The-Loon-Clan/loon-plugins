@@ -66,6 +66,23 @@ who was invited.
 | `pluginapi.InviteIssuer` (`auth.invite.issue`) | An approval has to become a real invite, and minting one is not a plugin's business — same mint, same window, same email, same chain as any other invite. |
 | `pluginapi.CSRFTokenFunc` | Every form, including the public one. |
 
+## Events
+
+**Declares** `applications.submitted` and `applications.decided`, both **system**
+events and neither countable.
+
+That is forced rather than chosen. An application is made by somebody with no
+account — the whole point of the plugin — so there is no member to attribute it
+to or total it against, and a countable event is totalled per member. A member
+event with no member is a contradiction the directory would carry happily.
+
+**Neither payload carries identifying detail.** No email, no IP hash, and on an
+acceptance no invite code. An event reaches every subscriber on the site, so
+carrying any of those would let a plugin learn who is trying to join a closed
+site from a stream — routing around the access gate on the staff queue, which
+is the one surface meant to show it. Only the fact travels, plus who decided.
+Tests assert the payload's field list, so adding one fails rather than shipping.
+
 ## Hooks & callbacks
 
 - **Publishes:** `auth.regmode.apply` (`pluginapi.RegistrationModeInfo`) — a way

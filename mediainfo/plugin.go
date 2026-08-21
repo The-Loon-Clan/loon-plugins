@@ -104,6 +104,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.st = NewPGStore(db)
 
+	if err := declareEvents(c); err != nil {
+		return fmt.Errorf("mediainfo: declaring events: %w", err)
+	}
+
 	tmpl, err := template.New("mediainfo").Funcs(tmplFuncs()).ParseFS(tmplFS, "templates/*.html")
 	if err != nil {
 		return fmt.Errorf("mediainfo: parsing templates: %w", err)

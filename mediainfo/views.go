@@ -209,6 +209,7 @@ func (p *Plugin) handlePost(c *gin.Context) {
 		return
 	}
 	p.reportsPosted.Add(1)
+	p.emit(c.Request.Context(), EventReportPosted, u.ID, ReportPosted{ReleaseID: releaseID})
 	c.Redirect(http.StatusSeeOther, back)
 }
 
@@ -256,6 +257,7 @@ func (p *Plugin) handleShot(c *gin.Context) {
 		return
 	}
 	p.shotsFetched.Add(1)
+	p.emit(ctx, EventShotAdded, u.ID, ShotAdded{ReleaseID: releaseID, Bytes: stored.Bytes})
 	c.Redirect(http.StatusSeeOther, back)
 }
 
