@@ -87,10 +87,14 @@ func TestSettingsRendersProviders(t *testing.T) {
 		`class="nav tabs"`, `data-bs-toggle="tab"`, `id="providers"`, `id="newsgroups"`,
 		"/admin/p/usenet/provider", "/admin/p/usenet/group-tune",
 		// one page per plugin: crawlers + filters embed as tabs, width is a
-		// container tier (compound .container.page selector), sections are
-		// host-native card-header boxes
+		// container tier (compound .container.page selector), sections are the
+		// host's own panel component rather than Bootstrap's card
 		`id="crawlers"`, `id="filters"`, "crawlers-frag", "filters-frag",
-		`class="container page"`, `class="card-header"`,
+		`class="container page"`, `class="panel__header"`,
+		// The scroll container, asserted by name because the class it replaced
+		// only ever styled a scrollbar: .table-responsive has no overflow-x in
+		// this project, so a wide row was clipped rather than scrolled.
+		`class="data-table-wrapper"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered settings page is missing %q", want)
