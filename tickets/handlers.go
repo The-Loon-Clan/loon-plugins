@@ -104,7 +104,7 @@ func (h *Handlers) TicketDetail(c *gin.Context) {
 	ticket, err := h.store.GetTicketByID(ctx, id)
 	visible := err == nil && ticketVisibleTo(ticket, user.ID, user.Admin)
 	if !visible {
-		c.String(http.StatusNotFound, "ticket not found")
+		h.fail(c, http.StatusNotFound, "noticket")
 		return
 	}
 	replies, _ := h.store.GetTicketReplies(ctx, id)
@@ -145,7 +145,7 @@ func (h *Handlers) ReplyTicket(c *gin.Context) {
 	ctx := c.Request.Context()
 	ticket, err := h.store.GetTicketByID(ctx, id)
 	if err != nil || !pluginapi.VisibleTo(ticket.UserID, user.ID, user.Admin) {
-		c.String(http.StatusNotFound, "ticket not found")
+		h.fail(c, http.StatusNotFound, "noticket")
 		return
 	}
 	body := strings.TrimSpace(c.PostForm("body"))
@@ -197,7 +197,7 @@ func (h *Handlers) Tickets(c *gin.Context) {
 
 	tickets, total, err := h.store.GetTickets(ctx, statusFilter, ticketsPageSize, offset)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to get tickets")
+		h.fail(c, http.StatusInternalServerError, "loadfailed")
 		return
 	}
 	ticketBaseURL := "/admin/tickets?"

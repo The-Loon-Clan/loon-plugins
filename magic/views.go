@@ -267,17 +267,17 @@ func (p *Plugin) actionCast(gc *gin.Context) (template.HTML, error) {
 func (p *Plugin) actionTerminate(gc *gin.Context) (template.HTML, error) {
 	u, ok := p.core.Auth.CurrentUser(gc)
 	if !ok || u == nil || !u.AtLeast(core.RoleAdmin) {
-		gc.Redirect(http.StatusSeeOther, "/p/magic?err="+url.QueryEscape("terminating a promotion is an admin act"))
+		gc.Redirect(http.StatusSeeOther, "/p/magic?err="+"notadmin")
 		return "", nil
 	}
 	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
 	if id > 0 {
 		if _, err := p.st.Terminate(gc.Request.Context(), id, u.ID); err != nil {
-			gc.Redirect(http.StatusSeeOther, "/p/magic?err="+url.QueryEscape("terminate failed"))
+			gc.Redirect(http.StatusSeeOther, "/p/magic?err="+"terminatefailed")
 			return "", nil
 		}
 	}
-	gc.Redirect(http.StatusSeeOther, "/p/magic?msg="+url.QueryEscape("Terminated — the record stays"))
+	gc.Redirect(http.StatusSeeOther, "/p/magic?msg="+"terminated")
 	return "", nil
 }
 

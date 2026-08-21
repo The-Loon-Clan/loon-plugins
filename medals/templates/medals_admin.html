@@ -12,10 +12,14 @@
 {{if .Msg}}<div class="notice notice--success"><span>
     {{if eq .Msg "created"}}Created {{.MsgName}}.
     {{else if eq .Msg "savedone"}}Saved {{.MsgName}}.
+    {{else if eq .Msg "savedplain"}}Saved.
+    {{else if eq .Msg "deleted"}}Deleted &mdash; holders&rsquo; copies went with it.
     {{else}}Done.{{end}}
 </span></div>{{end}}
 {{if .Err}}<div class="notice notice--warning"><span>
     {{if eq .Err "badslug"}}Slugs are lowercase with dashes.
+    {{else if eq .Err "togglefailed"}}That did not save. Please try again.
+    {{else if eq .Err "deletefailed"}}That did not delete. Please try again.
     {{else if eq .Err "createfailed"}}That did not create &mdash; is the slug taken?
     {{else if eq .Err "nosuch"}}No such medal.
     {{else if eq .Err "savefailed"}}That did not save. Please try again.

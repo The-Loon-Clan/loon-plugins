@@ -53,6 +53,12 @@ var (
 // status is explicit because three of these pages re-render themselves on a
 // validation failure and must say so — a 200 carrying "your ticket was
 // rejected" is a lie to anything reading the status line.
+// fail renders a refusal in the site's chrome instead of a bare string.
+// The reason travels as a code; ticket_error.html holds the words.
+func (h *Handlers) fail(c *gin.Context, status int, reason string) {
+	render(c, status, "Support", "ticket_error.html", gin.H{"Reason": reason})
+}
+
 func render(c *gin.Context, status int, title, name string, data gin.H) {
 	if data == nil {
 		data = gin.H{}

@@ -1,6 +1,15 @@
 {{/* Magic — /p/magic: cast a buff, and the history of every cast. */}}
-{{if .Msg}}<div class="notice notice--success"><span>{{.Msg}}</span></div>{{end}}
-{{if .Err}}<div class="notice notice--warning"><span>{{.Err}}</span></div>{{end}}
+{{/* Codes, not sentences — CHECKLIST §10. The handler redirects with
+     ?err=notadmin and the words live here. */}}
+{{if .Msg}}<div class="notice notice--success"><span>
+    {{if eq .Msg "terminated"}}Terminated &mdash; the record stays.
+    {{else}}Done.{{end}}
+</span></div>{{end}}
+{{if .Err}}<div class="notice notice--warning"><span>
+    {{if eq .Err "notadmin"}}Terminating a promotion is an admin act.
+    {{else if eq .Err "terminatefailed"}}That did not terminate. Please try again.
+    {{else}}Something went wrong.{{end}}
+</span></div>{{end}}
 
 <p class="text-muted">
     Magic casts ratio rules on a torrent: free leech, double upload, or your own

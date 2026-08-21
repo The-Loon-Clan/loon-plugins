@@ -1,0 +1,18 @@
+{{define "news_error.html"}}
+{{/* Codes, not sentences — CHECKLIST §10. A fragment; this plugin's host
+     wires Deps.RenderPage and supplies the chrome. */}}
+<section class="panelV2">
+    <div class="panel__body">
+        <div class="notice notice--warning">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+            <span>
+                {{if eq .Reason "loadfailed"}}The news could not be loaded just now. Please try again shortly.
+                {{else if eq .Reason "createfailed"}}That post could not be created. Please try again.
+                {{else if eq .Reason "updatefailed"}}That post could not be saved. Please try again.
+                {{else}}Something went wrong.{{end}}
+            </span>
+        </div>
+        <p class="mt-3 mb-0"><a class="button button--outlined button--sm" href="/news">Back to the news</a></p>
+    </div>
+</section>
+{{end}}

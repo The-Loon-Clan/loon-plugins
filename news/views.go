@@ -20,6 +20,16 @@ var pageFS embed.FS
 var pageTmpl = template.Must(template.ParseFS(pageFS, "templates/*.html"))
 
 // render executes one fragment and hands it to the host for chrome.
+// fail renders a refusal in the site's chrome instead of a bare string.
+//
+// No status parameter, because this plugin's render has none — its pages all
+// answer 200 and the host's RenderPage signature here carries no status
+// either. So a failure renders the words and returns 200, which is worse than
+// a 500 and better than plain text; fixing it means widening the seam.
+func (h *Handlers) fail(c *gin.Context, reason string) {
+	render(c, "News", "news_error.html", gin.H{"Reason": reason})
+}
+
 func render(c *gin.Context, title, name string, data gin.H) {
 	if data == nil {
 		data = gin.H{}

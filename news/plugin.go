@@ -345,7 +345,7 @@ func (h *Handlers) NewsDetail(c *gin.Context) {
 func (h *Handlers) NewsList(c *gin.Context) {
 	posts, err := h.store.GetAllNewsPosts(c.Request.Context())
 	if err != nil {
-		c.String(http.StatusInternalServerError, "failed to get news posts")
+		h.fail(c, "loadfailed")
 		return
 	}
 	render(c, "News — admin", "admin_news.html", gin.H{"Posts": posts, "CSRFToken": deps.CSRFToken(c)})
@@ -363,7 +363,7 @@ func (h *Handlers) CreateNews(c *gin.Context) {
 	_, err := h.store.CreateNewsPost(c.Request.Context(), title, slug, body, published)
 	if err != nil {
 		log.Printf("news/create-post: %v", err)
-		c.String(http.StatusInternalServerError, "failed to create the news post")
+		h.fail(c, "createfailed")
 		return
 	}
 	c.Redirect(http.StatusFound, "/admin/news")
@@ -389,7 +389,7 @@ func (h *Handlers) UpdateNews(c *gin.Context) {
 		slug = slugify(title)
 	}
 	if err := h.store.UpdateNewsPost(c.Request.Context(), id, title, slug, body, published); err != nil {
-		c.String(http.StatusInternalServerError, "failed to update news post")
+		h.fail(c, "updatefailed")
 		return
 	}
 	c.Redirect(http.StatusFound, "/admin/news")

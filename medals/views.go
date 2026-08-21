@@ -269,11 +269,11 @@ func (p *Plugin) actionToggle(gc *gin.Context) (template.HTML, error) {
 	on := gc.PostForm("on") == "1"
 	if id > 0 {
 		if err := p.st.SetEnabled(gc.Request.Context(), id, on); err != nil {
-			gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+url.QueryEscape("toggle failed"))
+			gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+"togglefailed")
 			return "", nil
 		}
 	}
-	gc.Redirect(http.StatusSeeOther, "/admin/p/medals?msg="+url.QueryEscape("Saved"))
+	gc.Redirect(http.StatusSeeOther, "/admin/p/medals?msg="+"savedplain")
 	return "", nil
 }
 
@@ -281,10 +281,10 @@ func (p *Plugin) actionDelete(gc *gin.Context) (template.HTML, error) {
 	id, _ := strconv.ParseInt(gc.PostForm("id"), 10, 64)
 	if id > 0 {
 		if err := p.st.Delete(gc.Request.Context(), id); err != nil {
-			gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+url.QueryEscape("delete failed"))
+			gc.Redirect(http.StatusSeeOther, "/admin/p/medals?err="+"deletefailed")
 			return "", nil
 		}
 	}
-	gc.Redirect(http.StatusSeeOther, "/admin/p/medals?msg="+url.QueryEscape("Deleted — holders' copies went with it"))
+	gc.Redirect(http.StatusSeeOther, "/admin/p/medals?msg="+"deleted")
 	return "", nil
 }
