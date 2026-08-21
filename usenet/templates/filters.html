@@ -76,7 +76,7 @@
         </div>
         <form method="post" action="/admin/p/usenet/junk-order" class="d-flex gap-2 align-items-center mt-2">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-            <input type="text" name="confirm" class="form__input" style="max-width:12rem"
+            <input aria-label="Type reorder to confirm" type="text" name="confirm" class="form__input" style="max-width:12rem"
                    placeholder="type reorder" autocomplete="off">
             <button class="button button--sm button--primary" type="submit">Apply recommended order</button>
             <span class="text-muted small">
@@ -392,9 +392,9 @@
     </p>
     <form method="post" action="/admin/p/usenet/poster-watch" class="d-flex mb-3" style="gap:.5rem;flex-wrap:wrap">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-      <input class="form__input" type="text" name="pattern"
+      <input aria-label="Poster pattern to watch" class="form__input" type="text" name="pattern"
              placeholder="tsukihime" style="max-width:16rem" required>
-      <input class="form__input" type="text" name="note"
+      <input aria-label="Why you are watching this poster" class="form__input" type="text" name="note"
              placeholder="why (optional)" style="max-width:20rem">
       <button class="button button--sm button--outlined" type="submit">Watch</button>
     </form>
