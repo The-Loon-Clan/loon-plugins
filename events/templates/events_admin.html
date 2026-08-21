@@ -13,6 +13,7 @@
   </div>
   <div class="data-table-wrapper">
     <table class="data-table mb-0">
+        <caption class="visually-hidden">Scheduled events</caption>
       <tbody>
       {{range .Findings}}
         <tr>
@@ -36,6 +37,7 @@
   </div>
   <div class="data-table-wrapper">
     <table class="data-table mb-0">
+        <caption class="visually-hidden">Event windows</caption>
       <thead><tr>
         <th>Slug</th><th>Name</th><th>Shape</th><th>Cron</th><th>TZ</th>
         <th>Windows</th><th>Open now</th><th>Next opens</th><th>Covered to</th><th></th>
@@ -87,6 +89,7 @@
   </div>
   <div class="data-table-wrapper">
     <table class="data-table mb-0">
+        <caption class="visually-hidden">Configuration findings</caption>
       <thead><tr><th>Starts</th><th>Ends</th><th>State</th></tr></thead>
       <tbody>
       {{range .Windows}}
