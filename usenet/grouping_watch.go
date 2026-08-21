@@ -336,7 +336,7 @@ func (s *PGStore) junkDropsReport(ctx context.Context, limit int) (junkDropRepor
 	// Real-vs-junk is decided by the junk rules in Go rather than in SQL, so
 	// the classification is the SAME code the crawler drops on. A SQL mirror of
 	// those rules is exactly the divergence that starved the title-cleaner
-	// worklist for a year (CLAUDE.md, Postgres has no ).
+	// worklist for a year (CLAUDE.md, Postgres has no \b).
 	named, err := s.recoveredNames(ctx)
 	if err != nil {
 		return rep, err
