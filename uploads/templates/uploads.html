@@ -32,8 +32,8 @@
     </ul>
 
     {{if eq .ActiveTab "public"}}
-    <div class="card mb-3">
-        <div class="card-body" style="font-size:0.9rem;color:var(--text-muted);">
+    <div class="panelV2 mb-3">
+        <div class="panel__body" style="font-size:0.9rem;color:var(--text-muted);">
             Everything you have uploaded publicly. Deleting hides a release from the site but keeps it
             recoverable here. Going <strong>anonymous</strong> hides your name publicly and can be
             undone. Going <strong>permanently anonymous</strong> unlinks the upload from your account
@@ -41,14 +41,14 @@
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="panelV2">
+        <div class="panel__header d-flex justify-content-between align-items-center">
             <span>Public uploads</span>
             <small style="color:var(--text-muted);">{{.PublicTotal}} total</small>
         </div>
         {{if .Public}}
         <div style="overflow-x:auto;">
-        <table class="table table-sm mb-0 align-middle">
+        <table class="data-table mb-0">
             <thead><tr>
                 <th>Release</th><th class="text-end">Size</th><th>Uploaded</th>
                 <th>Visibility</th><th style="width:230px;"></th>
@@ -60,22 +60,22 @@
                     <td class="text-end">{{bytes .SizeBytes}}</td>
                     <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt}}</td>
                     <td style="font-size:0.85rem;">
-                        {{if .Anonymous}}<span class="badge bg-dark">anonymous</span>{{else}}<span style="color:var(--text-muted);">named</span>{{end}}
-                        {{if .Queued}} <span class="badge bg-info text-dark">queued</span>{{end}}
+                        {{if .Anonymous}}<span class="tag">anonymous</span>{{else}}<span style="color:var(--text-muted);">named</span>{{end}}
+                        {{if .Queued}} <span class="tag tag--info">queued</span>{{end}}
                     </td>
                     <td>
                         <form method="POST" action="/account-settings/uploads/bulk" style="display:inline">
                             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <input type="hidden" name="id" value="{{.ID}}">
                             {{if .Deleted}}
-                            <button name="action" value="restore" class="btn btn-sm btn-outline-success">Restore</button>
+                            <button name="action" value="restore" class="button button--sm button--outlined">Restore</button>
                             {{else}}
-                            <button name="action" value="delete" class="btn btn-sm btn-outline-danger">Delete</button>
+                            <button name="action" value="delete" class="button button--sm button--outlined button--danger">Delete</button>
                             {{end}}
                             {{if .Anonymous}}
-                            <button name="action" value="deanonymous" class="btn btn-sm btn-outline-secondary">Show name</button>
+                            <button name="action" value="deanonymous" class="button button--sm button--outlined">Show name</button>
                             {{else}}
-                            <button name="action" value="anonymous" class="btn btn-sm btn-outline-secondary">Anonymous</button>
+                            <button name="action" value="anonymous" class="button button--sm button--outlined">Anonymous</button>
                             {{end}}
                         </form>
                     </td>
@@ -86,27 +86,27 @@
         </div>
         {{.PublicPagination}}
         {{else}}
-        <div class="card-body text-center" style="color:var(--text-muted);padding:2rem;">
+        <div class="panel__body text-center" style="color:var(--text-muted);padding:2rem;">
             You have not uploaded anything publicly yet.
         </div>
         {{end}}
     </div>
 
     {{if .Public}}
-    <div class="card mt-3">
-        <div class="card-header">Everything at once</div>
-        <div class="card-body">
+    <div class="panelV2 mt-3">
+        <div class="panel__header">Everything at once</div>
+        <div class="panel__body">
             <form method="POST" action="/account-settings/uploads/bulk" style="display:inline">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                <button name="action" value="delete" class="btn btn-sm btn-outline-danger">Delete all</button>
-                <button name="action" value="restore" class="btn btn-sm btn-outline-success">Restore all</button>
-                <button name="action" value="anonymous" class="btn btn-sm btn-outline-secondary">Make all anonymous</button>
+                <button name="action" value="delete" class="button button--sm button--outlined button--danger">Delete all</button>
+                <button name="action" value="restore" class="button button--sm button--outlined">Restore all</button>
+                <button name="action" value="anonymous" class="button button--sm button--outlined">Make all anonymous</button>
             </form>
             <form method="POST" action="/account-settings/uploads/bulk" style="display:inline"
                   onsubmit="return confirm('This unlinks every upload from your account permanently. They will leave this page and cannot be recovered. Continue?')">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                 <input type="hidden" name="confirm" value="permanent">
-                <button name="action" value="true-anonymous" class="btn btn-sm btn-danger">Permanently anonymous</button>
+                <button name="action" value="true-anonymous" class="button button--sm button--danger">Permanently anonymous</button>
             </form>
         </div>
     </div>
@@ -114,14 +114,14 @@
     {{end}}
 
     {{if eq .ActiveTab "private-nzb"}}
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="panelV2">
+        <div class="panel__header d-flex justify-content-between align-items-center">
             <span>Private NZB uploads</span>
             <small style="color:var(--text-muted);">{{.PrivateNZBTotal}} total</small>
         </div>
         {{if .PrivateNZB}}
         <div style="overflow-x:auto;">
-        <table class="table table-sm mb-0 align-middle">
+        <table class="data-table mb-0">
             <thead><tr><th>Title</th><th class="text-end">Size</th><th>Uploaded</th></tr></thead>
             <tbody>
             {{range .PrivateNZB}}
@@ -136,7 +136,7 @@
         </div>
         {{.PrivateNZBPager}}
         {{else}}
-        <div class="card-body text-center" style="color:var(--text-muted);padding:2rem;">
+        <div class="panel__body text-center" style="color:var(--text-muted);padding:2rem;">
             No private NZB uploads.
         </div>
         {{end}}
@@ -144,14 +144,14 @@
     {{end}}
 
     {{if eq .ActiveTab "private-torrent"}}
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="panelV2">
+        <div class="panel__header d-flex justify-content-between align-items-center">
             <span>Private torrent uploads</span>
             <small style="color:var(--text-muted);">{{.PrivateTorrentTotal}} total</small>
         </div>
         {{if .PrivateTorrent}}
         <div style="overflow-x:auto;">
-        <table class="table table-sm mb-0 align-middle">
+        <table class="data-table mb-0">
             <thead><tr>
                 <th>Title</th><th>Info hash</th><th>Uploaded</th>
                 <th>After fulfilment</th><th style="width:150px;"></th>
@@ -169,7 +169,7 @@
                         <form method="POST" action="/account-settings/uploads/torrent-visibility">
                             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <input type="hidden" name="request_id" value="{{.ID}}">
-                            <select name="keep_private" class="form-select form-select-sm d-inline"
+                            <select name="keep_private" class="form__select d-inline"
                                     style="width:auto" onchange="this.form.submit()">
                                 <option value="false" {{if not .KeptPrivate}}selected{{end}}>Publish</option>
                                 <option value="true"  {{if .KeptPrivate}}selected{{end}}>Keep private</option>
@@ -183,7 +183,7 @@
         </div>
         {{.PrivateTorrentPager}}
         {{else}}
-        <div class="card-body text-center" style="color:var(--text-muted);padding:2rem;">
+        <div class="panel__body text-center" style="color:var(--text-muted);padding:2rem;">
             No private torrent uploads.
         </div>
         {{end}}

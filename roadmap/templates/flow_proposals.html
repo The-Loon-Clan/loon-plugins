@@ -213,7 +213,7 @@
                 </p>
             </div>
             {{if .CurrentUserID}}
-            <a href="/flow/proposals?mine=1" class="btn btn-sm {{if .FilterMine}}btn-primary{{else}}btn-outline-primary{{end}}" style="flex-shrink:0;font-size:0.76rem;">
+            <a href="/flow/proposals?mine=1" class="button button--sm {{if .FilterMine}}button--primary{{else}}button--outlined{{end}}" style="flex-shrink:0;font-size:0.76rem;">
                 My Requests
             </a>
             {{end}}
@@ -266,7 +266,7 @@
             {{$tag := .FilterTag}}{{$status := .FilterStatus}}{{$sort := .FilterSort}}
             {{$f := .Facets}}
             {{$mineQS := ""}}{{if .FilterMine}}{{$mineQS = "&mine=1"}}{{end}}
-            <div class="card mb-3">
+            <div class="panelV2 mb-3">
                 <div class="fr-filters">
                     {{$qsBase := $mineQS}}
                     {{if $status}}{{$qsBase = print $qsBase "&status=" $status}}{{end}}
@@ -327,7 +327,7 @@
                 {{if .FilterMine}}Your requests{{else}}All requests{{end}}
             </h3>
             {{if .Proposals}}
-            <div class="card">
+            <div class="panelV2">
                 <div id="prop-list">
                     {{$cuid := $.CurrentUserID}}
                     {{range .Proposals}}
@@ -362,13 +362,13 @@
                 </div>
             </div>
             {{else}}
-            <div class="card">
-                <div class="card-body text-center py-4">
+            <div class="panelV2">
+                <div class="panel__body text-center py-4">
                     {{if or .FilterTag .FilterStatus .FilterMine}}
                     <p style="font-size:0.88rem;margin:0 0 0.5rem;">
                         {{if .FilterMine}}You haven't filed a request yet.{{else}}No requests match these filters.{{end}}
                     </p>
-                    <a href="/flow/proposals" class="btn btn-sm btn-outline-primary" style="font-size:0.76rem;">Show everything</a>
+                    <a href="/flow/proposals" class="button button--sm button--outlined" style="font-size:0.76rem;">Show everything</a>
                     {{else}}
                     <p style="font-size:0.88rem;margin:0 0 0.35rem;">No requests yet.</p>
                     <p style="font-size:0.76rem;color:var(--text-muted);margin:0;">The form above is the whole process — say what you'd like and it lands here.</p>
@@ -387,8 +387,8 @@
                      Open on the page rather than behind a summary. It was a
                      collapsed <details>, which hid the single action this page
                      exists for on a page that had nothing else on it. */}}
-                <div class="card" id="new-request-card">
-                    <div class="card-body">
+                <div class="panelV2" id="new-request-card">
+                    <div class="panel__body">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <h3 style="font-size:1rem;font-weight:600;margin:0;">Create a new feature request</h3>
                         </div>
@@ -399,7 +399,7 @@
                             <div class="fr-step-body">
                                 <div class="fr-step-title">What's your idea?</div>
                                 <div class="fr-step-hint">A clear, specific title helps others find and vote for it.</div>
-                                <input id="new-title" class="form-control form-control-sm" type="text" maxlength="100"
+                                <input id="new-title" class="form__input" type="text" maxlength="100"
                                        placeholder="Summarise your request in one line">
                                 <div class="fr-counter"><span id="title-count">0</span> / 100</div>
                                 <div id="dup-hint" class="dup-hint" style="display:none;"></div>
@@ -490,8 +490,8 @@
                         {{end}}
 
                         <div class="d-flex gap-2 align-items-center pt-3" style="border-top:1px solid var(--border);">
-                            <button id="btn-new" class="btn btn-sm btn-primary" type="button">Submit request</button>
-                            <button id="btn-cancel" class="btn btn-sm btn-outline-secondary" type="button">Clear</button>
+                            <button id="btn-new" class="button button--sm button--primary" type="button">Submit request</button>
+                            <button id="btn-cancel" class="button button--sm button--outlined" type="button">Clear</button>
                             <span id="new-status" style="font-size:0.78rem;color:var(--text-muted);"></span>
                         </div>
                     </div>
@@ -499,8 +499,8 @@
 
                 {{/* ── Right: guidance + what the place looks like ───── */}}
                 <div>
-                    <div class="card mb-3">
-                        <div class="card-body">
+                    <div class="panelV2 mb-3">
+                        <div class="panel__body">
                             <h3 style="font-size:0.88rem;font-weight:600;margin:0 0 0.4rem;">Before you submit</h3>
                             <div class="fr-tip">
                                 <div class="fr-tip-icon">
@@ -541,8 +541,8 @@
                         </div>
                     </div>
 
-                    <div class="card">
-                        <div class="card-body">
+                    <div class="panelV2">
+                        <div class="panel__body">
                             <h3 style="font-size:0.88rem;font-weight:600;margin:0 0 0.2rem;">Recent requests</h3>
                             {{if .Recent}}
                             {{range .Recent}}
@@ -556,7 +556,7 @@
                                 </div>
                             </a>
                             {{end}}
-                            <button type="button" class="btn btn-sm btn-outline-primary w-100 mt-2 js-show-requests" style="font-size:0.74rem;">View all requests</button>
+                            <button type="button" class="button button--sm button--outlined w-100 mt-2 js-show-requests" style="font-size:0.74rem;">View all requests</button>
                             {{else}}
                             <p style="font-size:0.74rem;color:var(--text-muted);margin:0.4rem 0 0;">
                                 Nothing yet — yours would be the first.
@@ -948,8 +948,8 @@
                      +  '<strong style="color:var(--text-muted);">Mod:</strong>';
                 html += statusSelect(d.id, d.status);
                 html += tagSelect(d.id, d.tag);
-                html += '<button class="btn btn-sm btn-outline-success btn-promote" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Promote</button>';
-                html += '<button class="btn btn-sm btn-outline-danger btn-delete ms-auto" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Delete</button>';
+                html += '<button class="button button--sm button--outlined btn-promote" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Promote</button>';
+                html += '<button class="button button--sm button--outlined button--danger btn-delete ms-auto" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Delete</button>';
                 html += '</div>';
             }
             // Comments thread.
@@ -964,9 +964,9 @@
             html += '</div>';
             // Reply box.
             html += '<div class="mt-2">'
-                 +  '<textarea class="form-control form-control-sm reply-body" rows="2" maxlength="2000" placeholder="Reply or suggest something — markdown supported."></textarea>'
+                 +  '<textarea class="form__input reply-body" rows="2" maxlength="2000" placeholder="Reply or suggest something — markdown supported."></textarea>'
                  +  '<div class="d-flex gap-2 align-items-center mt-1">'
-                 +  '<button class="btn btn-sm btn-primary btn-reply" data-id="' + d.id + '" type="button" style="font-size:0.78rem;">Post reply</button>'
+                 +  '<button class="button button--sm button--primary btn-reply" data-id="' + d.id + '" type="button" style="font-size:0.78rem;">Post reply</button>'
                  +  '<span class="reply-status" style="font-size:0.72rem;color:var(--text-muted);"></span>'
                  +  '</div></div>';
             return html;
@@ -980,7 +980,7 @@
                 ['done',        'Done'],
                 ['declined',    'Declined'],
             ];
-            let h = '<select class="form-select form-select-sm sel-status" data-id="' + id + '" style="width:auto;font-size:0.78rem;">';
+            let h = '<select class="form__select sel-status" data-id="' + id + '" style="width:auto;font-size:0.78rem;">';
             for (const [v, lbl] of opts) {
                 h += '<option value="' + v + '"' + (v === current ? ' selected' : '') + '>' + lbl + '</option>';
             }
@@ -996,7 +996,7 @@
                 ['performance', 'Performance'],
                 ['other',       'Other'],
             ];
-            let h = '<select class="form-select form-select-sm sel-tag" data-id="' + id + '" style="width:auto;font-size:0.78rem;">';
+            let h = '<select class="form__select sel-tag" data-id="' + id + '" style="width:auto;font-size:0.78rem;">';
             for (const [v, lbl] of opts) {
                 h += '<option value="' + v + '"' + (v === (current || '') ? ' selected' : '') + '>' + lbl + '</option>';
             }

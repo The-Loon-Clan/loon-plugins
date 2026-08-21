@@ -5,18 +5,18 @@
             <a href="/help/roadmap?tab=changelog" style="font-size:0.85rem;color:var(--blue);">Public view &rarr;</a>
         </div>
 
-        {{if .Saved}}<div class="alert alert-success py-2" style="font-size:0.85rem;">Saved.</div>{{end}}
+        {{if .Saved}}<div class="notice notice--success py-2" style="font-size:0.85rem;">Saved.</div>{{end}}
 
-        <details class="card mb-3" style="background:var(--bg-surface);border-color:var(--border);">
-            <summary class="card-header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add changelog entry</summary>
-            <div class="card-body">
+        <details class="panelV2 mb-3" style="background:var(--bg-surface);border-color:var(--border);">
+            <summary class="panel__header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add changelog entry</summary>
+            <div class="panel__body">
                 {{template "admin_changelog_form" (dict "Entry" nil "CSRFToken" .CSRFToken "FlowNodes" .FlowNodes)}}
             </div>
         </details>
 
-        <div class="card" style="background:var(--bg-surface);border-color:var(--border);">
-            <div class="card-body p-0">
-                <table class="table table-sm mb-0" style="font-size:0.85rem;">
+        <div class="panelV2" style="background:var(--bg-surface);border-color:var(--border);">
+            <div class="panel__body p-0">
+                <table class="data-table mb-0" style="font-size:0.85rem;">
                     <thead style="font-size:0.72rem;color:var(--text-muted);">
                         <tr>
                             <th style="width:100px;">Released</th>
@@ -29,18 +29,18 @@
                         {{range .Entries}}
                         <tr>
                             <td style="font-size:0.78rem;color:var(--text-muted);">{{.ReleasedAt.Format "2006-01-02"}}</td>
-                            <td><span class="badge bg-secondary bg-opacity-50" style="font-size:0.62rem;">{{.Category}}</span></td>
+                            <td><span class="tag tag--sm" style="font-size:0.62rem;">{{.Category}}</span></td>
                             <td>
                                 <div style="font-weight:600;">{{.Title}}</div>
                                 <div style="font-size:0.75rem;color:var(--text-muted);">{{.Description}}</div>
                             </td>
                             <td style="text-align:right;white-space:nowrap;">
-                                <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.7rem;"
+                                <button class="button button--outlined button--sm px-2" style="font-size:0.7rem;"
                                         data-bs-toggle="collapse" data-bs-target="#cl-edit-{{.ID}}">Edit</button>
                                 <form method="POST" action="/admin/changelog/{{.ID}}/delete" class="d-inline"
                                       onsubmit="return confirm('Delete this changelog entry?');">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.7rem;">Del</button>
+                                    <button type="submit" class="button button--outlined button--danger button--sm px-2" style="font-size:0.7rem;">Del</button>
                                 </form>
                             </td>
                         </tr>
@@ -57,8 +57,8 @@
             <div class="card-footer d-flex justify-content-between align-items-center py-2" style="font-size:0.75rem;color:var(--text-muted);">
                 <span>Page {{.Page}} of {{.TotalPages}}</span>
                 <div>
-                    {{if gt .Page 1}}<a href="?page={{sub (int64 .Page) 1}}" class="btn btn-sm btn-outline-secondary py-0">&laquo; Prev</a>{{end}}
-                    {{if lt .Page .TotalPages}}<a href="?page={{inc .Page}}" class="btn btn-sm btn-outline-secondary py-0">Next &raquo;</a>{{end}}
+                    {{if gt .Page 1}}<a href="?page={{sub (int64 .Page) 1}}" class="button button--sm button--outlined">&laquo; Prev</a>{{end}}
+                    {{if lt .Page .TotalPages}}<a href="?page={{inc .Page}}" class="button button--sm button--outlined">Next &raquo;</a>{{end}}
                 </div>
             </div>
             {{end}}
@@ -74,13 +74,13 @@
         <input type="hidden" name="id" value="{{if .Entry}}{{.Entry.ID}}{{else}}0{{end}}">
         <div class="row g-2">
             <div class="col-md-7">
-                <label class="form-label small">Title</label>
-                <input aria-label="Title" type="text" name="title" class="form-control form-control-sm" required
+                <label class="form__label small">Title</label>
+                <input aria-label="Title" type="text" name="title" class="form__input" required
                        value="{{if .Entry}}{{.Entry.Title}}{{end}}" maxlength="200">
             </div>
             <div class="col-md-3">
-                <label class="form-label small">Category</label>
-                <select aria-label="Category" name="category" class="form-select form-select-sm">
+                <label class="form__label small">Category</label>
+                <select aria-label="Category" name="category" class="form__select">
                     {{$cur := "feature"}}{{if .Entry}}{{$cur = .Entry.Category}}{{end}}
                     <option value="feature"  {{if eq $cur "feature"}}selected{{end}}>feature</option>
                     <option value="fix"      {{if eq $cur "fix"}}selected{{end}}>fix</option>
@@ -92,18 +92,18 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label small">Released</label>
-                <input aria-label="Released" type="date" name="released_at" class="form-control form-control-sm"
+                <label class="form__label small">Released</label>
+                <input aria-label="Released" type="date" name="released_at" class="form__input"
                        value="{{if .Entry}}{{.Entry.ReleasedAt.Format "2006-01-02"}}{{end}}">
             </div>
             <div class="col-12">
-                <label class="form-label small">Description</label>
-                <textarea aria-label="Description" name="description" class="form-control form-control-sm" rows="3"
+                <label class="form__label small">Description</label>
+                <textarea aria-label="Description" name="description" class="form__input" rows="3"
                           maxlength="4000">{{if .Entry}}{{.Entry.Description}}{{end}}</textarea>
             </div>
             <div class="col-12">
-                <label class="form-label small">Link to /flow proposal (optional)</label>
-                <select aria-label="Link to /flow proposal (optional)" name="flow_node_id" class="form-select form-select-sm">
+                <label class="form__label small">Link to /flow proposal (optional)</label>
+                <select aria-label="Link to /flow proposal (optional)" name="flow_node_id" class="form__select">
                     {{$curNode := int64 0}}{{if and .Entry .Entry.FlowNodeID}}{{$curNode = deref64 .Entry.FlowNodeID}}{{end}}
                     <option value="0">— no link —</option>
                     {{range .FlowNodes}}
@@ -117,7 +117,7 @@
                 </div>
             </div>
             <div class="col-12 mt-2">
-                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                <button type="submit" class="button button--primary button--sm">Save</button>
             </div>
         </div>
     </form>

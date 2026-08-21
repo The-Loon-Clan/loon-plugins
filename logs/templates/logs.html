@@ -37,17 +37,17 @@
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-secondary" id="totalBadge">Total: {{.Total}}</span>
-                <button class="btn btn-sm btn-outline-success" id="tailBtn" type="button" title="Auto-refresh newest matches">Live tail</button>
+                <span class="tag tag--sm" id="totalBadge">Total: {{.Total}}</span>
+                <button class="button button--sm button--outlined" id="tailBtn" type="button" title="Auto-refresh newest matches">Live tail</button>
             </div>
         </div>
 
         <form method="get" action="/admin/p/logs" class="mb-2" id="searchForm">
             <div class="input-group">
-                <input type="text" class="form-control" name="q" id="qInput" value="{{.Query}}"
+                <input type="text" class="form__input" name="q" id="qInput" value="{{.Query}}"
                        placeholder='e.g.  timeout op:usenet/*  severity:error  since:24h  sort:count' autofocus>
-                <button class="btn btn-primary" type="submit">Search</button>
-                <button class="btn btn-outline-secondary" type="button" id="helpBtn" title="Query syntax">?</button>
+                <button class="button button--primary" type="submit">Search</button>
+                <button class="button button--outlined" type="button" id="helpBtn" title="Query syntax">?</button>
             </div>
         </form>
 
@@ -93,8 +93,8 @@
                 </div>
                 {{end}}
 
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle">
+                <div class="data-table-wrapper">
+                    <table class="data-table">
                         <thead>
                             <tr style="font-size:0.75rem;">
                                 <th>Sev</th><th>Op</th><th>Message</th>
@@ -105,18 +105,18 @@
                             {{range .Logs}}
                             <tr class="log-row" data-id="{{.ID}}">
                                 <td>
-                                    {{if eq .Severity "fatal"}}<span class="badge bg-danger">fatal</span>
-                                    {{else if eq .Severity "warning"}}<span class="badge bg-warning text-dark">warning</span>
-                                    {{else}}<span class="badge bg-secondary">{{.Severity}}</span>{{end}}
+                                    {{if eq .Severity "fatal"}}<span class="tag tag--danger">fatal</span>
+                                    {{else if eq .Severity "warning"}}<span class="tag tag--warning">warning</span>
+                                    {{else}}<span class="tag tag--sm">{{.Severity}}</span>{{end}}
                                 </td>
                                 <td><span class="log-op" data-add="op:{{.Op}}">{{.Op}}</span></td>
                                 <td><div class="log-msg" title="click to expand">{{.Message}}</div>
                                     {{if .RequestPath}}<div style="font-size:0.7rem;color:var(--text-muted);font-family:monospace;">{{.RequestPath}}</div>{{end}}
                                 </td>
-                                <td class="text-end log-count">{{if gt .Count 1}}<span class="badge bg-dark">{{.Count}}</span>{{else}}{{.Count}}{{end}}</td>
+                                <td class="text-end log-count">{{if gt .Count 1}}<span class="tag">{{.Count}}</span>{{else}}{{.Count}}{{end}}</td>
                                 <td style="font-size:0.75rem;white-space:nowrap;">{{.LastAt.Format "01-02 15:04"}}</td>
                                 <td style="font-size:0.75rem;">{{if .UserID}}<a href="/admin/users/{{.UserID}}">#{{.UserID}}</a>{{end}}</td>
-                                <td><button class="btn btn-sm btn-outline-secondary dismiss-btn" title="Dismiss">&times;</button></td>
+                                <td><button class="button button--sm button--outlined dismiss-btn" title="Dismiss">&times;</button></td>
                             </tr>
                             {{else}}
                             <tr><td colspan="7" class="text-center text-muted py-4">No matching log rows.</td></tr>
@@ -178,11 +178,11 @@
         var body = document.getElementById('logBody');
         if (!rows.length){ body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No matching log rows.</td></tr>'; return; }
         body.innerHTML = rows.map(function(r){
-            var sev = r.severity === 'fatal' ? '<span class="badge bg-danger">fatal</span>'
-                    : r.severity === 'warning' ? '<span class="badge bg-warning text-dark">warning</span>'
-                    : '<span class="badge bg-secondary">' + esc(r.severity) + '</span>';
+            var sev = r.severity === 'fatal' ? '<span class="tag tag--danger">fatal</span>'
+                    : r.severity === 'warning' ? '<span class="tag tag--warning">warning</span>'
+                    : '<span class="tag tag--sm">' + esc(r.severity) + '</span>';
             var when = new Date(r.last_at).toLocaleString([], {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-            var cnt = r.count > 1 ? '<span class="badge bg-dark">' + r.count + '</span>' : r.count;
+            var cnt = r.count > 1 ? '<span class="tag">' + r.count + '</span>' : r.count;
             var path = r.request_path ? '<div style="font-size:.7rem;color:var(--text-muted);font-family:monospace;">' + esc(r.request_path) + '</div>' : '';
             var user = r.user_id ? '<a href="/admin/users/' + r.user_id + '">#' + r.user_id + '</a>' : '';
             return '<tr class="log-row" data-id="' + r.id + '"><td>' + sev + '</td>' +
@@ -191,7 +191,7 @@
                    '<td class="text-end log-count">' + cnt + '</td>' +
                    '<td style="font-size:.75rem;white-space:nowrap;">' + when + '</td>' +
                    '<td style="font-size:.75rem;">' + user + '</td>' +
-                   '<td><button class="btn btn-sm btn-outline-secondary dismiss-btn" title="Dismiss">&times;</button></td></tr>';
+                   '<td><button class="button button--sm button--outlined dismiss-btn" title="Dismiss">&times;</button></td></tr>';
         }).join('');
     }
     // Escapes < > & AND quotes — some values (op) land in an HTML
@@ -210,10 +210,10 @@
         var btn = this;
         if (tailTimer){
             clearInterval(tailTimer); tailTimer = null;
-            btn.classList.replace('btn-success','btn-outline-success'); btn.innerHTML = 'Live tail';
+            btn.classList.replace('button--primary','button--outlined'); btn.innerHTML = 'Live tail';
             document.getElementById('pager').style.display = '';
         } else {
-            btn.classList.replace('btn-outline-success','btn-success'); btn.innerHTML = '<span id="tailDot"></span>Tailing';
+            btn.classList.replace('button--outlined','button--primary'); btn.innerHTML = '<span id="tailDot"></span>Tailing';
             document.getElementById('pager').style.display = 'none';
             tailPoll(); tailTimer = setInterval(tailPoll, 5000);
         }

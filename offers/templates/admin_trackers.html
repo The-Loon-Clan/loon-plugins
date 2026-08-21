@@ -18,20 +18,20 @@
             <a href="/admin" style="font-size:0.85rem;color:var(--blue);">&larr; Admin home</a>
         </div>
 
-        {{if .Saved}}<div class="alert alert-success py-2" style="font-size:0.85rem;">Saved.</div>{{end}}
-        {{if .Error}}<div class="alert alert-danger py-2" style="font-size:0.85rem;">{{.Error}}</div>{{end}}
+        {{if .Saved}}<div class="notice notice--success py-2" style="font-size:0.85rem;">Saved.</div>{{end}}
+        {{if .Error}}<div class="notice notice--danger py-2" style="font-size:0.85rem;">{{.Error}}</div>{{end}}
 
         {{/* Add-new form. Collapsed by default to keep the index dense. */}}
-        <details class="card mb-3" style="background:var(--bg-surface);border-color:var(--border);">
-            <summary class="card-header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add tracker</summary>
-            <div class="card-body">
+        <details class="panelV2 mb-3" style="background:var(--bg-surface);border-color:var(--border);">
+            <summary class="panel__header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add tracker</summary>
+            <div class="panel__body">
                 {{template "admin_tracker_form" (dict "Tracker" nil "CSRFToken" .CSRFToken)}}
             </div>
         </details>
 
-        <div class="card" style="background:var(--bg-surface);border-color:var(--border);">
-            <div class="card-body p-0">
-                <table class="table table-sm mb-0" style="font-size:0.85rem;">
+        <div class="panelV2" style="background:var(--bg-surface);border-color:var(--border);">
+            <div class="panel__body p-0">
+                <table class="data-table mb-0" style="font-size:0.85rem;">
                     <thead style="font-size:0.72rem;color:var(--text-muted);">
                         <tr>
                             <th>Name</th>
@@ -53,13 +53,13 @@
                             <td>{{.AccessCount}}</td>
                             <td>{{.OfferCount}}</td>
                             <td style="text-align:right;white-space:nowrap;">
-                                <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.7rem;"
+                                <button class="button button--outlined button--sm px-2" style="font-size:0.7rem;"
                                         data-bs-toggle="collapse" data-bs-target="#tr-edit-{{.ID}}">Edit</button>
                                 {{if ne .ShortName "personal"}}
                                 <form method="POST" action="/admin/trackers/{{.ID}}/delete" class="d-inline"
                                       onsubmit="return confirm('Delete this tracker? Existing offers against it stay but become orphaned.');">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.7rem;">Del</button>
+                                    <button type="submit" class="button button--outlined button--danger button--sm px-2" style="font-size:0.7rem;">Del</button>
                                 </form>
                                 {{end}}
                             </td>
@@ -91,19 +91,19 @@
         <input type="hidden" name="id" value="{{if .Tracker}}{{.Tracker.ID}}{{else}}0{{end}}">
         <div class="row g-2">
             <div class="col-md-5">
-                <label class="form-label small">Name</label>
-                <input aria-label="Name" type="text" name="name" class="form-control form-control-sm" required maxlength="120"
+                <label class="form__label small">Name</label>
+                <input aria-label="Name" type="text" name="name" class="form__input" required maxlength="120"
                        value="{{if .Tracker}}{{.Tracker.Name}}{{end}}">
             </div>
             <div class="col-md-3">
-                <label class="form-label small">Short name (slug)</label>
-                <input aria-label="Short name (slug)" type="text" name="short_name" class="form-control form-control-sm" required maxlength="40"
+                <label class="form__label small">Short name (slug)</label>
+                <input aria-label="Short name (slug)" type="text" name="short_name" class="form__input" required maxlength="40"
                        value="{{if .Tracker}}{{.Tracker.ShortName}}{{end}}"
                        pattern="[a-z0-9_-]+" placeholder="e.g. ab, ptp">
             </div>
             <div class="col-md-2">
-                <label class="form-label small">Visibility</label>
-                <select aria-label="Visibility" name="visibility" class="form-select form-select-sm">
+                <label class="form__label small">Visibility</label>
+                <select aria-label="Visibility" name="visibility" class="form__select">
                     {{$cur := "private"}}{{if .Tracker}}{{$cur = .Tracker.Visibility}}{{end}}
                     <option value="private"  {{if eq $cur "private"}}selected{{end}}>private</option>
                     <option value="public"   {{if eq $cur "public"}}selected{{end}}>public</option>
@@ -111,8 +111,8 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label small">Status</label>
-                <select aria-label="Status" name="status" class="form-select form-select-sm">
+                <label class="form__label small">Status</label>
+                <select aria-label="Status" name="status" class="form__select">
                     {{$st := "unvetted"}}{{if .Tracker}}{{$st = .Tracker.Status}}{{end}}
                     <option value="unvetted" {{if eq $st "unvetted"}}selected{{end}}>unvetted</option>
                     <option value="active"   {{if eq $st "active"}}selected{{end}}>active</option>
@@ -120,19 +120,19 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <label class="form-label small">Scrape min seconds</label>
-                <input aria-label="Scrape min seconds" type="number" name="scrape_min_seconds" class="form-control form-control-sm"
+                <label class="form__label small">Scrape min seconds</label>
+                <input aria-label="Scrape min seconds" type="number" name="scrape_min_seconds" class="form__input"
                        min="30" max="3600" step="30"
                        value="{{if .Tracker}}{{.Tracker.ScrapeMinSeconds}}{{else}}180{{end}}">
                 <div class="form-text" style="font-size:0.7rem;">Per-page delay floor for the indexer-agent scraper. 180s = one page every 3 min.</div>
             </div>
             <div class="col-12">
-                <label class="form-label small">Rules (markdown)</label>
-                <textarea aria-label="Rules (markdown)" name="rules_md" class="form-control form-control-sm" rows="4" maxlength="8000"
+                <label class="form__label small">Rules (markdown)</label>
+                <textarea aria-label="Rules (markdown)" name="rules_md" class="form__input" rows="4" maxlength="8000"
                           placeholder="Posting rules, ratio requirements, banned content types…">{{if .Tracker}}{{.Tracker.RulesMarkdown}}{{end}}</textarea>
             </div>
             <div class="col-12 mt-2">
-                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                <button type="submit" class="button button--primary button--sm">Save</button>
             </div>
         </div>
     </form>

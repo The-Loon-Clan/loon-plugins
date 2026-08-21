@@ -119,7 +119,7 @@
                     </p>
                     <h1 class="list-banner-title">
                         {{.List.Name}}
-                        {{if .List.Public}}<span class="badge ms-2" style="background:var(--bs-info);font-size:0.55rem;vertical-align:middle;">PUBLIC</span>{{end}}
+                        {{if .List.Public}}<span class="tag ms-2" style="background:var(--bs-info);font-size:0.55rem;vertical-align:middle;">PUBLIC</span>{{end}}
                     </h1>
                     <a href="/u/{{.List.Username}}" class="list-banner-creator">
                         &#9881; {{.List.Username}}
@@ -148,23 +148,23 @@
                         {{if .IsFollowing}}
                         <form method="POST" action="/lists/{{.List.ID}}/unfollow">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                            <button class="btn btn-outline-danger btn-sm w-100 fw-semibold">Unfollow</button>
+                            <button class="button button--outlined button--danger button--sm w-100 fw-semibold">Unfollow</button>
                         </form>
                         {{else}}
                         <form method="POST" action="/lists/{{.List.ID}}/follow">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                            <button class="btn btn-outline-primary btn-sm w-100 fw-semibold">Follow</button>
+                            <button class="button button--outlined button--sm w-100 fw-semibold">Follow</button>
                         </form>
                         {{end}}
                         <form method="POST" action="/lists/{{.List.ID}}/copy" class="mt-2">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                            <button class="btn btn-outline-secondary btn-sm w-100 fw-semibold">Copy to my lists</button>
+                            <button class="button button--outlined button--sm w-100 fw-semibold">Copy to my lists</button>
                         </form>
                         {{/* Report — visible to every signed-in viewer except
                              the list's owner. 5 reports auto-hide the list
                              pending community review. */}}
                         {{if and $.ViewerID (ne $.ViewerID .List.UserID)}}
-                        <button type="button" class="btn btn-outline-warning btn-sm w-100 fw-semibold mt-2 report-content"
+                        <button type="button" class="button button--outlined button--sm w-100 fw-semibold mt-2 report-content"
                                 data-target-type="user_list" data-target-id="{{.List.ID}}">⚑ Report list</button>
                         {{end}}
                     {{end}}
@@ -174,10 +174,10 @@
                 {{if .List.ItemCount}}
                 <div class="sidebar-card">
                     <h6>Download</h6>
-                    <a href="/lists/{{.List.ID}}/download-all" class="btn btn-primary btn-sm w-100 fw-semibold mb-2">
+                    <a href="/lists/{{.List.ID}}/download-all" class="button button--primary button--sm w-100 fw-semibold mb-2">
                         &#11015; Download all NZBs
                     </a>
-                    <a href="#items" class="btn btn-outline-secondary btn-sm w-100 fw-semibold">
+                    <a href="#items" class="button button--outlined button--sm w-100 fw-semibold">
                         Jump to titles
                     </a>
                 </div>
@@ -214,13 +214,13 @@
                 {{if .IsOwner}}
                 <div class="sidebar-card">
                     <h6>Manage</h6>
-                    <a href="/lists" class="btn btn-outline-secondary btn-sm w-100 fw-semibold mb-2">
+                    <a href="/lists" class="button button--outlined button--sm w-100 fw-semibold mb-2">
                         All my lists
                     </a>
                     <form method="POST" action="/lists/{{.List.ID}}/visibility">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         <input type="hidden" name="public" value="{{if .List.Public}}0{{else}}1{{end}}">
-                        <button class="btn btn-outline-{{if .List.Public}}warning{{else}}info{{end}} btn-sm w-100 fw-semibold">
+                        <button class="button button--outlined button--sm button--block fw-semibold">
                             Make {{if .List.Public}}private{{else}}public{{end}}
                         </button>
                     </form>

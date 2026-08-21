@@ -64,7 +64,7 @@ func TestRenderPageExecutesTheWholeFragment(t *testing.T) {
 		"Log Search",           // header
 		"usenet/flush", "boom", // first row
 		"api/search", "slow", // SECOND row — a streamed abort typically loses this
-		"badge bg-danger",         // severity chrome
+		"tag tag--danger",         // severity chrome
 		"/admin/users/42",         // the user link off a set pointer
 		`action="/admin/p/logs"`,  // the moved form target
 		`<nav id="pg">`,           // the host-rendered pager landed

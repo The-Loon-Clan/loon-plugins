@@ -160,16 +160,16 @@
 
     <div class="flow-shell">
         <div class="flow-toolbar">
-            <button id="btn-add-node" class="btn btn-sm btn-primary" title="Add node (N)">+ Node</button>
-            <button id="btn-add-comment" class="btn btn-sm btn-outline-secondary" title="Add comment node">+ Comment</button>
-            <button id="btn-add-mockup" class="btn btn-sm btn-outline-secondary" title="Add UI mockup node — HTML preview, fork-able like any other node">+ Mockup</button>
-            <button id="btn-undo" class="btn btn-sm btn-outline-secondary" title="Undo (Ctrl+Z)" disabled>&#9100;</button>
-            <button id="btn-redo" class="btn btn-sm btn-outline-secondary" title="Redo (Ctrl+Shift+Z)" disabled>&#9101;</button>
+            <button id="btn-add-node" class="button button--sm button--primary" title="Add node (N)">+ Node</button>
+            <button id="btn-add-comment" class="button button--sm button--outlined" title="Add comment node">+ Comment</button>
+            <button id="btn-add-mockup" class="button button--sm button--outlined" title="Add UI mockup node — HTML preview, fork-able like any other node">+ Mockup</button>
+            <button id="btn-undo" class="button button--sm button--outlined" title="Undo (Ctrl+Z)" disabled>&#9100;</button>
+            <button id="btn-redo" class="button button--sm button--outlined" title="Redo (Ctrl+Shift+Z)" disabled>&#9101;</button>
             <span class="spacer"></span>
             <span class="status" id="flow-status">ready</span>
-            <button id="btn-refresh" class="btn btn-sm btn-outline-secondary" title="Refresh from server">Refresh</button>
-            <button id="btn-fit" class="btn btn-sm btn-outline-secondary" title="Fit (F)">Fit</button>
-            <button id="btn-help" class="btn btn-sm btn-outline-secondary" title="Help">?</button>
+            <button id="btn-refresh" class="button button--sm button--outlined" title="Refresh from server">Refresh</button>
+            <button id="btn-fit" class="button button--sm button--outlined" title="Fit (F)">Fit</button>
+            <button id="btn-help" class="button button--sm button--outlined" title="Help">?</button>
         </div>
 
         <div class="flow-canvas" id="flow-canvas">
@@ -183,7 +183,7 @@
                  right after the click. */}}
             <div class="flow-connect-banner" id="connect-banner">
                 <span id="connect-banner-text">🔗 Click another node to connect…</span>
-                <button type="button" id="connect-cancel" class="btn btn-sm btn-outline-light py-0 px-2 ms-3" style="font-size:0.72rem;">Cancel</button>
+                <button type="button" id="connect-cancel" class="button button--sm button--outlined px-2 ms-3" style="font-size:0.72rem;">Cancel</button>
             </div>
 
             {{/* Port picker. Surfaces only when the relevant node
@@ -204,7 +204,7 @@
                     <div class="modal-content" style="background:var(--bg-elevated);">
                         <div class="modal-header py-2">
                             <h6 class="modal-title" id="history-modal-title" style="font-size:0.9rem;">History</h6>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="filter:invert(0.7);"></button>
+                            <button type="button" class="button button--text button--sm" data-bs-dismiss="modal" aria-label="Close" style="filter:invert(0.7);"></button>
                         </div>
                         <div class="modal-body" id="history-modal-body" style="font-size:0.85rem;">
                             <div style="color:var(--text-muted);">Loading…</div>
@@ -224,7 +224,7 @@
                     <div class="modal-content" style="background:var(--bg-elevated);">
                         <div class="modal-header py-2">
                             <h6 class="modal-title" id="mockup-fullsize-title" style="font-size:0.9rem;">Mockup preview</h6>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="filter:invert(0.7);"></button>
+                            <button type="button" class="button button--text button--sm" data-bs-dismiss="modal" aria-label="Close" style="filter:invert(0.7);"></button>
                         </div>
                         <div class="modal-body p-0" style="background:#fff;">
                             <iframe id="mockup-fullsize-frame" sandbox="" style="width:100%;height:75vh;border:0;background:#fff;"></iframe>
@@ -236,12 +236,12 @@
             <aside class="flow-inspector" id="inspector">
                 <div class="flow-inspector-header">
                     <span id="inspector-title">Node</span>
-                    <button class="btn-close btn-close-white" id="inspector-close" aria-label="Close" style="filter:invert(0.7);"></button>
+                    <button class="button button--text button--sm" id="inspector-close" aria-label="Close" style="filter:invert(0.7);"></button>
                 </div>
                 <div class="flow-inspector-body" id="inspector-body"></div>
                 <div class="flow-inspector-footer">
-                    <button id="btn-save" class="btn btn-sm btn-primary" type="button">Save</button>
-                    <button id="btn-delete" class="btn btn-sm btn-outline-danger ms-auto" type="button">Delete</button>
+                    <button id="btn-save" class="button button--sm button--primary" type="button">Save</button>
+                    <button id="btn-delete" class="button button--sm button--outlined button--danger ms-auto" type="button">Delete</button>
                 </div>
             </aside>
 
@@ -927,7 +927,7 @@
                         + '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">'
                         +   when + ' &middot; by ' + escapeText(actor)
                         + '</div>'
-                        + '<button class="btn btn-sm btn-outline-secondary py-0 mt-2" data-rev-idx="' + i + '" style="font-size:0.7rem;">Show before</button>'
+                        + '<button class="button button--sm button--outlined mt-2" data-rev-idx="' + i + '" style="font-size:0.7rem;">Show before</button>'
                         + '<div class="rev-diff" data-rev-diff="' + i + '" style="display:none;margin-top:6px;"></div>'
                     + '</div>';
                 }).join('');
@@ -1190,7 +1190,7 @@
             const renderPortList = (label, list) => {
                 if (!list || list.length === 0) return '';
                 const chips = list.map(p =>
-                    '<span class="badge bg-secondary me-1" title="' + escapeAttr(p.hint || '') + '" style="font-size:0.7rem;font-weight:500;">'
+                    '<span class="tag tag--sm me-1" title="' + escapeAttr(p.hint || '') + '" style="font-size:0.7rem;font-weight:500;">'
                     + escapeText(p.name || '') + '</span>'
                 ).join('');
                 return '<div class="mb-1" style="font-size:0.72rem;color:var(--text-muted);"><strong>' + label + ':</strong> ' + chips + '</div>';
@@ -1261,17 +1261,17 @@
             //    targeted edits, "Promote to canonical" for stand-
             //    alone proposals.
             const voteBtn = (VIEWER_ID > 0)
-                ? '<button id="btn-vote" class="btn btn-sm btn-outline-warning" type="button">👍 Vote <span class="badge bg-secondary ms-1" id="vote-count">' + (data.vote_count || 0) + '</span></button>'
+                ? '<button id="btn-vote" class="button button--sm button--outlined" type="button">👍 Vote <span class="tag tag--sm ms-1" id="vote-count">' + (data.vote_count || 0) + '</span></button>'
                 : '';
             const proposeBtn = (VIEWER_ID > 0 && !isProposal)
-                ? '<button id="btn-propose" class="btn btn-sm btn-outline-info" type="button">✏️ Propose change</button>'
+                ? '<button id="btn-propose" class="button button--sm button--outlined" type="button">✏️ Propose change</button>'
                 : '';
             let promoteBtn = '';
             if (VIEWER_IS_MOD) {
                 if (isProposal) {
-                    promoteBtn = '<button id="btn-promote" class="btn btn-sm btn-success" type="button">⚡ Merge into canonical</button>';
+                    promoteBtn = '<button id="btn-promote" class="button button--sm button--primary" type="button">⚡ Merge into canonical</button>';
                 } else if (!data.locked) {
-                    promoteBtn = '<button id="btn-promote" class="btn btn-sm btn-success" type="button">⚡ Promote to canonical</button>';
+                    promoteBtn = '<button id="btn-promote" class="button button--sm button--primary" type="button">⚡ Promote to canonical</button>';
                 }
             }
             // History is available on any node — every node may
@@ -1279,7 +1279,7 @@
             // lifetime. Hidden when there's no chance of history (a
             // brand-new user-proposal) is overkill; always show it
             // and let the modal say "no history yet" when empty.
-            const historyBtn = '<button id="btn-history" class="btn btn-sm btn-outline-secondary" type="button">🕘 History</button>';
+            const historyBtn = '<button id="btn-history" class="button button--sm button--outlined" type="button">🕘 History</button>';
             const actionRow = (voteBtn || proposeBtn || promoteBtn || historyBtn)
                 ? '<div class="d-flex gap-1 flex-wrap mt-2 mb-2">' + voteBtn + proposeBtn + promoteBtn + historyBtn + '</div>'
                 : '';
@@ -1307,26 +1307,26 @@
                 mockupHtmlBlock =
                     '<hr style="border-color:rgba(167,139,250,0.3);">' +
                     '<div class="d-flex justify-content-between align-items-end mb-1">' +
-                        '<label class="form-label mb-0">HTML</label>' +
-                        '<button id="btn-mockup-fullsize" class="btn btn-sm btn-outline-secondary py-0 px-2" type="button" style="font-size:0.7rem;">🔍 Open full-size</button>' +
+                        '<label class="form__label mb-0">HTML</label>' +
+                        '<button id="btn-mockup-fullsize" class="button button--sm button--outlined px-2" type="button" style="font-size:0.7rem;">🔍 Open full-size</button>' +
                     '</div>' +
                     '<div class="mb-2">' +
-                        '<textarea id="ins-mockup-html" class="form-control form-control-sm font-monospace" rows="8" ' + (editable ? '' : 'disabled') + '>' + escapedHTML + '</textarea>' +
+                        '<textarea id="ins-mockup-html" class="form__input font-monospace" rows="8" ' + (editable ? '' : 'disabled') + '>' + escapedHTML + '</textarea>' +
                     '</div>' +
-                    '<div class="mb-2"><label class="form-label">Live preview</label>' +
+                    '<div class="mb-2"><label class="form__label">Live preview</label>' +
                         '<iframe id="ins-mockup-preview" sandbox="" style="width:100%;height:160px;border:1px solid var(--border);border-radius:4px;background:#fff;"></iframe>' +
                     '</div>' +
-                    '<div class="mb-2"><label class="form-label">Notes (markdown)</label>' +
-                        '<textarea id="ins-mockup-md" class="form-control form-control-sm" rows="3" placeholder="Why this mockup, what it changes, what users said in review…" ' + (editable ? '' : 'disabled') + '>' + escapedMD + '</textarea>' +
+                    '<div class="mb-2"><label class="form__label">Notes (markdown)</label>' +
+                        '<textarea id="ins-mockup-md" class="form__input" rows="3" placeholder="Why this mockup, what it changes, what users said in review…" ' + (editable ? '' : 'disabled') + '>' + escapedMD + '</textarea>' +
                         renderedBlock +
                     '</div>';
             }
 
             $inspectorBody.innerHTML =
-                '<div class="mb-2"><label class="form-label">Label</label>' +
-                '<input id="ins-label" class="form-control form-control-sm" type="text" value="' + escapeAttr(data.label || '') + '" ' + (editable ? '' : 'disabled') + '></div>' +
-                '<div class="mb-2"><label class="form-label">Description</label>' +
-                '<textarea id="ins-desc" class="form-control form-control-sm" ' + (editable ? '' : 'disabled') + '>' + escapeText(data.description || '') + '</textarea></div>' +
+                '<div class="mb-2"><label class="form__label">Label</label>' +
+                '<input id="ins-label" class="form__input" type="text" value="' + escapeAttr(data.label || '') + '" ' + (editable ? '' : 'disabled') + '></div>' +
+                '<div class="mb-2"><label class="form__label">Description</label>' +
+                '<textarea id="ins-desc" class="form__input" ' + (editable ? '' : 'disabled') + '>' + escapeText(data.description || '') + '</textarea></div>' +
                 (VIEWER_IS_MOD ? '<div class="form-check mb-2"><input id="ins-locked" class="form-check-input" type="checkbox" ' + (data.locked ? 'checked' : '') + '><label class="form-check-label" for="ins-locked" style="font-size:0.78rem;">Locked (canonical)</label></div>' : '') +
                 renderPortList('Inputs',  inPorts) +
                 renderPortList('Outputs', outPorts) +
@@ -1338,11 +1338,11 @@
                 // right-click-then-click-target gesture. Anyone can edge
                 // FROM any node (including locked canonical ones); the
                 // edge ownership rules apply at the target end / overall.
-                '<div class="mt-2 mb-2"><button id="btn-connect-from" class="btn btn-sm btn-outline-primary w-100" type="button">🔗 Connect to another node…</button></div>' +
+                '<div class="mt-2 mb-2"><button id="btn-connect-from" class="button button--sm button--outlined w-100" type="button">🔗 Connect to another node…</button></div>' +
                 '<div class="flow-comments" id="comments-thread">' +
                     '<div class="flow-meta">Comments</div>' +
                     '<div id="comments-list" style="margin-top:4px;"></div>' +
-                    '<div class="d-flex gap-1 mt-2"><input id="comment-input" class="form-control form-control-sm" type="text" placeholder="Add a comment…"><button id="btn-comment" class="btn btn-sm btn-outline-primary">Send</button></div>' +
+                    '<div class="d-flex gap-1 mt-2"><input id="comment-input" class="form__input" type="text" placeholder="Add a comment…"><button id="btn-comment" class="button button--sm button--outlined">Send</button></div>' +
                 '</div>';
             $btnSave.disabled = !editable;
             $btnDelete.disabled = !editable;

@@ -63,18 +63,18 @@
                     Browse every mockup posted to the <a href="/flow">Feature Requests board</a>. Click a card to open the full-size view, vote, and read the discussion. Edit mockups by forking from the canvas.
                 </p>
             </div>
-            <a href="/flow" class="btn btn-sm btn-outline-primary">Open canvas</a>
+            <a href="/flow" class="button button--sm button--outlined">Open canvas</a>
         </div>
 
         {{/* Filter / sort bar — purely query-string driven, no JS. */}}
         <form method="get" class="d-flex gap-2 align-items-center mb-3" style="font-size:0.85rem;">
             <span style="color:var(--text-muted);">Sort:</span>
-            <select name="sort" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+            <select name="sort" class="form__select" style="width:auto;" onchange="this.form.submit()">
                 <option value="newest" {{if eq .Sort "newest"}}selected{{end}}>Newest</option>
                 <option value="votes"  {{if eq .Sort "votes"}}selected{{end}}>Most voted</option>
             </select>
             <span style="color:var(--text-muted);" class="ms-2">Show:</span>
-            <select name="scope" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+            <select name="scope" class="form__select" style="width:auto;" onchange="this.form.submit()">
                 <option value="all"        {{if eq .Scope "all"}}selected{{end}}>All</option>
                 <option value="edits"      {{if eq .Scope "edits"}}selected{{end}}>Proposed edits</option>
                 <option value="standalone" {{if eq .Scope "standalone"}}selected{{end}}>Stand-alone</option>
@@ -115,7 +115,7 @@
             {{end}}
         </div>
         {{else}}
-        <div class="alert alert-info py-3" style="font-size:0.88rem;">
+        <div class="notice notice--info py-3" style="font-size:0.88rem;">
             No mockups yet. Open the <a href="/flow">Feature Requests board</a> and click <strong>+ Mockup</strong> to add one.
         </div>
         {{end}}

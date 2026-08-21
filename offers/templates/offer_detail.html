@@ -77,9 +77,9 @@
                 </div>
                 {{if .CanReRequest}}
                 <div style="display:flex;gap:6px;align-items:center;">
-                    <input type="number" class="form-control form-control-sm of-points" min="0" step="1" value="0"
+                    <input type="number" class="form__input of-points" min="0" step="1" value="0"
                            title="Points to stake — debited now, paid to whoever delivers" style="width:80px;">
-                    <button type="button" class="btn btn-warning btn-sm of-request" data-bucket-id="{{.Bucket.BucketID}}">
+                    <button type="button" class="button button--primary button--sm of-request" data-bucket-id="{{.Bucket.BucketID}}">
                         Request a fresh copy
                     </button>
                 </div>
@@ -106,18 +106,18 @@
                 </div>
                 {{if ne .Request.Status "claimed"}}
                 <div style="display:flex;gap:6px;align-items:center;">
-                    <input type="number" class="form-control form-control-sm of-points" min="0" step="1" value="0"
+                    <input type="number" class="form__input of-points" min="0" step="1" value="0"
                            title="Points to stake — debited now, paid to whoever delivers, returned if you withdraw" style="width:80px;">
-                    <button type="button" class="btn btn-primary of-request" data-bucket-id="{{.Bucket.BucketID}}">
+                    <button type="button" class="button button--primary of-request" data-bucket-id="{{.Bucket.BucketID}}">
                         Join this request
                     </button>
                 </div>
                 {{end}}
                 {{else}}
                 <div style="display:flex;gap:6px;align-items:center;">
-                    <input type="number" class="form-control form-control-sm of-points" min="0" step="1" value="0"
+                    <input type="number" class="form__input of-points" min="0" step="1" value="0"
                            title="Points to stake — debited now, paid to whoever delivers, returned if you withdraw" style="width:80px;">
-                    <button type="button" class="btn btn-primary of-request" data-bucket-id="{{.Bucket.BucketID}}">
+                    <button type="button" class="button button--primary of-request" data-bucket-id="{{.Bucket.BucketID}}">
                         Request this
                     </button>
                 </div>

@@ -4,32 +4,32 @@
         .form-control:focus { background: var(--bg-surface); color: var(--text-primary); border-color: var(--blue); box-shadow: none; }
     </style>
     <div class="container mt-4 site-container">
-        <div class="card mb-4">
-            <div class="card-header">Create New Collection</div>
-            <div class="card-body">
+        <div class="panelV2 mb-4">
+            <div class="panel__header">Create New Collection</div>
+            <div class="panel__body">
                 <form method="POST" action="/lists">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-2">
-                        <input type="text" name="name" class="form-control" placeholder="Collection name" required maxlength="100">
+                        <input type="text" name="name" class="form__input" placeholder="Collection name" required maxlength="100">
                     </div>
                     <div class="mb-2">
-                        <input type="text" name="description" class="form-control" placeholder="Description (optional)" maxlength="300">
+                        <input type="text" name="description" class="form__input" placeholder="Description (optional)" maxlength="300">
                     </div>
                     <div class="mb-3 d-flex align-items-center gap-2">
                         <input type="checkbox" name="public" value="1" class="form-check-input mt-0" id="createPublic">
                         <label for="createPublic" style="font-size:0.85rem;color:var(--text-muted);">Make public — visible on Collections</label>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm">Create Collection</button>
+                    <button type="submit" class="button button--primary button--sm">Create Collection</button>
                 </form>
             </div>
         </div>
 
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="panelV2">
+            <div class="panel__header d-flex justify-content-between align-items-center">
                 <span>My Collections</span>
                 <a href="/community/watchlists" style="font-size:0.8rem;color:var(--blue);">Browse Collections →</a>
             </div>
-            <table class="table mb-0">
+            <table class="data-table mb-0">
                 <tbody>
                     {{range .Lists}}
                     <tr>
@@ -43,7 +43,7 @@
                         </td>
                         <td>
                             <a href="/lists/{{.ID}}" style="color:var(--text-primary);font-weight:500;">{{.Name}}</a>
-                            {{if .Public}}<span class="badge ms-1" style="background:var(--blue);font-size:0.65rem;">Public</span>{{end}}
+                            {{if .Public}}<span class="tag ms-1" style="background:var(--blue);font-size:0.65rem;">Public</span>{{end}}
                             {{if .Description}}<div style="color:var(--text-muted);font-size:0.8rem;">{{.Description}}</div>{{end}}
                         </td>
                         <td style="color:var(--text-muted);font-size:0.85rem;width:80px;vertical-align:middle;">{{.ItemCount}} items</td>
@@ -52,18 +52,18 @@
                             <form method="POST" action="/lists/{{.ID}}/visibility" class="d-inline me-1">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="public" value="0">
-                                <button class="btn btn-sm btn-outline-secondary">Make Private</button>
+                                <button class="button button--sm button--outlined">Make Private</button>
                             </form>
                             {{else}}
                             <form method="POST" action="/lists/{{.ID}}/visibility" class="d-inline me-1">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="public" value="1">
-                                <button class="btn btn-sm btn-outline-secondary">Make Public</button>
+                                <button class="button button--sm button--outlined">Make Public</button>
                             </form>
                             {{end}}
                             <form method="POST" action="/lists/{{.ID}}/delete" class="d-inline">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                <button class="btn btn-sm btn-outline-danger">Delete</button>
+                                <button class="button button--sm button--outlined button--danger">Delete</button>
                             </form>
                         </td>
                     </tr>
@@ -74,13 +74,13 @@
             </table>
         </div>
         {{/* ── Following ── */}}
-        <div class="card mt-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="panelV2 mt-4">
+            <div class="panel__header d-flex justify-content-between align-items-center">
                 <span>Following</span>
                 <a href="/community/watchlists" style="font-size:0.8rem;color:var(--blue);">Discover Collections &#8594;</a>
             </div>
             {{if .Followed}}
-            <table class="table mb-0">
+            <table class="data-table mb-0">
                 <tbody>
                     {{range .Followed}}
                     <tr>
@@ -101,11 +101,11 @@
                         <td style="width:180px;vertical-align:middle;white-space:nowrap;">
                             <form method="POST" action="/lists/{{.ID}}/copy" class="d-inline me-1">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                <button class="btn btn-sm btn-outline-secondary" title="Copy to my lists">Copy</button>
+                                <button class="button button--sm button--outlined" title="Copy to my lists">Copy</button>
                             </form>
                             <form method="POST" action="/lists/{{.ID}}/unfollow" class="d-inline">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                <button class="btn btn-sm btn-outline-danger">Unfollow</button>
+                                <button class="button button--sm button--outlined button--danger">Unfollow</button>
                             </form>
                         </td>
                     </tr>
@@ -113,7 +113,7 @@
                 </tbody>
             </table>
             {{else}}
-            <div class="card-body text-center" style="color:var(--text-muted);font-size:0.85rem;padding:1.5rem;">
+            <div class="panel__body text-center" style="color:var(--text-muted);font-size:0.85rem;padding:1.5rem;">
                 You're not following any collections yet. Browse <a href="/community/watchlists" style="color:var(--blue);">community collections</a> to find some to follow.
             </div>
             {{end}}

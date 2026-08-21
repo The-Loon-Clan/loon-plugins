@@ -5,20 +5,20 @@
             <a href="/help/roadmap" style="font-size:0.85rem;color:var(--blue);">Public view &rarr;</a>
         </div>
 
-        {{if .Saved}}<div class="alert alert-success py-2" style="font-size:0.85rem;">Saved.</div>{{end}}
+        {{if .Saved}}<div class="notice notice--success py-2" style="font-size:0.85rem;">Saved.</div>{{end}}
 
         {{/* New-item form (id=0 → create). Reused on the row-level
              edit modal below; here it's the top-of-page quick-add. */}}
-        <details class="card mb-3" style="background:var(--bg-surface);border-color:var(--border);">
-            <summary class="card-header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add roadmap item</summary>
-            <div class="card-body">
+        <details class="panelV2 mb-3" style="background:var(--bg-surface);border-color:var(--border);">
+            <summary class="panel__header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add roadmap item</summary>
+            <div class="panel__body">
                 {{template "admin_roadmap_form" (dict "Item" nil "CSRFToken" .CSRFToken "FlowNodes" .FlowNodes)}}
             </div>
         </details>
 
-        <div class="card" style="background:var(--bg-surface);border-color:var(--border);">
-            <div class="card-body p-0">
-                <table class="table table-sm mb-0" style="font-size:0.85rem;">
+        <div class="panelV2" style="background:var(--bg-surface);border-color:var(--border);">
+            <div class="panel__body p-0">
+                <table class="data-table mb-0" style="font-size:0.85rem;">
                     <thead style="font-size:0.72rem;color:var(--text-muted);">
                         <tr>
                             <th style="width:90px;">Status</th>
@@ -32,9 +32,9 @@
                         {{range .Items}}
                         <tr>
                             <td>
-                                {{if eq .Status "in_flight"}}<span class="badge bg-warning text-dark" style="font-size:0.62rem;">in flight</span>
-                                {{else if eq .Status "backlog"}}<span class="badge bg-secondary bg-opacity-50" style="font-size:0.62rem;">backlog</span>
-                                {{else}}<span class="badge bg-dark" style="font-size:0.62rem;">archived</span>{{end}}
+                                {{if eq .Status "in_flight"}}<span class="tag tag--warning" style="font-size:0.62rem;">in flight</span>
+                                {{else if eq .Status "backlog"}}<span class="tag tag--sm" style="font-size:0.62rem;">backlog</span>
+                                {{else}}<span class="tag" style="font-size:0.62rem;">archived</span>{{end}}
                             </td>
                             <td style="color:var(--text-muted);">{{.SortOrder}}</td>
                             <td>
@@ -43,12 +43,12 @@
                             </td>
                             <td style="font-size:0.75rem;color:var(--text-muted);">{{relativeTime .UpdatedAt}}</td>
                             <td style="text-align:right;white-space:nowrap;">
-                                <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.7rem;"
+                                <button class="button button--outlined button--sm px-2" style="font-size:0.7rem;"
                                         data-bs-toggle="collapse" data-bs-target="#edit-{{.ID}}">Edit</button>
                                 <form method="POST" action="/admin/roadmap/{{.ID}}/delete" class="d-inline"
                                       onsubmit="return confirm('Delete this roadmap item?');">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.7rem;">Del</button>
+                                    <button type="submit" class="button button--outlined button--danger button--sm px-2" style="font-size:0.7rem;">Del</button>
                                 </form>
                             </td>
                         </tr>
@@ -75,13 +75,13 @@
         <input type="hidden" name="id" value="{{if .Item}}{{.Item.ID}}{{else}}0{{end}}">
         <div class="row g-2">
             <div class="col-md-7">
-                <label class="form-label small">Title</label>
-                <input aria-label="Title" type="text" name="title" class="form-control form-control-sm" required
+                <label class="form__label small">Title</label>
+                <input aria-label="Title" type="text" name="title" class="form__input" required
                        value="{{if .Item}}{{.Item.Title}}{{end}}" maxlength="200">
             </div>
             <div class="col-md-3">
-                <label class="form-label small">Status</label>
-                <select aria-label="Status" name="status" class="form-select form-select-sm">
+                <label class="form__label small">Status</label>
+                <select aria-label="Status" name="status" class="form__select">
                     {{$cur := ""}}{{if .Item}}{{$cur = .Item.Status}}{{end}}
                     <option value="in_flight" {{if eq $cur "in_flight"}}selected{{end}}>in flight</option>
                     <option value="backlog"   {{if or (eq $cur "backlog") (eq $cur "")}}selected{{end}}>backlog</option>
@@ -89,18 +89,18 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label small">Sort order</label>
-                <input aria-label="Sort order" type="number" name="sort_order" class="form-control form-control-sm"
+                <label class="form__label small">Sort order</label>
+                <input aria-label="Sort order" type="number" name="sort_order" class="form__input"
                        value="{{if .Item}}{{.Item.SortOrder}}{{else}}100{{end}}">
             </div>
             <div class="col-12">
-                <label class="form-label small">Description</label>
-                <textarea aria-label="Description" name="description" class="form-control form-control-sm" rows="3"
+                <label class="form__label small">Description</label>
+                <textarea aria-label="Description" name="description" class="form__input" rows="3"
                           maxlength="2000">{{if .Item}}{{.Item.Description}}{{end}}</textarea>
             </div>
             <div class="col-12">
-                <label class="form-label small">Link to /flow proposal (optional)</label>
-                <select aria-label="Link to /flow proposal (optional)" name="flow_node_id" class="form-select form-select-sm">
+                <label class="form__label small">Link to /flow proposal (optional)</label>
+                <select aria-label="Link to /flow proposal (optional)" name="flow_node_id" class="form__select">
                     {{$curNode := int64 0}}{{if and .Item .Item.FlowNodeID}}{{$curNode = deref64 .Item.FlowNodeID}}{{end}}
                     <option value="0">— no link —</option>
                     {{range .FlowNodes}}
@@ -114,7 +114,7 @@
                 </div>
             </div>
             <div class="col-12 mt-2">
-                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                <button type="submit" class="button button--primary button--sm">Save</button>
             </div>
         </div>
     </form>

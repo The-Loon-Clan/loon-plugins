@@ -29,7 +29,7 @@
             <div class="d-flex gap-2 align-items-center flex-wrap">
                 <form method="POST" action="/release-groups/{{.Group.Slug}}/archive/refresh" class="d-inline">
                     <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                    <button type="submit" class="btn btn-outline-primary btn-sm">Refresh from nekoBT</button>
+                    <button type="submit" class="button button--outlined button--sm">Refresh from nekoBT</button>
                 </form>
                 {{/* Bulk-request all Missing rows in one click. The
                      handler caps at 50/click and dedups internally so
@@ -37,7 +37,7 @@
                 <form method="POST" action="/release-groups/{{.Group.Slug}}/archive/request-missing" class="d-inline"
                       onsubmit="return confirm('File a download request for every Missing release on this page (up to 50)?');">
                     <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                    <button type="submit" class="btn btn-outline-success btn-sm">Request all missing</button>
+                    <button type="submit" class="button button--outlined button--sm">Request all missing</button>
                 </form>
             </div>
             {{end}}
@@ -46,7 +46,7 @@
         {{/* Flash banner for refresh action — whitelisted to known
              values so a hand-edited query string can't inject content. */}}
         {{if .RefreshFlash}}
-        <div class="alert {{if eq .RefreshFlash "started"}}alert-info{{else if eq .RefreshFlash "cooldown"}}alert-secondary{{else if eq .RefreshFlash "not_found"}}alert-secondary{{else if eq .RefreshFlash "unlinked"}}alert-warning{{else}}alert-warning{{end}} py-2 mb-3" style="font-size:0.85rem;">
+        <div class="notice {{if eq .RefreshFlash "started"}} notice--info{{else if eq .RefreshFlash "cooldown"}}notice--info{{else if eq .RefreshFlash "not_found"}}notice--info{{else if eq .RefreshFlash "unlinked"}}notice--warning{{else}}notice--warning{{end}} py-2 mb-3" style="font-size:0.85rem;">
             {{if eq .RefreshFlash "started"}}Refresh queued — should land within a minute or so. Reload to see new rows.
             {{else if eq .RefreshFlash "cooldown"}}Slow down — wait 15 minutes between owner-triggered refreshes.
             {{else if eq .RefreshFlash "forbidden"}}Only owners (or admins) can trigger a refresh.
@@ -59,7 +59,7 @@
         {{/* Bulk-request outcome banner. "ok" carries per-category
              counts in query params so the user gets a real receipt. */}}
         {{if .BulkFlash}}
-        <div class="alert {{if eq .BulkFlash "ok"}}alert-success{{else if eq .BulkFlash "forbidden"}}alert-warning{{else}}alert-danger{{end}} py-2 mb-3" style="font-size:0.85rem;">
+        <div class="notice {{if eq .BulkFlash "ok"}} notice--success{{else if eq .BulkFlash "forbidden"}}notice--warning{{else}}notice--danger{{end}} py-2 mb-3" style="font-size:0.85rem;">
             {{if eq .BulkFlash "ok"}}
                 Filed <strong>{{.BulkFiled}}</strong> new request{{if ne .BulkFiled "1"}}s{{end}}.
                 {{if and .BulkDup (ne .BulkDup "0")}}{{.BulkDup}} already pending. {{end}}
@@ -72,9 +72,9 @@
         {{end}}
 
         {{if .Torrents}}
-        <div class="card">
-            <div class="card-body p-0">
-                <table class="table table-sm arch-table mb-0">
+        <div class="panelV2">
+            <div class="panel__body p-0">
+                <table class="data-table arch-table mb-0">
                     <thead>
                         <tr>
                             <th style="width:42%;">Title</th>
@@ -91,7 +91,7 @@
                             <td>
                                 <div class="arch-title">{{.Title}}</div>
                                 <div class="arch-meta">
-                                    {{if .ImportedNyaaID}}<span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:0.6rem;">via Nyaa</span>{{end}}
+                                    {{if .ImportedNyaaID}}<span class="tag tag--sm" style="font-size:0.6rem;">via Nyaa</span>{{end}}
                                     {{if .InfoHash}}<span title="{{.InfoHash}}">{{slice .InfoHash 0 12}}…</span>{{end}}
                                 </div>
                             </td>
@@ -105,7 +105,7 @@
                             <td style="color:var(--text-muted);font-size:0.78rem;">{{.Seeders}}</td>
                             <td>
                                 {{if .OurNzbID}}
-                                <a href="/release/{{deref64 .OurNzbID}}" class="badge arch-badge-avail" style="font-size:0.65rem;text-decoration:none;">&#10003; Available</a>
+                                <a href="/release/{{deref64 .OurNzbID}}" class="tag arch-badge-avail" style="font-size:0.65rem;text-decoration:none;">&#10003; Available</a>
                                 {{else}}
                                 {{/* Inline request form. POSTs into the existing
                                      /community/requests handler with the cached
@@ -121,10 +121,10 @@
                                     <input type="hidden" name="nyaa_url"   value="https://nekobt.to/torrents/{{.NekobtTorrentID}}">
                                     <input type="hidden" name="info_hash"  value="{{.InfoHash}}">
                                     <input type="hidden" name="seed_count" value="{{.Seeders}}">
-                                    <button type="submit" class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size:0.7rem;">Request</button>
+                                    <button type="submit" class="button button--outlined button--sm px-2" style="font-size:0.7rem;">Request</button>
                                 </form>
                                 {{else}}
-                                <a href="/login" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.7rem;" title="Sign in to file a request">Request</a>
+                                <a href="/login" class="button button--outlined button--sm px-2" style="font-size:0.7rem;" title="Sign in to file a request">Request</a>
                                 {{end}}
                                 {{end}}
                             </td>
@@ -138,18 +138,18 @@
                 <span style="font-size:0.75rem;color:var(--text-muted);">Page {{.Page}} of {{.TotalPages}}</span>
                 <div>
                     {{if gt .Page 1}}
-                    <a href="?page={{sub (int64 .Page) 1}}" class="btn btn-sm btn-outline-secondary py-0" style="font-size:0.75rem;">&laquo; Prev</a>
+                    <a href="?page={{sub (int64 .Page) 1}}" class="button button--sm button--outlined" style="font-size:0.75rem;">&laquo; Prev</a>
                     {{end}}
                     {{if lt .Page .TotalPages}}
-                    <a href="?page={{inc .Page}}" class="btn btn-sm btn-outline-secondary py-0" style="font-size:0.75rem;">Next &raquo;</a>
+                    <a href="?page={{inc .Page}}" class="button button--sm button--outlined" style="font-size:0.75rem;">Next &raquo;</a>
                     {{end}}
                 </div>
             </div>
             {{end}}
         </div>
         {{else}}
-        <div class="card">
-            <div class="card-body" style="color:var(--text-muted);font-size:0.88rem;">
+        <div class="panelV2">
+            <div class="panel__body" style="color:var(--text-muted);font-size:0.88rem;">
                 {{if eq .Group.NekobtStatus "not_found"}}
                 This group isn't on nekoBT — the scanner already confirmed there's nothing to pull.
                 {{else if eq .Group.NekobtStatus "linked"}}

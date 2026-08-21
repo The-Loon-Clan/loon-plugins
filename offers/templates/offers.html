@@ -41,13 +41,13 @@
                 <form method="GET" action="/offers" class="d-flex flex-wrap gap-2 align-items-end mb-3">
                     {{if eq .Tab "fulfilled"}}<input type="hidden" name="tab" value="fulfilled">{{end}}
                     <div style="flex:1;min-width:180px;">
-                        <label class="form-label small mb-1">Search</label>
-                        <input aria-label="Search" type="search" name="q" value="{{.Query}}" class="form-control form-control-sm"
+                        <label class="form__label small mb-1">Search</label>
+                        <input aria-label="Search" type="search" name="q" value="{{.Query}}" class="form__input"
                                placeholder="Search offers by title &mdash; e.g. Frieren">
                     </div>
                     <div>
-                        <label class="form-label small mb-1">Type</label>
-                        <select aria-label="Type" name="type" class="form-select form-select-sm">
+                        <label class="form__label small mb-1">Type</label>
+                        <select aria-label="Type" name="type" class="form__select">
                             {{$t := .EntityType}}
                             <option value="anime" {{if eq $t "anime"}}selected{{end}}>Anime</option>
                             <option value="manga" {{if eq $t "manga"}}selected{{end}}>Manga</option>
@@ -56,8 +56,8 @@
                         </select>
                     </div>
                     <div>
-                        <label class="form-label small mb-1">Size</label>
-                        <select aria-label="Size" name="size" class="form-select form-select-sm">
+                        <label class="form__label small mb-1">Size</label>
+                        <select aria-label="Size" name="size" class="form__select">
                             {{$s := .SizeBucket}}
                             <option value=""        {{if eq $s ""}}selected{{end}}>Any</option>
                             <option value="<500MB"  {{if eq $s "<500MB"}}selected{{end}}>&lt;500MB</option>
@@ -66,7 +66,7 @@
                             <option value=">=2.5GB" {{if eq $s ">=2.5GB"}}selected{{end}}>&ge;2.5GB</option>
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                    <button type="submit" class="button button--primary button--sm">Apply</button>
                 </form>
 
                 {{/* Tab strip, community/requests-style: fulfilled buckets
@@ -96,8 +96,8 @@
                      keyboard included, no script. Single-variant shows stay
                      open: there is nothing to hide behind a click, and every
                      request would otherwise cost one. */}}
-                <details class="card mb-2 of-group">
-                    <summary class="card-header" style="display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;">
+                <details class="panelV2 mb-2 of-group">
+                    <summary class="panel__header" style="display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;">
                         {{if .Picture}}
                         <span class="nzb-thumb" data-cover="{{.Picture}}" data-fallback="{{.PictureFallback}}"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
                               onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}"></span>
@@ -110,7 +110,7 @@
                         </div>
                         <span class="of-chevron" aria-hidden="true">&#9656;</span>
                     </summary>
-                    <table class="table mb-0">
+                    <table class="data-table mb-0">
                         <tbody>
                         {{range .Buckets}}
                             <tr>
@@ -128,8 +128,8 @@
                                     </div>
                                 </td>
                                 <td style="width:120px;font-size:0.82rem;">
-                                    {{if .Resolution}}<span class="badge" style="background:rgba(var(--bs-primary-rgb),0.2);color:var(--bs-primary);">{{.Resolution}}</span>{{end}}
-                                    {{if .SourceTag}}<span class="badge" style="background:rgba(var(--bs-success-rgb),0.15);color:var(--bs-success);">{{.SourceTag}}</span>{{end}}
+                                    {{if .Resolution}}<span class="tag" style="background:rgba(var(--bs-primary-rgb),0.2);color:var(--bs-primary);">{{.Resolution}}</span>{{end}}
+                                    {{if .SourceTag}}<span class="tag" style="background:rgba(var(--bs-success-rgb),0.15);color:var(--bs-success);">{{.SourceTag}}</span>{{end}}
                                 </td>
                                 {{if eq $.Tab "fulfilled"}}
                                 <td style="width:200px;font-size:0.82rem;">
@@ -145,10 +145,10 @@
                                          stake is debited on submit — see the detail
                                          page. */}}
                                     <div style="display:flex;gap:4px;align-items:center;">
-                                        <input type="number" class="form-control form-control-sm of-points"
+                                        <input type="number" class="form__input of-points"
                                                min="0" step="1" value="0" title="Points to stake — debited now, paid to whoever delivers, returned if you withdraw"
                                                style="width:64px;font-size:0.78rem;">
-                                        <button type="button" class="btn btn-primary btn-sm of-request" data-bucket-id="{{.BucketID}}">{{if .BackerCount}}Join{{else}}Request{{end}}</button>
+                                        <button type="button" class="button button--primary button--sm of-request" data-bucket-id="{{.BucketID}}">{{if .BackerCount}}Join{{else}}Request{{end}}</button>
                                     </div>
                                 </td>
                                 {{end}}

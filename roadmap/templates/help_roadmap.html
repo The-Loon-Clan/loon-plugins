@@ -191,8 +191,8 @@
         <div class="d-flex justify-content-between align-items-center mt-3" style="font-size:0.85rem;">
             <span style="color:var(--text-muted);">Page {{.Page}} of {{.TotalPages}}</span>
             <div>
-                {{if gt .Page 1}}<a href="?tab={{.ActiveTab}}&amp;page={{sub (int64 .Page) 1}}" class="btn btn-sm btn-outline-secondary py-0">&laquo; Prev</a>{{end}}
-                {{if lt .Page .TotalPages}}<a href="?tab={{.ActiveTab}}&amp;page={{inc .Page}}" class="btn btn-sm btn-outline-secondary py-0">Next &raquo;</a>{{end}}
+                {{if gt .Page 1}}<a href="?tab={{.ActiveTab}}&amp;page={{sub (int64 .Page) 1}}" class="button button--sm button--outlined">&laquo; Prev</a>{{end}}
+                {{if lt .Page .TotalPages}}<a href="?tab={{.ActiveTab}}&amp;page={{inc .Page}}" class="button button--sm button--outlined">Next &raquo;</a>{{end}}
             </div>
         </div>
         {{end}}

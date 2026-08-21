@@ -113,7 +113,7 @@ func TestPageRenders(t *testing.T) {
 	out := b.String()
 	for _, marker := range []string{
 		"60%", "Some Release", "/release/1", "/anime/7", "unresolved",
-		"badge bg-primary\">S1", "no metadata row", "page=2",
+		"tag tag--info\">S1", "no metadata row", "page=2",
 	} {
 		if !strings.Contains(out, marker) {
 			t.Errorf("rendered page is missing %q", marker)

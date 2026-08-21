@@ -60,16 +60,16 @@
                 <h2 class="mb-0" style="font-size:1.25rem;font-weight:600;">🖼 {{.Node.Label}}</h2>
                 {{if .Parent}}
                 <p class="mb-0 mt-1" style="font-size:0.78rem;color:var(--text-muted);">
-                    <span class="badge bg-warning text-dark me-1" style="font-size:0.65rem;">edits</span>
+                    <span class="tag tag--warning me-1" style="font-size:0.65rem;">edits</span>
                     Proposes a change to
                     <a href="/flow#node-{{.Parent.ID}}" style="color:var(--bs-warning);">{{.Parent.Label}}</a>
                 </p>
                 {{end}}
             </div>
             <div class="d-flex gap-2 align-items-center">
-                <span class="badge bg-secondary" style="font-size:0.78rem;">▲ <span id="vote-count">{{.Node.VoteCount}}</span></span>
-                <button id="btn-vote" class="btn btn-sm btn-outline-warning">👍 Vote</button>
-                <a href="/flow#node-{{.Node.ID}}" class="btn btn-sm btn-outline-primary">🌐 Open in graph</a>
+                <span class="tag tag--sm" style="font-size:0.78rem;">▲ <span id="vote-count">{{.Node.VoteCount}}</span></span>
+                <button id="btn-vote" class="button button--sm button--outlined">👍 Vote</button>
+                <a href="/flow#node-{{.Node.ID}}" class="button button--sm button--outlined">🌐 Open in graph</a>
             </div>
         </div>
 
@@ -109,11 +109,11 @@
             </div>
 
             <div class="col-12 col-lg-4">
-                <div class="card">
-                    <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">
+                <div class="panelV2">
+                    <div class="panel__header" style="font-size:0.85rem;color:var(--text-muted);">
                         Comments ({{len .Comments}})
                     </div>
-                    <div class="card-body p-0">
+                    <div class="panel__body p-0">
                         {{range .Comments}}
                         <div class="mockup-comment">
                             <div class="mockup-comment-meta">
@@ -130,12 +130,12 @@
                     </div>
                 </div>
 
-                <div class="card mt-3">
-                    <div class="card-header" style="font-size:0.85rem;color:var(--text-muted);">Quick add</div>
-                    <div class="card-body">
+                <div class="panelV2 mt-3">
+                    <div class="panel__header" style="font-size:0.85rem;color:var(--text-muted);">Quick add</div>
+                    <div class="panel__body">
                         <div class="d-flex gap-1">
-                            <input id="comment-input" class="form-control form-control-sm" type="text" placeholder="Leave a comment…" maxlength="2000">
-                            <button id="btn-comment" class="btn btn-sm btn-primary">Send</button>
+                            <input id="comment-input" class="form__input" type="text" placeholder="Leave a comment…" maxlength="2000">
+                            <button id="btn-comment" class="button button--sm button--primary">Send</button>
                         </div>
                         <div style="font-size:0.7rem;color:var(--text-muted);margin-top:6px;">
                             Comments here go to the same thread as the canvas. Markdown isn't rendered yet — keep it short.

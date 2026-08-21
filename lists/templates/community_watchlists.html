@@ -53,20 +53,20 @@
                     <span id="wl-visible-count">{{len .Lists}}</span> of {{len .Lists}} public collections
                 </small>
             </div>
-            <a href="/lists" class="btn btn-sm btn-primary fw-semibold">+ My Collections</a>
+            <a href="/lists" class="button button--sm button--primary fw-semibold">+ My Collections</a>
         </div>
 
         {{/* Toolbar — client-side filter + sort over the combined set
              loaded by the handler. Server-side filtering can swap in
              later if the list count grows past a few hundred. */}}
         <div class="wl-toolbar">
-            <input id="wl-search" type="search" class="form-control form-control-sm"
+            <input id="wl-search" type="search" class="form__input"
                    placeholder="Search by name…" autocomplete="off"
                    style="max-width:300px;">
-            <input id="wl-username" type="search" class="form-control form-control-sm"
+            <input id="wl-username" type="search" class="form__input"
                    placeholder="Username…" autocomplete="off"
                    style="max-width:200px;">
-            <select id="wl-sort" class="form-select form-select-sm" style="max-width:160px;">
+            <select id="wl-sort" class="form__select" style="max-width:160px;">
                 <option value="new">Newest</option>
                 <option value="items">Most items</option>
                 <option value="grabs">Most grabbed</option>
@@ -85,7 +85,7 @@
                  data-grabs="{{.DownloadCount}}"
                  data-follows="{{.FollowCount}}"
                  data-created="{{.CreatedAt.Unix}}">
-                <div class="card h-100 cover-card wl-card" style="background:var(--bg-elevated);border-color:var(--border);">
+                <div class="panelV2 h-100 cover-card wl-card" style="background:var(--bg-elevated);border-color:var(--border);">
                     <a href="/lists/{{.ID}}">
                         <div class="cover-wrap">
                             {{if .CoverURL}}
@@ -97,7 +97,7 @@
                             {{end}}
                         </div>
                     </a>
-                    <div class="card-body p-2">
+                    <div class="panel__body p-2">
                         <a href="/u/{{.Username}}" class="wl-creator">
                             &#9881; {{.Username}}
                         </a>

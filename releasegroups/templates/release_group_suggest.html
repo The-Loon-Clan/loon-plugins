@@ -41,40 +41,40 @@
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
 
                 <div class="mb-3">
-                    <label class="form-label small">Name {{if .IsNew}}*{{end}}</label>
-                    <input class="form-control form-control-sm" name="name"
+                    <label class="form__label small">Name {{if .IsNew}}*{{end}}</label>
+                    <input class="form__input" name="name"
                            value="{{if not .IsNew}}{{.Group.Name}}{{end}}"
                            {{if .IsNew}}required{{end}}>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label small">Website URL</label>
-                    <input aria-label="Website URL" class="form-control form-control-sm" name="website_url" type="url"
+                    <label class="form__label small">Website URL</label>
+                    <input aria-label="Website URL" class="form__input" name="website_url" type="url"
                            value="{{if not .IsNew}}{{.Group.WebsiteURL}}{{end}}"
                            placeholder="https://…">
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label small">Logo URL</label>
-                    <input aria-label="Logo URL" class="form-control form-control-sm" name="logo_url" type="url"
+                    <label class="form__label small">Logo URL</label>
+                    <input aria-label="Logo URL" class="form__input" name="logo_url" type="url"
                            value="{{if not .IsNew}}{{.Group.LogoURL}}{{end}}"
                            placeholder="https://…">
                     <div class="form-text" style="font-size:0.72rem;">Direct link to a square logo image.</div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label small">Description</label>
-                    <textarea aria-label="Description" class="form-control form-control-sm" name="description" rows="4">{{if not .IsNew}}{{.Group.Description}}{{end}}</textarea>
+                    <label class="form__label small">Description</label>
+                    <textarea aria-label="Description" class="form__input" name="description" rows="4">{{if not .IsNew}}{{.Group.Description}}{{end}}</textarea>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label small">Notes for moderator</label>
-                    <textarea aria-label="Notes for moderator" class="form-control form-control-sm" name="notes" rows="2" placeholder="Optional context, sources, why this change…"></textarea>
+                    <label class="form__label small">Notes for moderator</label>
+                    <textarea aria-label="Notes for moderator" class="form__input" name="notes" rows="2" placeholder="Optional context, sources, why this change…"></textarea>
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center">
-                    <a href="{{if .IsNew}}/release-groups{{else}}/release-groups/{{.Group.Slug}}{{end}}" class="btn btn-outline-secondary btn-sm">Cancel</a>
-                    <button type="submit" class="btn btn-primary btn-sm">Submit Suggestion</button>
+                    <a href="{{if .IsNew}}/release-groups{{else}}/release-groups/{{.Group.Slug}}{{end}}" class="button button--outlined button--sm">Cancel</a>
+                    <button type="submit" class="button button--primary button--sm">Submit Suggestion</button>
                 </div>
             </form>
         </div>

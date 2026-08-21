@@ -79,7 +79,7 @@
         {{$claimFlash := .ClaimFlash}}
         {{$verifyFlash := .VerifyFlash}}
         {{if $claimFlash}}
-        <div class="alert {{if eq $claimFlash "created"}}alert-info{{else if eq $claimFlash "bad_url"}}alert-warning{{else}}alert-secondary{{end}} py-2 mb-3" style="font-size:0.85rem;">
+        <div class="notice {{if eq $claimFlash "created"}} notice--info{{else if eq $claimFlash "bad_url"}}notice--warning{{else}}notice--info{{end}} py-2 mb-3" style="font-size:0.85rem;">
             {{if eq $claimFlash "created"}}Claim filed. Add the verification token below to your URL and click Verify.
             {{else if eq $claimFlash "already_owner"}}You already own this group.
             {{else if eq $claimFlash "already_pending"}}You already have a pending claim on this group.
@@ -88,7 +88,7 @@
         </div>
         {{end}}
         {{if $verifyFlash}}
-        <div class="alert {{if eq $verifyFlash "approved"}}alert-success{{else if eq $verifyFlash "token_missing"}}alert-warning{{else if eq $verifyFlash "cooldown"}}alert-secondary{{else}}alert-danger{{end}} py-2 mb-3" style="font-size:0.85rem;">
+        <div class="notice {{if eq $verifyFlash "approved"}} notice--success{{else if eq $verifyFlash "token_missing"}}notice--warning{{else if eq $verifyFlash "cooldown"}}notice--info{{else}}notice--danger{{end}} py-2 mb-3" style="font-size:0.85rem;">
             {{if eq $verifyFlash "approved"}}Verified — you're now an owner of this release group.
             {{else if eq $verifyFlash "token_missing"}}We couldn't find your verification code on that page. Make sure the snippet (or comment) is published at the URL you nominated, then try again.
             {{else if eq $verifyFlash "cooldown"}}Slow down — wait a minute between verification attempts.
@@ -108,7 +108,7 @@
                 <h1>
                     {{.Group.Name}}
                     {{if eq .Group.Status "confirmed"}}<span class="badge-status badge-confirmed">Confirmed</span>{{else}}<span class="badge-status badge-unknown">Unknown</span>{{end}}
-                    {{if .Owners}}<span class="badge bg-success bg-opacity-25 text-success ms-2" style="font-size:0.6rem;vertical-align:middle;" title="Claimed by an owner">Owned</span>{{end}}
+                    {{if .Owners}}<span class="tag tag--success ms-2" style="font-size:0.6rem;vertical-align:middle;" title="Claimed by an owner">Owned</span>{{end}}
                 </h1>
                 {{/* External links — admin-set. WebsiteURL is the
                      group's own site (used as the claim-verify URL
@@ -167,18 +167,18 @@
                 {{if .User}}
                 <form method="POST" action="/release-groups/{{.Group.Slug}}/follow" class="d-inline">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                    <button id="rg-follow-btn" type="submit" class="btn btn-sm {{if .ViewerIsFollowing}}btn-success{{else}}btn-outline-primary{{end}}"
+                    <button id="rg-follow-btn" type="submit" class="button button--sm {{if .ViewerIsFollowing}}button--primary{{else}}button--outlined{{end}}"
                             data-following="{{if .ViewerIsFollowing}}1{{else}}0{{end}}">
                         <span id="rg-follow-label">{{if .ViewerIsFollowing}}Following{{else}}Follow{{end}}</span>
                     </button>
                 </form>
                 {{end}}
                 {{if and .User (not .ViewerIsOwner) (not .ViewerClaim)}}
-                <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#claimGroupModal">Claim ownership</button>
+                <button class="button button--outlined button--sm" data-bs-toggle="modal" data-bs-target="#claimGroupModal">Claim ownership</button>
                 {{end}}
-                <a href="/release-groups/{{.Group.Slug}}/suggest" class="btn btn-outline-secondary btn-sm">Suggest Edit</a>
+                <a href="/release-groups/{{.Group.Slug}}/suggest" class="button button--outlined button--sm">Suggest Edit</a>
                 {{if .IsAdmin}}
-                <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editGroupModal">Edit</button>
+                <button class="button button--outlined button--sm" data-bs-toggle="modal" data-bs-target="#editGroupModal">Edit</button>
                 {{end}}
             </div>
         </div>
@@ -192,7 +192,7 @@
         {{/* Hide-torrent action flash (mig 231). Whitelisted enum so
              a hand-edited query string can't inject content. */}}
         {{if .HideFlash}}
-        <div class="alert {{if eq .HideFlash "ok"}}alert-success{{else}}alert-warning{{end}} py-2 mb-3" style="font-size:0.85rem;">
+        <div class="notice {{if eq .HideFlash "ok"}} notice--success{{else}}notice--warning{{end}} mb-3" style="font-size:0.85rem;">
             {{if eq .HideFlash "ok"}}Hidden from this group's archive.
             {{else if eq .HideFlash "forbidden"}}Only owners (or admins) can hide torrents.
             {{else if eq .HideFlash "bad_id"}}Couldn't identify which torrent to hide.
@@ -204,7 +204,7 @@
              handler's redirect target; whitelisted to known values
              so a hand-edited query string can't inject content. */}}
         {{if .BioFlash}}
-        <div class="alert {{if eq .BioFlash "saved"}}alert-success{{else}}alert-warning{{end}} py-2 mb-3" style="font-size:0.85rem;">
+        <div class="notice {{if eq .BioFlash "saved"}} notice--success{{else}}notice--warning{{end}} mb-3" style="font-size:0.85rem;">
             {{if eq .BioFlash "saved"}}Bio updated.
             {{else if eq .BioFlash "forbidden"}}Only owners can edit the bio.
             {{else}}{{.BioFlash}}{{end}}
@@ -217,15 +217,15 @@
              renders when content exists, so a fresh group doesn't
              show an empty box. */}}
         {{if .BioHTML}}
-        <div class="card mb-3" style="background:var(--bg-surface);border-color:var(--border);">
-            <div class="card-body rg-bio" style="font-size:0.9rem;line-height:1.55;">
+        <div class="panelV2 mb-3" style="background:var(--bg-surface);border-color:var(--border);">
+            <div class="panel__body rg-bio" style="font-size:0.9rem;line-height:1.55;">
                 {{.BioHTML}}
             </div>
         </div>
         {{end}}
         {{if or .ViewerIsOwner .IsAdmin}}
         <div class="mb-3">
-            <a href="/release-groups/{{.Group.Slug}}/bio" class="btn btn-outline-secondary btn-sm" style="font-size:0.75rem;">
+            <a href="/release-groups/{{.Group.Slug}}/bio" class="button button--outlined button--sm" style="font-size:0.75rem;">
                 {{if .BioHTML}}Edit bio{{else}}Write a bio &rarr;{{end}}
             </a>
         </div>
@@ -251,8 +251,8 @@
         {{$tok := .ViewerClaim.VerificationToken}}
         {{$verifyURL := printf "%s/v/%s" $.BaseURL $tok}}
         {{$hiddenSnippet := printf `<a href="%s">ameNZB 💧</a>` $verifyURL}}
-        <div class="card mb-3" style="border-color:var(--blue);">
-            <div class="card-body" style="font-size:0.85rem;">
+        <div class="panelV2 mb-3" style="border-color:var(--blue);">
+            <div class="panel__body" style="font-size:0.85rem;">
                 <h6 style="margin:0 0 0.5rem;font-weight:600;">Your pending ownership claim</h6>
                 <p style="margin:0 0 0.8rem;color:var(--text-muted);">
                     Pick one of the snippets below and paste it into your group's description at
@@ -275,7 +275,7 @@
                         <span style="flex:1;font-size:0.78rem;color:var(--text-muted);">
                             Renders as a small "ameNZB 💧" link &mdash; your per-claim token lives in the URL.
                         </span>
-                        <button type="button" class="btn btn-primary btn-sm"
+                        <button type="button" class="button button--primary button--sm"
                                 onclick="navigator.clipboard.writeText(document.getElementById('rg-snippet-hidden').textContent); this.textContent='Copied';">
                             Copy HTML
                         </button>
@@ -288,7 +288,7 @@
 
                 <form method="POST" action="/release-groups/{{.Group.Slug}}/claim/verify" class="d-inline">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                    <button type="submit" class="btn btn-primary btn-sm">Verify now</button>
+                    <button type="submit" class="button button--primary button--sm">Verify now</button>
                 </form>
                 {{if gt .ViewerClaim.VerificationAttempts 0}}
                 <span style="margin-left:0.5rem;color:var(--text-muted);font-size:0.75rem;">{{.ViewerClaim.VerificationAttempts}} attempt{{if ne .ViewerClaim.VerificationAttempts 1}}s{{end}} so far</span>
@@ -313,7 +313,7 @@
                         <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         <div class="modal-header">
                             <h5 class="modal-title" style="font-size:1rem;">Claim ownership of {{.Group.Name}}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            <button type="button" class="button button--text button--sm" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body" style="font-size:0.85rem;">
                             <p style="color:var(--text-muted);">
@@ -324,8 +324,8 @@
                             </p>
 
                             <div class="mb-3">
-                                <label class="form-label" style="font-size:0.8rem;">Verification URL</label>
-                                <input aria-label="Verification URL" type="url" name="verification_url" class="form-control form-control-sm"
+                                <label class="form__label" style="font-size:0.8rem;">Verification URL</label>
+                                <input aria-label="Verification URL" type="url" name="verification_url" class="form__input"
                                     value="{{.Group.WebsiteURL}}"
                                     placeholder="https://nekobt.to/yourhandle or your own site"
                                     required>
@@ -334,14 +334,14 @@
                                 </div>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label" style="font-size:0.8rem;">Optional note <span class="text-muted">(visible to admins + voters)</span></label>
-                                <textarea aria-label="Optional note (visible to admins + voters)" name="claim_message" class="form-control form-control-sm" rows="2" maxlength="1000"
+                                <label class="form__label" style="font-size:0.8rem;">Optional note <span class="text-muted">(visible to admins + voters)</span></label>
+                                <textarea aria-label="Optional note (visible to admins + voters)" name="claim_message" class="form__input" rows="2" maxlength="1000"
                                     placeholder="I run @ToonsHub. We'll put the snippet in our pinned bio."></textarea>
                             </div>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary btn-sm">Continue</button>
+                            <button type="button" class="button button--outlined button--sm" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="button button--primary button--sm">Continue</button>
                         </div>
                     </form>
                 </div>
@@ -352,7 +352,7 @@
         {{/* News flash banner. Strings come from release_group_handler.go's
              redirect target (?news=...). Migration 222. */}}
         {{if .NewsFlash}}
-        <div class="alert {{if eq .NewsFlash "posted"}}alert-success{{else if eq .NewsFlash "deleted"}}alert-secondary{{else}}alert-warning{{end}} py-2 mb-3" style="font-size:0.85rem;">
+        <div class="notice {{if eq .NewsFlash "posted"}} notice--success{{else if eq .NewsFlash "deleted"}}notice--info{{else}}notice--warning{{end}} py-2 mb-3" style="font-size:0.85rem;">
             {{if eq .NewsFlash "posted"}}Posted. Followers have been notified.
             {{else if eq .NewsFlash "deleted"}}Post deleted.
             {{else if eq .NewsFlash "forbidden"}}Only owners and admins can manage news posts.
@@ -374,20 +374,20 @@
         </div>
 
         {{if $canPostNews}}
-        <details class="card mb-3" style="border-color:var(--blue);">
-            <summary class="card-header" style="font-size:0.82rem;font-weight:600;cursor:pointer;list-style:none;">
+        <details class="panelV2 mb-3" style="border-color:var(--blue);">
+            <summary class="panel__header" style="font-size:0.82rem;font-weight:600;cursor:pointer;list-style:none;">
                 + New post <span style="color:var(--text-muted);font-weight:400;font-size:0.78rem;">(visible to everyone; fans out to all followers)</span>
             </summary>
-            <div class="card-body">
+            <div class="panel__body">
                 <form method="POST" action="/release-groups/{{.Group.Slug}}/news">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-2">
-                        <input type="text" name="title" class="form-control form-control-sm" placeholder="Post title (required, ≤ 200 chars)" maxlength="200" required>
+                        <input type="text" name="title" class="form__input" placeholder="Post title (required, ≤ 200 chars)" maxlength="200" required>
                     </div>
                     <div class="mb-2">
-                        <textarea name="body" class="form-control form-control-sm" rows="4" placeholder="Post body — describe what's new, what's coming, what you're recruiting for…" maxlength="10000"></textarea>
+                        <textarea name="body" class="form__input" rows="4" placeholder="Post body — describe what's new, what's coming, what you're recruiting for…" maxlength="10000"></textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm">Publish</button>
+                    <button type="submit" class="button button--primary button--sm">Publish</button>
                 </form>
             </div>
         </details>
@@ -396,8 +396,8 @@
         {{if .NewsPosts}}
         <div class="mb-4">
             {{range .NewsPosts}}
-            <div class="card mb-2" id="news-{{.ID}}">
-                <div class="card-body" style="font-size:0.88rem;">
+            <div class="panelV2 mb-2" id="news-{{.ID}}">
+                <div class="panel__body" style="font-size:0.88rem;">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div style="min-width:0;">
                             <h6 style="margin:0;font-size:0.95rem;font-weight:600;">{{.Title}}</h6>
@@ -408,7 +408,7 @@
                         {{if or $.IsAdmin (and $.User (eq .AuthorUserID $.User.ID)) $.ViewerIsOwner}}
                         <form method="POST" action="/release-groups/{{$.Group.Slug}}/news/{{.ID}}/delete" onsubmit="return confirm('Delete this post?');" style="margin:0;">
                             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                            <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.7rem;">Delete</button>
+                            <button type="submit" class="button button--sm button--outlined button--danger px-2" style="font-size:0.7rem;">Delete</button>
                         </form>
                         {{end}}
                     </div>
@@ -485,13 +485,13 @@
                 <div class="d-flex gap-2 mb-3 flex-wrap">
                     <form method="POST" action="/release-groups/{{.Group.Slug}}/archive/refresh" class="d-inline">
                         <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                        <button type="submit" class="btn btn-outline-primary btn-sm">Refresh from {{$sourceLabel}}</button>
+                        <button type="submit" class="button button--outlined button--sm">Refresh from {{$sourceLabel}}</button>
                     </form>
                     {{if .ArchiveTorrents}}
                     <form method="POST" action="/release-groups/{{.Group.Slug}}/archive/request-missing" class="d-inline"
                           onsubmit="return confirm('File a download request for every Missing release on this page (up to 50)?');">
                         <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                        <button type="submit" class="btn btn-outline-success btn-sm">Request all missing</button>
+                        <button type="submit" class="button button--outlined button--sm">Request all missing</button>
                     </form>
                     {{end}}
                     {{if .Group.ArchiveLastRefreshAt}}
@@ -508,13 +508,13 @@
                      OurNzbID fall back to the group logo (or a
                      placeholder) so the grid stays visually consistent. */}}
                 <div class="d-flex justify-content-end mb-2">
-                    <button type="button" id="rg-torrents-toggle-view" class="btn btn-outline-secondary btn-sm" style="font-size:0.75rem;" title="Switch view">&#9776; List</button>
+                    <button type="button" id="rg-torrents-toggle-view" class="button button--outlined button--sm" style="font-size:0.75rem;" title="Switch view">&#9776; List</button>
                 </div>
 
                 <div id="rg-torrents-view-table">
-                <div class="card">
-                    <div class="card-body p-0">
-                        <table class="table table-sm mb-0" style="font-size:0.85rem;">
+                <div class="panelV2">
+                    <div class="panel__body p-0">
+                        <table class="data-table mb-0" style="font-size:0.85rem;">
                             <thead style="font-size:0.72rem;color:var(--text-muted);">
                                 <tr>
                                     <th style="width:60px;"></th>
@@ -566,11 +566,11 @@
                                     <td style="vertical-align:middle;text-align:right;white-space:nowrap;">
                                         {{/* NZB: only when we have a matching infohash. */}}
                                         {{if .OurNzbID}}
-                                        <a href="/release/{{deref64 .OurNzbID}}" class="btn btn-success btn-sm py-0 px-2" style="font-size:0.7rem;">NZB</a>
+                                        <a href="/release/{{deref64 .OurNzbID}}" class="button button--primary button--sm px-2" style="font-size:0.7rem;">NZB</a>
                                         {{end}}
                                         {{/* Magnet: opens the user's torrent client. */}}
                                         {{if .InfoHash}}
-                                        <a href="magnet:?xt=urn:btih:{{.InfoHash}}&dn={{urlquery .Title}}" class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size:0.7rem;" title="Open in torrent client">Magnet</a>
+                                        <a href="magnet:?xt=urn:btih:{{.InfoHash}}&dn={{urlquery .Title}}" class="button button--outlined button--sm px-2" style="font-size:0.7rem;" title="Open in torrent client">Magnet</a>
                                         {{end}}
                                         {{/* Primary split-button labelled per-row source
                                              (Nyaa or nekoBT). Dropdown arrow renders
@@ -579,10 +579,10 @@
                                              no longer a duplicate "other source" entry
                                              because every torrent has exactly one
                                              upstream of record. */}}
-                                        <div class="btn-group" role="group">
-                                            <a href="{{$primaryURL}}" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.7rem;">{{$primaryLabel}}</a>
+                                        <div class="panel__actions" role="group">
+                                            <a href="{{$primaryURL}}" target="_blank" rel="noopener" class="button button--outlined button--sm px-2" style="font-size:0.7rem;">{{$primaryLabel}}</a>
                                             {{if $canManage}}
-                                            <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle dropdown-toggle-split py-0 px-1" data-bs-toggle="dropdown" aria-expanded="false" style="font-size:0.7rem;">
+                                            <button type="button" class="button button--outlined button--sm dropdown-toggle dropdown-toggle-split px-1" data-bs-toggle="dropdown" aria-expanded="false" style="font-size:0.7rem;">
                                                 <span class="visually-hidden">Curate</span>
                                             </button>
                                             <ul class="dropdown-menu dropdown-menu-end" style="font-size:0.78rem;">
@@ -590,8 +590,8 @@
                                                     <form method="POST" action="/release-groups/{{$.Group.Slug}}/archive/torrents/{{.NekobtTorrentID}}/hide" class="px-2 py-1"
                                                           onsubmit="return confirm('Hide this torrent from your group&apos;s archive? You can unhide later via psql.');">
                                                         <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                                        <input type="text" name="reason" placeholder="Reason (optional)" class="form-control form-control-sm mb-1" style="font-size:0.72rem;" maxlength="256">
-                                                        <button type="submit" class="btn btn-outline-danger btn-sm w-100" style="font-size:0.72rem;">Hide from archive</button>
+                                                        <input type="text" name="reason" placeholder="Reason (optional)" class="form__input mb-1" style="font-size:0.72rem;" maxlength="256">
+                                                        <button type="submit" class="button button--outlined button--danger button--sm w-100" style="font-size:0.72rem;">Hide from archive</button>
                                                     </form>
                                                 </li>
                                             </ul>
@@ -631,7 +631,7 @@
                             {{$primaryURL   = printf "https://nyaa.si/view/%s" (derefStr .ImportedNyaaID)}}
                         {{end}}
                         <div class="col">
-                            <div class="card h-100" style="background:var(--bg-elevated);border-color:var(--border);">
+                            <div class="panelV2 h-100" style="background:var(--bg-elevated);border-color:var(--border);">
                                 <div style="aspect-ratio:2/3;background:var(--bg-surface);overflow:hidden;border-radius:6px 6px 0 0;">
                                     {{if $cover}}
                                     <img src="{{$cover}}" alt="" style="width:100%;height:100%;object-fit:cover;" loading="lazy">
@@ -639,7 +639,7 @@
                                     <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:2.5rem;">?</div>
                                     {{end}}
                                 </div>
-                                <div class="card-body p-2" style="font-size:0.78rem;">
+                                <div class="panel__body p-2" style="font-size:0.78rem;">
                                     <div class="text-truncate" style="font-weight:500;" title="{{.Title}}">{{.Title}}</div>
                                     <div style="color:var(--text-muted);font-size:0.7rem;margin-top:2px;">
                                         {{if .FilesizeBytes}}{{formatBytes .FilesizeBytes}}{{else}}—{{end}}
@@ -647,12 +647,12 @@
                                     </div>
                                     <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">
                                         {{if .OurNzbID}}
-                                        <a href="/release/{{deref64 .OurNzbID}}" class="btn btn-success btn-sm py-0 px-2" style="font-size:0.68rem;">NZB</a>
+                                        <a href="/release/{{deref64 .OurNzbID}}" class="button button--primary button--sm px-2" style="font-size:0.68rem;">NZB</a>
                                         {{end}}
                                         {{if .InfoHash}}
-                                        <a href="magnet:?xt=urn:btih:{{.InfoHash}}&dn={{urlquery .Title}}" class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size:0.68rem;" title="Open in torrent client">Magnet</a>
+                                        <a href="magnet:?xt=urn:btih:{{.InfoHash}}&dn={{urlquery .Title}}" class="button button--outlined button--sm px-2" style="font-size:0.68rem;" title="Open in torrent client">Magnet</a>
                                         {{end}}
-                                        <a href="{{$primaryURL}}" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.68rem;">{{$primaryLabel}}</a>
+                                        <a href="{{$primaryURL}}" target="_blank" rel="noopener" class="button button--outlined button--sm px-2" style="font-size:0.68rem;">{{$primaryLabel}}</a>
                                     </div>
                                 </div>
                             </div>
@@ -697,7 +697,7 @@
                         We haven't connected this group to nekoBT yet, so there's no archive to show.
                         {{if .IsAdmin}}
                         <div class="mt-3">
-                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editGroupModal">Link to nekoBT</button>
+                            <button type="button" class="button button--primary button--sm" data-bs-toggle="modal" data-bs-target="#editGroupModal">Link to nekoBT</button>
                             <div style="font-size:0.74rem;margin-top:0.4rem;">
                                 Paste the group's nekoBT ID (the numeric part of <code style="font-size:0.72rem;">nekobt.to/groups/<strong>11101956255038</strong></code>).
                             </div>
@@ -720,40 +720,40 @@
                     <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                     <div class="modal-header">
                         <h6 class="modal-title">Edit {{.Group.Name}}</h6>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <button type="button" class="button button--text button--sm" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="mb-2"><label class="form-label small">Name *</label><input class="form-control form-control-sm" name="name" id="edit-name" value="{{.Group.Name}}" required></div>
-                        <div class="mb-2"><label class="form-label small">Website URL</label><input aria-label="Website URL" class="form-control form-control-sm" name="website_url" type="url" value="{{.Group.WebsiteURL}}"></div>
+                        <div class="mb-2"><label class="form__label small">Name *</label><input class="form__input" name="name" id="edit-name" value="{{.Group.Name}}" required></div>
+                        <div class="mb-2"><label class="form__label small">Website URL</label><input aria-label="Website URL" class="form__input" name="website_url" type="url" value="{{.Group.WebsiteURL}}"></div>
                         <div class="mb-2">
-                            <label class="form-label small">Logo URL</label>
+                            <label class="form__label small">Logo URL</label>
                             <div class="input-group input-group-sm">
-                                <input class="form-control form-control-sm" name="logo_url" id="edit-logo-url" type="text" value="{{.Group.LogoURL}}" placeholder="Paste a URL then click Scrape">
-                                <button type="button" class="btn btn-outline-info" onclick="scrapeLogoFromEditModal()">Scrape</button>
+                                <input class="form__input" name="logo_url" id="edit-logo-url" type="text" value="{{.Group.LogoURL}}" placeholder="Paste a URL then click Scrape">
+                                <button type="button" class="button button--outlined" onclick="scrapeLogoFromEditModal()">Scrape</button>
                             </div>
                             <div id="edit-logo-status" class="form-text" style="font-size:0.72rem;"></div>
                         </div>
-                        <div class="mb-2"><label class="form-label small">Description</label><textarea aria-label="Logo URL Scrape Description" class="form-control form-control-sm" name="description" rows="4">{{.Group.Description}}</textarea></div>
+                        <div class="mb-2"><label class="form__label small">Description</label><textarea aria-label="Logo URL Scrape Description" class="form__input" name="description" rows="4">{{.Group.Description}}</textarea></div>
                         <div class="mb-2">
-                            <label class="form-label small">nekoBT group ID</label>
-                            <input aria-label="nekoBT group ID" class="form-control form-control-sm" name="nekobt_group_id" type="text" value="{{.Group.NekobtGroupID}}" placeholder="e.g. 11101956255038">
+                            <label class="form__label small">nekoBT group ID</label>
+                            <input aria-label="nekoBT group ID" class="form__input" name="nekobt_group_id" type="text" value="{{.Group.NekobtGroupID}}" placeholder="e.g. 11101956255038">
                             <div class="form-text" style="font-size:0.7rem;">
                                 Upstream snowflake from <code style="font-size:0.7rem;">https://nekobt.to/groups/&lt;id&gt;</code>. Takes priority for both archive scraping AND claim verification.
                             </div>
                         </div>
                         <fieldset class="mb-2" style="border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.6rem;">
-                            <legend class="form-label small" style="float:none;width:auto;padding:0 0.3rem;font-size:0.78rem;">Alternate archive source</legend>
+                            <legend class="form__label small" style="float:none;width:auto;padding:0 0.3rem;font-size:0.78rem;">Alternate archive source</legend>
                             <div class="mb-2">
-                                <label class="form-label small">Scrape source</label>
-                                <select aria-label="Scrape source" class="form-select form-select-sm" name="scrape_source">
+                                <label class="form__label small">Scrape source</label>
+                                <select aria-label="Scrape source" class="form__select" name="scrape_source">
                                     {{$cur := .Group.ScrapeSource}}
                                     <option value=""    {{if eq $cur ""}}selected{{end}}>— none (nekoBT only, if set above) —</option>
                                     <option value="nyaa" {{if eq $cur "nyaa"}}selected{{end}}>nyaa</option>
                                 </select>
                             </div>
                             <div class="mb-1">
-                                <label class="form-label small">Scrape URL</label>
-                                <input aria-label="Scrape URL" class="form-control form-control-sm" name="scrape_url" type="url" value="{{.Group.ScrapeURL}}" placeholder="https://nyaa.si/user/subsplease">
+                                <label class="form__label small">Scrape URL</label>
+                                <input aria-label="Scrape URL" class="form__input" name="scrape_url" type="url" value="{{.Group.ScrapeURL}}" placeholder="https://nyaa.si/user/subsplease">
                                 <div class="form-text" style="font-size:0.7rem;">
                                     Used only when the nekoBT ID above is empty. For Nyaa, paste the user page URL.
                                 </div>
@@ -762,10 +762,10 @@
                         <div style="font-size:0.72rem;color:var(--text-muted);">Saving will mark this group as confirmed. Verification falls back to the Website URL above when nekoBT isn't set.</div>
                     </div>
                     <div class="modal-footer d-flex justify-content-between">
-                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="if(confirm('Delete this group?')) deleteGroup({{.Group.ID}})">Delete</button>
+                        <button type="button" class="button button--outlined button--danger button--sm" onclick="if(confirm('Delete this group?')) deleteGroup({{.Group.ID}})">Delete</button>
                         <div>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                            <button type="button" class="button button--outlined button--sm" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="button button--primary button--sm">Save</button>
                         </div>
                     </div>
                 </form>
@@ -790,8 +790,8 @@
                 .then(function(d){
                     if (d && d.ok) {
                         var nowFollowing = !!d.following;
-                        btn.classList.toggle('btn-success', nowFollowing);
-                        btn.classList.toggle('btn-outline-primary', !nowFollowing);
+                        btn.classList.toggle('button--primary', nowFollowing);
+                        btn.classList.toggle('button--outlined', !nowFollowing);
                         label.textContent = nowFollowing ? 'Following' : 'Follow';
                         btn.setAttribute('data-following', nowFollowing ? '1' : '0');
                     }
