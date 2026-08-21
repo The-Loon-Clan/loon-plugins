@@ -11,8 +11,21 @@
      its own. */}}
 {{define "achievements_page.html"}}
 
-{{if .Msg}}<div class="alert alert-success py-2" style="font-size:0.85rem;">{{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert alert-danger py-2" style="font-size:0.85rem;">{{.Err}}</div>{{end}}
+{{if .Msg}}<div class="notice notice--success">
+    <span>
+        {{if eq .Msg "shown"}}Your achievements are shown on your public profile.
+        {{else if eq .Msg "hidden"}}Your achievements are now hidden from everyone but you.
+        {{else}}Done.{{end}}
+    </span>
+</div>{{end}}
+{{/* A CODE, not a sentence (CHECKLIST §10), and the host's notice rather
+     than Bootstrap's alert. */}}
+{{if .Err}}<div class="notice notice--danger">
+    <span>
+        {{if eq .Err "unavailable"}}Achievements are not available right now.
+        {{else}}Something went wrong.{{end}}
+    </span>
+</div>{{end}}
 
 {{if .SignedIn}}
   {{/* The same card a profile shows, from the same code — so this page cannot

@@ -159,7 +159,7 @@ func (p *Plugin) actionSetVisibility(gc *gin.Context) (template.HTML, error) {
 		return "", nil
 	}
 	if p.store == nil {
-		gc.Redirect(http.StatusSeeOther, "/p/achievements?err="+url.QueryEscape("Achievements are not available right now."))
+		gc.Redirect(http.StatusSeeOther, "/p/achievements?err="+"unavailable")
 		return "", nil
 	}
 	hide := gc.PostForm("hidden") == "1"
@@ -169,9 +169,14 @@ func (p *Plugin) actionSetVisibility(gc *gin.Context) (template.HTML, error) {
 		// leave the member believing they had hidden something.
 		return "", err
 	}
-	msg := "Your achievements are shown on your public profile."
+	// A CODE, not a sentence — achievements_page.html holds the words.
+	//
+	// Note for anyone auditing: assigning the sentence to a variable first, as
+	// this did, hides it from the Go-sentence ratchet, whose pattern only sees
+	// a literal inside the call. The count is a floor, not a census.
+	msg := "shown"
 	if hide {
-		msg = "Your achievements are now hidden from everyone but you."
+		msg = "hidden"
 	}
 	gc.Redirect(http.StatusSeeOther, "/p/achievements?msg="+url.QueryEscape(msg))
 	return "", nil
