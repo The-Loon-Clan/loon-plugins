@@ -3,7 +3,7 @@
 
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2 class="mb-0" style="font-weight:600;font-size:1rem;">Store</h2>
-            <span class="badge bg-warning text-dark" style="font-size:0.82rem;">{{.Balance}} pts</span>
+            <span class="tag tag--warning">{{.Balance}} pts</span>
         </div>
 
         {{/* Page links rather than Bootstrap's JS tabs: History pages
@@ -26,20 +26,19 @@
         </ul>
         {{end}}
 
-        {{if .Error}}<div class="alert alert-danger py-1 mb-3" style="font-size:0.82rem;">{{.Error}}</div>{{end}}
-        {{if .Ok}}<div class="alert alert-success py-1 mb-3" style="font-size:0.82rem;">Purchased {{.Ok}}. Enjoy!</div>{{end}}
+        {{if .Error}}<div class="notice notice--danger mb-3">{{.Error}}</div>{{end}}
+        {{if .Ok}}<div class="notice notice--success mb-3">Purchased {{.Ok}}. Enjoy!</div>{{end}}
 
         {{if .Items}}
-        <div class="row g-3">
+        <div class="grid grid--2">
             {{range $it := .Items}}
             {{/* The buy control a contributed type declared for THIS item, or
                  false for every item the store grants itself. Guarded on the
                  key rather than indexed straight, so a caller that never heard
                  of widgets renders plain cards instead of failing mid-page. */}}
             {{$w := false}}{{if $.Widgets}}{{$w = index $.Widgets $it.ID}}{{end}}
-            <div class="col-md-6">
-                <div class="card h-100">
-                    <div class="card-body d-flex flex-column">
+            <div class="panelV2">
+                <div class="panel__body d-flex flex-column">
                         <div class="d-flex justify-content-between align-items-start mb-1">
                             {{/* The icon comes from the item's reward type, not
                                  from a column — see Item.Icon. aria-hidden
@@ -52,7 +51,7 @@
                             {{/* A type that prices itself has no figure to show
                                  until the member picks one — printing the def's
                                  cost there would name a price nobody pays. */}}
-                            <span style="color:var(--bs-warning);font-weight:600;white-space:nowrap;">
+                            <span style="color:var(--warning);font-weight:600;white-space:nowrap;">
                                 {{if and $w $w.CostFrom}}you choose{{else}}{{.PointsCost}} pts{{end}}
                             </span>
                         </div>
@@ -73,35 +72,34 @@
                                  so they cannot collide with _csrf. */}}
                             {{if $w}}{{range $f := $w.Fields}}
                             <div class="mb-2">
-                                <label class="form-label mb-1" style="font-size:0.72rem;" for="f-{{$it.ID}}-{{$f.Name}}">
+                                <label class="form__label" style="font-size:0.72rem;" for="f-{{$it.ID}}-{{$f.Name}}">
                                     {{$f.Label}}{{if $f.Suffix}} ({{$f.Suffix}}){{end}}
                                 </label>
                                 {{if eq $f.Kind "select"}}
-                                <select class="form-select form-select-sm" id="f-{{$it.ID}}-{{$f.Name}}" name="f_{{$f.Name}}">
+                                <select class="form__input" id="f-{{$it.ID}}-{{$f.Name}}" name="f_{{$f.Name}}">
                                     {{range $f.Options}}
                                     <option value="{{.Value}}" {{if eq .Value $f.Default}}selected{{end}}>{{if .Label}}{{.Label}}{{else}}{{.Value}}{{end}}</option>
                                     {{end}}
                                 </select>
                                 {{else}}
-                                <input type="number" class="form-control form-control-sm" id="f-{{$it.ID}}-{{$f.Name}}"
+                                <input type="number" class="form__input" id="f-{{$it.ID}}-{{$f.Name}}"
                                        name="f_{{$f.Name}}" value="{{$f.Default}}"
                                        {{if $f.Min}}min="{{$f.Min}}"{{end}}{{if $f.Max}} max="{{$f.Max}}"{{end}}>
                                 {{end}}
                                 {{if $f.Help}}<div style="font-size:0.68rem;color:var(--text-muted);">{{$f.Help}}</div>{{end}}
                             </div>
                             {{end}}{{end}}
-                            <button type="submit" class="btn btn-primary btn-sm w-100"
+                            <button type="submit" class="button button--primary button--block"
                                     {{if not .InStock}}disabled{{end}}>
                                 {{if not .InStock}}Out of stock{{else if and $w $w.ButtonLabel}}{{$w.ButtonLabel}}{{else}}Buy for {{.PointsCost}} pts{{end}}
                             </button>
                         </form>
-                    </div>
                 </div>
             </div>
             {{end}}
         </div>
         {{else}}
-        <div class="card"><div class="card-body" style="color:var(--text-muted);font-size:0.85rem;">
+        <div class="panelV2"><div class="panel__body text-muted">
             The store is empty right now. Check back soon.
         </div></div>
         {{end}}
