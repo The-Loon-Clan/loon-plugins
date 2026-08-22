@@ -2,6 +2,7 @@ package tracker
 
 import (
 	"html/template"
+	"log"
 	"strings"
 	"time"
 
@@ -130,7 +131,13 @@ func (h *Handlers) render(c *gin.Context, tmpl, title string, data any) {
 		// A fragment that fails mid-execute has already written part of itself to
 		// sb, which is exactly why it goes to a buffer first: the half-rendered
 		// output is discarded instead of reaching the browser as a truncated page.
-		c.String(500, "tracker: rendering %s: %v", tmpl, err)
+		//
+		// The member gets the same sentence every other plugin's render failure
+		// gives. It used to be "tracker: rendering %s: %v" — the template name
+		// and the raw Go error, printed to whoever hit it, which is the defect
+		// forum and communities each recorded fixing in their own handlers.
+		log.Printf("tracker: rendering %s: %v", tmpl, err)
+		c.String(500, "this page failed to render")
 		return
 	}
 	deps.RenderPage(c, title, template.HTML(sb.String()))
