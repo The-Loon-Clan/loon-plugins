@@ -37,7 +37,7 @@
                     </div>
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="form-label" style="font-size:0.85rem;">Banner</label>
+                            <label class="form-label" for="bp-file" style="font-size:0.85rem;">Banner</label>
                             {{/* Live WYSIWYG preview: a banner-shaped strip
                                  the same height as the real header. The
                                  position slider moves the focal point in
@@ -50,18 +50,18 @@
                                 No banner yet — upload one or paste a URL to preview.
                             </div>
                             <input type="file" name="banner" id="bp-file" accept="image/*" class="form-control form-control-sm mt-2">
-                            <input type="text" name="banner_url" id="bp-url" class="form-control form-control-sm mt-1" value="{{.Community.BannerURL}}" placeholder="…or paste an image URL">
+                            <input type="text" name="banner_url" id="bp-url" aria-label="Banner image URL" class="form-control form-control-sm mt-1" value="{{.Community.BannerURL}}" placeholder="…or paste an image URL">
                             <div class="form-text" style="font-size:0.7rem;">Uploads are auto-compressed (capped ~1600px wide). Wide format reads best.</div>
-                            <label class="form-label mt-2" style="font-size:0.8rem;">Banner position <span id="bp-val" style="color:var(--text-muted);">{{.Community.BannerPosition}}%</span></label>
+                            <label class="form-label mt-2" for="bp-range" style="font-size:0.8rem;">Banner position <span id="bp-val" style="color:var(--text-muted);">{{.Community.BannerPosition}}%</span></label>
                             <input type="range" name="banner_position" id="bp-range" min="0" max="100" step="1"
                                    value="{{.Community.BannerPosition}}" class="form-range">
                             <div class="form-text" style="font-size:0.7rem;">0% = top of image, 50% = centre, 100% = bottom. Drag to preview above.</div>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label" style="font-size:0.85rem;">Icon</label>
+                            <label class="form-label" for="c-icon-file" style="font-size:0.85rem;">Icon</label>
                             {{if .Community.IconURL}}<div class="mb-1"><img src="{{.Community.IconURL}}" alt="" style="height:48px;width:48px;object-fit:cover;border-radius:8px;border:1px solid var(--border);"></div>{{end}}
-                            <input type="file" name="icon" accept="image/*" class="form-control form-control-sm">
-                            <input type="text" name="icon_url" class="form-control form-control-sm mt-1" value="{{.Community.IconURL}}" placeholder="…or paste an image URL">
+                            <input type="file" name="icon" id="c-icon-file" accept="image/*" class="form-control form-control-sm">
+                            <input type="text" name="icon_url" aria-label="Icon image URL" class="form-control form-control-sm mt-1" value="{{.Community.IconURL}}" placeholder="…or paste an image URL">
                             <div class="form-text" style="font-size:0.7rem;">Square works best.</div>
                         </div>
                     </div>
@@ -95,8 +95,8 @@
                     <div class="mb-1" style="font-size:0.8rem;color:var(--text-muted);">Requirements (applied to open joins + queued requests; invites bypass them):</div>
                     <div class="row g-2">
                         <div class="col-md-4">
-                            <label class="form-label" style="font-size:0.8rem;">Min account age (days)</label>
-                            <input type="number" name="min_account_age_days" class="form-control form-control-sm" min="0" max="3650" value="{{.Community.MinAccountAgeDays}}">
+                            <label class="form-label" for="c-min-age" style="font-size:0.8rem;">Min account age (days)</label>
+                            <input type="number" name="min_account_age_days" id="c-min-age" class="form-control form-control-sm" min="0" max="3650" value="{{.Community.MinAccountAgeDays}}">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label" style="font-size:0.8rem;">Min rank</label>

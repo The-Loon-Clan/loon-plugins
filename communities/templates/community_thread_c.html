@@ -34,7 +34,7 @@
         /* Sidebar reused from community_view */
         .c-side { display: flex; flex-direction: column; gap: 0.9rem; }
         .c-side-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.95rem 1rem; }
-        .c-side-card h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--text-muted); margin: 0 0 0.6rem; }
+        .c-side-card h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--text-muted); margin: 0 0 0.6rem; }
         .c-rule { border-bottom: 1px solid var(--border); font-size: 0.85rem; }
         .c-rule:last-child { border-bottom: none; }
         .c-rule > summary { display: flex; align-items: flex-start; gap: 0.4rem; padding: 0.5rem 0; cursor: pointer; list-style: none; }
@@ -90,7 +90,7 @@
                         </form>
                         <form method="POST" action="/c/{{.Community.Slug}}/thread/{{.Thread.ID}}/remove" onsubmit="return confirm('Remove this thread? It stays in the database for restore.')">
                             <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                            <input type="text" name="reason" placeholder="Reason (optional)" class="form-control form-control-sm d-inline-block" style="width:200px;font-size:0.75rem;" maxlength="256">
+                            <input type="text" name="reason" aria-label="Reason (optional)" placeholder="Reason (optional)" class="form-control form-control-sm d-inline-block" style="width:200px;font-size:0.75rem;" maxlength="256">
                             <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
                         </form>
                     </div>
@@ -143,7 +143,7 @@
 
             <aside class="c-side">
                 <div class="c-side-card">
-                    <h3>About /c/{{.Community.Slug}}</h3>
+                    <h2>About /c/{{.Community.Slug}}</h2>
                     {{if .Community.Description}}<div style="font-size:0.86rem;color:var(--text-primary);line-height:1.5;">{{.Community.Description}}</div>{{end}}
                     <div style="display:flex;gap:0.95rem;font-size:0.82rem;margin-top:0.55rem;">
                         <div><strong style="color:var(--text-primary);font-size:0.95rem;">{{.Community.SubscriberCount}}</strong> <span style="color:var(--text-muted);">members</span></div>
@@ -153,14 +153,14 @@
 
                 {{if .SidebarHTML}}
                 <div class="c-side-card">
-                    <h3>Description</h3>
+                    <h2>Description</h2>
                     <div style="font-size:0.86rem;color:var(--text-primary);line-height:1.5;">{{.SidebarHTML}}</div>
                 </div>
                 {{end}}
 
                 {{if .Rules}}
                 <div class="c-side-card">
-                    <h3>Rules</h3>
+                    <h2>Rules</h2>
                     {{range $i, $r := .Rules}}
                     {{if $r.Body}}
                     <details class="c-rule">
@@ -182,7 +182,7 @@
                 {{end}}
 
                 <div class="c-side-card">
-                    <h3>Moderators</h3>
+                    <h2>Moderators</h2>
                     <div class="c-mod-list">
                         <a class="c-mod" href="/u/{{.Community.OwnerUsername}}">
                             <span class="m-avatar">{{if .Community.OwnerAvatarPath}}<img src="{{.Community.OwnerAvatarPath}}" alt="">{{else}}{{initial .Community.OwnerUsername}}{{end}}</span>

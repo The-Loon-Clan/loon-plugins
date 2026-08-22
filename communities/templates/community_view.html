@@ -96,7 +96,7 @@
         /* Sidebar */
         .c-side { display: flex; flex-direction: column; gap: 0.9rem; }
         .c-side-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.95rem 1rem; }
-        .c-side-card h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--text-muted); margin: 0 0 0.6rem; }
+        .c-side-card h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--text-muted); margin: 0 0 0.6rem; }
         .c-side-md { font-size: 0.86rem; color: var(--text-primary); line-height: 1.5; }
         .c-side-md p { margin: 0 0 0.5rem; }
         .c-side-stats { display: flex; gap: 0.95rem; font-size: 0.82rem; }
@@ -240,7 +240,7 @@
 
             <aside class="c-side">
                 <div class="c-side-card">
-                    <h3>About community</h3>
+                    <h2>About community</h2>
                     {{if .DescriptionHTML}}<div class="c-side-md">{{.DescriptionHTML}}</div>{{end}}
                     <div class="c-side-stats mt-2">
                         <div><strong>{{.Community.SubscriberCount}}</strong> <span>members</span></div>
@@ -250,14 +250,14 @@
 
                 {{if .SidebarHTML}}
                 <div class="c-side-card">
-                    <h3>Description</h3>
+                    <h2>Description</h2>
                     <div class="c-side-md">{{.SidebarHTML}}</div>
                 </div>
                 {{end}}
 
                 {{if .Rules}}
                 <div class="c-side-card">
-                    <h3>Rules</h3>
+                    <h2>Rules</h2>
                     {{range $i, $r := .Rules}}
                     {{if $r.Body}}
                     {{/* Has detail → collapsible; click the row to expand. */}}
@@ -281,7 +281,7 @@
                 {{end}}
 
                 <div class="c-side-card">
-                    <h3>Moderators</h3>
+                    <h2>Moderators</h2>
                     <div class="c-mod-list">
                         <a class="c-mod" href="/u/{{.Community.OwnerUsername}}">
                             <span class="m-avatar">{{if .Community.OwnerAvatarPath}}<img src="{{.Community.OwnerAvatarPath}}" alt="">{{else}}{{initial .Community.OwnerUsername}}{{end}}</span>

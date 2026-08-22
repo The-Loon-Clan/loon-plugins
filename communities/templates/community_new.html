@@ -14,18 +14,18 @@
         <form method="POST" action="/c">
             <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
             <div class="mb-3">
-                <label class="form-label" style="font-size:0.85rem;">Slug</label>
+                <label class="form-label" for="c-slug" style="font-size:0.85rem;">Slug</label>
                 <div class="input-group">
                     <span class="input-group-text" style="font-size:0.82rem;">/c/</span>
-                    <input type="text" name="slug" class="form-control" required minlength="3" maxlength="32"
+                    <input type="text" name="slug" id="c-slug" class="form-control" required minlength="3" maxlength="32"
                            pattern="[a-z][a-z0-9_-]{2,31}" autocomplete="off"
                            value="{{.Slug}}" placeholder="my-community">
                 </div>
                 <div class="form-text" style="font-size:0.74rem;">3–32 chars, lowercase letters/digits/_/-, must start with a letter.</div>
             </div>
             <div class="mb-3">
-                <label class="form-label" style="font-size:0.85rem;">Name</label>
-                <input type="text" name="name" class="form-control" required maxlength="80" value="{{.Name}}" placeholder="Display name shown on the banner">
+                <label class="form-label" for="c-name" style="font-size:0.85rem;">Name</label>
+                <input type="text" name="name" id="c-name" class="form-control" required maxlength="80" value="{{.Name}}" placeholder="Display name shown on the banner">
             </div>
             <div class="mb-4">
                 <label class="form-label" style="font-size:0.85rem;">Description</label>
