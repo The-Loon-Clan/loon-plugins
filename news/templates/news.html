@@ -110,9 +110,9 @@
            to twice for no destination a reader does not already have. */
         .news-card__more { margin-top: 0.7rem; font-size: 0.82rem; font-weight: 600; color: var(--blue); }
     </style>
-    {{/* The container the SIBLING fragments already carry (news_detail wraps
-         in container site-container, admin_news in container mt-4
-         site-container) and this one lacked — so the feed rendered flush
+    {{/* The container the SIBLING fragments already carry (news_detail and
+         admin_news both wrap in `container mt-4`) and this one lacked — so the
+         feed rendered flush
          against the viewport with no margins on hosts whose chrome supplies
          no wrapper of its own. page-narrow width: this is a prose column,
          and the cards cap their excerpts at 74ch anyway. */}}

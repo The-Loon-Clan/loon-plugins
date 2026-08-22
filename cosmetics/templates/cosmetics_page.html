@@ -52,7 +52,7 @@
         {{with .Title}}{{if .Allowed}}
         <div class="panel__actions">
             {{if eq .State "pending"}}<span class="tag">Waiting for staff</span>
-            {{else if eq .State "approved"}}<span class="tag tag--ok">Showing</span>
+            {{else if eq .State "approved"}}<span class="tag tag--success">Showing</span>
             {{else if eq .State "rejected"}}<span class="tag">Turned down</span>{{end}}
         </div>
         {{end}}{{end}}
@@ -84,7 +84,7 @@
                     {{/* Said plainly and up front. Somebody who submits and
                          sees nothing change has been given no way to tell
                          "waiting" from "broken". */}}
-                    <p class="form__hint">
+                    <p class="form__help">
                         Staff read every title before it appears, including a change to one
                         already showing. Up to {{.Max}} characters.
                     </p>
@@ -163,7 +163,7 @@
 
                 <div class="fx-card__action">
                     {{if .Worn}}
-                    <span class="tag tag--ok">Wearing</span>
+                    <span class="tag tag--success">Wearing</span>
                     {{else if .Owned}}
                     <form method="post" action="/p/cosmetics/equip">
                         <input type="hidden" name="_csrf" value="{{$csrf}}">

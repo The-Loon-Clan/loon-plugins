@@ -47,12 +47,12 @@
                 <label class="form__label" for="poll-options">Options</label>
                 <textarea class="form__input" id="poll-options" name="options" rows="5" required
                           placeholder="Yes&#10;No&#10;Only with the source listed"></textarea>
-                <p class="form__hint">One per line. Two at least, twelve at most.</p>
+                <p class="form__help">One per line. Two at least, twelve at most.</p>
             </div>
             <div class="form__group">
                 <label class="form__label" for="poll-slug">Name</label>
                 <input class="form__input" id="poll-slug" name="slug" maxlength="60" placeholder="re-encodes">
-                <p class="form__hint">
+                <p class="form__help">
                     What a page calls this poll — <code>[widget poll re-encodes]</code>.
                     Leave it blank to name it after the question.
                 </p>
@@ -114,10 +114,10 @@
                             {{if .Closed}}
                                 <span class="tag">Closed</span>
                             {{else if .ClosesAt}}
-                                <span class="tag tag--ok">Open</span>
+                                <span class="tag tag--success">Open</span>
                                 <span class="small text-muted">until {{date .ClosesAt}}</span>
                             {{else}}
-                                <span class="tag tag--ok">Open</span>
+                                <span class="tag tag--success">Open</span>
                             {{end}}
                         </td>
                         <td>

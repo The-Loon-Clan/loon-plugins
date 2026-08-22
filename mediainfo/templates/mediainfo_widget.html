@@ -148,7 +148,7 @@
             <textarea class="form__input mi__paste" id="mi-raw" name="raw" rows="8"
                       maxlength="{{.Max}}"
                       placeholder="General&#10;Format                    : Matroska&#10;...">{{.Mine}}</textarea>
-            <p class="form__hint">
+            <p class="form__help">
                 The whole thing, starting at General. Clear the box and save to withdraw yours.
             </p>
         </div>
@@ -168,7 +168,7 @@
             <label class="form__label" for="mi-shot">Screenshot link</label>
             <input class="form__input" id="mi-shot" name="url" type="url" inputmode="url"
                    placeholder="https://…/frame.png">
-            <p class="form__hint">
+            <p class="form__help">
                 An https link to an image. This site fetches it once and serves its own
                 copy, so it will not disappear or follow readers back to where you found it.
                 {{.ShotsLeft}} left on this release.
