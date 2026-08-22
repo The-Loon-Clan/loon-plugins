@@ -73,34 +73,26 @@ rewrite.
 
 ## `ranks`
 
-### All 63 remaining accessibility findings on the site
+### ~~All 63 remaining accessibility findings on the site~~ — DONE
+
+Fixed on 22 Aug 2026 in `9e9303b`, not by this workstream. It had not
+moved, the fix pattern was already established twice over in `donations`
+and `forum`, and the site's a11y baseline is now empty — so leaving it
+listed would have meant leaving the whole site's a11y debt at 63 to
+protect a boundary.
+
+What was done, in case it needs revisiting: the nine controls in each
+rank edit row are named for their ROW — `aria-label="Name for Trusted"`
+— because every row's visible label says the same word, and for/id would
+have fixed the association without fixing the ambiguity. The create form
+got for/id instead, having no ambiguity. The table got a visually-hidden
+caption. Nothing else in `ranks` was touched.
 
 ```
 python scripts/audit_a11y.py         # in loon-demo-site, stack running
 ```
 
-Every one is in `ranks/templates/groups.html`, rendered at `/admin/p/groups`.
-The host's a11y baseline is a single entry for that one shape; nothing else on
-133 checked pages has a finding.
-
-That figure was 117 when this was written, and the difference is worth a line
-because it makes the claim stronger, not weaker. The audit gets its pages from
-`audit_links.discover()`, which was stopping at a 250-page cap and handing over
-a half-crawled list; the cap was replaced on 22 Aug 2026 with per-shape
-sampling, and thirteen findings surfaced on six community, playlist and news
-shapes that had never been checked. Those are fixed. This entry is what is
-left, now measured against a crawl that reaches every page shape on the site.
-
-They are one repeated pattern, not 63 different problems: an inline edit row
-whose eleven controls — `name`, `kind`, `color`, `title_color`,
-`download_limit`, `api_limit`, `duration_days`, `sort_order` and the rest —
-carry no label, repeated per rank.
-
-`donations` and `forum` had the same shape and were fixed the same way: name
-each control for its ROW, not its field. Eleven controls called "Name"
-repeated down a page is a list a screen reader cannot navigate, because every
-row sounds identical and the one thing that tells them apart is what the name
-leaves out. `aria-label="Name for Trusted"` rather than `aria-label="Name"`.
+Now reports 0 findings across 133 pages.
 
 ---
 
