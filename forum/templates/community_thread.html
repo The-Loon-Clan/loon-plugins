@@ -100,13 +100,25 @@
             <div class="post-list forum-post-list">
             {{range .Posts}}
             <article class="post-card forum-post-card" id="post-{{.ID}}" data-post-id="{{.ID}}" data-username="{{.Username}}" data-my-reactions="{{range $i, $e := .MyReactions}}{{if $i}},{{end}}{{$e}}{{end}}">
-                <aside class="forum-post-author">
+                {{/* The profile GROUND. Same slot the host paints behind a
+                     profile card, and this column is the same thing: a card
+                     about one member. .fx-bg-* sets its own position,
+                     overflow and isolation, and paints a ::before at z-index
+                     -1 — above this element's own background, below its
+                     content — so the column keeps its surface colour and the
+                     wash sits on top of it. */}}
+                <aside class="{{profileFX .Username}} forum-post-author">
                     <span class="forum-post-presence" aria-hidden="true"></span>
-                    <a href="/u/{{.Username}}" class="{{avatarFX .Username}} forum-post-author-avatar">
+                    {{/* The frame is a box-shadow RING, so it takes the
+                         border-radius of the element carrying it. This wrapper
+                         has none — the shape is on the img and the span inside
+                         — so putting it here drew a square ring around a round
+                         avatar. It goes on the shaped element. */}}
+                    <a href="/u/{{.Username}}" class="forum-post-author-avatar">
                         {{if .AvatarPath}}
-                        <img src="{{.AvatarPath}}" alt="" loading="lazy">
+                        <img class="{{avatarFX .Username}}" src="{{.AvatarPath}}" alt="" loading="lazy">
                         {{else}}
-                        <span>{{initial .Username}}</span>
+                        <span class="{{avatarFX .Username}}">{{initial .Username}}</span>
                         {{end}}
                     </a>
                     <a class="{{nameFX .Username}} forum-post-author-name role-name role-name-{{or .UserRole "user"}}" href="/u/{{.Username}}">{{.Username}}</a>

@@ -48,6 +48,9 @@ func parseTemplates() {
 		// Both nil-degrade to "": no cosmetics plugin, no classes, plain names.
 		"nameFX":   func(name string) string { return pluginapi.NameClass(fxCore, name) },
 		"avatarFX": func(name string) string { return pluginapi.SlotClass(fxCore, pluginapi.SlotAvatar, name) },
+		"profileFX": func(name string) string {
+			return pluginapi.SlotClass(fxCore, pluginapi.SlotProfile, name)
+		},
 
 		// The rest are pure and are reimplemented rather than crossed. The
 		// rule this follows: a helper crosses the seam when the two copies

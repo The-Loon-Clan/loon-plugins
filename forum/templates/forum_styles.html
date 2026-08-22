@@ -102,11 +102,25 @@
    sets the shape and each suffix only sets a colour. */
 .role-name { font-weight: 600; color: var(--text, #e7e9ee); text-decoration: none; }
 .role-name:hover { text-decoration: underline; }
-.role-name-admin { color: var(--user-tag-admin-fg, var(--danger, #e5484d)); }
-.role-name-mod { color: var(--user-tag-mod-fg, var(--success, #46a758)); }
-.role-name-contributor { color: var(--user-tag-contributor-fg, var(--info, #3b9eff)); }
-.role-name-user,
-.role-name-member { color: var(--user-tag-member-fg, var(--text, #e7e9ee)); }
+/* :not([class*="fx-"]) on every role colour, and it is load-bearing rather
+   than decorative.
+
+   .fx-glow-ice and .role-name-member are both a single class, so neither wins
+   on specificity and the LATER stylesheet takes it. This one is always later:
+   a plugin fragment's CSS is hoisted into the head after the host's. So a
+   member wearing a name effect got its text-shadow and the role's colour, and
+   the effect read as not applied.
+
+   The host has the opposite order — .fx-glow-* sits below .user-tag__link in
+   components.css and wins there — so without this the same member is drawn two
+   different ways on two pages. Excluding the fx case here is what makes the
+   forum agree with the rest of the site: an equipped effect REPLACES the role
+   colour, everywhere. */
+.role-name-admin:not([class*="fx-"]) { color: var(--user-tag-admin-fg, var(--danger, #e5484d)); }
+.role-name-mod:not([class*="fx-"]) { color: var(--user-tag-mod-fg, var(--success, #46a758)); }
+.role-name-contributor:not([class*="fx-"]) { color: var(--user-tag-contributor-fg, var(--info, #3b9eff)); }
+.role-name-user:not([class*="fx-"]),
+.role-name-member:not([class*="fx-"]) { color: var(--user-tag-member-fg, var(--text, #e7e9ee)); }
 .forum-latest-user { font-weight: 600; color: var(--text, #e7e9ee); }
 
 .role-badge {
