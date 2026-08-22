@@ -323,6 +323,7 @@ func (h *Handlers) DonatePage(c *gin.Context) {
 			TotalYearlyUSD:  totalYearlyUSD,
 			TotalAnnualUSD:  totalAnnualUSD,
 			TipJarGoals:     tipJarGoals,
+			Tiers:           donorTiers(ctx, h.deps.Settings),
 			Packages:        pkgViews,
 			FundedPackages:  fundedPkgs,
 		},

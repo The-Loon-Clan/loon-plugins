@@ -214,11 +214,10 @@
         .tier-card .tier-perks { font-size: 0.7rem; color: var(--text-muted); margin-top: 1px; }
         .tier-card .tier-price { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; flex-shrink: 0; }
         .tier-card .tier-price .tier-per { color: var(--text-muted); font-weight: 500; font-size: 0.75rem; }
-        .tier-rain    { background: linear-gradient(90deg, rgba(91,138,245,0.18) 0%, var(--bg-surface) 50%); }
-        .tier-storm   { background: linear-gradient(90deg, rgba(124,58,237,0.20) 0%, var(--bg-surface) 50%); }
-        .tier-monsoon { background: linear-gradient(90deg, rgba(245,158,11,0.20) 0%, var(--bg-surface) 50%); }
-        .tier-typhoon { background: linear-gradient(90deg, rgba(236,72,153,0.20) 0%, var(--bg-surface) 50%); }
-        .tier-legend  { background: linear-gradient(90deg, rgba(251,191,36,0.22) 0%, var(--bg-surface) 50%); }
+        /* One rule, not five. The ladder is configurable now, so there is
+           no fixed set of tier names to key gradients off — and five
+           gradients named for five specific tiers was the same hardcoding
+           in another form. */
 
         /* ─────────── Community Goals (stretch) ─────────── */
         .stretch-card {
@@ -397,7 +396,7 @@
         {{/* ─────────── 1. Hero ─────────── */}}
         <div class="donate-hero mb-4">
             <div class="hero-eyebrow">Help</div>
-            <h1>Keep the Rain Falling <span style="margin-left:4px;">☂️</span></h1>
+            <h1>Keep {{site}} running</h1>
             <p>
                 {{siteCap}} is 100% community-funded.<br>
                 Your support keeps our servers online,<br>
@@ -690,48 +689,22 @@
                     <h2>Donator Tiers &amp; Rewards</h2>
                 </div>
                 <p class="section-sub">Higher tiers include all lower tier perks.</p>
-                {{/* Tiers are currently static. To make them admin-editable
-                     wire them to `donate_tiers` settings (TODO). */}}
-                <div class="tier-card tier-rain">
-                    <div class="tier-icon">💧</div>
+                {{/* The ladder is DATA, not markup. It used to be five cards
+                     named Rain, Storm, Monsoon, Typhoon and Legendary
+                     Supporter — the weather motif of the site this plugin was
+                     lifted out of, rendered on every host that installed it.
+                     tiers.go holds a plain default and reads donate_tiers,
+                     which is the TODO that used to sit here. */}}
+                {{range .Tiers}}
+                <div class="tier-card">
+                    {{if .Icon}}<div class="tier-icon">{{.Icon}}</div>{{end}}
                     <div class="tier-body">
-                        <div class="tier-name">Rain Supporter</div>
-                        <div class="tier-perks">Badge · Bonus Points</div>
+                        <div class="tier-name">{{.Name}}</div>
+                        <div class="tier-perks">{{.Perks}}</div>
                     </div>
-                    <div class="tier-price">$5+</div>
+                    <div class="tier-price">{{.Price}}</div>
                 </div>
-                <div class="tier-card tier-storm">
-                    <div class="tier-icon">⛈</div>
-                    <div class="tier-body">
-                        <div class="tier-name">Storm Supporter</div>
-                        <div class="tier-perks">Badge · Border · Bonus Points</div>
-                    </div>
-                    <div class="tier-price">$25+</div>
-                </div>
-                <div class="tier-card tier-monsoon">
-                    <div class="tier-icon">⛈</div>
-                    <div class="tier-body">
-                        <div class="tier-name">Monsoon Supporter</div>
-                        <div class="tier-perks">Badge · Border · Effects · Bonus Points</div>
-                    </div>
-                    <div class="tier-price">$50+</div>
-                </div>
-                <div class="tier-card tier-typhoon">
-                    <div class="tier-icon">🌀</div>
-                    <div class="tier-body">
-                        <div class="tier-name">Typhoon Supporter</div>
-                        <div class="tier-perks">All Perks · Exclusive Theme · More</div>
-                    </div>
-                    <div class="tier-price">$100+</div>
-                </div>
-                <div class="tier-card tier-legend">
-                    <div class="tier-icon">🌈</div>
-                    <div class="tier-body">
-                        <div class="tier-name">Legendary Supporter</div>
-                        <div class="tier-perks">All Perks · Custom Flair · Hall of Fame</div>
-                    </div>
-                    <div class="tier-price">$250+</div>
-                </div>
+                {{end}}
             </div>
         </div>
 
@@ -969,7 +942,7 @@
                 <div class="outro-title">{{siteCap}} exists because of you.</div>
                 <div class="outro-text">
                     Donations are never required, but they help keep the indexer online, improve infrastructure,
-                    and fund future development. Every contribution, large or small, helps keep the rain falling. ☔
+                    and fund future development. Every contribution, large or small, keeps {{site}} online.
                 </div>
             </div>
             <div class="outro-art" aria-hidden="true"></div>

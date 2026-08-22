@@ -125,6 +125,9 @@ type donatePageVM struct {
 	TipJarGoals     []TipJarGoal
 	Packages        []*DonationPackageView
 	FundedPackages  []*DonationPackageView
+	// The donor ladder, from donate_tiers or the plain default. See
+	// tiers.go for why it is not five cards in the markup any more.
+	Tiers []DonorTier
 }
 
 // adminDonateVM mirrors the AdminDonatePage handler's data, key for key.

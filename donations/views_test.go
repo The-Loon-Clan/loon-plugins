@@ -1,6 +1,7 @@
 package donations
 
 import (
+	"context"
 	"html/template"
 	"net/http/httptest"
 	"regexp"
@@ -114,6 +115,11 @@ func donatePageFixture() *donatePageVM {
 		BTCAddress:      "bc1qtestaddr",
 		RecentDonations: []*Donation{sampleDonation()},
 		TotalMonthlyUSD: 80, TotalYearlyUSD: 30, TotalAnnualUSD: 990,
+		// Mirrors the handler, which passes donorTiers(ctx, Settings). nil
+		// Settings yields the default ladder, which is the path worth
+		// rendering: it is what every host without a donate_tiers setting
+		// gets.
+		Tiers:       donorTiers(context.Background(), nil),
 		TipJarGoals: []TipJarGoal{{Slot: 1, Name: "Profile Effects", TargetUSD: 250, RaisedUSD: 50, PercentRound: 20, RingOffset: 150.8}},
 		Packages:    []*DonationPackageView{samplePackageView(false)},
 		FundedPackages: []*DonationPackageView{func() *DonationPackageView {
@@ -147,17 +153,86 @@ func adminDonateFixture() *adminDonateVM {
 	}
 }
 
+// The donor ladder is DATA now, and the default must not carry one site's
+// motif. It used to be five cards in the markup named Rain, Storm, Monsoon,
+// Typhoon and Legendary Supporter — the weather ladder of the site this plugin
+// was lifted out of, on every host that installed it.
+func TestDonorTiersDefaultIsSiteNeutral(t *testing.T) {
+	out := testRenderDonate(t, false, "help_donate.html", donatePageFixture())
+	for _, motif := range []string{"Rain Supporter", "Storm Supporter",
+		"Monsoon Supporter", "Typhoon Supporter", "Keep the Rain Falling"} {
+		if strings.Contains(out, motif) {
+			t.Errorf("the page still ships the lifted site's motif: %q", motif)
+		}
+	}
+	// Matched inside the tier-name element, not as bare words: "Patron"
+	// also appears in the fixture's "Server Patron 2026" package, so a
+	// substring check would have passed with no ladder rendered at all.
+	for _, want := range []string{"Supporter", "Patron", "Benefactor", "Champion", "Founder"} {
+		if !strings.Contains(out, `<div class="tier-name">`+want+`</div>`) {
+			t.Errorf("the default ladder is missing %q", want)
+		}
+	}
+}
+
+// An operator's ladder replaces the default, and a malformed one does not
+// leave the section empty — a donate page with no tiers reads as a site that
+// offers nothing for donating, which is a worse answer to a typo than the
+// defaults. An EMPTY array is honoured, because that is a deliberate choice
+// rather than an absent one.
+func TestDonorTiersComeFromTheSettingIfSet(t *testing.T) {
+	for _, tc := range []struct {
+		name, raw string
+		want      []string
+		notWant   []string
+	}{
+		{"configured", `[{"name":"Bronze","perks":"Badge","price":"$3+"}]`,
+			[]string{"Bronze", "$3+"}, []string{"Benefactor"}},
+		{"malformed", `{not json`, []string{"Supporter", "Founder"}, nil},
+		{"unset", "", []string{"Supporter", "Founder"}, nil},
+		{"deliberately empty", `[]`, nil, []string{"Supporter", "Founder"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := donorTiers(context.Background(), fakeSettings{"donate_tiers": tc.raw})
+			var names strings.Builder
+			for _, x := range got {
+				names.WriteString(x.Name + " " + x.Price + " ")
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(names.String(), w) {
+					t.Errorf("missing %q in %q", w, names.String())
+				}
+			}
+			for _, w := range tc.notWant {
+				if strings.Contains(names.String(), w) {
+					t.Errorf("unexpected %q in %q", w, names.String())
+				}
+			}
+		})
+	}
+}
+
+type fakeSettings map[string]string
+
+func (f fakeSettings) GetSetting(ctx context.Context, k string) (string, error) {
+	return f[k], nil
+}
+func (f fakeSettings) SetSetting(ctx context.Context, k, v string) error {
+	f[k] = v
+	return nil
+}
+
 func TestPagesRender(t *testing.T) {
 	out := testRenderDonate(t, false, "help_donate.html", donatePageFixture())
 	for _, marker := range []string{
-		"Keep the Rain Falling", // hero
-		"Dedicated Server",      // cost card from the group items
-		"Server Patron 2026",    // claimable package
-		"Domain Patron",         // funded package row
-		"Profile Effects",       // tip-jar goal
-		"rain-friend",           // recent donor label
-		"bc1qtestaddr",          // receive address
-		"log in",                // IsAnon tip (anonymous viewer)
+		"Keep this site running", // hero, with no SiteName seam wired
+		"Dedicated Server",       // cost card from the group items
+		"Server Patron 2026",     // claimable package
+		"Domain Patron",          // funded package row
+		"Profile Effects",        // tip-jar goal
+		"rain-friend",            // recent donor label
+		"bc1qtestaddr",           // receive address
+		"log in",                 // IsAnon tip (anonymous viewer)
 	} {
 		if !strings.Contains(out, marker) {
 			t.Errorf("help_donate missing %q", marker)
