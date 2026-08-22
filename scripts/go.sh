@@ -86,6 +86,10 @@ MSYS_NO_PATHCONV=1 exec docker run --rm \
   -e DONATIONS_PREVIEW_DIR \
   -e DONATIONS_PREVIEW_CSS \
   -e DONATIONS_PREVIEW_SPRITE \
+  `# ...and the communities one.` \
+  -e COMMUNITIES_PREVIEW_DIR \
+  -e COMMUNITIES_PREVIEW_CSS \
+  -e COMMUNITIES_PREVIEW_SPRITE \
   `# --network host so the container can reach the throwaway Postgres that` \
   `# 'make itest' publishes on the host.` \
   --network host \

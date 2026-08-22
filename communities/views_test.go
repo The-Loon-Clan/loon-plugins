@@ -354,3 +354,52 @@ func TestLegacyContractIsStillAccepted(t *testing.T) {
 		t.Error("a host that wired no Markdown was accepted; community posts are user-authored")
 	}
 }
+
+// Every flash CODE renders its own sentence, with the numbers it was given.
+//
+// Ported from loon-demo-site, which owned this template until the plugin took
+// over rendering. The host's copy of the test went with the host's copy of the
+// markup, and this is the coverage that would otherwise have been lost.
+//
+// The failure it pins is specific and silent: Flash carries a code and its
+// values separately, so an argument the template asks for and the sender never
+// supplied renders "You need  points to join this community" — a grammatical,
+// wrong sentence that no Go test sees and no template error reports.
+func TestFlashRendersItsNumbers(t *testing.T) {
+	SetDeps(Deps{
+		RenderPage:       func(c *gin.Context, status int, title string, body template.HTML) {},
+		CSRFToken:        func(c *gin.Context) string { return "test-csrf" },
+		RenderPagination: func(page, pageSize, totalItems int, baseURL string) template.HTML { return "" },
+		RenderEditor:     func(opts map[string]any) template.HTML { return "" },
+		RelativeTime:     func(v any) string { return "3 days ago" },
+		Markdown:         func(src string) template.HTML { return template.HTML(src) },
+		PageOffset:       func(page, pageSize int) int { return 0 },
+	})
+	t.Cleanup(func() { deps = Deps{}; pageTmpl = nil })
+	if err := parseTemplates(); err != nil {
+		t.Fatalf("parseTemplates: %v", err)
+	}
+
+	for _, tc := range []struct {
+		code string
+		args []string
+		want []string
+	}{
+		{"toopoor", []string{"100", "42"}, []string{"100", "42"}},
+		{"tooyoung", []string{"7", "2"}, []string{"7", "2"}},
+		{"invited", []string{"abc123"}, []string{"/c/join/abc123"}},
+		{"saved", nil, []string{"Settings saved."}},
+		// A code nothing maps still says something: silence reads as success.
+		{"wat", nil, []string{"Something went wrong."}},
+	} {
+		var buf strings.Builder
+		if err := pageTmpl.ExecuteTemplate(&buf, "c-flash", Flash{Code: tc.code, Args: tc.args}); err != nil {
+			t.Fatalf("%s: execute: %v", tc.code, err)
+		}
+		for _, want := range tc.want {
+			if !strings.Contains(buf.String(), want) {
+				t.Errorf("flash %q is missing %q:\n%s", tc.code, want, buf.String())
+			}
+		}
+	}
+}
