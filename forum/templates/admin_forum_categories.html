@@ -1,6 +1,7 @@
 {{define "admin_forum_categories.html"}}
+{{template "forum_styles.html" .}}
 
-    <div class="container mt-4 site-container">
+    <div class="container mt-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h3 class="m-0">Forum Categories</h3>
             <small style="color:var(--text-muted);">
@@ -64,7 +65,7 @@
                     {{range .Categories}}
                     <tr>
                         <td><code>{{.ID}}</code></td>
-                        <td colspan="3" class="p-0">
+                        <td colspan="3" class="forum-admin-nested-cell">
                             {{/* Inline edit row — one form so a single Save updates everything. The
                                  icon preview span uses the same classes the public forums page renders.
                                  Second line: the three access gates (see / read / write), each a

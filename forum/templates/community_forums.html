@@ -1,4 +1,5 @@
 {{define "community_forums.html"}}
+{{template "forum_styles.html" .}}
 <main class="container page-wide forum-index">
     <section class="forum-hero" aria-labelledby="forum-title">
         <div class="forum-hero-copy">
@@ -164,7 +165,7 @@
                     <h2 id="forum-guide-title">Forum Guide</h2>
                 </div>
                 <ul class="forum-guide-list">
-                    <li><span>Pinned threads stay at the top</span></li>
+                    <li><svg class="icon" aria-hidden="true"><use href="#star"></use></svg><span>Pinned threads stay at the top</span></li>
                     <li><svg class="icon" aria-hidden="true"><use href="#lock"></use></svg><span>Restricted forums show a lock</span></li>
                     <li><svg class="icon" aria-hidden="true"><use href="#user"></use></svg><span>Name colors reflect member roles</span></li>
                     <li><svg class="icon" aria-hidden="true"><use href="#folder"></use></svg><span>Icons identify forum categories</span></li>

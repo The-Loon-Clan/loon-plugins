@@ -75,6 +75,13 @@ MSYS_NO_PATHCONV=1 exec docker run --rm \
   -e INDEXER_TEST_DB_DSN \
   -e REDIS_TEST_ADDR \
   -e CI \
+  `# The forum preview dumper writes each page as a standalone file` \
+  `# so it can be screenshotted. Those five templates render on the` \
+  `# RenderPage contract only, which no host wires yet, so looking` \
+  `# at them is otherwise impossible.` \
+  -e FORUM_PREVIEW_DIR \
+  -e FORUM_PREVIEW_CSS \
+  -e FORUM_PREVIEW_SPRITE \
   `# --network host so the container can reach the throwaway Postgres that` \
   `# 'make itest' publishes on the host.` \
   --network host \

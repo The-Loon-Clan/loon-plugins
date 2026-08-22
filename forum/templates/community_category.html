@@ -1,4 +1,5 @@
 {{define "community_category.html"}}
+{{template "forum_styles.html" .}}
 <main class="container page-wide forum-category-page">
     <section class="forum-category-hero" aria-labelledby="forum-category-title">
         <div class="forum-category-hero-copy">
@@ -67,7 +68,7 @@
                     <a href="/community/forums/thread/{{.ID}}" class="forum-thread-row">
                         <span class="forum-thread-state {{if .Pinned}}is-pinned{{else if .Locked}}is-locked{{else if eq .ThreadType "recruitment"}}is-recruitment{{else}}is-discussion{{end}}" aria-hidden="true">
                             {{if .Pinned}}
-                            
+                            <svg class="icon" aria-hidden="true"><use href="#star"></use></svg>
                             {{else if .Locked}}
                             <svg class="icon" aria-hidden="true"><use href="#lock"></use></svg>
                             {{else if eq .ThreadType "recruitment"}}

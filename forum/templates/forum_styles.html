@@ -1,0 +1,788 @@
+{{define "forum_styles.html"}}
+{{/* The forum's own stylesheet.
+
+     These five templates use 136 class names that no stylesheet anywhere
+     defined, so every one of them rendered as though the class were absent:
+     the category list came out as a run-on paragraph, the two-column index
+     was a single flow, and the avatars were bare letters. Nothing reported
+     it, because the only host that exists still wires the legacy BaseData
+     contract and serves its own copies of these files -- so this markup
+     executed nowhere a person could look at it.
+
+     CHECKLIST section 8: "If the plugin renders its own fragments, the README
+     says which component names it assumes." The names this assumes from a host
+     are few and listed at the bottom; everything else is defined here.
+
+     Every custom property carries a literal fallback. A host on the RenderPage
+     contract need not have the demo's token system, and var(--panel-bg) with
+     no fallback resolves to nothing -- which is the same invisible failure
+     this file exists to end. With fallbacks the forum themes with a host that
+     has tokens and still renders on one that does not. */}}
+<style>
+/* ── shared shell ──────────────────────────────────────────────────────── */
+
+.forum-index,
+.forum-category-page,
+.forum-thread-page { display: flex; flex-direction: column; gap: 1.25rem; }
+
+.forum-panel {
+    background: var(--panel-bg, #16171d);
+    border: 1px solid var(--panel-border-color, var(--border, #2a2c36));
+    border-radius: var(--panel-border-radius, var(--radius, 8px));
+    overflow: hidden;
+}
+.forum-panel-header,
+.forum-thread-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--panel-head-border, var(--border, #2a2c36));
+    background: var(--panel-head-bg, transparent);
+}
+.forum-panel-header h2,
+.forum-thread-panel-header h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--panel-head-fg, var(--text, #e7e9ee));
+}
+.forum-panel-header p {
+    margin: 0.15rem 0 0;
+    font-size: 0.8rem;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-panel-empty,
+.forum-category-empty {
+    padding: 1.25rem 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted, #8b90a0);
+}
+
+/* Column captions. aria-hidden in the markup because the same words are the
+   accessible names of the cells beneath them. */
+.forum-recent-columns,
+.forum-thread-columns {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.4rem 1rem;
+    border-bottom: 1px solid var(--border, #2a2c36);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted, #8b90a0);
+}
+
+/* ── avatars and names ─────────────────────────────────────────────────── */
+
+.forum-avatar,
+.forum-avatar-fallback {
+    flex: 0 0 auto;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.forum-avatar-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--avatar-fallback-bg, var(--surface-2, #2a2c36));
+    color: var(--text-muted, #8b90a0);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    line-height: 1;
+}
+.forum-avatar-lg { width: 2.2rem; height: 2.2rem; font-size: 0.85rem; }
+
+/* role-name-<role> is built by concatenation in the markup, so the base class
+   sets the shape and each suffix only sets a colour. */
+.role-name { font-weight: 600; color: var(--text, #e7e9ee); text-decoration: none; }
+.role-name:hover { text-decoration: underline; }
+.role-name-admin { color: var(--user-tag-admin-fg, var(--danger, #e5484d)); }
+.role-name-mod { color: var(--user-tag-mod-fg, var(--success, #46a758)); }
+.role-name-contributor { color: var(--user-tag-contributor-fg, var(--info, #3b9eff)); }
+.role-name-user,
+.role-name-member { color: var(--user-tag-member-fg, var(--text, #e7e9ee)); }
+.forum-latest-user { font-weight: 600; color: var(--text, #e7e9ee); }
+
+.role-badge {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    border-radius: var(--radius-pill, 999px);
+    background: var(--chip-bg, var(--surface-2, #2a2c36));
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.role-admin { color: var(--user-tag-admin-fg, #e5484d); }
+.role-mod { color: var(--user-tag-mod-fg, #46a758); }
+.role-contributor { color: var(--user-tag-contributor-fg, #3b9eff); }
+.role-user { color: var(--user-tag-member-fg, #8b90a0); }
+
+/* ── category icon, in the eight colours admin.go allows ───────────────── */
+
+.forum-cat-icon,
+.forum-help-icon,
+.forum-category-hero-icon,
+.forum-thread-hero-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    flex: 0 0 auto;
+    border-radius: var(--radius, 8px);
+    background: var(--surface-2, #2a2c36);
+    color: var(--text, #e7e9ee);
+}
+.forum-category-hero-icon,
+.forum-thread-hero-icon { width: 2.75rem; height: 2.75rem; }
+
+.forum-cat-icon-blue   { background: rgba( 59, 158, 255, 0.16); color: #6cb8ff; }
+.forum-cat-icon-cyan   { background: rgba( 34, 197, 214, 0.16); color: #4fd3e2; }
+.forum-cat-icon-green  { background: rgba( 70, 167,  88, 0.18); color: #6ed17f; }
+.forum-cat-icon-orange { background: rgba(247, 147,  30, 0.18); color: #f0a955; }
+.forum-cat-icon-pink   { background: rgba(226,  84, 165, 0.18); color: #ef86c4; }
+.forum-cat-icon-purple { background: rgba(139, 105, 246, 0.20); color: #a68cff; }
+.forum-cat-icon-red    { background: rgba(229,  72,  77, 0.18); color: #ff8a8d; }
+.forum-cat-icon-yellow { background: rgba(232, 194,  62, 0.18); color: #ecd06a; }
+
+/* ── heroes ────────────────────────────────────────────────────────────── */
+
+.forum-hero,
+.forum-category-hero,
+.forum-thread-hero {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+}
+.forum-hero-copy,
+.forum-category-hero-copy,
+.forum-thread-hero-copy { min-width: 0; flex: 1 1 24rem; }
+.forum-hero-copy h1,
+.forum-category-heading h1 { margin: 0.15rem 0; font-size: 1.6rem; }
+.forum-hero-copy > p,
+.forum-category-heading p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-hero-eyebrow {
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-hero-totals,
+.forum-category-totals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-hero-totals span,
+.forum-category-totals span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.forum-hero-totals strong,
+.forum-category-totals strong { color: var(--text, #e7e9ee); }
+.forum-new-thread,
+.forum-category-new-thread,
+.forum-thread-reply-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex: 0 0 auto;
+}
+.forum-category-heading { display: flex; align-items: flex-start; gap: 0.75rem; }
+.forum-category-heading > div { min-width: 0; }
+
+.forum-category-breadcrumb,
+.forum-thread-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-category-breadcrumb a,
+.forum-thread-breadcrumb a { color: var(--link-fg, #6cb8ff); text-decoration: none; }
+.forum-category-breadcrumb a:hover,
+.forum-thread-breadcrumb a:hover { text-decoration: underline; }
+
+.forum-category-access-note {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* ── index: two columns, main and rail ─────────────────────────────────── */
+
+.forum-index-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    gap: 1.25rem;
+    align-items: start;
+}
+.forum-index-main,
+.forum-index-sidebar,
+.forum-category-layout { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
+
+.forum-category-list { display: flex; flex-direction: column; }
+.forum-category-row {
+    display: grid;
+    grid-template-columns: 2.2rem minmax(0, 1fr) 7rem minmax(0, 16rem);
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--border, #2a2c36);
+    color: inherit;
+    text-decoration: none;
+}
+.forum-category-row:last-child { border-bottom: 0; }
+.forum-category-row:hover { background: var(--data-table-tr-hover-bg, rgba(255, 255, 255, 0.03)); }
+.forum-category-copy { display: flex; flex-direction: column; min-width: 0; gap: 0.1rem; }
+.forum-category-copy strong { font-size: 0.92rem; }
+.forum-category-copy small,
+.forum-category-latest-copy small {
+    font-size: 0.75rem;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-category-counts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    font-size: 0.75rem;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-category-counts strong { color: var(--text, #e7e9ee); }
+.forum-category-latest { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.forum-category-latest-copy { display: flex; flex-direction: column; min-width: 0; gap: 0.1rem; }
+.forum-category-latest-copy strong {
+    font-size: 0.8rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.forum-recent-columns { grid-template-columns: minmax(0, 1fr) 4rem minmax(0, 11rem); }
+.forum-recent-list { list-style: none; margin: 0; padding: 0; }
+.forum-recent-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 4rem minmax(0, 11rem);
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--border, #2a2c36);
+    color: inherit;
+    text-decoration: none;
+}
+.forum-recent-list li:last-child .forum-recent-row { border-bottom: 0; }
+.forum-recent-row:hover { background: var(--data-table-tr-hover-bg, rgba(255, 255, 255, 0.03)); }
+.forum-recent-discussion { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
+.forum-recent-copy { display: flex; flex-direction: column; min-width: 0; gap: 0.1rem; }
+.forum-recent-copy strong {
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.forum-recent-copy small,
+.forum-recent-last small { font-size: 0.72rem; color: var(--text-muted, #8b90a0); }
+.forum-recent-category { display: flex; justify-content: center; }
+.forum-recent-category .forum-cat-icon { width: 1.8rem; height: 1.8rem; }
+.forum-recent-last { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; font-size: 0.78rem; }
+
+/* ── index rail ────────────────────────────────────────────────────────── */
+
+.forum-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 0.9rem 1rem;
+}
+.forum-stats-grid > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.6rem 0.4rem;
+    border-radius: var(--radius, 8px);
+    background: var(--surface-2, rgba(255, 255, 255, 0.03));
+}
+.forum-stats-grid strong { font-size: 1.15rem; }
+.forum-stats-grid span { font-size: 0.72rem; color: var(--text-muted, #8b90a0); }
+
+.forum-contrib-list { list-style: none; margin: 0; padding: 0.5rem 0; }
+.forum-contrib-list li {
+    display: grid;
+    grid-template-columns: 1.2rem 1.6rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 1rem;
+}
+.forum-contrib-rank {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-align: center;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-contrib-name {
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.forum-contrib-badge { font-size: 0.7rem; color: var(--text-muted, #8b90a0); white-space: nowrap; }
+
+.forum-guide-list { list-style: none; margin: 0; padding: 0.6rem 1rem; display: flex; flex-direction: column; gap: 0.45rem; }
+.forum-guide-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.78rem;
+    color: var(--text-muted, #8b90a0);
+}
+
+.forum-help-panel { display: flex; align-items: flex-start; gap: 0.75rem; padding: 1rem; }
+.forum-help-panel h2 { margin: 0 0 0.15rem; font-size: 0.95rem; }
+.forum-help-panel p { margin: 0 0 0.6rem; font-size: 0.78rem; color: var(--text-muted, #8b90a0); }
+
+/* ── category: the thread list ─────────────────────────────────────────── */
+
+.forum-thread-tabs { display: flex; align-items: center; gap: 0.75rem; }
+.forum-thread-total { font-size: 0.75rem; color: var(--text-muted, #8b90a0); }
+/* Three captions over FOUR cells: the row leads with the pinned/locked state
+   marker, which has no caption of its own. Repeating the row's template put
+   "Thread" over the marker and pushed every caption one column left. The
+   padding stands in for that first column plus its gap. */
+.forum-thread-columns {
+    grid-template-columns: minmax(0, 1fr) 4.5rem minmax(0, 12rem);
+    padding-left: calc(1rem + 1.5rem + 0.75rem);
+}
+.forum-thread-columns span:nth-child(2) { text-align: center; }
+.forum-thread-list { list-style: none; margin: 0; padding: 0; }
+.forum-thread-row {
+    display: grid;
+    grid-template-columns: 1.5rem minmax(0, 1fr) 4.5rem minmax(0, 12rem);
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid var(--border, #2a2c36);
+    color: inherit;
+    text-decoration: none;
+}
+.forum-thread-list li:last-child .forum-thread-row { border-bottom: 0; }
+.forum-thread-row:hover { background: var(--data-table-tr-hover-bg, rgba(255, 255, 255, 0.03)); }
+
+.forum-thread-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-thread-state.is-pinned { color: var(--warning, #f0a955); }
+.forum-thread-state.is-locked { color: var(--danger, #e5484d); }
+.forum-thread-state.is-recruitment { color: var(--info, #6cb8ff); }
+
+.forum-thread-primary { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.forum-thread-copy { display: flex; flex-direction: column; min-width: 0; gap: 0.15rem; }
+.forum-thread-title-line { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; min-width: 0; }
+.forum-thread-title-line strong { font-size: 0.9rem; }
+.forum-thread-copy small { font-size: 0.73rem; color: var(--text-muted, #8b90a0); }
+
+.forum-thread-badge {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    border-radius: var(--radius-pill, 999px);
+    border: 1px solid currentColor;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.forum-thread-badge.is-pinned { color: var(--warning, #f0a955); }
+.forum-thread-badge.is-locked { color: var(--danger, #e5484d); }
+.forum-thread-badge.is-recruitment { color: var(--info, #6cb8ff); }
+
+.forum-thread-replies {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.05rem;
+}
+.forum-thread-replies strong { font-size: 0.95rem; }
+.forum-thread-replies small { font-size: 0.65rem; color: var(--text-muted, #8b90a0); }
+.forum-thread-last { display: flex; align-items: center; gap: 0.5rem; min-width: 0; font-size: 0.78rem; }
+.forum-thread-last span { display: flex; flex-direction: column; min-width: 0; gap: 0.05rem; }
+.forum-thread-last small { font-size: 0.7rem; color: var(--text-muted, #8b90a0); }
+
+.forum-thread-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0.6rem 1rem;
+    border-top: 1px solid var(--border, #2a2c36);
+    font-size: 0.75rem;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-thread-empty,
+.forum-thread-locked,
+.forum-thread-no-posts {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-thread-empty p,
+.forum-thread-locked p,
+.forum-thread-no-posts p { margin: 0; font-size: 0.82rem; max-width: 28rem; }
+.forum-thread-empty strong,
+.forum-thread-locked strong { color: var(--text, #e7e9ee); font-size: 0.95rem; }
+
+/* ── thread ────────────────────────────────────────────────────────────── */
+
+.forum-thread-heading { display: flex; align-items: flex-start; gap: 0.75rem; }
+.forum-thread-heading h1 { margin: 0 0 0.3rem; font-size: 1.45rem; }
+.forum-thread-labels { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+.forum-thread-category-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--link-fg, #6cb8ff);
+    text-decoration: none;
+}
+.forum-thread-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-thread-hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+.forum-thread-hero-actions form { display: inline; }
+.forum-thread-privacy-note,
+.forum-thread-locked-note {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    border: 1px solid var(--border, #2a2c36);
+    border-radius: var(--radius, 8px);
+    background: var(--surface-2, rgba(255, 255, 255, 0.03));
+    font-size: 0.82rem;
+    color: var(--text-muted, #8b90a0);
+}
+
+.forum-post-layout { display: flex; flex-direction: column; gap: 1rem; }
+.forum-post-main { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+.forum-post-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-post-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+
+.forum-post-card,
+.post-card {
+    display: grid;
+    grid-template-columns: 11rem minmax(0, 1fr);
+    background: var(--panel-bg, #16171d);
+    border: 1px solid var(--panel-border-color, var(--border, #2a2c36));
+    border-radius: var(--panel-border-radius, var(--radius, 8px));
+    overflow: hidden;
+}
+.forum-post-author {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.9rem 0.6rem;
+    border-right: 1px solid var(--border, #2a2c36);
+    background: var(--bg-sunken, rgba(0, 0, 0, 0.15));
+    text-align: center;
+}
+.forum-post-author-avatar { display: inline-flex; }
+/* The markup nests a bare <img> or <span> here rather than one carrying an
+   avatar class, so this styles the CHILD. Selecting .forum-avatar inside
+   matched nothing and the initial rendered as loose text. */
+.forum-post-author-avatar > img,
+.forum-post-author-avatar > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.2rem;
+    height: 3.2rem;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--avatar-fallback-bg, var(--surface-2, #2a2c36));
+    color: var(--text-muted, #8b90a0);
+    font-size: 1.15rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    line-height: 1;
+}
+.forum-post-author-avatar > img { background: none; }
+.forum-post-author-name { font-size: 0.88rem; }
+.forum-post-op-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-post-presence {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--success, #46a758);
+}
+.forum-post-reputation {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border-radius: var(--radius-pill, 999px);
+    background: var(--chip-bg, var(--surface-2, #2a2c36));
+    font-size: 0.62rem;
+    font-weight: 700;
+}
+.forum-post-author small { font-size: 0.68rem; color: var(--text-muted, #8b90a0); }
+
+.forum-post-body { display: flex; flex-direction: column; min-width: 0; }
+.forum-post-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.9rem;
+    border-bottom: 1px solid var(--border, #2a2c36);
+    font-size: 0.73rem;
+    color: var(--text-muted, #8b90a0);
+}
+.forum-post-date-full { color: var(--text-muted, #8b90a0); }
+.post-permalink { color: var(--text-muted, #8b90a0); text-decoration: none; font-weight: 700; }
+.post-permalink:hover { color: var(--link-fg, #6cb8ff); }
+.post-content { padding: 0.9rem; font-size: 0.9rem; line-height: 1.6; }
+.post-content > :first-child { margin-top: 0; }
+.post-content > :last-child { margin-bottom: 0; }
+.post-edit-form { padding: 0 0.9rem 0.9rem; }
+.forum-post-edit-actions { display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 0.5rem; }
+
+.post-quote {
+    margin: 0.9rem 0.9rem 0;
+    padding: 0.5rem 0.75rem;
+    border-left: 3px solid var(--border-strong, #3a3d4a);
+    border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
+    background: var(--bg-sunken, rgba(0, 0, 0, 0.15));
+    font-size: 0.82rem;
+}
+.post-quote.deleted { opacity: 0.6; font-style: italic; }
+.quote-label {
+    display: block;
+    margin-bottom: 0.2rem;
+    font-size: 0.7rem;
+    color: var(--text-muted, #8b90a0);
+}
+.quote-body { color: var(--text-muted, #8b90a0); }
+
+.post-footer-row,
+.forum-post-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.45rem 0.9rem;
+    border-top: 1px solid var(--border, #2a2c36);
+}
+.post-reactions { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; position: relative; }
+.reaction-btn,
+.reaction-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.1rem 0.45rem;
+    border: 1px solid var(--border, #2a2c36);
+    border-radius: var(--radius-pill, 999px);
+    background: var(--surface-2, rgba(255, 255, 255, 0.03));
+    color: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+.reaction-btn:hover,
+.reaction-add:hover { border-color: var(--border-strong, #3a3d4a); }
+.reaction-btn .emoji { font-size: 0.85rem; line-height: 1; }
+.reaction-btn .count { font-size: 0.7rem; color: var(--text-muted, #8b90a0); }
+.reaction-picker {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    z-index: var(--z-dropdown, 40);
+    display: none;
+    gap: 0.15rem;
+    padding: 0.3rem;
+    border: 1px solid var(--border, #2a2c36);
+    border-radius: var(--radius, 8px);
+    background: var(--panel-bg, #16171d);
+    box-shadow: var(--shadow, 0 6px 20px rgba(0, 0, 0, 0.4));
+}
+.reaction-picker.show { display: flex; }
+
+.post-actions,
+.forum-post-actions { display: flex; align-items: center; gap: 0.15rem; flex-wrap: wrap; }
+.post-actions form,
+.forum-post-actions form { display: inline; }
+/* .report-content is BOTH the flat text action inside a post footer and, in
+   the thread hero, a .btn. Styling the bare class stripped the hero button's
+   border and background. Scoped to the footer, where the flat look belongs. */
+.forum-post-action,
+.quote-trigger,
+.forum-post-actions .report-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.45rem;
+    border: 0;
+    border-radius: var(--radius-sm, 4px);
+    background: transparent;
+    color: var(--text-muted, #8b90a0);
+    font-size: 0.74rem;
+    cursor: pointer;
+}
+.forum-post-action:hover,
+.forum-post-actions .report-content:hover,
+.quote-trigger:hover { background: var(--surface-2, rgba(255, 255, 255, 0.05)); color: var(--text, #e7e9ee); }
+.forum-post-action.is-danger { color: var(--danger, #e5484d); }
+
+.forum-post-pagination { display: flex; justify-content: flex-end; }
+.forum-post-toolbar-bottom { border-top: 1px solid var(--border, #2a2c36); padding-top: 0.6rem; }
+
+.reply-card,
+.forum-reply-card {
+    background: var(--panel-bg, #16171d);
+    border: 1px solid var(--panel-border-color, var(--border, #2a2c36));
+    border-radius: var(--panel-border-radius, var(--radius, 8px));
+    overflow: hidden;
+}
+.reply-header {
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--border, #2a2c36);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+.reply-body { padding: 0.9rem; }
+/* The hint text is a bare text node beside the button; flex-end alone let
+   the two overlap at narrow widths. */
+.forum-reply-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 0.6rem;
+    font-size: 0.78rem;
+    color: var(--text-muted, #8b90a0);
+}
+.reaction-picker button {
+    border: 0;
+    border-radius: var(--radius-sm, 4px);
+    background: transparent;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0.2rem 0.25rem;
+    cursor: pointer;
+}
+.reaction-picker button:hover { background: var(--surface-2, rgba(255, 255, 255, 0.08)); }
+.reply-quote-preview {
+    position: relative;
+    margin-bottom: 0.6rem;
+    padding: 0.5rem 2rem 0.5rem 0.75rem;
+    border-left: 3px solid var(--border-strong, #3a3d4a);
+    background: var(--bg-sunken, rgba(0, 0, 0, 0.15));
+    font-size: 0.8rem;
+}
+.reply-quote-preview .clear {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.4rem;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted, #8b90a0);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+/* ── narrow ────────────────────────────────────────────────────────────── */
+
+@media (max-width: 62rem) {
+    .forum-index-grid { grid-template-columns: minmax(0, 1fr); }
+    .forum-category-row { grid-template-columns: 2.2rem minmax(0, 1fr); }
+    .forum-category-counts,
+    .forum-category-latest { grid-column: 2; flex-direction: row; gap: 0.75rem; }
+    .forum-recent-columns,
+    .forum-thread-columns { display: none; }
+    .forum-recent-row { grid-template-columns: minmax(0, 1fr) 2rem; }
+    .forum-recent-last { display: none; }
+    .forum-thread-row { grid-template-columns: 1.5rem minmax(0, 1fr) 4.5rem; }
+    .forum-thread-last { display: none; }
+    .forum-post-card,
+    .post-card { grid-template-columns: minmax(0, 1fr); }
+    .forum-post-author {
+        flex-direction: row;
+        justify-content: flex-start;
+        border-right: 0;
+        border-bottom: 1px solid var(--border, #2a2c36);
+        text-align: left;
+    }
+    .forum-post-author-avatar .forum-avatar,
+    .forum-post-author-avatar .forum-avatar-fallback { width: 2rem; height: 2rem; font-size: 0.8rem; }
+}
+
+.forum-admin-nested-cell { padding: 0; }
+
+/* The category footer's pager slot. Unlike the nine names below it this one
+   carries no base class, so with no rule it was a plain <div> and the host's
+   pager sat hard left under the thread count. */
+.forum-thread-pagination { display: flex; justify-content: flex-end; }
+
+/* Nine names in these templates deliberately have no rules: they are modifier
+   hooks beside a base class that carries the styling --
+   .forum-panel .forum-categories-panel, .forum-panel-header .forum-recent-header,
+   .post-list .forum-post-list, .reply-card .reply-form -- kept so a host or a
+   later variant can target one panel without reaching for a tag selector.
+   audit_css counts them as undefined, which is true and is why the forum's
+   baseline there is nine rather than zero. Padding them with empty rules would
+   buy a green number and say nothing. */
+
+/* ── borrowed from the host ────────────────────────────────────────────────
+   These names are NOT defined here, because a host that styles its own site
+   should style these too and a definition here would fight it. A host wiring
+   RenderPage needs: .container, .page-wide, .btn (+ .btn-sm, .btn-primary,
+   .btn-outline-primary, .btn-outline-secondary, .btn-outline-danger),
+   .alert (+ .alert-warning), .icon, .visually-hidden and .d-inline.
+   The README says the same; this is the copy that sits next to the markup. */
+</style>
+{{end}}

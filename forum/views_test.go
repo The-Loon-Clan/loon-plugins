@@ -25,7 +25,33 @@ func withTemplates(t *testing.T) {
 	t.Cleanup(func() { deps = Deps{}; pageTmpl = nil })
 }
 
+// render1 is renderDoc with the page's own <style> block removed.
+//
+// The assertions here grep the whole rendered string, and several grep for a
+// bare class NAME rather than a class attribute. Once forum_styles.html began
+// travelling with the markup, `.forum-post-toolbar-bottom` as a SELECTOR
+// satisfied a check that meant "is this element present", and a test went red
+// on a page whose markup had not changed. Stripping it in the helper covers
+// the checks nobody has written yet as well as the one that caught it.
 func render1(t *testing.T, name string, data map[string]any) string {
+	t.Helper()
+	s := renderDoc(t, name, data)
+	for {
+		i := strings.Index(s, "<style>")
+		if i < 0 {
+			return s
+		}
+		j := strings.Index(s[i:], "</style>")
+		if j < 0 {
+			t.Fatalf("%s: unclosed <style>", name)
+		}
+		s = s[:i] + s[i+j+len("</style>"):]
+	}
+}
+
+// renderDoc is the page exactly as the host would receive it, stylesheet and
+// all. Used by the preview dumper, which has nothing to look at without it.
+func renderDoc(t *testing.T, name string, data map[string]any) string {
 	t.Helper()
 	withTemplates(t)
 	var sb strings.Builder

@@ -1,4 +1,5 @@
 {{define "community_new_thread.html"}}
+{{template "forum_styles.html" .}}
     <style>
         .form-control, .form-select {
             background: var(--bg-surface);
@@ -12,12 +13,11 @@
             box-shadow: none;
         }
     </style>
-    <div class="container mt-4 site-container">
-        <nav aria-label="breadcrumb" style="font-size:0.85rem;" class="mb-3">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a href="/community/forums">Forums</a></li>
-                <li class="breadcrumb-item active">New Thread</li>
-            </ol>
+    <div class="container mt-4">
+        <nav class="forum-category-breadcrumb" aria-label="Breadcrumb">
+            <a href="/community/forums">Forums</a>
+            <svg class="icon" aria-hidden="true"><use href="#chevron-right"></use></svg>
+            <span>New Thread</span>
         </nav>
 
         <div class="card">
