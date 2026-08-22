@@ -94,11 +94,14 @@ consumers:
 
 ## flavours: every plugin declares which half of a site it belongs to
 ##
-## Reporting rather than failing, in CI as well: the three plugins without a
-## declaration belong to another workstream, and turning their build red over
-## a change they did not make would be somebody else's problem imposed.
+## The three plugins without a declaration belong to another workstream, and
+## turning their build red over a change they did not make would be somebody
+## else's problem imposed. That exemption is now NAMED, in the script's
+## BASELINE, rather than bought with a `|| true` that also exempted every
+## plugin anyone might add next. Undeclared-and-not-in-BASELINE fails; so does
+## an entry that has started declaring, so the list cannot outlive its reason.
 flavours:
-	@$(PYTHON) scripts/audit_flavours.py || true
+	@$(PYTHON) scripts/audit_flavours.py
 
 ## check: everything CI runs except itest
 check: vet sqllint sentinels test

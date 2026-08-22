@@ -63,6 +63,20 @@ def declared_flavours(block):
     return re.findall(r"Flavour[A-Za-z]+", m.group(1))
 
 
+BASELINE = {
+    # The three the Makefile's `|| true` is FOR. They belong to another
+    # workstream (see HANDOVER.md, "All three: Metadata.Flavours"), and
+    # turning their build red over a change they did not make would be
+    # somebody else's problem imposed.
+    #
+    # Naming them is what makes the exemption a decision instead of a hole.
+    # Without this, a plugin added by ANYONE with no declaration also
+    # passed -- reporting-for-three quietly meant reporting-for-everyone,
+    # and the check could not fail no matter what was added.
+    "agent", "ranks", "requests",
+}
+
+
 def main():
     strict = "--strict" in sys.argv
     missing, invalid, ok = [], [], {}
@@ -149,6 +163,27 @@ def main():
     bad = len(missing) + len(invalid)
     print("\nflavours: %d declared, %d undeclared, %d malformed" %
           (len(ok), len(missing), len(invalid)))
+    # Anything undeclared that is NOT one of the three is a new hole, and
+    # fails whether --strict was asked for or not: the exemption is for
+    # three named plugins, not for the rule.
+    fresh = sorted(set(missing) - BASELINE)
+    if fresh:
+        print()
+        print("  UNDECLARED and not in BASELINE:")
+        for name in fresh:
+            print("    " + name)
+        return 1
+
+    # And one that starts declaring must leave, or the list outlives the
+    # reason for it.
+    stale = sorted(BASELINE - set(missing) - set(invalid))
+    if stale:
+        print()
+        print("  DECLARED now, still in BASELINE -- remove them:")
+        for name in stale:
+            print("    " + name)
+        return 1
+
     if strict and bad:
         return 1
     return 0
