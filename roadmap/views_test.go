@@ -332,15 +332,22 @@ func TestFormCarriesItsPickerAndEditor(t *testing.T) {
 			t.Errorf("category card %q missing -- the picker cannot select it", tag)
 		}
 	}
-	// Emitting .md-editor is the entire integration: the host footer wires
-	// every one on the page. Lose the class and the toolbar and preview
-	// silently become a bare textarea.
-	if !strings.Contains(out, `class="md-editor"`) {
-		t.Error("the shared markdown editor markup is gone -- the toolbar and " +
-			"Preview tab are wired by the host from this class alone")
+	// data-prose IS the entire integration, and this assertion used to say the
+	// same thing about the wrong thing: it pinned class="md-editor" and a
+	// hand-emitted toolbar, which site_chrome.html has never wired. It builds
+	// the toolbar in JS for every textarea[data-prose] — "that is the entire
+	// integration and there is no markup to keep in sync" — so the copy this
+	// template carried was unstyled buttons that did nothing.
+	if !strings.Contains(out, "data-prose") {
+		t.Error("the description textarea lost data-prose -- the host builds the " +
+			"formatting toolbar from that attribute and nothing else, so the " +
+			"member gets a bare textarea with no bold, link or quote")
 	}
-	if !strings.Contains(out, `class="md-textarea" id="new-desc"`) {
-		t.Error("the description textarea lost the id the submit path reads it by")
+	// Separately from the class, because the previous assertion checked both in
+	// one string and reported a lost id when only the class had changed.
+	if !strings.Contains(out, `id="new-desc"`) {
+		t.Error("the description textarea lost the id its own submit script reads " +
+			"it by (getElementById('new-desc'))")
 	}
 }
 

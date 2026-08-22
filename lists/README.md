@@ -61,6 +61,20 @@ listing page and reads most of a release; mirroring that schema in to redraw
 the host's own markup would be the wrong trade. Same for `NzbCardCSS` and
 `ReportModal` — shared chrome the plugin embeds but does not own.
 
+**Class names this plugin assumes from the host** (CHECKLIST §8). The discovery
+grid's cards are drawn with `NzbCardCSS`'s vocabulary, not its own:
+
+| class | where it comes from |
+|---|---|
+| `cover-card` `cover-wrap` `cover-img` `cover-img-placeholder` | `Deps.NzbCardCSS` — the host's release-card stylesheet |
+| `report-content` | the trigger `Deps.ReportModal`'s own script binds to |
+| `container` `page-wide` `row` `col` `row-cols-*` `panelV2` `panel__body` `button` `button--*` `form__input` `form__label` `form__help` `tag` `tag--*` | the host's design vocabulary |
+
+A host whose card CSS spells the first four differently gets an unstyled grid
+and no warning, which is why they are written down rather than assumed. They
+are also why `audit_css` records a baseline for this plugin: the stylesheet
+arrives as a Go value at render time, so a static check cannot see it.
+
 Two dependencies are host **policy**, deliberately not reimplemented:
 `DownloadAllowed` (the pinned-browse-IP rule behind the bulk ZIP) and `Gunzip`
 (NZBs are gzipped at rest by the host). A plugin that decided either would be

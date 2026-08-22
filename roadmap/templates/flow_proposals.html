@@ -137,6 +137,9 @@
         }
         .role-admin       { background: rgba(var(--bs-danger-rgb), 0.2); color: var(--bs-danger); }
         .role-contributor { background: rgba(91,138,245,0.2); color: var(--blue); }
+        /* .role-admin and .role-contributor had rules and this did not, so a
+           moderator's badge rendered as bare text beside an admin's red one. */
+        .role-mod         { background: rgba(var(--bs-success-rgb), 0.2); color: var(--bs-success); }
 
         /* ── The full list ───────────────────────────────────────── */
         .prop-row {
@@ -354,7 +357,7 @@
                         </div>
                         <div class="prop-stat" title="Comments">{{.CommentCount}} comment{{if ne .CommentCount 1}}s{{end}}</div>
                         <button class="vote-btn btn-vote{{if $isOwn}} disabled{{end}}" data-id="{{.ID}}" type="button" title="{{if $isOwn}}You can't vote on your own request{{else}}Vote for this request{{end}}" onclick="event.stopPropagation();">
-                            &#9650; <span class="vote-count">{{.VoteCount}}</span>
+                            &#9650; <span class="js-vote-count">{{.VoteCount}}</span>
                         </button>
                     </div>
                     <div class="prop-detail" id="detail-{{.ID}}" style="display:none;"></div>
@@ -441,32 +444,32 @@
                             <div class="fr-step-body">
                                 <div class="fr-step-title">Describe your idea</div>
                                 <div class="fr-step-hint">What problem does it solve, and how would it work? The more detail, the better.</div>
-                                {{/* The site's shared markdown editor. Emitting its
-                                     markup is all that is required — the host's
-                                     footer wires every .md-editor on the page, so
-                                     the toolbar and the Preview tab come for free
-                                     and stay identical to the forum and the wiki. */}}
-                                <div class="md-editor" data-md-policy="forum">
-                                    <div class="md-toolbar" role="toolbar" aria-label="Formatting">
-                                        <button type="button" class="md-btn" data-md="bold"   title="Bold (Ctrl+B)"><strong>B</strong></button>
-                                        <button type="button" class="md-btn" data-md="italic" title="Italic (Ctrl+I)"><em>I</em></button>
-                                        <button type="button" class="md-btn" data-md="link"   title="Link" aria-label="Link">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                                        </button>
-                                        <button type="button" class="md-btn" data-md="quote"  title="Quote">&gt;</button>
-                                        <button type="button" class="md-btn" data-md="list"   title="Bullet list">&bull;</button>
-                                        <button type="button" class="md-btn" data-md="code"   title="Inline code">&lt;/&gt;</button>
-                                        <span class="md-toolbar-spacer"></span>
-                                        <button type="button" class="md-btn md-tab is-active" data-md-view="edit">Edit</button>
-                                        <button type="button" class="md-btn md-tab"           data-md-view="preview">Preview</button>
-                                    </div>
-                                    <textarea class="md-textarea" id="new-desc" name="description" rows="8" maxlength="4000"
-                                              placeholder="Explain it in detail. What problem does it solve? How would it work?"></textarea>
-                                    <div class="md-preview" hidden></div>
-                                    <div class="md-hint">
-                                        Markdown supported — <code>**bold**</code> <code>*italic*</code>
-                                        <code>&gt; quote</code> <code>`code`</code> <code>[link](url)</code>
-                                    </div>
+                                {{/* The site's shared markdown editor is `data-prose` on
+                                     the textarea and NOTHING ELSE. site_chrome.html builds
+                                     the toolbar in JS for every textarea[data-prose] and
+                                     says so: "that is the entire integration and there is
+                                     no markup to keep in sync."
+
+                                     This used to hand-emit a copy of the toolbar — seven
+                                     format buttons, an Edit/Preview tab pair and a hint
+                                     line, thirteen md-* classes — under a comment claiming
+                                     "the host's footer wires every .md-editor on the page".
+                                     It does not: it wires textarea[data-prose], which this
+                                     textarea did not have. No stylesheet defined a single
+                                     md-* name either, so what a member actually saw was a
+                                     row of unstyled buttons that did nothing and a Preview
+                                     tab that never previewed.
+
+                                     The preview goes with it. It never worked, so there is
+                                     nothing to replace — the host's toolbar has no preview
+                                     and the markdown hint below says what is supported. */}}
+                                <textarea class="form__textarea" data-prose id="new-desc"
+                                          name="description" rows="8" maxlength="4000"
+                                          aria-label="Describe your idea"
+                                          placeholder="Explain it in detail. What problem does it solve? How would it work?"></textarea>
+                                <div class="form__help">
+                                    Markdown supported &mdash; <code>**bold**</code> <code>*italic*</code>
+                                    <code>&gt; quote</code> <code>`code`</code> <code>[link](url)</code>
                                 </div>
                                 <div class="fr-counter"><span id="desc-count">0</span> / 4000</div>
                             </div>
@@ -814,7 +817,7 @@
                 });
                 const body = await r.json();
                 if (!r.ok || !body.ok) throw new Error((body && body.error) || ('HTTP ' + r.status));
-                const $count = vbtn.querySelector('.vote-count');
+                const $count = vbtn.querySelector('.js-vote-count');
                 if ($count) $count.textContent = body.count;
                 vbtn.classList.toggle('voted', !!body.added);
             } catch (err) {
@@ -948,8 +951,8 @@
                      +  '<strong style="color:var(--text-muted);">Mod:</strong>';
                 html += statusSelect(d.id, d.status);
                 html += tagSelect(d.id, d.tag);
-                html += '<button class="button button--sm button--outlined btn-promote" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Promote</button>';
-                html += '<button class="button button--sm button--outlined button--danger btn-delete ms-auto" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Delete</button>';
+                html += '<button class="button button--sm button--outlined js-btn-promote" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Promote</button>';
+                html += '<button class="button button--sm button--outlined button--danger js-btn-delete ms-auto" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Delete</button>';
                 html += '</div>';
             }
             // Comments thread.
@@ -964,10 +967,10 @@
             html += '</div>';
             // Reply box.
             html += '<div class="mt-2">'
-                 +  '<textarea class="form__input reply-body" rows="2" maxlength="2000" placeholder="Reply or suggest something — markdown supported."></textarea>'
+                 +  '<textarea class="form__input js-reply-body" rows="2" maxlength="2000" placeholder="Reply or suggest something — markdown supported."></textarea>'
                  +  '<div class="d-flex gap-2 align-items-center mt-1">'
-                 +  '<button class="button button--sm button--primary btn-reply" data-id="' + d.id + '" type="button" style="font-size:0.78rem;">Post reply</button>'
-                 +  '<span class="reply-status" style="font-size:0.72rem;color:var(--text-muted);"></span>'
+                 +  '<button class="button button--sm button--primary js-btn-reply" data-id="' + d.id + '" type="button" style="font-size:0.78rem;">Post reply</button>'
+                 +  '<span class="js-reply-status" style="font-size:0.72rem;color:var(--text-muted);"></span>'
                  +  '</div></div>';
             return html;
         }
@@ -980,7 +983,7 @@
                 ['done',        'Done'],
                 ['declined',    'Declined'],
             ];
-            let h = '<select class="form__select sel-status" data-id="' + id + '" style="width:auto;font-size:0.78rem;">';
+            let h = '<select class="form__select js-sel-status" data-id="' + id + '" style="width:auto;font-size:0.78rem;">';
             for (const [v, lbl] of opts) {
                 h += '<option value="' + v + '"' + (v === current ? ' selected' : '') + '>' + lbl + '</option>';
             }
@@ -996,7 +999,7 @@
                 ['performance', 'Performance'],
                 ['other',       'Other'],
             ];
-            let h = '<select class="form__select sel-tag" data-id="' + id + '" style="width:auto;font-size:0.78rem;">';
+            let h = '<select class="form__select js-sel-tag" data-id="' + id + '" style="width:auto;font-size:0.78rem;">';
             for (const [v, lbl] of opts) {
                 h += '<option value="' + v + '"' + (v === (current || '') ? ' selected' : '') + '>' + lbl + '</option>';
             }
@@ -1006,11 +1009,11 @@
 
         function wireDetail(id, panel) {
             // Reply handler.
-            const replyBtn = panel.querySelector('.btn-reply');
+            const replyBtn = panel.querySelector('.js-btn-reply');
             if (replyBtn) {
                 replyBtn.addEventListener('click', async () => {
-                    const body = panel.querySelector('.reply-body');
-                    const stat = panel.querySelector('.reply-status');
+                    const body = panel.querySelector('.js-reply-body');
+                    const stat = panel.querySelector('.js-reply-status');
                     const txt = (body.value || '').trim();
                     if (!txt) return;
                     replyBtn.disabled = true;
@@ -1040,7 +1043,7 @@
                 });
             }
             // Mod controls.
-            const selStatus = panel.querySelector('.sel-status');
+            const selStatus = panel.querySelector('.js-sel-status');
             if (selStatus) {
                 selStatus.addEventListener('change', async () => {
                     const fd = new URLSearchParams();
@@ -1055,7 +1058,7 @@
                     location.reload();
                 });
             }
-            const selTag = panel.querySelector('.sel-tag');
+            const selTag = panel.querySelector('.js-sel-tag');
             if (selTag) {
                 selTag.addEventListener('change', async () => {
                     const fd = new URLSearchParams();
@@ -1069,7 +1072,7 @@
                     location.reload();
                 });
             }
-            const promoteBtn = panel.querySelector('.btn-promote');
+            const promoteBtn = panel.querySelector('.js-btn-promote');
             if (promoteBtn) {
                 promoteBtn.addEventListener('click', async () => {
                     if (!confirm('Promote node #' + id + ' to canonical (locked)?')) return;
@@ -1085,7 +1088,7 @@
             // Mod-only delete. Soft-delete via the existing
             // DELETE /flow/node/:id endpoint — same path the canvas
             // editor uses, so the row vanishes from both surfaces.
-            const deleteBtn = panel.querySelector('.btn-delete');
+            const deleteBtn = panel.querySelector('.js-btn-delete');
             if (deleteBtn) {
                 deleteBtn.addEventListener('click', async () => {
                     if (!confirm('Delete request #' + id + '? This is reversible only via the DB.')) return;

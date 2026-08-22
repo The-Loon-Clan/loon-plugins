@@ -77,7 +77,7 @@
 
         <div id="wl-grid" class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3">
             {{range .Lists}}
-            <div class="col wl-item"
+            <div class="col js-wl-item"
                  data-id="{{.ID}}"
                  data-name="{{.Name}}"
                  data-username="{{.Username}}"
@@ -126,7 +126,7 @@
         var username = document.getElementById('wl-username');
         var sort     = document.getElementById('wl-sort');
         var counter  = document.getElementById('wl-visible-count');
-        var items    = Array.prototype.slice.call(grid.querySelectorAll('.wl-item'));
+        var items    = Array.prototype.slice.call(grid.querySelectorAll('.js-wl-item'));
 
         // Filter + sort in one pass — keep it cheap so it stays
         // responsive at a few hundred items without virtualization.
