@@ -71,12 +71,39 @@ def main():
         d = os.path.join(ROOT, name)
         if not os.path.isdir(d) or name.startswith(".") or name in SKIP:
             continue
-        plugin_go = os.path.join(d, "plugin.go")
-        if not os.path.exists(plugin_go):
+        # EVERY .go file in the directory, not just plugin.go.
+        #
+        # It read plugin.go alone until 22 Aug 2026, and three plugins keep
+        # their Metadata in a file named after themselves — games/games.go,
+        # magic/magic.go, medals/medals.go. All three were skipped by a bare
+        # `continue`: not reported as unreadable, not counted, simply absent.
+        # All three also fail the MUST this script exists to enforce, so the
+        # check was silent about the plugins it was most needed for.
+        #
+        # plugin.go first, because that is where 48 of the 51 put it and
+        # reading it first keeps the common case cheap.
+        src, block = None, None
+        candidates = ["plugin.go", name + ".go"] + sorted(
+            f for f in os.listdir(d)
+            if f.endswith(".go") and not f.endswith("_test.go"))
+        seen = set()
+        for fn in candidates:
+            if fn in seen:
+                continue
+            seen.add(fn)
+            path = os.path.join(d, fn)
+            if not os.path.exists(path):
+                continue
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            if "core.RegisterPlugin" not in text and "core.Metadata{" not in text:
+                continue
+            src = text
+            block = metadata_block(text)
+            if block:
+                break
+        if src is None:
             continue
-        with open(plugin_go, encoding="utf-8") as f:
-            src = f.read()
-        block = metadata_block(src)
         if not block:
             # No Metadata literal here — plugin.go exists but the metadata is
             # built elsewhere. Reported rather than skipped: the reader above

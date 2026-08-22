@@ -64,8 +64,14 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "magic",
 		Version:     "0.1.0",
 		Description: "Torrent promotions: cast free leech / double upload / custom ratio buffs on a torrent, private or public, for points.",
-		Migrations:  migrations,
-		Processes:   []string{"web"},
+		// TRACKER only, and the one-sided declaration carries its reason as
+		// CHECKLIST section 1 asks: free leech, double upload and ratio buffs
+		// are all statements about a swarm. On an indexer-only site every
+		// promotion this casts would apply to nothing — the admin surface
+		// would offer buffs no accounting reads.
+		Flavours:   []string{core.FlavourTracker},
+		Migrations: migrations,
+		Processes:  []string{"web"},
 	}
 }
 

@@ -89,8 +89,11 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "medals",
 		Version:     "0.1.0",
 		Description: "Collectible medals: buy or be awarded them, wear them on your profile; a medal may carry a bonus the host chooses to honour.",
-		Migrations:  migrations,
-		Processes:   []string{"web"},
+		// A profile decoration bought with points. Neither the catalogue nor
+		// the tracker is involved, so it belongs to both halves.
+		Flavours:   []string{core.FlavourAny},
+		Migrations: migrations,
+		Processes:  []string{"web"},
 	}
 }
 

@@ -64,8 +64,11 @@ func (p *Plugin) Metadata() core.Metadata {
 		Name:        "games",
 		Version:     "0.1.0",
 		Description: "Community point games: the pot (donate daily, one contributor wins it) and charity (points to members in need).",
-		Migrations:  migrations,
-		Processes:   []string{"web"},
+		// Points, not torrents or releases: nothing here reads either half of
+		// a site, so it runs the same on both.
+		Flavours:   []string{core.FlavourAny},
+		Migrations: migrations,
+		Processes:  []string{"web"},
 	}
 }
 
