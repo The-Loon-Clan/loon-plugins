@@ -1,0 +1,49 @@
+{{define "forum_error.html"}}
+{{template "forum_styles.html" .}}
+{{/* A refusal from the forum, in words rather than a Go error.
+
+     Seven handlers call fail(c, status, "loadfailed") and this maps the code
+     to a sentence. CHECKLIST section 10: a user-visible string belongs in a
+     template, so the translation seam landing later is a mechanical wrap
+     rather than a rewrite. One of these replaced
+     c.String(500, "list forum categories: %v", err), which printed a raw Go
+     error to whoever hit it.
+
+     THE PLUGIN HAD NO COPY OF THIS FILE. fail() has always rendered
+     "forum_error.html" by name, and on the RenderPage contract that name is
+     looked up in the plugin's own embedded set -- where it did not exist. So
+     every refusal path would have executed a template that is not there and
+     answered "this page failed to render": the one page whose entire job is to
+     explain what went wrong, replaced by a sentence that explains nothing.
+     Invisible until now because no host wires that contract yet.
+
+     A FRAGMENT, not a full page: RenderPage supplies the chrome. The host's
+     copy is a full document with fhead/ffoot because it is rendered by name on
+     the legacy contract. The shape follows the contract, not the plugin.
+
+     The link goes to /community/forums, which is where the forum is. The
+     host's copy points at /forums -- a path no route and no redirect defines,
+     so the only way off that page was the back button. Nothing caught it: the
+     link crawler never reaches a page that renders only on failure. */}}
+<main class="container page-wide forum-index">
+    <section class="forum-panel">
+        <div class="forum-thread-empty">
+            <span class="forum-category-hero-icon forum-cat-icon-orange">
+                <svg class="icon" aria-hidden="true"><use href="#info"></use></svg>
+            </span>
+            <strong>
+                {{if eq .Reason "loadfailed"}}The forum could not be loaded just now
+                {{else if eq .Reason "createfailed"}}That thread could not be created
+                {{else if eq .Reason "replyfailed"}}That reply could not be posted
+                {{else}}Something went wrong{{end}}
+            </strong>
+            <p>
+                {{if eq .Reason "loadfailed"}}Please try again shortly.
+                {{else if or (eq .Reason "createfailed") (eq .Reason "replyfailed")}}Please try again.
+                {{else}}Please try again, or contact staff if it keeps happening.{{end}}
+            </p>
+            <a class="btn btn-sm btn-outline-primary" href="/community/forums">Back to the forums</a>
+        </div>
+    </section>
+</main>
+{{end}}

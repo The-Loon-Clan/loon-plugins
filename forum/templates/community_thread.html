@@ -60,7 +60,11 @@
             </form>
             {{end}}
 
-            {{if and .CurrentUserID (ne .Thread.UserID .CurrentUserID)}}
+            {{/* Only when the host actually supplied a report dialog. The seam
+                 is required, but a host with no report surface satisfies it by
+                 returning "" -- and a button that opens nothing is worse than
+                 no button. */}}
+            {{if and .ReportModalHTML .CurrentUserID (ne .Thread.UserID .CurrentUserID)}}
             <button type="button" class="btn btn-outline-secondary report-content"
                     data-target-type="forum_thread" data-target-id="{{.Thread.ID}}">Report</button>
             {{end}}
@@ -112,6 +116,23 @@
                     {{else if eq .UserRole "contributor"}}<span class="role-badge role-contributor">Contributor</span>
                     {{else}}<span class="role-badge role-user">Member</span>{{end}}
                     {{with repBadge .ReputationTier}}{{if .Name}}<span class="forum-post-reputation bg-{{.Color}}" title="Earned reputation tier">{{.Name}}</span>{{end}}{{end}}
+                    {{/* Joined and Posts, each rendered only when it HAS a
+                         value rather than with a dash when it does not. The
+                         in-memory store populates neither, and "Joined Jan
+                         0001" is worse than a card that does not claim to
+                         know. GetForumPosts has been fetching both all along
+                         -- UserPostCount costs a batched second query -- and
+                         nothing here read them. */}}
+                    {{if or (not .UserJoinedAt.IsZero) .UserPostCount}}
+                    <dl class="forum-post-stats">
+                        {{if not .UserJoinedAt.IsZero}}
+                        <dt>Joined</dt><dd>{{.UserJoinedAt.Format "Jan 2006"}}</dd>
+                        {{end}}
+                        {{if .UserPostCount}}
+                        <dt>Posts</dt><dd>{{.UserPostCount}}</dd>
+                        {{end}}
+                    </dl>
+                    {{end}}
                 </aside>
 
                 <div class="forum-post-body">
@@ -187,11 +208,9 @@
                                 <button class="forum-post-action is-danger"> Delete</button>
                             </form>
                             {{end}}
-                            {{if and $.CurrentUserID (ne .UserID $.CurrentUserID)}}
+                            {{if and $.ReportModalHTML $.CurrentUserID (ne .UserID $.CurrentUserID)}}
                             <button type="button" class="forum-post-action report-content"
-                                    data-target-type="forum_post" data-target-id="{{.ID}}">
-                                 Report
-                            </button>
+                                    data-target-type="forum_post" data-target-id="{{.ID}}">Report</button>
                             {{end}}
                         </div>
                     </footer>

@@ -234,6 +234,27 @@ func TestForumListPagesRender(t *testing.T) {
 	}
 }
 
+// fail() renders this by NAME, and on the RenderPage contract the name is
+// looked up in the plugin's own set. There was no copy here, so every refusal
+// path -- seven handlers -- would have answered "this page failed to render":
+// the one page whose job is to say what went wrong, saying nothing. Each reason
+// code is executed, because an {{if}} chain that falls through renders the
+// generic arm and looks fine.
+func TestForumErrorPageRendersEveryReason(t *testing.T) {
+	for _, reason := range []string{"loadfailed", "createfailed", "replyfailed", ""} {
+		got := render1(t, "forum_error.html", map[string]any{"Reason": reason})
+		if !strings.Contains(got, `href="/community/forums"`) {
+			t.Errorf("%q: no way back to the forum", reason)
+		}
+	}
+	generic := render1(t, "forum_error.html", map[string]any{"Reason": ""})
+	for _, reason := range []string{"loadfailed", "createfailed", "replyfailed"} {
+		if got := render1(t, "forum_error.html", map[string]any{"Reason": reason}); got == generic {
+			t.Errorf("%q renders the generic message — its arm never matched", reason)
+		}
+	}
+}
+
 func TestNewThreadAndAdminPagesRender(t *testing.T) {
 	nt := render1(t, "community_new_thread.html", map[string]any{
 		"Categories": []*ForumCategory{sampleCategory()}, "SelectedCategory": 1,

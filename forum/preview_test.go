@@ -208,6 +208,7 @@ func previewPages() []previewPage {
 			"Categories": cats, "SelectedCategory": 2,
 			"EditorHTML": template.HTML(`<div id="new-ed" style="border:1px dashed currentColor;padding:.5rem;opacity:.5;">[host editor]</div>`),
 		})},
+		{"forum_error.html", with(map[string]any{"Reason": "loadfailed"})},
 		{"admin_forum_categories.html", with(map[string]any{
 			"Categories": cats, "Colors": categoryColorList, "GateRoles": gateRoleList,
 			"Flash": "", "Err": "",

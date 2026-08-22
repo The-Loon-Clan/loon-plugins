@@ -571,6 +571,15 @@
     font-weight: 700;
 }
 .forum-post-author small { font-size: 0.68rem; color: var(--text-muted, #8b90a0); }
+.forum-post-stats {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0.05rem 0.5rem;
+    margin: 0.35rem 0 0;
+    font-size: 0.68rem;
+}
+.forum-post-stats dt { color: var(--text-muted, #8b90a0); text-align: left; }
+.forum-post-stats dd { margin: 0; text-align: right; font-weight: 600; }
 
 .forum-post-body { display: flex; flex-direction: column; min-width: 0; }
 .forum-post-header {
