@@ -659,7 +659,17 @@
     background: var(--panel-bg, #16171d);
     box-shadow: var(--shadow, 0 6px 20px rgba(0, 0, 0, 0.4));
 }
-.reaction-picker.show { display: flex; }
+/* .open, which is what the script toggles. This said .show for one
+   commit -- Bootstrap habit rather than a reading of the JS six lines
+   below the markup -- and the picker could not be opened at all. */
+.reaction-picker.open { display: flex; }
+/* The viewer's own reactions. Without this, pressing one changed the
+   count and nothing else, so there was no way to see what you had
+   already reacted with. */
+.reaction-btn.mine {
+    border-color: var(--primary, #7c6cf0);
+    background: var(--primary-soft, rgba(124, 108, 240, 0.18));
+}
 
 .post-actions,
 .forum-post-actions { display: flex; align-items: center; gap: 0.15rem; flex-wrap: wrap; }
@@ -725,7 +735,11 @@
     cursor: pointer;
 }
 .reaction-picker button:hover { background: var(--surface-2, rgba(255, 255, 255, 0.08)); }
-.reply-quote-preview {
+/* Hidden until a Quote button reveals it. With no rule it sat open on
+   every page load reading "Replying to :" with an empty name. */
+.reply-quote-preview { display: none; }
+.reply-quote-preview.active {
+    display: block;
     position: relative;
     margin-bottom: 0.6rem;
     padding: 0.5rem 2rem 0.5rem 0.75rem;

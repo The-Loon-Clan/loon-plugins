@@ -27,7 +27,7 @@
                         <span title="{{.Thread.CreatedAt.Format "2006-01-02 15:04:05"}}">{{relativeTime .Thread.CreatedAt}}</span>
                         {{if or (not .IsRecruitment) .CanSeeAllReplies}}
                         <span aria-hidden="true">&middot;</span>
-                        <span>{{.Thread.ReplyCount}} replies</span>
+                        <span>{{.Thread.ReplyCount}} {{if eq .Thread.ReplyCount 1}}reply{{else}}replies{{end}}</span>
                         {{end}}
                     </div>
                 </div>
