@@ -20,7 +20,13 @@ import (
 // Skipped unless COMMUNITIES_PREVIEW_DIR is set.
 //
 //	COMMUNITIES_PREVIEW_CSS=a.css COMMUNITIES_PREVIEW_SPRITE=s.svg \
-//	COMMUNITIES_PREVIEW_DIR=/tmp/p go test ./communities/ -run Preview
+//	COMMUNITIES_PREVIEW_DIR=/tmp/p go test -count=1 ./communities/ -run Preview
+//
+// USE -count=1. These read the host's stylesheets, which live outside the
+// package, so Go's test cache cannot know they changed: a second run after a
+// CSS edit replays the previous log — "wrote ..." and all — without executing,
+// and the dumped pages are silently the old ones. That cost a wrong conclusion
+// once: a grid fix looked like it had not worked when it had.
 func TestWriteCommunitiesPreviews(t *testing.T) {
 	dir := os.Getenv("COMMUNITIES_PREVIEW_DIR")
 	if dir == "" {

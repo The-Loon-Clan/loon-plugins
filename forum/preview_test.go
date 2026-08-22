@@ -21,7 +21,13 @@ import (
 // looking possible. Skipped unless FORUM_PREVIEW_DIR is set, because it writes
 // files and proves nothing on its own.
 //
-//	FORUM_PREVIEW_CSS=a.css,b.css FORUM_PREVIEW_DIR=/tmp/p go test ./forum/ -run Preview
+//	FORUM_PREVIEW_CSS=a.css,b.css FORUM_PREVIEW_DIR=/tmp/p go test -count=1 ./forum/ -run Preview
+//
+// USE -count=1. These read the host's stylesheets, which live outside the
+// package, so Go's test cache cannot know they changed: a second run after a
+// CSS edit replays the previous log — "wrote ..." and all — without executing,
+// and the dumped pages are silently the old ones. That cost a wrong conclusion
+// once: a grid fix looked like it had not worked when it had.
 //
 // The CSS files are INLINED rather than linked: the output lands in a scratch
 // directory far from the stylesheets, and a <link> that 404s renders exactly

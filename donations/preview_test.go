@@ -19,7 +19,13 @@ import (
 // proves nothing on its own.
 //
 //	DONATIONS_PREVIEW_CSS=a.css,b.css DONATIONS_PREVIEW_SPRITE=s.svg \
-//	DONATIONS_PREVIEW_DIR=/tmp/p go test ./donations/ -run Preview
+//	DONATIONS_PREVIEW_DIR=/tmp/p go test -count=1 ./donations/ -run Preview
+//
+// USE -count=1. These read the host's stylesheets, which live outside the
+// package, so Go's test cache cannot know they changed: a second run after a
+// CSS edit replays the previous log — "wrote ..." and all — without executing,
+// and the dumped pages are silently the old ones. That cost a wrong conclusion
+// once: a grid fix looked like it had not worked when it had.
 //
 // CSS is INLINED and the sprite injected rather than linked: the output lands
 // in a scratch directory far from both, and a <link> that 404s renders exactly

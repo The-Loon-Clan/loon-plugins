@@ -75,21 +75,27 @@ MSYS_NO_PATHCONV=1 exec docker run --rm \
   -e INDEXER_TEST_DB_DSN \
   -e REDIS_TEST_ADDR \
   -e CI \
-  `# The forum preview dumper writes each page as a standalone file` \
-  `# so it can be screenshotted. Those five templates render on the` \
-  `# RenderPage contract only, which no host wires yet, so looking` \
-  `# at them is otherwise impossible.` \
+  `# The preview dumpers, one per plugin whose templates no host renders.` \
+  `# Their markup executes nowhere a person can look at it, which is how` \
+  `# 144 undefined class names accumulated in one of them unseen. Listed` \
+  `# by PREFIX because docker run has no wildcard for -e, and three` \
+  `# hand-written trios is where a missing one starts looking like the` \
+  `# test skipping for a good reason.` \
   -e FORUM_PREVIEW_DIR \
   -e FORUM_PREVIEW_CSS \
   -e FORUM_PREVIEW_SPRITE \
-  `# The donations preview dumper, same idea as the forum's.` \
   -e DONATIONS_PREVIEW_DIR \
   -e DONATIONS_PREVIEW_CSS \
   -e DONATIONS_PREVIEW_SPRITE \
-  `# ...and the communities one.` \
   -e COMMUNITIES_PREVIEW_DIR \
   -e COMMUNITIES_PREVIEW_CSS \
   -e COMMUNITIES_PREVIEW_SPRITE \
+  -e LISTS_PREVIEW_DIR \
+  -e LISTS_PREVIEW_CSS \
+  -e LISTS_PREVIEW_SPRITE \
+  -e ROADMAP_PREVIEW_DIR \
+  -e ROADMAP_PREVIEW_CSS \
+  -e ROADMAP_PREVIEW_SPRITE \
   `# --network host so the container can reach the throwaway Postgres that` \
   `# 'make itest' publishes on the host.` \
   --network host \
