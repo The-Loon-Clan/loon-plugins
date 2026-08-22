@@ -5,6 +5,7 @@ import (
 	"io"
 	"mime"
 	"strings"
+	"unicode/utf8"
 )
 
 // RFC 2047 encoded-words in overview subjects.
@@ -49,6 +50,45 @@ func passthroughCharset(charset string, input io.Reader) (io.Reader, error) {
 	return input, nil
 }
 
+// unmojibake reverses a subject whose encoded-word LIED about its charset.
+//
+// The lie is common and Go believes it: =?ISO-8859-1?Q?Espa=C3=B1ol?= carries
+// UTF-8 bytes under a Latin-1 label, and mime.WordDecoder does exactly what it
+// was told -- widen each byte to the code point of the same value. "EspaÃ
+// ±ol" becomes "EspaÃ±ol", and a right single quote (E2 80 99)
+// becomes "a": two C1 CONTROL CHARACTERS, which are forbidden in
+// HTML. 2,008 rows in this demo's index carry them, and every one of them
+// reverses -- see docs/BACKLOG.md item 9 in loon-demo-site.
+//
+// The reversal is the encode run backwards: narrow every rune to one byte,
+// then read those bytes as UTF-8. It applies ONLY when all three hold --
+//
+//	every rune fits in a byte  (it cannot be an honest string with real
+//	                            non-Latin-1 characters)
+//	the bytes are valid UTF-8  (an honest Latin-1 string almost never is:
+//	                            "Español" narrows to a lone 0xF1, invalid)
+//	the result differs         (pure ASCII narrows to itself and is left)
+//
+// -- which leaves an honest =?UTF-8?= subject and an honest =?ISO-8859-1?=
+// subject both untouched, verified by test.
+//
+// The residual false positive is a title that genuinely contains "Ã±"
+// and means it. Such a title is mojibake somebody else made; there is no
+// reading of it that this makes worse.
+func unmojibake(s string) string {
+	b := make([]byte, 0, len(s))
+	for _, r := range s {
+		if r > 0xFF {
+			return s
+		}
+		b = append(b, byte(r))
+	}
+	if !utf8.Valid(b) || string(b) == s {
+		return s
+	}
+	return string(b)
+}
+
 // decodeSubject expands encoded-words, returning the subject unchanged when
 // there are none (the overwhelming majority — this sits on the per-article
 // ingest path) or when decoding fails.
@@ -61,5 +101,7 @@ func decodeSubject(s string) string {
 		// Never trade a parseable raw subject for an empty or half-decoded one.
 		return s
 	}
-	return d
+	// Only what WE decoded. A raw subject arrives as the poster's own bytes and
+	// may be mojibake they made; this reverses the widening this path performs.
+	return unmojibake(d)
 }
