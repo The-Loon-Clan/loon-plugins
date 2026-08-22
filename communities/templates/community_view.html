@@ -42,7 +42,22 @@
         /* Header action buttons — sit over the banner, so give them a
            solid translucent backing + bright text instead of the
            low-contrast outline-on-image they had before. */
-        .c-actions { display:flex; gap:0.45rem; align-items:center; }
+        /* wrap, because these buttons are nowrap by design and there are four
+           of them for a member who can moderate: Joined, New thread, Queue,
+           Settings. On a 390px screen the row pushed the whole PAGE sideways
+           by 189px -- the only member-facing page that did, and it went
+           unseen because a community is not in the sitemap and the mobile
+           check read its page list from there. */
+        .c-actions { display:flex; flex-wrap:wrap; gap:0.45rem; align-items:center; }
+
+        /* Below the phone breakpoint the identity row stacks: an avatar, a
+           title and a four-button toolbar do not share 390px, and ms-auto
+           pushing the toolbar right is what makes it overflow rather than
+           sit under the title. */
+        @media (max-width: 560px) {
+            .c-id-row { flex-wrap: wrap; }
+            .c-actions { margin-left: 0; padding-top: 0.5rem; width: 100%; }
+        }
         .c-actions .c-btn {
             font-size: 0.8rem; font-weight: 600;
             padding: 0.35rem 0.85rem; border-radius: 8px;

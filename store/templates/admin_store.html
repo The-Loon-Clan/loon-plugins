@@ -95,6 +95,7 @@
         <div class="panelV2">
             <div class="panel__body p-0">
                 {{if .Items}}
+                <div class="data-table-wrapper">
                 <table class="data-table mb-0" style="font-size:0.82rem;">
             <caption class="visually-hidden">Store catalogue</caption>
                     <thead>
@@ -195,6 +196,7 @@
                         {{end}}
                     </tbody>
                 </table>
+                </div>
                 {{else}}
                 <div class="p-3" style="color:var(--text-muted);font-size:0.82rem;">No items yet. Create one above.</div>
                 {{end}}
