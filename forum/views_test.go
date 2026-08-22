@@ -240,6 +240,38 @@ func TestForumListPagesRender(t *testing.T) {
 // the one page whose job is to say what went wrong, saying nothing. Each reason
 // code is executed, because an {{if}} chain that falls through renders the
 // generic arm and looks fine.
+// Every count on these pages was a hand-written plural, so a board with one
+// thread said "1 threads" — and a seeded install is nearly all ones. The
+// helper is one line; what needs pinning is that the call sites use it.
+func TestCountsReadCorrectlyAtOne(t *testing.T) {
+	one := sampleCategory()
+	one.ThreadCount, one.PostCount = 1, 1
+	got := render1(t, "community_forums.html", map[string]any{
+		"Categories": []*ForumCategory{one}, "TotalThreads": 1, "TotalPosts": 1,
+		"CurrentUserID": 42, "CSRFToken": "test-csrf",
+	})
+	for _, wrong := range []string{"1</strong> threads", "1</strong> posts",
+		"1</strong> categories", "1 posts", "1 threads"} {
+		if strings.Contains(got, wrong) {
+			t.Errorf("the forum index says %q", wrong)
+		}
+	}
+	for _, want := range []string{"thread<", "post<", "category<"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the singular %q never appears — the helper is not wired here", want)
+		}
+	}
+
+	cat := render1(t, "community_category.html", map[string]any{
+		"Category": one, "Threads": []*ForumThread{sampleThread()},
+		"Total": 1, "Page": 1, "TotalPages": 1,
+		"PaginationHTML": template.HTML(""), "CurrentUserID": 42, "CSRFToken": "test-csrf",
+	})
+	if strings.Contains(cat, "1 threads in this forum") {
+		t.Error("the category footer says \"1 threads in this forum\"")
+	}
+}
+
 func TestForumErrorPageRendersEveryReason(t *testing.T) {
 	for _, reason := range []string{"loadfailed", "createfailed", "replyfailed", ""} {
 		got := render1(t, "forum_error.html", map[string]any{"Reason": reason})

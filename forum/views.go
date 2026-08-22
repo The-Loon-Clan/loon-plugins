@@ -51,6 +51,20 @@ func parseTemplates() {
 			return deps.RepBadge(tier)
 		},
 
+		// The counted nouns. Every one of these was hand-written as a bare
+		// plural, so a board with one thread said "1 threads" -- and a seeded
+		// install is nearly all ones. Returns the NOUN alone: the markup
+		// already sets the number in its own <strong>.
+		"plural": func(n int, one string, many ...string) string {
+			if n == 1 {
+				return one
+			}
+			if len(many) > 0 {
+				return many[0]
+			}
+			return one + "s"
+		},
+
 		"add":      func(a, b int) int { return a + b },
 		"derefStr": derefStr,
 		"deref64": func(p *int64) int64 {

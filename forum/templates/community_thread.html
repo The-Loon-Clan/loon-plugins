@@ -88,7 +88,7 @@
     <div class="forum-post-layout">
         <div class="forum-post-main">
             <div class="forum-post-toolbar">
-                <span>{{.Total}} posts in this conversation</span>
+                <span>{{.Total}} {{plural .Total "post"}} in this conversation</span>
                 <div class="forum-post-pagination">{{.PaginationHTML}}</div>
             </div>
 
@@ -233,7 +233,7 @@
                  short thread on the site with nothing to page to. */}}
             {{if gt .TotalPages 1}}
             <div class="forum-post-toolbar forum-post-toolbar-bottom">
-                <span>{{.Total}} posts in this conversation</span>
+                <span>{{.Total}} {{plural .Total "post"}} in this conversation</span>
                 <div class="forum-post-pagination">{{.PaginationHTML}}</div>
             </div>
             {{end}}

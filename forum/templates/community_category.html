@@ -20,8 +20,8 @@
             </div>
 
             <div class="forum-category-totals" aria-label="Category totals">
-                <span><svg class="icon" aria-hidden="true"><use href="#comment"></use></svg><strong>{{.Category.ThreadCount}}</strong> threads</span>
-                <span><svg class="icon" aria-hidden="true"><use href="#book"></use></svg><strong>{{.Category.PostCount}}</strong> posts</span>
+                <span><svg class="icon" aria-hidden="true"><use href="#comment"></use></svg><strong>{{.Category.ThreadCount}}</strong> {{plural .Category.ThreadCount "thread"}}</span>
+                <span><svg class="icon" aria-hidden="true"><use href="#book"></use></svg><strong>{{.Category.PostCount}}</strong> {{plural .Category.PostCount "post"}}</span>
             </div>
         </div>
 
@@ -102,7 +102,7 @@
 
                         <span class="forum-thread-replies">
                             <strong>{{.ReplyCount}}</strong>
-                            <small>Replies</small>
+                            <small>{{plural .ReplyCount "Reply" "Replies"}}</small>
                         </span>
 
                         <span class="forum-thread-last">
@@ -147,7 +147,7 @@
             {{end}}
 
             <footer class="forum-thread-footer">
-                <span>{{.Total}} threads in this forum</span>
+                <span>{{.Total}} {{plural .Total "thread"}} in this forum</span>
                 <div class="forum-thread-pagination">{{.PaginationHTML}}</div>
             </footer>
             {{else}}

@@ -7,9 +7,9 @@
             <h1 id="forum-title">Forums</h1>
             <p>Join the discussion with the community.</p>
             <div class="forum-hero-totals" aria-label="Forum totals">
-                <span><svg class="icon" aria-hidden="true"><use href="#folder"></use></svg><strong>{{len .Categories}}</strong> categories</span>
-                <span><svg class="icon" aria-hidden="true"><use href="#comment"></use></svg><strong>{{.TotalThreads}}</strong> threads</span>
-                <span><svg class="icon" aria-hidden="true"><use href="#book"></use></svg><strong>{{.TotalPosts}}</strong> posts</span>
+                <span><svg class="icon" aria-hidden="true"><use href="#folder"></use></svg><strong>{{len .Categories}}</strong> {{plural (len .Categories) "category" "categories"}}</span>
+                <span><svg class="icon" aria-hidden="true"><use href="#comment"></use></svg><strong>{{.TotalThreads}}</strong> {{plural .TotalThreads "thread"}}</span>
+                <span><svg class="icon" aria-hidden="true"><use href="#book"></use></svg><strong>{{.TotalPosts}}</strong> {{plural .TotalPosts "post"}}</span>
             </div>
         </div>
         <a href="/community/forums/new" class="btn btn-primary forum-new-thread">
@@ -41,8 +41,8 @@
                         </span>
 
                         <span class="forum-category-counts">
-                            <span><strong>{{.ThreadCount}}</strong> threads</span>
-                            <span><strong>{{.PostCount}}</strong> posts</span>
+                            <span><strong>{{.ThreadCount}}</strong> {{plural .ThreadCount "thread"}}</span>
+                            <span><strong>{{.PostCount}}</strong> {{plural .PostCount "post"}}</span>
                         </span>
 
                         <span class="forum-category-latest">
@@ -151,7 +151,7 @@
                         <span class="forum-avatar-fallback">{{initial $c.Username}}</span>
                         {{end}}
                         <a href="/u/{{$c.Username}}" class="forum-contrib-name role-name role-name-{{or $c.Role "user"}}">{{$c.Username}}</a>
-                        <span class="forum-contrib-badge">{{$c.PostCount}} posts</span>
+                        <span class="forum-contrib-badge">{{$c.PostCount}} {{plural $c.PostCount "post"}}</span>
                     </li>
                     {{end}}
                 </ol>
