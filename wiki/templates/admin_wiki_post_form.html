@@ -40,7 +40,7 @@
     <div class="container mt-4 page-wide">
 
         <div class="d-flex align-items-center gap-3 mb-3">
-            <h6 class="mb-0" style="color:var(--text-muted);">{{.Action}} Post</h6>
+            <h2 class="mb-0" style="color:var(--text-muted);font-size:1rem;">{{.Action}} Post</h2>
             <a href="/admin/wiki" class="button button--outlined button--sm ms-auto">← Back</a>
         </div>
 
@@ -57,14 +57,14 @@
                 {{end}}
 
                     <div class="mb-3">
-                        <label class="form__label" style="font-size:0.85rem;">Title <span class="text-danger">*</span></label>
-                        <input aria-label="Title" type="text" class="form__input" name="title" required maxlength="512"
+                        <label class="form__label" for="post-title" style="font-size:0.85rem;">Title <span class="text-danger">*</span></label>
+                        <input type="text" class="form__input" id="post-title" name="title" required maxlength="512"
                                value="{{if .Post}}{{.Post.Title}}{{end}}">
                     </div>
 
                     <div class="mb-1">
                         <div class="d-flex justify-content-between align-items-center mb-1">
-                            <label class="form__label mb-0" style="font-size:0.85rem;">Content (HTML)</label>
+                            <label class="form__label mb-0" for="content" style="font-size:0.85rem;">Content (HTML)</label>
                             <div style="font-size:0.75rem;color:var(--text-muted);">Editor ↔ Live Preview</div>
                         </div>
 
