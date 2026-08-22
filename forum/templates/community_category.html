@@ -24,7 +24,9 @@
                 </div>
             </div>
 
-            <div class="forum-category-totals" aria-label="Category totals">
+            {{/* role="group": aria-label needs a role that can carry a name, and a
+                 bare div has none. Same shape as the forum index hero. */}}
+            <div class="forum-category-totals" role="group" aria-label="Category totals">
                 <span><svg class="icon" aria-hidden="true"><use href="#comment"></use></svg><strong>{{.Category.ThreadCount}}</strong> {{plural .Category.ThreadCount "thread"}}</span>
                 <span><svg class="icon" aria-hidden="true"><use href="#book"></use></svg><strong>{{.Category.PostCount}}</strong> {{plural .Category.PostCount "post"}}</span>
             </div>
