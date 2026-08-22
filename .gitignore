@@ -19,3 +19,7 @@ go.work.sum
 .vscode/
 *.swp
 .DS_Store
+
+# Python bytecode, from the audit scripts in scripts/.
+__pycache__/
+*.pyc
