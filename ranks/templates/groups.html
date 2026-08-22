@@ -21,40 +21,40 @@
     <form method="POST" action="/admin/p/groups/create" class="row g-2 align-items-end">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
       <div class="col-md-3">
-        <label class="form-label mb-1">Name</label>
-        <input type="text" name="name" class="form-control form-control-sm" required>
+        <label class="form-label mb-1" for="add-name">Name</label>
+        <input type="text" id="add-name" name="name" class="form-control form-control-sm" required>
       </div>
       <div class="col-md-2">
-        <label class="form-label mb-1">Kind</label>
-        <select name="kind" class="form-select form-select-sm">
+        <label class="form-label mb-1" for="add-kind">Kind</label>
+        <select id="add-kind" name="kind" class="form-select form-select-sm">
           <option value="paid">paid</option>
           <option value="earned">earned</option>
           <option value="assigned">assigned</option>
         </select>
       </div>
       <div class="col-md-1">
-        <label class="form-label mb-1">Badge</label>
-        <input type="text" name="color" class="form-control form-control-sm" placeholder="secondary">
+        <label class="form-label mb-1" for="add-color">Badge</label>
+        <input type="text" id="add-color" name="color" class="form-control form-control-sm" placeholder="secondary">
       </div>
       <div class="col-md-1">
-        <label class="form-label mb-1">Title</label>
-        <input type="text" name="title_color" class="form-control form-control-sm" placeholder="#fff">
+        <label class="form-label mb-1" for="add-title-color">Title</label>
+        <input type="text" id="add-title-color" name="title_color" class="form-control form-control-sm" placeholder="#fff">
       </div>
       <div class="col-md-1">
-        <label class="form-label mb-1">DL/day</label>
-        <input type="number" name="download_limit" class="form-control form-control-sm" min="0">
+        <label class="form-label mb-1" for="add-download-limit">DL/day</label>
+        <input type="number" id="add-download-limit" name="download_limit" class="form-control form-control-sm" min="0">
       </div>
       <div class="col-md-1">
-        <label class="form-label mb-1">API/day</label>
-        <input type="number" name="api_limit" class="form-control form-control-sm" min="0">
+        <label class="form-label mb-1" for="add-api-limit">API/day</label>
+        <input type="number" id="add-api-limit" name="api_limit" class="form-control form-control-sm" min="0">
       </div>
       <div class="col-md-1">
-        <label class="form-label mb-1">Days</label>
-        <input type="number" name="duration_days" class="form-control form-control-sm" min="1" placeholder="30">
+        <label class="form-label mb-1" for="add-duration-days">Days</label>
+        <input type="number" id="add-duration-days" name="duration_days" class="form-control form-control-sm" min="1" placeholder="30">
       </div>
       <div class="col-md-1">
-        <label class="form-label mb-1">Sort</label>
-        <input type="number" name="sort_order" class="form-control form-control-sm">
+        <label class="form-label mb-1" for="add-sort-order">Sort</label>
+        <input type="number" id="add-sort-order" name="sort_order" class="form-control form-control-sm">
       </div>
       <div class="col-md-1">
         <button class="btn btn-sm btn-primary w-100">Add</button>
@@ -65,6 +65,7 @@
 
 <div class="table-responsive">
   <table class="table table-sm align-middle">
+    <caption class="visually-hidden">Every rank group, with its kind, parent, entitlements and cost — each row is an edit form</caption>
     <thead>
       <tr>
         <th>Group</th><th>Kind</th><th>Parent</th><th>Entitlements</th>
@@ -84,19 +85,19 @@
                 {{if .Visible}}<span class="badge bg-{{.Color}} ms-1">{{.Name}}</span>
                 {{else}}<span class="badge bg-dark ms-1" title="Grants entitlements, shows no badge">hidden</span>{{end}}
               </label>
-              <input type="text" name="name" value="{{.Name}}" class="form-control form-control-sm">
+              <input aria-label="Name for {{.Name}}" type="text" name="name" value="{{.Name}}" class="form-control form-control-sm">
               <div class="form-text" style="font-size:0.68rem;">{{.Slug}}{{if gt .Depth 0}} · depth {{.Depth}}{{end}}</div>
             </div>
             <div class="col-md-1">
               <label class="form-label mb-1" style="font-size:0.72rem;">Kind</label>
-              <select name="kind" class="form-select form-select-sm">
+              <select aria-label="Kind for {{.Name}}" name="kind" class="form-select form-select-sm">
                 {{$k := .Kind}}
                 {{range $.Kinds}}<option value="{{.}}"{{if eq . $k}} selected{{end}}>{{.}}</option>{{end}}
               </select>
             </div>
             <div class="col-md-2">
               <label class="form-label mb-1" style="font-size:0.72rem;">Parent</label>
-              <select name="parent_id" class="form-select form-select-sm">
+              <select aria-label="Parent group for {{.Name}}" name="parent_id" class="form-select form-select-sm">
                 <option value="">— none —</option>
                 {{$pid := .ParentIDValue}}{{$self := .ID}}
                 {{range $.Groups}}{{if ne .ID $self}}
@@ -106,27 +107,27 @@
             </div>
             <div class="col-md-1">
               <label class="form-label mb-1" style="font-size:0.72rem;">Badge</label>
-              <input type="text" name="color" value="{{.Color}}" class="form-control form-control-sm">
+              <input aria-label="Badge colour for {{.Name}}" type="text" name="color" value="{{.Color}}" class="form-control form-control-sm">
             </div>
             <div class="col-md-1">
               <label class="form-label mb-1" style="font-size:0.72rem;">Title</label>
-              <input type="text" name="title_color" value="{{.TitleColor}}" class="form-control form-control-sm">
+              <input aria-label="Title colour for {{.Name}}" type="text" name="title_color" value="{{.TitleColor}}" class="form-control form-control-sm">
             </div>
             <div class="col-md-1">
               <label class="form-label mb-1" style="font-size:0.72rem;">DL/day</label>
-              <input type="number" name="download_limit" value="{{.DownloadDaily}}" class="form-control form-control-sm" min="0">
+              <input aria-label="Downloads per day for {{.Name}}" type="number" name="download_limit" value="{{.DownloadDaily}}" class="form-control form-control-sm" min="0">
             </div>
             <div class="col-md-1">
               <label class="form-label mb-1" style="font-size:0.72rem;">API/day</label>
-              <input type="number" name="api_limit" value="{{.APIDaily}}" class="form-control form-control-sm" min="0">
+              <input aria-label="API calls per day for {{.Name}}" type="number" name="api_limit" value="{{.APIDaily}}" class="form-control form-control-sm" min="0">
             </div>
             <div class="col-md-1">
               <label class="form-label mb-1" style="font-size:0.72rem;">Days</label>
-              <input type="number" name="duration_days" value="{{.DurationDays}}" class="form-control form-control-sm" min="1">
+              <input aria-label="Duration in days for {{.Name}}" type="number" name="duration_days" value="{{.DurationDays}}" class="form-control form-control-sm" min="1">
             </div>
             <div class="col-md-1">
               <label class="form-label mb-1" style="font-size:0.72rem;">Sort</label>
-              <input type="number" name="sort_order" value="{{.SortOrder}}" class="form-control form-control-sm">
+              <input aria-label="Sort order for {{.Name}}" type="number" name="sort_order" value="{{.SortOrder}}" class="form-control form-control-sm">
             </div>
             {{/* The cost is round-tripped hidden: the store owns the price, but
                  dropping the field would Atoi("") to 0 and wipe what the tier
