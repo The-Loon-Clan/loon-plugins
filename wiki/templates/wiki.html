@@ -463,7 +463,10 @@
             </header>
             <div class="panel__body panel__body--flush">
         <div class="wiki-pop-panel">
-            <ul class="pop-list">
+            {{/* A div: the children are <a class="pop-item">, not list items,
+                 and .pop-list is list-style:none on a flex column — so the ul
+                 was carrying no list semantics and one W3C error. */}}
+            <div class="pop-list">
                 {{range .PopularPosts}}
                 <a class="pop-item" href="/wiki/{{.TopicSlug}}/{{.Slug}}">
                     <span class="pop-ico">
@@ -476,7 +479,7 @@
                     <span class="pop-views">&#128065; {{.ViewCount}} view{{if ne .ViewCount 1}}s{{end}}</span>
                 </a>
                 {{end}}
-            </ul>
+            </div>
         </div>
             </div>
         </section>

@@ -25,7 +25,12 @@
      host's copy points at /forums -- a path no route and no redirect defines,
      so the only way off that page was the back button. Nothing caught it: the
      link crawler never reaches a page that renders only on failure. */}}
-<main class="container page-wide forum-index">
+{{/* A div, not a main element: this template is a FRAGMENT now, and
+     the host's chrome supplies the page's one main landmark. Carrying
+     another put one inside another inside an article, which the W3C
+     rejects three times over and which leaves a screen reader two
+     page-level landmarks to choose between. */}}
+<div class="container page-wide forum-index">
     <section class="forum-panel">
         <div class="forum-thread-empty">
             <span class="forum-category-hero-icon forum-cat-icon-orange">
@@ -45,5 +50,5 @@
             <a class="btn btn-sm btn-outline-primary" href="/community/forums">Back to the forums</a>
         </div>
     </section>
-</main>
+</div>
 {{end}}

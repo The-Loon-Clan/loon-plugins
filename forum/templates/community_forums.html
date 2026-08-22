@@ -1,12 +1,20 @@
 {{define "community_forums.html"}}
 {{template "forum_styles.html" .}}
-<main class="container page-wide forum-index">
+{{/* A div, not a main element: this template is a FRAGMENT now, and
+     the host's chrome supplies the page's one main landmark. Carrying
+     another put one inside another inside an article, which the W3C
+     rejects three times over and which leaves a screen reader two
+     page-level landmarks to choose between. */}}
+<div class="container page-wide forum-index">
     <section class="forum-hero" aria-labelledby="forum-title">
         <div class="forum-hero-copy">
             <div class="forum-hero-eyebrow">Community</div>
             <h1 id="forum-title">Forums</h1>
             <p>Join the discussion with the community.</p>
-            <div class="forum-hero-totals" aria-label="Forum totals">
+            {{/* role="group" because aria-label needs a role that can carry a name;
+                 a bare div has none, and the W3C says so. A group is what this
+                 is: three related counts read together. */}}
+            <div class="forum-hero-totals" role="group" aria-label="Forum totals">
                 <span><svg class="icon" aria-hidden="true"><use href="#folder"></use></svg><strong>{{len .Categories}}</strong> {{plural (len .Categories) "category" "categories"}}</span>
                 <span><svg class="icon" aria-hidden="true"><use href="#comment"></use></svg><strong>{{.TotalThreads}}</strong> {{plural .TotalThreads "thread"}}</span>
                 <span><svg class="icon" aria-hidden="true"><use href="#book"></use></svg><strong>{{.TotalPosts}}</strong> {{plural .TotalPosts "post"}}</span>
@@ -97,7 +105,13 @@
                                 </span>
                             </span>
 
-                            <span class="forum-recent-category" aria-label="Forum category" title="Forum category">
+                            {{/* role="img" for the same reason: a bare span cannot carry an
+                                 aria-label. The name stays generic because it has to —
+                                 this row carries CategoryColor and no category NAME, so
+                                 the icon says "there is a category" and its colour says
+                                 which, which is not information a screen reader can
+                                 reach. Naming the category properly needs the field. */}}
+                            <span class="forum-recent-category" role="img" aria-label="Forum category" title="Forum category">
                                 <span class="forum-cat-icon forum-cat-icon-{{or .CategoryColor "blue"}}">
                                     <svg class="icon" aria-hidden="true"><use href="#forums"></use></svg>
                                 </span>
@@ -182,5 +196,5 @@
             </section>
         </aside>
     </div>
-</main>
+</div>
 {{end}}

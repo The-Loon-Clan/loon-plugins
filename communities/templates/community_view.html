@@ -220,7 +220,10 @@
         <div class="c-shell">
             <div>
                 {{if .Threads}}
-                <ul class="c-thread-list">
+                {{/* A div, for the same reason as wiki's pop-list: the children
+                     are <div class="c-thread">, and .c-thread-list is
+                     list-style:none on a flex column. */}}
+                <div class="c-thread-list">
                     {{range .Threads}}
                     <div class="c-thread">
                         <span class="t-avatar">
@@ -243,7 +246,7 @@
                         </div>
                     </div>
                     {{end}}
-                </ul>
+                </div>
                 {{.Pagination}}
                 {{else}}
                 <div style="text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:0.9rem;">

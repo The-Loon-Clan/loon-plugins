@@ -1,6 +1,11 @@
 {{define "community_thread.html"}}
 {{template "forum_styles.html" .}}
-<main class="container page-wide forum-thread-page">
+{{/* A div, not a main element: this template is a FRAGMENT now, and
+     the host's chrome supplies the page's one main landmark. Carrying
+     another put one inside another inside an article, which the W3C
+     rejects three times over and which leaves a screen reader two
+     page-level landmarks to choose between. */}}
+<div class="container page-wide forum-thread-page">
     <section class="forum-thread-hero" aria-labelledby="forum-thread-title">
         <div class="forum-thread-hero-copy">
             <nav class="forum-thread-breadcrumb" aria-label="Breadcrumb">
@@ -263,7 +268,7 @@
         </div>
 
     </div>
-</main>
+</div>
 
 <script>
 function startEdit(id){
