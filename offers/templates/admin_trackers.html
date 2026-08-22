@@ -53,8 +53,9 @@
                             <td>{{.AccessCount}}</td>
                             <td>{{.OfferCount}}</td>
                             <td style="text-align:right;white-space:nowrap;">
-                                <button class="button button--outlined button--sm px-2" style="font-size:0.7rem;"
-                                        data-bs-toggle="collapse" data-bs-target="#tr-edit-{{.ID}}">Edit</button>
+                                {{/* The Edit control is the <summary> in the row
+                                     below: a data-bs-toggle button here did nothing,
+                                     because this host ships no Bootstrap JS. */}}
                                 {{if ne .ShortName "personal"}}
                                 <form method="POST" action="/admin/trackers/{{.ID}}/delete" class="d-inline"
                                       onsubmit="return confirm('Delete this tracker? Existing offers against it stay but become orphaned.');">
@@ -64,9 +65,14 @@
                                 {{end}}
                             </td>
                         </tr>
-                        <tr id="tr-edit-{{.ID}}" class="collapse">
+                        <tr id="tr-edit-{{.ID}}">
                             <td colspan="7" style="background:var(--bg-elevated);">
+                                {{/* <details>, the shape rewards_admin.html uses: a <tr> cannot be
+                                     wrapped in one, but the cell can hold it. */}}
+                                <details>
+                                <summary class="text-muted small" style="cursor:pointer;">Edit this tracker</summary>
                                 {{template "admin_tracker_form" (dict "Tracker" . "CSRFToken" $.CSRFToken)}}
+                                </details>
                             </td>
                         </tr>
                         {{else}}

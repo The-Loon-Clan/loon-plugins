@@ -156,6 +156,31 @@
             background: var(--bg-base); border: 1px solid var(--border);
             border-radius: 3px; padding: 0 4px; font-size: 0.72rem;
         }
+
+    /* The two <dialog>s. These replace .modal/.modal-dialog/.modal-lg/.modal-xl,
+       none of which any stylesheet this site serves defines -- so neither dialog
+       has ever had a width, a backdrop or a border of its own. */
+    dialog.dlg {
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+        max-height: 85vh;
+        overflow: hidden;
+    }
+    dialog.dlg::backdrop { background: rgba(0, 0, 0, 0.6); }
+    dialog.dlg--lg { width: min(800px, 92vw); }
+    dialog.dlg--xl { width: min(1140px, 92vw); }
+    .dlg__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid var(--border);
+    }
+    .dlg__body { padding: 0.75rem 1rem; overflow-y: auto; max-height: 70vh; }
     </style>
 
     <div class="flow-shell">
@@ -197,41 +222,37 @@
                  every revision in flow_node_revisions for that node,
                  with per-row "Show before" buttons that diff the
                  snapshot's label/description/HTML against the live
-                 row. Bootstrap modal-lg keeps it readable on a tall
-                 list without dominating the screen. */}}
-            <div class="modal fade" id="history-modal" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-                    <div class="modal-content" style="background:var(--bg-elevated);">
-                        <div class="modal-header py-2">
-                            <h6 class="modal-title" id="history-modal-title" style="font-size:0.9rem;">History</h6>
-                            <button type="button" class="button button--text button--sm" data-bs-dismiss="modal" aria-label="Close" style="filter:invert(0.7);"></button>
-                        </div>
-                        <div class="modal-body" id="history-modal-body" style="font-size:0.85rem;">
-                            <div style="color:var(--text-muted);">Loading…</div>
-                        </div>
-                    </div>
+                 row. Sized wide in .dlg below so it stays readable
+                 on a tall list without dominating the screen. */}}
+            <dialog id="history-modal" class="dlg dlg--lg" aria-labelledby="history-modal-title">
+                <div class="dlg__header">
+                    <h6 id="history-modal-title" style="font-size:0.9rem;margin:0;">History</h6>
+                    <button type="button" class="button button--text button--sm" aria-label="Close"
+                            onclick="this.closest('dialog').close()">✕</button>
                 </div>
-            </div>
+                <div class="dlg__body" id="history-modal-body" style="font-size:0.85rem;">
+                    <div style="color:var(--text-muted);">Loading…</div>
+                </div>
+            </dialog>
 
-            {{/* Full-size mockup modal. Bootstrap is already loaded
-                 (see footer script tag). The iframe inside gets srcdoc
-                 set to the current mockup's HTML when the user clicks
-                 "Open full-size" in the inspector — same sandbox=""
-                 boundary as the canvas overlay, just at natural size
-                 so reviewers can see the actual layout. */}}
-            <div class="modal fade" id="mockup-fullsize-modal" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog modal-xl modal-dialog-centered">
-                    <div class="modal-content" style="background:var(--bg-elevated);">
-                        <div class="modal-header py-2">
-                            <h6 class="modal-title" id="mockup-fullsize-title" style="font-size:0.9rem;">Mockup preview</h6>
-                            <button type="button" class="button button--text button--sm" data-bs-dismiss="modal" aria-label="Close" style="filter:invert(0.7);"></button>
-                        </div>
-                        <div class="modal-body p-0" style="background:#fff;">
-                            <iframe id="mockup-fullsize-frame" sandbox="" style="width:100%;height:75vh;border:0;background:#fff;"></iframe>
-                        </div>
-                    </div>
+            {{/* Full-size mockup dialog. NOT a Bootstrap modal: no
+                 Bootstrap JS is loaded on this site (site_chrome.html
+                 defines window.bootstrap.Tab and nothing else), so the
+                 old markup never overlaid anything. The iframe gets
+                 srcdoc set to the current mockup's HTML when the user
+                 clicks "Open full-size" in the inspector — same
+                 sandbox="" boundary as the canvas overlay, just at
+                 natural size so reviewers can see the actual layout. */}}
+            <dialog id="mockup-fullsize-modal" class="dlg dlg--xl" aria-labelledby="mockup-fullsize-title">
+                <div class="dlg__header">
+                    <h6 id="mockup-fullsize-title" style="font-size:0.9rem;margin:0;">Mockup preview</h6>
+                    <button type="button" class="button button--text button--sm" aria-label="Close"
+                            onclick="this.closest('dialog').close()">✕</button>
                 </div>
-            </div>
+                <div style="background:#fff;">
+                    <iframe id="mockup-fullsize-frame" title="Mockup preview" sandbox="" style="width:100%;height:75vh;border:0;background:#fff;display:block;"></iframe>
+                </div>
+            </dialog>
 
             <aside class="flow-inspector" id="inspector">
                 <div class="flow-inspector-header">
@@ -903,10 +924,10 @@
             const modalEl = document.getElementById('history-modal');
             const titleEl = document.getElementById('history-modal-title');
             const bodyEl  = document.getElementById('history-modal-body');
-            if (!modalEl || !window.bootstrap) return;
+            if (!modalEl) return;
             titleEl.textContent = 'History — ' + (currentData.label || ('#' + nodeID));
             bodyEl.innerHTML = '<div style="color:var(--text-muted);">Loading…</div>';
-            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            modalEl.showModal();
             try {
                 const r = await fetch('/flow/node/' + nodeID + '/history', { credentials: 'same-origin' });
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -1387,8 +1408,8 @@
                     $mp.srcdoc = $mh.value;
                     $mh.addEventListener('input', () => { $mp.srcdoc = $mh.value; });
                 }
-                // Full-size modal: opens a bootstrap dialog at modal-xl
-                // (~85% viewport width) with the live HTML — useful
+                // Full-size preview: opens the <dialog> at .dlg--xl
+                // (~1140px, capped at 92vw) with the live HTML — useful
                 // when the 240×160 canvas tile + the 160px inspector
                 // pane are too small to evaluate the actual layout.
                 const $full = document.getElementById('btn-mockup-fullsize');
@@ -1398,9 +1419,7 @@
                     if ($frame) $frame.srcdoc = ($mh ? $mh.value : data.mockup_html || '');
                     if ($title) $title.textContent = 'Mockup preview — ' + (data.label || ('#' + selectedID));
                     const modalEl = document.getElementById('mockup-fullsize-modal');
-                    if (modalEl && window.bootstrap) {
-                        bootstrap.Modal.getOrCreateInstance(modalEl).show();
-                    }
+                    if (modalEl) modalEl.showModal();
                 });
             }
             // Lazy-load thread on first inspector open (cached locally).

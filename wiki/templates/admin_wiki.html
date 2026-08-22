@@ -4,13 +4,15 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h2 class="h6 mb-0" style="color:var(--text-muted);">Wiki Groups &amp; Posts</h2>
-            <button class="button button--primary button--sm" data-bs-toggle="collapse" data-bs-target="#new-group-form">
-                + New Group
-            </button>
         </div>
 
         {{/* ── New Group form ── */}}
-        <div class="collapse mb-4" id="new-group-form">
+        {{/* <details>, not data-bs-toggle="collapse" (CHECKLIST §8). This host
+             ships no Bootstrap JS or CSS, so .collapse styled nothing and the
+             toggle bound to nothing: the form was permanently open and the
+             button inert. */}}
+        <details class="mb-4" id="new-group-form">
+            <summary class="button button--primary button--sm" style="display:inline-block;margin-bottom:.6rem;">+ New Group</summary>
             <div class="panelV2">
                 <div class="panel__header" style="font-size:0.85rem;color:var(--text-muted);">New Group</div>
                 <div class="panel__body">
@@ -34,7 +36,7 @@
                     </form>
                 </div>
             </div>
-        </div>
+        </details>
 
         {{/* ── Groups list ── */}}
         {{if .Topics}}

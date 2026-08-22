@@ -35,8 +35,9 @@
                                 <div style="font-size:0.75rem;color:var(--text-muted);">{{.Description}}</div>
                             </td>
                             <td style="text-align:right;white-space:nowrap;">
-                                <button class="button button--outlined button--sm px-2" style="font-size:0.7rem;"
-                                        data-bs-toggle="collapse" data-bs-target="#cl-edit-{{.ID}}">Edit</button>
+                                {{/* The Edit control is the <summary> in the row
+                                     below: a data-bs-toggle button here did nothing,
+                                     because this host ships no Bootstrap JS. */}}
                                 <form method="POST" action="/admin/changelog/{{.ID}}/delete" class="d-inline"
                                       onsubmit="return confirm('Delete this changelog entry?');">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
@@ -44,9 +45,14 @@
                                 </form>
                             </td>
                         </tr>
-                        <tr id="cl-edit-{{.ID}}" class="collapse">
+                        <tr id="cl-edit-{{.ID}}">
                             <td colspan="4" style="background:var(--bg-elevated);">
+                                {{/* <details>, the shape rewards_admin.html uses: a <tr> cannot be
+                                     wrapped in one, but the cell can hold it. */}}
+                                <details>
+                                <summary class="text-muted small" style="cursor:pointer;">Edit this entry</summary>
                                 {{template "admin_changelog_form" (dict "Entry" . "CSRFToken" $.CSRFToken "FlowNodes" $.FlowNodes)}}
+                                </details>
                             </td>
                         </tr>
                         {{end}}

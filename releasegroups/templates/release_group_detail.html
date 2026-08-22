@@ -174,11 +174,14 @@
                 </form>
                 {{end}}
                 {{if and .User (not .ViewerIsOwner) (not .ViewerClaim)}}
-                <button class="button button--outlined button--sm" data-bs-toggle="modal" data-bs-target="#claimGroupModal">Claim ownership</button>
+                {{/* The control is the <summary> on the claim panel below. */}}
+                <a class="button button--outlined button--sm" href="#claim-ownership">Claim ownership</a>
                 {{end}}
                 <a href="/release-groups/{{.Group.Slug}}/suggest" class="button button--outlined button--sm">Suggest Edit</a>
                 {{if .IsAdmin}}
-                <button class="button button--outlined button--sm" data-bs-toggle="modal" data-bs-target="#editGroupModal">Edit</button>
+                {{/* The control is the <summary> on the edit panel at the foot
+                     of the page; this jumps to it. */}}
+                <a class="button button--outlined button--sm" href="#edit-group">Edit</a>
                 {{end}}
             </div>
         </div>
@@ -306,16 +309,15 @@
              page. ClaimBacklink is built handler-side from
              h.baseURL + slug + ?owner=<session-user-id>. */}}
         {{if and .User (not .ViewerIsOwner) (not .ViewerClaim)}}
-        <div class="modal fade" id="claimGroupModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <form method="POST" action="/release-groups/{{.Group.Slug}}/claim">
-                        <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                        <div class="modal-header">
-                            <h5 class="modal-title" style="font-size:1rem;">Claim ownership of {{.Group.Name}}</h5>
-                            <button type="button" class="button button--text button--sm" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body" style="font-size:0.85rem;">
+        {{/* <details>, not a modal (CHECKLIST 8): every .modal-* class was
+             undefined and no Bootstrap JS is loaded, so this block always sat
+             open here and its Cancel button cancelled nothing. */}}
+        <details id="claim-ownership" class="mb-3">
+            <summary class="button button--outlined button--sm" style="display:inline-block;margin-bottom:.6rem;">Claim ownership of {{.Group.Name}}</summary>
+            <div class="panelV2">
+                <form method="POST" action="/release-groups/{{.Group.Slug}}/claim">
+                    <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                    <div style="font-size:0.85rem;">
                             <p style="color:var(--text-muted);">
                                 On the next step we'll generate a one-time verification token and give you a small HTML snippet to paste into your group's description. We scrape the URL you nominate, find the token, and auto-approve the claim.
                             </p>
@@ -339,14 +341,10 @@
                                     placeholder="I run @ToonsHub. We'll put the snippet in our pinned bio."></textarea>
                             </div>
                         </div>
-                        <div class="modal-footer">
-                            <button type="button" class="button button--outlined button--sm" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="button button--primary button--sm">Continue</button>
-                        </div>
-                    </form>
-                </div>
+                    <button type="submit" class="button button--primary button--sm">Continue</button>
+                </form>
             </div>
-        </div>
+        </details>
         {{end}}
 
         {{/* News flash banner. Strings come from release_group_handler.go's
@@ -582,19 +580,20 @@
                                         <div class="panel__actions" role="group">
                                             <a href="{{$primaryURL}}" target="_blank" rel="noopener" class="button button--outlined button--sm px-2" style="font-size:0.7rem;">{{$primaryLabel}}</a>
                                             {{if $canManage}}
-                                            <button type="button" class="button button--outlined button--sm dropdown-toggle dropdown-toggle-split px-1" data-bs-toggle="dropdown" aria-expanded="false" style="font-size:0.7rem;">
-                                                <span class="visually-hidden">Curate</span>
-                                            </button>
-                                            <ul class="dropdown-menu dropdown-menu-end" style="font-size:0.78rem;">
-                                                <li>
+                                            {{/* <details>, not data-bs-toggle="dropdown": .dropdown-menu
+                                                 is undefined here, so the menu was permanently
+                                                 open under the button and the toggle was inert. */}}
+                                            <details style="display:inline-block;">
+                                                <summary class="button button--outlined button--sm px-2" style="font-size:0.7rem;display:inline-block;">Curate</summary>
+                                                <div style="font-size:0.78rem;">
                                                     <form method="POST" action="/release-groups/{{$.Group.Slug}}/archive/torrents/{{.NekobtTorrentID}}/hide" class="px-2 py-1"
                                                           onsubmit="return confirm('Hide this torrent from your group&apos;s archive? You can unhide later via psql.');">
                                                         <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                                         <input type="text" name="reason" placeholder="Reason (optional)" class="form__input mb-1" style="font-size:0.72rem;" maxlength="256">
                                                         <button type="submit" class="button button--outlined button--danger button--sm w-100" style="font-size:0.72rem;">Hide from archive</button>
                                                     </form>
-                                                </li>
-                                            </ul>
+                                                </div>
+                                            </details>
                                             {{end}}
                                         </div>
                                     </td>
@@ -688,7 +687,7 @@
                         This group has no nekoBT presence — releases will only appear on the NZBs tab.
                         {{if .IsAdmin}}
                         <div class="mt-2" style="font-size:0.78rem;">
-                            (If that's wrong, an admin can paste a nekoBT ID from the Edit modal to override.)
+                            (If that's wrong, an admin can paste a nekoBT ID from the Edit panel to override.)
                         </div>
                         {{end}}
                     {{else if eq .Group.NekobtStatus "linked"}}
@@ -697,7 +696,7 @@
                         We haven't connected this group to nekoBT yet, so there's no archive to show.
                         {{if .IsAdmin}}
                         <div class="mt-3">
-                            <button type="button" class="button button--primary button--sm" data-bs-toggle="modal" data-bs-target="#editGroupModal">Link to nekoBT</button>
+                            <a class="button button--primary button--sm" href="#edit-group">Link to nekoBT</a>
                             <div style="font-size:0.74rem;margin-top:0.4rem;">
                                 Paste the group's nekoBT ID (the numeric part of <code style="font-size:0.72rem;">nekobt.to/groups/<strong>11101956255038</strong></code>).
                             </div>
@@ -713,27 +712,24 @@
     </div>
 
     {{if .IsAdmin}}
-    <div class="modal fade" id="editGroupModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form method="POST" action="/admin/release-groups/{{.Group.ID}}/edit">
-                    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                    <div class="modal-header">
-                        <h6 class="modal-title">Edit {{.Group.Name}}</h6>
-                        <button type="button" class="button button--text button--sm" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
+    {{/* <details>, not a modal -- see the claim panel above. */}}
+    <details id="edit-group" class="container mb-4">
+        <summary class="button button--outlined button--sm" style="display:inline-block;margin-bottom:.6rem;">Edit {{.Group.Name}}</summary>
+        <div class="panelV2">
+            <form method="POST" action="/admin/release-groups/{{.Group.ID}}/edit">
+                <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                <div>
                         <div class="mb-2"><label class="form__label small">Name *</label><input class="form__input" name="name" id="edit-name" value="{{.Group.Name}}" required></div>
                         <div class="mb-2"><label class="form__label small">Website URL</label><input aria-label="Website URL" class="form__input" name="website_url" type="url" value="{{.Group.WebsiteURL}}"></div>
                         <div class="mb-2">
                             <label class="form__label small">Logo URL</label>
-                            <div class="input-group input-group-sm">
+                            <div class="d-flex gap-2">
                                 <input class="form__input" name="logo_url" id="edit-logo-url" type="text" value="{{.Group.LogoURL}}" placeholder="Paste a URL then click Scrape">
                                 <button type="button" class="button button--outlined" onclick="scrapeLogoFromEditModal()">Scrape</button>
                             </div>
                             <div id="edit-logo-status" class="form-text" style="font-size:0.72rem;"></div>
                         </div>
-                        <div class="mb-2"><label class="form__label small">Description</label><textarea aria-label="Logo URL Scrape Description" class="form__input" name="description" rows="4">{{.Group.Description}}</textarea></div>
+                        <div class="mb-2"><label class="form__label small" for="edit-description">Description</label><textarea class="form__input" name="description" id="edit-description" rows="4">{{.Group.Description}}</textarea></div>
                         <div class="mb-2">
                             <label class="form__label small">nekoBT group ID</label>
                             <input aria-label="nekoBT group ID" class="form__input" name="nekobt_group_id" type="text" value="{{.Group.NekobtGroupID}}" placeholder="e.g. 11101956255038">
@@ -761,17 +757,13 @@
                         </fieldset>
                         <div style="font-size:0.72rem;color:var(--text-muted);">Saving will mark this group as confirmed. Verification falls back to the Website URL above when nekoBT isn't set.</div>
                     </div>
-                    <div class="modal-footer d-flex justify-content-between">
-                        <button type="button" class="button button--outlined button--danger button--sm" onclick="if(confirm('Delete this group?')) deleteGroup({{.Group.ID}})">Delete</button>
-                        <div>
-                            <button type="button" class="button button--outlined button--sm" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="button button--primary button--sm">Save</button>
-                        </div>
-                    </div>
-                </form>
-            </div>
+                <div class="d-flex justify-content-between mt-3">
+                    <button type="button" class="button button--outlined button--danger button--sm" onclick="if(confirm('Delete this group?')) deleteGroup({{.Group.ID}})">Delete</button>
+                    <button type="submit" class="button button--primary button--sm">Save</button>
+                </div>
+            </form>
         </div>
-    </div>
+    </details>
     <script>
     // Follow / unfollow button in-place toggle. Submits via fetch
     // (Accept: application/json) so the server returns the new state
