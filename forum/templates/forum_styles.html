@@ -517,6 +517,15 @@
     border-radius: var(--panel-border-radius, var(--radius, 8px));
     overflow: hidden;
 }
+/* --surface-2, not --bg-sunken. These three regions — the author column, a
+   quoted block and the reply preview — all sit INSIDE a panel, and --surface-2
+   is the token for that: midnight documents it as "raised inside a panel:
+   thead, chips, inputs". --bg-sunken is the page's deepest recess, for the
+   footer and table gutters, and using it here drops two steps below the panel
+   rather than one. In midnight that is #070a11 against a #111826 panel, which
+   does not read as recessed; it reads as a black hole where the poster's card
+   should be. Reported from a screenshot, and it was wrong in every theme —
+   cosmic-void and nord were simply dark enough to hide it. */
 .forum-post-author {
     display: flex;
     flex-direction: column;
@@ -524,7 +533,7 @@
     gap: 0.3rem;
     padding: 0.9rem 0.6rem;
     border-right: 1px solid var(--border, #2a2c36);
-    background: var(--bg-sunken, rgba(0, 0, 0, 0.15));
+    background: var(--surface-2, rgba(0, 0, 0, 0.15));
     text-align: center;
 }
 .forum-post-author-avatar { display: inline-flex; }
@@ -606,7 +615,7 @@
     padding: 0.5rem 0.75rem;
     border-left: 3px solid var(--border-strong, #3a3d4a);
     border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
-    background: var(--bg-sunken, rgba(0, 0, 0, 0.15));
+    background: var(--surface-2, rgba(0, 0, 0, 0.15));
     font-size: 0.82rem;
 }
 .post-quote.deleted { opacity: 0.6; font-style: italic; }
@@ -744,7 +753,7 @@
     margin-bottom: 0.6rem;
     padding: 0.5rem 2rem 0.5rem 0.75rem;
     border-left: 3px solid var(--border-strong, #3a3d4a);
-    background: var(--bg-sunken, rgba(0, 0, 0, 0.15));
+    background: var(--surface-2, rgba(0, 0, 0, 0.15));
     font-size: 0.8rem;
 }
 .reply-quote-preview .clear {
