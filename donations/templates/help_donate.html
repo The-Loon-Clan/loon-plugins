@@ -35,7 +35,11 @@
         .donate-hero p { color: rgba(255,255,255,0.78); font-size: 0.92rem; line-height: 1.5; max-width: 460px; margin-bottom: 1.25rem; }
         .donate-hero-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .donate-hero-actions .btn { font-size: 0.85rem; padding: 0.45rem 1rem; }
-        .donate-hero .btn-primary { background: #5b8af5; border: 0; }
+        /* The host's token, not a hardcoded blue. #5b8af5 was 3.28:1 under
+           white — below AA for the label on it — and being a literal it did
+           not follow the theme either, so the one button on this page was
+           the same colour in all three. */
+        .donate-hero .btn-primary { background: var(--primary-strong, #1877cc); border: 0; }
         .donate-hero .btn-primary:hover { background: #6f9bff; }
         .donate-hero .btn-outline { background: transparent; border: 1px solid rgba(255,255,255,0.25); color: #fff; }
         .donate-hero .btn-outline:hover { background: rgba(255,255,255,0.1); }
