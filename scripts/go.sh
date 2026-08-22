@@ -82,6 +82,10 @@ MSYS_NO_PATHCONV=1 exec docker run --rm \
   -e FORUM_PREVIEW_DIR \
   -e FORUM_PREVIEW_CSS \
   -e FORUM_PREVIEW_SPRITE \
+  `# The donations preview dumper, same idea as the forum's.` \
+  -e DONATIONS_PREVIEW_DIR \
+  -e DONATIONS_PREVIEW_CSS \
+  -e DONATIONS_PREVIEW_SPRITE \
   `# --network host so the container can reach the throwaway Postgres that` \
   `# 'make itest' publishes on the host.` \
   --network host \

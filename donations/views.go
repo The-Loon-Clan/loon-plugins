@@ -29,6 +29,10 @@ func parseTemplates() error {
 	t, err := template.New("donations").Funcs(template.FuncMap{
 		// The one seam-bound function: the site's time wording.
 		"relativeTime": func(v any) string { return deps.RelativeTime(v) },
+		// What this deployment calls itself. A function rather than a view-model
+		// field because both pages want it and neither VM is shared.
+		"site":    siteName,
+		"siteCap": siteNameCap,
 		// Exact copies of the host FuncMap entries these pages rendered
 		// with — parity is the lift's contract. All pure; none can drift
 		// toward a silently wrong answer.

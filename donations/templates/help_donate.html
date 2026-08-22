@@ -399,12 +399,12 @@
             <div class="hero-eyebrow">Help</div>
             <h1>Keep the Rain Falling <span style="margin-left:4px;">☂️</span></h1>
             <p>
-                ameNZB is 100% community-funded.<br>
+                {{siteCap}} is 100% community-funded.<br>
                 Your support keeps our servers online,<br>
                 our agents running, and the indexer growing.
             </p>
             <div class="donate-hero-actions">
-                <a class="btn btn-primary" href="#send-section">♡ Support ameNZB ♡</a>
+                <a class="btn btn-primary" href="#send-section">♡ Support {{site}} ♡</a>
                 <a class="btn btn-outline" href="#costs-section">📋 View Costs Breakdown</a>
             </div>
             <div class="donate-hero-art" aria-hidden="true"></div>
@@ -490,7 +490,7 @@
         {{if gt .TotalAnnualUSD 0.0}}
         <div class="annual-total-card mb-4">
             <div class="annual-total-row">
-                <span class="annual-total-label">Total annual cost to run ameNZB</span>
+                <span class="annual-total-label">Total annual cost to run {{site}}</span>
                 <span class="annual-total-amount">${{printf "%.0f" .TotalAnnualUSD}}<span class="annual-total-per">/ year</span></span>
             </div>
             <div class="annual-total-breakdown">
@@ -504,7 +504,7 @@
             <h2>Where Your Donations Go</h2>
             <span class="section-meta">All amounts in USD</span>
         </div>
-        <p class="section-sub">Every dollar goes directly toward keeping ameNZB fast, secure, and online.</p>
+        <p class="section-sub">Every dollar goes directly toward keeping {{site}} fast, secure, and online.</p>
 
         {{/* Iterates each cost row across every group. Items already
              carry .Label, .AmountUSD, .Period. Icon + Description are
@@ -966,7 +966,7 @@
         <div class="outro-banner">
             <div class="outro-icon">♥</div>
             <div>
-                <div class="outro-title">ameNZB exists because of you.</div>
+                <div class="outro-title">{{siteCap}} exists because of you.</div>
                 <div class="outro-text">
                     Donations are never required, but they help keep the indexer online, improve infrastructure,
                     and fund future development. Every contribution, large or small, helps keep the rain falling. ☔

@@ -190,10 +190,61 @@ func TestHelpDonateRendersTheRecentDonorTimestamp(t *testing.T) {
 		t.Error("recent-donor card lost its ReceivedAt timestamp — the carousel would truncate the page")
 	}
 	// Everything after the carousel must have rendered too — a stream abort
-	// would cut the outro banner.
-	if !strings.Contains(out, "ameNZB exists because of you.") {
+	// would cut the outro banner. Matched on the half of the sentence that is
+	// NOT the site's name: it used to read "ameNZB exists because of you" on
+	// every host that installed this plugin, and now the name is a seam.
+	if !strings.Contains(out, "exists because of you.") {
 		t.Error("content after the carousel is missing — the render aborted mid-stream")
 	}
+}
+
+// The site name is the host's to supply, and this page said "ameNZB" five
+// times in copy a visitor reads — the name of the site the plugin was lifted
+// out of, on every host that installed it.
+//
+// Both directions are pinned: a host that supplies a name gets it, and a host
+// that supplies none gets a phrase that is true everywhere rather than a gap
+// in the middle of a sentence.
+func TestSiteNameComesFromTheHost(t *testing.T) {
+	named := renderDonateWithSiteName(t, func() string { return "Loon Indexer" })
+	if !strings.Contains(named, "Loon Indexer is 100% community-funded.") {
+		t.Error("the host's site name did not reach the hero copy")
+	}
+	if strings.Contains(named, "ameNZB") {
+		t.Error("the page still names the site this plugin was lifted out of")
+	}
+
+	anon := renderDonateWithSiteName(t, nil)
+	if !strings.Contains(anon, "This site is 100% community-funded.") {
+		t.Error("with no seam the copy should read \"This site\", not a gap")
+	}
+	for _, gap := range []string{"  is 100%", "keeping  fast"} {
+		if strings.Contains(anon, gap) {
+			t.Errorf("the name left a hole in the sentence: %q", gap)
+		}
+	}
+}
+
+func renderDonateWithSiteName(t *testing.T, name func() string) string {
+	t.Helper()
+	var captured template.HTML
+	SetDeps(Deps{
+		RenderPage:   func(c *gin.Context, status int, title string, body template.HTML) { captured = body },
+		RenderError:  func(c *gin.Context, code int, title, msg string) { t.Fatalf("%d %s", code, msg) },
+		CSRFToken:    func(c *gin.Context) string { return "test-csrf" },
+		RelativeTime: func(v any) string { return "3 days ago" },
+		SiteName:     name,
+	})
+	t.Cleanup(func() { deps = nil; pageTmpl = nil })
+	if err := parseTemplates(); err != nil {
+		t.Fatalf("parseTemplates: %v", err)
+	}
+	h := &Handlers{deps: *deps, auth: donationsTestAuth(false)}
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("GET", "/help/donate", nil)
+	h.render(c, 200, "t", "help_donate.html", donatePageFixture(), gin.H{})
+	return string(captured)
 }
 
 // This test pins the POST-form inventory and their inline tokens. A form

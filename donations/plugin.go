@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -60,6 +61,17 @@ type Deps struct {
 	// to RenderPage.
 	BaseData func(c *gin.Context, extra gin.H) gin.H
 
+	// SiteName is what this deployment calls itself.
+	//
+	// It exists because this page said "ameNZB" five times in copy a visitor
+	// reads — the name of the site this plugin was lifted out of — on every
+	// host that installed it. A plugin cannot know the name and must not guess
+	// it, and there is exactly one right answer per deployment, so the host
+	// says. Same seam wiki added for the same reason.
+	//
+	// Optional: absent, the copy reads "this site", which is true everywhere.
+	SiteName func() string
+
 	// Settings is the shared site-settings store (donate_* keys,
 	// BTCPay credentials, tip-jar goals).
 	Settings Settings
@@ -91,6 +103,33 @@ func (d *Deps) renderContractOK() bool {
 	modern := d.RenderPage != nil && d.RenderError != nil &&
 		d.CSRFToken != nil && d.RelativeTime != nil
 	return modern || d.BaseData != nil
+}
+
+// siteName resolves the deployment's name, or a neutral stand-in.
+//
+// The stand-in is a phrase rather than an empty string because every use here
+// is mid-sentence: "keeping  fast, secure, and online" is worse than a generic
+// noun, and worse than saying nothing at all would have been.
+func siteName() string {
+	if deps == nil || deps.SiteName == nil {
+		return "this site"
+	}
+	if n := strings.TrimSpace(deps.SiteName()); n != "" {
+		return n
+	}
+	return "this site"
+}
+
+// siteNameCap is siteName for the start of a sentence.
+//
+// Two functions rather than one piped through a title-caser: a caser would
+// turn a real name like "ameNZB" into "Amenzb", which is worse than the
+// problem it solves.
+func siteNameCap() string {
+	if n := siteName(); n != "this site" {
+		return n
+	}
+	return "This site"
 }
 
 // Handlers serves the donation surfaces.
