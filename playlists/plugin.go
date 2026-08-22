@@ -16,6 +16,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
@@ -37,8 +38,46 @@ func init() {
 // Deps are the host seams. SetDeps must be called before core.Boot; Provision
 // fails loud otherwise, so a half-wired host cannot serve broken pages.
 type Deps struct {
-	// BaseData merges the host's page chrome (user, nav, CSRF, theme) into a
-	// template data map. Required — these pages render inside the host layout.
+	// RenderPage wraps a finished fragment in the site chrome. The plugin
+	// owns its four pages now (templates/, embedded), so chrome crosses
+	// rather than a data map.
+	//
+	// status crosses too: Create re-renders the form on a validation failure,
+	// and a seam fixed at 200 reports success while showing an error.
+	RenderPage func(c *gin.Context, status int, title string, body template.HTML)
+
+	// CSRFToken feeds the create, edit, add and remove forms — minted by host
+	// middleware, so only the host can answer it.
+	CSRFToken func(c *gin.Context) string
+
+	// RenderPagination is the site's pager as finished HTML. The index used
+	// to build its own <nav> from Deps.Pagination's view-model, which is six
+	// fields where one seam does and six chances to drift when the host's own
+	// pager changes.
+	RenderPagination func(page, pageSize, totalItems int, baseURL string) template.HTML
+
+	// RenderUserTag is the site's own username chip — role colour, name
+	// effects, profile link — as finished HTML.
+	//
+	// The markup used to call the host partial {{template "user-tag"}}
+	// directly, which worked only because the host parsed its chrome and every
+	// plugin template into one flat namespace. A plugin's own set has no such
+	// reach, and should not: what a username LOOKS like is the host's.
+	//
+	// Optional. A host that leaves it nil gets a plain link to the profile —
+	// the information without the decoration.
+	RenderUserTag func(name string) template.HTML
+
+	// RelativeTime is the site's time wording ("2 hours ago"). Passed rather
+	// than copied for consistency of phrasing across the site.
+	RelativeTime func(any) string
+
+	// BaseData and Pagination are the PREVIOUS contract, where the HOST owned
+	// these four templates and the plugin rendered them by name.
+	//
+	// Kept working so a host mid-migration keeps building. Remove both, and
+	// the branches in render()/paginationHTML() that read them, once every
+	// host has moved to RenderPage.
 	BaseData func(c *gin.Context, extra gin.H) gin.H
 
 	// PageOffset and Pagination are the host's paging helpers. Taken rather
@@ -75,6 +114,17 @@ type Plugin struct {
 	handlers *Handlers
 }
 
+// renderContractOK accepts either contract and refuses half of one.
+//
+// A host that wired some of the render seams would serve some pages and blank
+// others, which reads as a broken site rather than a missing call.
+func (d Deps) renderContractOK() bool {
+	modern := d.RenderPage != nil && d.CSRFToken != nil &&
+		d.RenderPagination != nil && d.RelativeTime != nil
+	legacy := d.BaseData != nil && d.Pagination != nil
+	return modern || legacy
+}
+
 func (p *Plugin) Metadata() core.Metadata {
 	return core.Metadata{
 		Name:        "playlists",
@@ -89,8 +139,17 @@ func (p *Plugin) Metadata() core.Metadata {
 const pageSize = 24
 
 func (p *Plugin) Provision(c *core.Core) error {
-	if deps.BaseData == nil || deps.PageOffset == nil || deps.Pagination == nil {
-		return fmt.Errorf("playlists: SetDeps not called with BaseData, PageOffset and Pagination before core.Boot")
+	if !deps.renderContractOK() || deps.PageOffset == nil {
+		return fmt.Errorf("playlists: SetDeps not called, or a render seam is missing — " +
+			"PageOffset plus either the current contract (RenderPage, CSRFToken, " +
+			"RenderPagination, RelativeTime) or the previous one (BaseData, Pagination); " +
+			"wire it in main() before core.Boot")
+	}
+	// Parsed here, not at package init: RelativeTime is a Deps function.
+	// Forgetting this leaves pageTmpl nil and panics on the first page view
+	// rather than failing at boot.
+	if err := parseTemplates(); err != nil {
+		return fmt.Errorf("playlists: parse templates: %w", err)
 	}
 	if deps.LookupReleases == nil {
 		return fmt.Errorf("playlists: SetDeps needs LookupReleases — a playlist that cannot resolve its releases has nothing to show")
@@ -171,17 +230,21 @@ func (h *Handlers) Index(c *gin.Context) {
 	ctx := c.Request.Context()
 	rows, total, err := h.store.ListVisible(ctx, h.viewer(c), pageSize, deps.PageOffset(page, pageSize))
 	if err != nil {
-		c.HTML(http.StatusInternalServerError, "playlists_index.html", deps.BaseData(c, gin.H{
+		h.render(c, http.StatusInternalServerError, "playlists_index.html", gin.H{
 			"Error": "loadfailed",
-		}))
+		})
 		return
 	}
 	h.fillUsernames(ctx, rows)
-	c.HTML(http.StatusOK, "playlists_index.html", deps.BaseData(c, gin.H{
-		"Playlists":  rows,
-		"Total":      total,
-		"Pagination": deps.Pagination(page, pageSize, total, "/playlists"),
-	}))
+	h.render(c, http.StatusOK, "playlists_index.html", gin.H{
+		"Playlists": rows,
+		"Total":     total,
+		// Both, for as long as both contracts are accepted: the legacy
+		// markup in the host reads .Pagination's view-model, the plugin's own
+		// reads .PaginationHTML. Each renders nothing on the other's path.
+		"Pagination":     legacyPagination(page, pageSize, total, "/playlists"),
+		"PaginationHTML": paginationHTML(page, pageSize, total, "/playlists"),
+	})
 }
 
 // fail renders the site's error page with a CODE the template turns into
@@ -205,7 +268,7 @@ func (h *Handlers) fail(c *gin.Context, status int, code string) {
 		c.String(status, code)
 		return
 	}
-	c.HTML(status, "playlist_error.html", deps.BaseData(c, gin.H{"Reason": code}))
+	h.render(c, status, "playlist_error.html", gin.H{"Reason": code})
 }
 
 func (h *Handlers) Show(c *gin.Context) {
@@ -234,24 +297,24 @@ func (h *Handlers) Show(c *gin.Context) {
 	}
 	h.resolveItems(ctx, items)
 	h.fillUsernames(ctx, []*Playlist{p})
-	c.HTML(http.StatusOK, "playlist_view.html", deps.BaseData(c, gin.H{
+	h.render(c, http.StatusOK, "playlist_view.html", gin.H{
 		"Playlist": p,
 		"Items":    items,
 		"IsOwner":  pluginapi.OwnedBy(p.UserID, me),
 		"Saved":    c.Query("saved") == "1",
-	}))
+	})
 }
 
 func (h *Handlers) New(c *gin.Context) {
-	c.HTML(http.StatusOK, "playlist_form.html", deps.BaseData(c, gin.H{"Action": "Create"}))
+	h.render(c, http.StatusOK, "playlist_form.html", gin.H{"Action": "Create"})
 }
 
 func (h *Handlers) Create(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("name"))
 	if name == "" {
-		c.HTML(http.StatusBadRequest, "playlist_form.html", deps.BaseData(c, gin.H{
+		h.render(c, http.StatusBadRequest, "playlist_form.html", gin.H{
 			"Action": "Create", "Error": "noname",
-		}))
+		})
 		return
 	}
 	p := &Playlist{
@@ -264,14 +327,14 @@ func (h *Handlers) Create(c *gin.Context) {
 	}
 	switch err := h.store.Create(c.Request.Context(), p); {
 	case err == ErrSlugTaken:
-		c.HTML(http.StatusBadRequest, "playlist_form.html", deps.BaseData(c, gin.H{
+		h.render(c, http.StatusBadRequest, "playlist_form.html", gin.H{
 			"Action": "Create", "Error": "nametaken",
 			"Name": name, "Description": p.Description, "CoverURL": p.CoverURL, "Public": p.Public,
-		}))
+		})
 	case err != nil:
-		c.HTML(http.StatusInternalServerError, "playlist_form.html", deps.BaseData(c, gin.H{
+		h.render(c, http.StatusInternalServerError, "playlist_form.html", gin.H{
 			"Action": "Create", "Error": "createfailed",
-		}))
+		})
 	default:
 		h.emit(c.Request.Context(), EventPlaylistCreated, p.UserID,
 			PlaylistCreated{PlaylistID: p.ID, Slug: p.Slug, Name: p.Name, Public: p.Public})
@@ -284,10 +347,10 @@ func (h *Handlers) Edit(c *gin.Context) {
 	if !ok {
 		return
 	}
-	c.HTML(http.StatusOK, "playlist_form.html", deps.BaseData(c, gin.H{
+	h.render(c, http.StatusOK, "playlist_form.html", gin.H{
 		"Action": "Save", "Playlist": p,
 		"Name": p.Name, "Description": p.Description, "CoverURL": p.CoverURL, "Public": p.Public,
-	}))
+	})
 }
 
 func (h *Handlers) Update(c *gin.Context) {
