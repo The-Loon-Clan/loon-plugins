@@ -77,9 +77,9 @@
                 </div>
                 {{if .CanReRequest}}
                 <div style="display:flex;gap:6px;align-items:center;">
-                    <input type="number" class="form__input of-points" min="0" step="1" value="0"
+                    <input type="number" class="form__input js-of-points" min="0" step="1" value="0"
                            title="Points to stake — debited now, paid to whoever delivers" style="width:80px;">
-                    <button type="button" class="button button--primary button--sm of-request" data-bucket-id="{{.Bucket.BucketID}}">
+                    <button type="button" class="button button--primary button--sm js-of-request" data-bucket-id="{{.Bucket.BucketID}}">
                         Request a fresh copy
                     </button>
                 </div>
@@ -106,18 +106,18 @@
                 </div>
                 {{if ne .Request.Status "claimed"}}
                 <div style="display:flex;gap:6px;align-items:center;">
-                    <input type="number" class="form__input of-points" min="0" step="1" value="0"
+                    <input type="number" class="form__input js-of-points" min="0" step="1" value="0"
                            title="Points to stake — debited now, paid to whoever delivers, returned if you withdraw" style="width:80px;">
-                    <button type="button" class="button button--primary of-request" data-bucket-id="{{.Bucket.BucketID}}">
+                    <button type="button" class="button button--primary js-of-request" data-bucket-id="{{.Bucket.BucketID}}">
                         Join this request
                     </button>
                 </div>
                 {{end}}
                 {{else}}
                 <div style="display:flex;gap:6px;align-items:center;">
-                    <input type="number" class="form__input of-points" min="0" step="1" value="0"
+                    <input type="number" class="form__input js-of-points" min="0" step="1" value="0"
                            title="Points to stake — debited now, paid to whoever delivers, returned if you withdraw" style="width:80px;">
-                    <button type="button" class="button button--primary of-request" data-bucket-id="{{.Bucket.BucketID}}">
+                    <button type="button" class="button button--primary js-of-request" data-bucket-id="{{.Bucket.BucketID}}">
                         Request this
                     </button>
                 </div>
@@ -138,7 +138,7 @@
             <div class="od-note" style="margin-bottom:.5rem;">
                 Tick files to request only part of this offer — say, the episodes the
                 catalog is missing. Leave everything unticked to request it all.
-                <span class="of-pick-count" style="color:var(--blue);"></span>
+                <span class="js-of-pick-count" style="color:var(--blue);"></span>
             </div>
             {{end}}
             {{if .Files}}
@@ -147,7 +147,7 @@
                     <div class="od-fname">
                         {{if and $canScope (gt (len $.Files) 1)}}
                         <label style="display:flex;gap:.5rem;align-items:baseline;cursor:pointer;margin:0;">
-                            <input type="checkbox" class="of-file-pick" value="{{.Name}}" style="flex-shrink:0;">
+                            <input type="checkbox" class="js-of-file-pick" value="{{.Name}}" style="flex-shrink:0;">
                             <span>{{.Name}}</span>
                         </label>
                         {{else}}{{.Name}}{{end}}
@@ -202,24 +202,24 @@
     // from the action area, since the file list can be long.
     function ofPickedFiles() {
         return Array.prototype.map.call(
-            document.querySelectorAll('.of-file-pick:checked'),
+            document.querySelectorAll('.js-of-file-pick:checked'),
             function (cb) { return cb.value; });
     }
     (function () {
-        var counter = document.querySelector('.of-pick-count');
+        var counter = document.querySelector('.js-of-pick-count');
         if (!counter) return;
-        document.querySelectorAll('.of-file-pick').forEach(function (cb) {
+        document.querySelectorAll('.js-of-file-pick').forEach(function (cb) {
             cb.addEventListener('change', function () {
                 var n = ofPickedFiles().length;
                 counter.textContent = n ? n + ' file' + (n === 1 ? '' : 's') + ' selected — the request will cover only these.' : '';
             });
         });
     })();
-    document.querySelectorAll('.of-request').forEach(function (btn) {
+    document.querySelectorAll('.js-of-request').forEach(function (btn) {
         btn.addEventListener('click', function () {
             // The points field sits beside the button; a missing one means 0.
             var cell = btn.parentElement;
-            var field = cell ? cell.querySelector('.of-points') : null;
+            var field = cell ? cell.querySelector('.js-of-points') : null;
             var points = Math.max(0, parseInt((field && field.value) || '0', 10) || 0);
             btn.disabled = true;
             fetch('/offers/request', {

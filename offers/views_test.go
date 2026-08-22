@@ -235,7 +235,7 @@ func TestOfferDetailFilePicking(t *testing.T) {
 		"RequestLive": false, "Delivered": false,
 		"Health": "", "CanReRequest": false,
 	})
-	if strings.Count(fresh, `class="of-file-pick"`) != 2 {
+	if strings.Count(fresh, `class="js-of-file-pick"`) != 2 {
 		t.Error("a requestable multi-file offer should render one pick box per file")
 	}
 	if !strings.Contains(fresh, "Tick files to request only part of this offer") {

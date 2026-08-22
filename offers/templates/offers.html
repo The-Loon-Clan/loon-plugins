@@ -145,10 +145,10 @@
                                          stake is debited on submit — see the detail
                                          page. */}}
                                     <div style="display:flex;gap:4px;align-items:center;">
-                                        <input type="number" class="form__input of-points"
+                                        <input type="number" class="form__input js-of-points"
                                                min="0" step="1" value="0" title="Points to stake — debited now, paid to whoever delivers, returned if you withdraw"
                                                style="width:64px;font-size:0.78rem;">
-                                        <button type="button" class="button button--primary button--sm of-request" data-bucket-id="{{.BucketID}}">{{if .BackerCount}}Join{{else}}Request{{end}}</button>
+                                        <button type="button" class="button button--primary button--sm js-of-request" data-bucket-id="{{.BucketID}}">{{if .BackerCount}}Join{{else}}Request{{end}}</button>
                                     </div>
                                 </td>
                                 {{end}}
@@ -182,13 +182,13 @@
 
     <script>
     // Request modal-less click — POST + replace button with status line.
-    document.querySelectorAll('.of-request').forEach(btn => {
+    document.querySelectorAll('.js-of-request').forEach(btn => {
         btn.addEventListener('click', async () => {
             // The points input sits beside the button in the same cell. Read it
             // here rather than binding per-row state: a NaN or a negative would
             // be refused by the server anyway, and 0 is the honest default.
             const cell   = btn.closest('div');
-            const field  = cell ? cell.querySelector('.of-points') : null;
+            const field  = cell ? cell.querySelector('.js-of-points') : null;
             const points = Math.max(0, parseInt((field && field.value) || '0', 10) || 0);
             btn.disabled = true;
             btn.textContent = '…';

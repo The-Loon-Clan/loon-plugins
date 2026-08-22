@@ -116,7 +116,7 @@
                                 <td class="text-end log-count">{{if gt .Count 1}}<span class="tag">{{.Count}}</span>{{else}}{{.Count}}{{end}}</td>
                                 <td style="font-size:0.75rem;white-space:nowrap;">{{.LastAt.Format "01-02 15:04"}}</td>
                                 <td style="font-size:0.75rem;">{{if .UserID}}<a href="/admin/users/{{.UserID}}">#{{.UserID}}</a>{{end}}</td>
-                                <td><button class="button button--sm button--outlined dismiss-btn" title="Dismiss">&times;</button></td>
+                                <td><button class="button button--sm button--outlined js-dismiss-btn" title="Dismiss">&times;</button></td>
                             </tr>
                             {{else}}
                             <tr><td colspan="7" class="text-center text-muted py-4">No matching log rows.</td></tr>
@@ -162,7 +162,7 @@
 
     // Dismiss (archive) a row
     document.getElementById('logBody').addEventListener('click', function(e){
-        if (!e.target.classList.contains('dismiss-btn')) return;
+        if (!e.target.classList.contains('js-dismiss-btn')) return;
         var row = e.target.closest('.log-row');
         var id = row.getAttribute('data-id');
         row.classList.add('archiving');
@@ -191,7 +191,7 @@
                    '<td class="text-end log-count">' + cnt + '</td>' +
                    '<td style="font-size:.75rem;white-space:nowrap;">' + when + '</td>' +
                    '<td style="font-size:.75rem;">' + user + '</td>' +
-                   '<td><button class="button button--sm button--outlined dismiss-btn" title="Dismiss">&times;</button></td></tr>';
+                   '<td><button class="button button--sm button--outlined js-dismiss-btn" title="Dismiss">&times;</button></td></tr>';
         }).join('');
     }
     // Escapes < > & AND quotes — some values (op) land in an HTML

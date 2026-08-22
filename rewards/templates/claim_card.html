@@ -5,7 +5,7 @@
     <p class="notice notice--success rw-claim-flash{{if not .Msg}} d-none{{end}}" data-flash="ok">{{.Msg}}</p>
     <p class="notice notice--danger rw-claim-flash{{if not .Err}} d-none{{end}}" data-flash="err">{{.Err}}</p>
     {{range .Grants}}
-      <div class="d-flex justify-content-between align-items-center py-2 border-bottom rw-claim-row">
+      <div class="d-flex justify-content-between align-items-center py-2 border-bottom js-rw-claim-row">
         <div>
           <strong>{{.Pays}}</strong>
           {{if .Expires}}<div class="text-muted small">claim before {{.Expires}}</div>{{end}}
@@ -14,7 +14,7 @@
              action is refused 403 by the host middleware before any handler
              runs — probed, not assumed — so without the rewards.csrf seam
              this button silently did nothing for every member. */}}
-        <form method="post" action="/plugin/rewards/claim" class="ms-3 rw-claim-form">
+        <form method="post" action="/plugin/rewards/claim" class="ms-3 js-rw-claim-form">
           <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
           <input type="hidden" name="grant_id" value="{{.ID}}">
           <button class="button button--primary button--sm" type="submit">Claim</button>
@@ -38,7 +38,7 @@
       if (mine) el.textContent = text;
     });
   }
-  card.querySelectorAll('.rw-claim-form').forEach(function (form) {
+  card.querySelectorAll('.js-rw-claim-form').forEach(function (form) {
     form.addEventListener('submit', function (ev) {
       ev.preventDefault();
       var btn = form.querySelector('button');
@@ -51,10 +51,10 @@
       }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
         .then(function (res) {
           if (res.ok && res.body.claimed) {
-            var row = form.closest('.rw-claim-row');
+            var row = form.closest('.js-rw-claim-row');
             if (row) row.remove();
             flash('ok', res.body.msg || 'Reward claimed');
-            if (!card.querySelector('.rw-claim-row')) {
+            if (!card.querySelector('.js-rw-claim-row')) {
               // The last one: the card's remaining content IS the flash, so it
               // reads "claimed" rather than an empty box with a green line.
               // .panel__header, because that is what the markup says now. A
