@@ -142,7 +142,9 @@
         <a href="/wiki" class="wiki-back-link"><span>&larr;</span> Wiki</a>
 
         <div class="wiki-overview">
-            <span class="overview-icon">{{if eq .Topic.Slug "amenzb"}}<img src="/static/posters/ame.png" alt="">{{else}}&#128193;{{end}}</span>
+            {{/* One slug used to get a mascot from /static/posters/ame.png — a host
+                 asset no other deployment has, chosen by a site's own name. */}}
+            <span class="overview-icon">&#128193;</span>
             <div class="overview-body">
                 <h2>{{.Topic.Name}}</h2>
                 {{if .Topic.Description}}<p>{{.Topic.Description}}</p>{{end}}

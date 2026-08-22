@@ -25,7 +25,6 @@ const (
 	archiveDefaultInterval = 24 * time.Hour     // daily
 
 	nekobtAPIBase    = "https://nekobt.to"
-	scraperUserAgent = "AmeNZB/1.0 (+release-group scraper; contact via site)"
 	scraperHTTPLimit = 30 * time.Second
 	nekobtPageLimit  = 50
 	nekobtMaxPages   = 20 // hard cap: 1000 groups max per run
@@ -285,7 +284,7 @@ func fetchGroups(ctx context.Context, client *http.Client, apiURL string) ([]nek
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", scraperUserAgent)
+	req.Header.Set("User-Agent", scraperUserAgent())
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)
@@ -431,4 +430,14 @@ func (s *archiveService) run(parentCtx context.Context) {
 		verb, totalGroups, totalTorrents, totalErrors,
 		time.Since(start).Round(time.Millisecond))
 	s.job.SetIdle(time.Now().Add(archiveDefaultInterval))
+}
+
+// scraperUserAgent identifies this crawler to the sites it visits.
+//
+// A function rather than a const because it reads the deployment's name, and it
+// reads it because the const said "AmeNZB/1.0" on every host that installed
+// this plugin. A User-Agent naming the wrong site is a false statement about
+// who is crawling you, which is the one thing a UA exists to get right.
+func scraperUserAgent() string {
+	return deps.siteName() + "/1.0 (+release-group scraper; contact via site)"
 }

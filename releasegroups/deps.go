@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"html/template"
+	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -117,6 +119,19 @@ type Deps struct {
 	// the backlink the claimant must publish).
 	BaseURL string
 
+	// SiteName is what this deployment calls itself.
+	//
+	// It exists because the claim snippet — the link a group owner pastes
+	// into their own bio — was labelled "ameNZB", the name of the site this
+	// plugin was lifted out of, and so was the scraper's User-Agent. Both
+	// leave this deployment: one is published on somebody else's page, the
+	// other is written into somebody else's logs. A plugin cannot know the
+	// name and must not guess it.
+	//
+	// Optional. Empty falls back to BaseURL's host — not to a phrase like
+	// "this site", which means nothing in another person's bio.
+	SiteName string
+
 	// The claim-verification machinery, host-owned (its scraper and rules
 	// are shared with the admin review surface).
 	NewClaimToken func() (string, error)
@@ -177,3 +192,19 @@ var jobDeps *JobDeps
 // SetJobDeps hands the plugin its worker-leg seams. Called once, before
 // core.Boot, in worker/all processes.
 func SetJobDeps(d JobDeps) { jobDeps = &d }
+
+// siteName is what to call this deployment in text that LEAVES it.
+//
+// The fallback is BaseURL's host rather than a generic phrase, because both
+// callers address somebody outside: a group owner reading a snippet in their
+// own bio, and whoever reads their server logs. "this site" is useless in
+// both, and a bare host name is at least true.
+func (d Deps) siteName() string {
+	if n := strings.TrimSpace(d.SiteName); n != "" {
+		return n
+	}
+	if u, err := url.Parse(d.BaseURL); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return "this indexer"
+}

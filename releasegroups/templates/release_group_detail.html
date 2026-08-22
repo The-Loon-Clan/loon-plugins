@@ -253,7 +253,7 @@
              scraper finds the token substring in the page source. */}}
         {{$tok := .ViewerClaim.VerificationToken}}
         {{$verifyURL := printf "%s/v/%s" $.BaseURL $tok}}
-        {{$hiddenSnippet := printf `<a href="%s">ameNZB 💧</a>` $verifyURL}}
+        {{$hiddenSnippet := printf `<a href="%s">%s</a>` $verifyURL $.SiteName}}
         <div class="panelV2 mb-3" style="border-color:var(--blue);">
             <div class="panel__body" style="font-size:0.85rem;">
                 <h6 style="margin:0 0 0.5rem;font-weight:600;">Your pending ownership claim</h6>
@@ -274,9 +274,9 @@
                         Copy this snippet &amp; paste it anywhere in your description
                     </div>
                     <div class="d-flex align-items-center gap-3 mb-2">
-                        <a href="{{$verifyURL}}" target="_blank" rel="noopener" style="font-size:0.85rem;color:var(--blue);">ameNZB &#128167;</a>
+                        <a href="{{$verifyURL}}" target="_blank" rel="noopener" style="font-size:0.85rem;color:var(--blue);">{{$.SiteName}}</a>
                         <span style="flex:1;font-size:0.78rem;color:var(--text-muted);">
-                            Renders as a small "ameNZB 💧" link &mdash; your per-claim token lives in the URL.
+                            Renders as a small &ldquo;{{$.SiteName}}&rdquo; link &mdash; your per-claim token lives in the URL.
                         </span>
                         <button type="button" class="button button--primary button--sm"
                                 onclick="navigator.clipboard.writeText(document.getElementById('rg-snippet-hidden').textContent); this.textContent='Copied';">

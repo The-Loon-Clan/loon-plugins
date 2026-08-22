@@ -93,6 +93,17 @@ type Deps struct {
 	Settings SettingReader
 	Users    UserStore
 
+	// SiteName is what this deployment calls itself.
+	//
+	// It exists because the bot joined a network as nick "ameNZB", realname
+	// "ameNZB bridge bot" and CTCP version "ameNZB-bridge" — the name of the
+	// site this plugin was lifted out of, announced in somebody else's
+	// channel. The nick and realname were already settings-backed, but a
+	// default is what most deployments run.
+	//
+	// Optional: absent, the bot uses the host part of BaseURL.
+	SiteName func() string
+
 	// NewHub constructs this bot's own chat-hub instance. The hub stays
 	// host-owned; instances converge on Redis. Called once, on the worker leg.
 	NewHub func() pluginapi.ChatHub

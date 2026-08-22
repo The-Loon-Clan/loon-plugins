@@ -37,6 +37,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -97,6 +98,7 @@ type IRCBotService struct {
 	settings     SettingReader
 	users        UserStore
 	baseURL      string
+	siteName     string
 	chat         pluginapi.ChatHub
 	display      pluginapi.GroupDisplay
 	createInvite func(context.Context, int) (string, error)
@@ -308,8 +310,8 @@ func (b *IRCBotService) runOnce(ctx context.Context) error {
 	}
 	port := b.ircSettingInt(ctx, "irc_port", 6697)
 	useTLS := b.ircSettingBool(ctx, "irc_use_tls", true)
-	nick := b.ircSetting(ctx, "irc_nick", "ameNZB")
-	realname := b.ircSetting(ctx, "irc_realname", "ameNZB bridge bot")
+	nick := b.ircSetting(ctx, "irc_nick", b.site())
+	realname := b.ircSetting(ctx, "irc_realname", b.site()+" bridge bot")
 	channel := b.ircSetting(ctx, "irc_channel", "")
 	if channel == "" {
 		b.job.SetError("No IRC channel configured")
@@ -325,7 +327,7 @@ func (b *IRCBotService) runOnce(ctx context.Context) error {
 		Nick:      nick,
 		User:      nick,
 		Name:      realname,
-		Version:   "ameNZB-bridge",
+		Version:   b.site() + "-bridge",
 		SSL:       useTLS,
 		TLSConfig: &tls.Config{ServerName: server, MinVersion: tls.VersionTLS12},
 	}
@@ -721,4 +723,23 @@ func (b *IRCBotService) recentlySent(target, body string) bool {
 
 func (b *IRCBotService) settingEnabled(ctx context.Context) bool {
 	return b.ircSettingBool(ctx, "irc_enabled", false)
+}
+
+// SetSiteName supplies what this deployment calls itself, for the strings this
+// bot sends to people who are not on it. Optional, like SetChatHub beside it.
+func (b *IRCBotService) SetSiteName(name string) { b.siteName = strings.TrimSpace(name) }
+
+// site is the deployment's name, or the host part of its base URL.
+//
+// The fallback is a host name rather than a phrase like "this site", because
+// every caller is read by somebody elsewhere — in another server's channel, or
+// in a stranger's Discord — where "this site" says nothing at all.
+func (b *IRCBotService) site() string {
+	if b.siteName != "" {
+		return b.siteName
+	}
+	if u, err := url.Parse(b.baseURL); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return "this indexer"
 }

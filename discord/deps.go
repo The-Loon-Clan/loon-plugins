@@ -110,6 +110,16 @@ type Deps struct {
 	Users    UserStore
 	Settings Settings
 
+	// SiteName is what this deployment calls itself.
+	//
+	// It exists because the bot's embeds and replies said "ameNZB" — the
+	// name of the site this plugin was lifted out of — to people who are
+	// not on this one. A plugin cannot know the name and must not guess
+	// it, and there is exactly one right answer per deployment.
+	//
+	// Optional: absent, the bot uses the host part of BaseURL.
+	SiteName func() string
+
 	// CSRFToken answers the host middleware's per-session token for the
 	// admin settings form.
 	//

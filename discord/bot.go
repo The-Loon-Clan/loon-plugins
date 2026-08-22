@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ type DiscordBotService struct {
 	users        UserStore
 	settings     Settings
 	baseURL      string
+	siteName     string
 	chat         pluginapi.ChatHub                          // optional — set via SetChatHub
 	createInvite func(context.Context, int) (string, error) // optional — set via SetCreateInvite
 	display      pluginapi.GroupDisplay                     // optional — set via SetGroupDisplay
@@ -445,10 +447,11 @@ func (d *DiscordBotService) handleSetupVerify(s *discordgo.Session, i *discordgo
 	}
 
 	embed := &discordgo.MessageEmbed{
-		Title: "ameNZB",
+		Title: d.site(),
 		Description: "**To gain access to the server, click the button below!**\n\n" +
-			"_Find your verify code on your Profile page after creating your ameNZB account._",
-		Color: 0x6f42c1, // ameNZB purple
+			"_Find your verify code on your Profile page after creating your " +
+			d.site() + " account._",
+		Color: 0x6f42c1, // brand purple
 	}
 	components := []discordgo.MessageComponent{
 		discordgo.ActionsRow{
@@ -634,7 +637,7 @@ func (d *DiscordBotService) handleInvite(s *discordgo.Session, i *discordgo.Inte
 	// Look up the linked site account.
 	link, err := d.discordLinks.GetDiscordLinkByDiscordID(ctx, discordID)
 	if err != nil || link == nil {
-		d.respond(s, i, "Your Discord account is not linked to an ameNZB account. Click the **Verify** button in the verification channel first.")
+		d.respond(s, i, "Your Discord account is not linked to a "+d.site()+" account. Click the **Verify** button in the verification channel first.")
 		return
 	}
 
@@ -747,7 +750,7 @@ func (d *DiscordBotService) NotifyRelease(nzb pluginapi.ReleaseAnnouncement) {
 		Description: desc.String(),
 		Color:       0x5b8af5,
 		Footer: &discordgo.MessageEmbedFooter{
-			Text: "ameNZB",
+			Text: d.site(),
 		},
 		Timestamp: nzb.CreatedAt.Format(time.RFC3339),
 	}
@@ -784,7 +787,7 @@ func (d *DiscordBotService) NotifyOps(title, body string) {
 			Title:       title,
 			Description: body,
 			Color:       0x8a5bf5,
-			Footer:      &discordgo.MessageEmbedFooter{Text: "ameNZB ops"},
+			Footer:      &discordgo.MessageEmbedFooter{Text: d.site() + " ops"},
 			Timestamp:   time.Now().Format(time.RFC3339),
 		}
 		if _, err := s.ChannelMessageSendEmbed(channelID, embed); err != nil {
@@ -1120,4 +1123,23 @@ func (d *DiscordBotService) buildChatMessage(ctx context.Context, s *discordgo.S
 		ThreadName:  threadName,
 		Public:      public,
 	}, true
+}
+
+// SetSiteName supplies what this deployment calls itself, for the strings this
+// bot sends to people who are not on it. Optional, like SetChatHub beside it.
+func (d *DiscordBotService) SetSiteName(name string) { d.siteName = strings.TrimSpace(name) }
+
+// site is the deployment's name, or the host part of its base URL.
+//
+// The fallback is a host name rather than a phrase like "this site", because
+// every caller is read by somebody elsewhere — in another server's channel, or
+// in a stranger's Discord — where "this site" says nothing at all.
+func (d *DiscordBotService) site() string {
+	if d.siteName != "" {
+		return d.siteName
+	}
+	if u, err := url.Parse(d.baseURL); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return "this indexer"
 }

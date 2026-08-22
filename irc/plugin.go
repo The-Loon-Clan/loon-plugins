@@ -95,6 +95,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 
 	p.hub = deps.NewHub()
 	p.bot = NewIRCBotService(deps.DMs, deps.Links, deps.Settings, deps.Users, deps.BaseURL)
+	if deps.SiteName != nil {
+		p.bot.SetSiteName(deps.SiteName())
+	}
 	p.bot.SetChatHub(p.hub)
 	p.bot.SetCreateInvite(deps.CreateInvite)
 	return nil

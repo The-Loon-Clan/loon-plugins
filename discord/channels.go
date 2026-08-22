@@ -319,7 +319,7 @@ func (d *DiscordBotService) webhookFor(s *discordgo.Session, ch *discordgo.Chann
 			return webhookURL(h)
 		}
 	}
-	created, err := s.WebhookCreate(ch.ID, "amenzb", "")
+	created, err := s.WebhookCreate(ch.ID, d.site(), "")
 	if err != nil || created == nil {
 		log.Printf("discord bot: cannot create a webhook in #%s (%s) — "+
 			"grant MANAGE_WEBHOOKS to send there: %v", ch.Name, ch.ID, err)

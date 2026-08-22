@@ -75,6 +75,7 @@ func (h *Handlers) render(c *gin.Context, status int, title, name string, data g
 	}
 	data["CSRFToken"] = h.deps.CSRFToken(c)
 	data["BaseURL"] = h.deps.BaseURL
+	data["SiteName"] = h.deps.siteName()
 	data["ActiveNav"] = "groups"
 	data["NzbCardCSS"] = h.deps.NzbCardCSS()
 	if v := h.deps.Viewer(c); v != nil {

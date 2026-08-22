@@ -121,6 +121,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// the web process's chat plugin subscribes via Redis pub/sub.
 	p.hub = deps.NewHub()
 	p.bot = NewDiscordBotService(deps.Links, deps.Users, deps.Settings, deps.BaseURL)
+	if deps.SiteName != nil {
+		p.bot.SetSiteName(deps.SiteName())
+	}
 	p.bot.SetChatHub(p.hub)
 	p.bot.SetCreateInvite(deps.CreateInvite)
 
