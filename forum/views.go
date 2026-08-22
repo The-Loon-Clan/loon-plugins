@@ -7,6 +7,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // The forum's five pages, owned by the plugin that owns the forum.
@@ -32,6 +34,20 @@ func parseTemplates() {
 	}
 	pageTmpl = template.Must(template.New("forum").Funcs(template.FuncMap{
 		"relativeTime": func(v any) string { return deps.RelativeTime(v) },
+
+		// The cosmetics a member is WEARING. Not a Deps seam: cosmetics is a
+		// pluginapi contract with its own cache, and pluginapi is already
+		// imported here — asking the host to pass a copy would be a second
+		// answer to a question the contract already answers.
+		//
+		// The forum draws its own author column, so it never picked these up:
+		// the host applies them in its user-tag and avatar templates, which a
+		// plugin fragment does not use. A member with an equipped name effect
+		// saw it everywhere on the site except the place they post.
+		//
+		// Both nil-degrade to "": no cosmetics plugin, no classes, plain names.
+		"nameFX":   func(name string) string { return pluginapi.NameClass(fxCore, name) },
+		"avatarFX": func(name string) string { return pluginapi.SlotClass(fxCore, pluginapi.SlotAvatar, name) },
 
 		// The rest are pure and are reimplemented rather than crossed. The
 		// rule this follows: a helper crosses the seam when the two copies

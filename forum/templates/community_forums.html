@@ -56,7 +56,7 @@
                         <span class="forum-category-latest">
                             {{if .LastThreadTitle}}
                             {{$latestUser := derefStr .LastPostUser}}
-                            <span class="forum-avatar-fallback" aria-hidden="true">{{initial $latestUser}}</span>
+                            <span class="{{avatarFX $latestUser}} forum-avatar-fallback" aria-hidden="true">{{initial $latestUser}}</span>
                             <span class="forum-category-latest-copy">
                                 <strong>{{derefStr .LastThreadTitle}}</strong>
                                 <small>
@@ -95,13 +95,13 @@
                         <a href="/community/forums/thread/{{.ThreadID}}#post-{{.PostID}}" class="forum-recent-row">
                             <span class="forum-recent-discussion">
                                 {{if .AvatarPath}}
-                                <img class="forum-avatar forum-avatar-lg" src="{{.AvatarPath}}" alt="" loading="lazy">
+                                <img class="{{avatarFX .Username}} forum-avatar forum-avatar-lg" src="{{.AvatarPath}}" alt="" loading="lazy">
                                 {{else}}
-                                <span class="forum-avatar-fallback forum-avatar-lg">{{initial .Username}}</span>
+                                <span class="{{avatarFX .Username}} forum-avatar-fallback forum-avatar-lg">{{initial .Username}}</span>
                                 {{end}}
                                 <span class="forum-recent-copy">
                                     <strong>{{.ThreadTitle}}</strong>
-                                    <small>Latest reply by <span class="role-name role-name-{{or .Role "user"}}">{{.Username}}</span></small>
+                                    <small>Latest reply by <span class="{{nameFX .Username}} role-name role-name-{{or .Role "user"}}">{{.Username}}</span></small>
                                 </span>
                             </span>
 
@@ -118,7 +118,7 @@
                             </span>
 
                             <span class="forum-recent-last">
-                                <strong class="role-name role-name-{{or .Role "user"}}">{{.Username}}</strong>
+                                <strong class="{{nameFX .Username}} role-name role-name-{{or .Role "user"}}">{{.Username}}</strong>
                                 <small title="{{.CreatedAt.Format "2006-01-02 15:04:05"}}">{{relativeTime .CreatedAt}}</small>
                             </span>
                         </a>
@@ -160,11 +160,11 @@
                     <li>
                         <span class="forum-contrib-rank">{{add $i 1}}</span>
                         {{if $c.AvatarPath}}
-                        <img class="forum-avatar" src="{{$c.AvatarPath}}" alt="" loading="lazy">
+                        <img class="{{avatarFX $c.Username}} forum-avatar" src="{{$c.AvatarPath}}" alt="" loading="lazy">
                         {{else}}
-                        <span class="forum-avatar-fallback">{{initial $c.Username}}</span>
+                        <span class="{{avatarFX $c.Username}} forum-avatar-fallback">{{initial $c.Username}}</span>
                         {{end}}
-                        <a href="/u/{{$c.Username}}" class="forum-contrib-name role-name role-name-{{or $c.Role "user"}}">{{$c.Username}}</a>
+                        <a href="/u/{{$c.Username}}" class="{{nameFX $c.Username}} forum-contrib-name role-name role-name-{{or $c.Role "user"}}">{{$c.Username}}</a>
                         <span class="forum-contrib-badge">{{$c.PostCount}} {{plural $c.PostCount "post"}}</span>
                     </li>
                     {{end}}

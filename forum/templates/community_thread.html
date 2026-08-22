@@ -27,7 +27,7 @@
                     </div>
                     <h1 id="forum-thread-title">{{.Thread.Title}}</h1>
                     <div class="forum-thread-meta">
-                        <span>Started by <a href="/u/{{.Thread.Username}}" class="role-name role-name-{{or .Thread.Role "user"}}">{{.Thread.Username}}</a></span>
+                        <span>Started by <a href="/u/{{.Thread.Username}}" class="{{nameFX .Thread.Username}} role-name role-name-{{or .Thread.Role "user"}}">{{.Thread.Username}}</a></span>
                         <span aria-hidden="true">&middot;</span>
                         <span title="{{.Thread.CreatedAt.Format "2006-01-02 15:04:05"}}">{{relativeTime .Thread.CreatedAt}}</span>
                         {{if or (not .IsRecruitment) .CanSeeAllReplies}}
@@ -102,14 +102,14 @@
             <article class="post-card forum-post-card" id="post-{{.ID}}" data-post-id="{{.ID}}" data-username="{{.Username}}" data-my-reactions="{{range $i, $e := .MyReactions}}{{if $i}},{{end}}{{$e}}{{end}}">
                 <aside class="forum-post-author">
                     <span class="forum-post-presence" aria-hidden="true"></span>
-                    <a href="/u/{{.Username}}" class="forum-post-author-avatar">
+                    <a href="/u/{{.Username}}" class="{{avatarFX .Username}} forum-post-author-avatar">
                         {{if .AvatarPath}}
                         <img src="{{.AvatarPath}}" alt="" loading="lazy">
                         {{else}}
                         <span>{{initial .Username}}</span>
                         {{end}}
                     </a>
-                    <a class="forum-post-author-name role-name role-name-{{or .UserRole "user"}}" href="/u/{{.Username}}">{{.Username}}</a>
+                    <a class="{{nameFX .Username}} forum-post-author-name role-name role-name-{{or .UserRole "user"}}" href="/u/{{.Username}}">{{.Username}}</a>
                     {{if eq .UserID $.Thread.UserID}}<span class="forum-post-op-badge">Original poster</span>{{end}}
                     {{/* The mod branch was missing, so a moderator fell to the
                          default and was labelled "Member" -- worse than no badge,

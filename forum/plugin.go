@@ -65,6 +65,14 @@ type Deps struct {
 
 var deps Deps
 
+// fxCore is the Core, kept for the cosmetics helpers in views.go.
+//
+// pluginapi.NameClass and SlotClass need it, and they are called from a
+// TEMPLATE function, which has no other way to reach it. Nil until
+// Provision, which is fine: the helpers answer "" for a nil Core and a
+// member simply draws plain.
+var fxCore *core.Core
+
 // SetDeps installs the host seams. Call from main() before core.Boot.
 func SetDeps(d Deps) { deps = d }
 
@@ -113,6 +121,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// Forgetting this leaves pageTmpl nil and panics on the first page view
 	// rather than failing at boot. Skipped on the legacy contract, where the
 	// host renders its own copies of these templates by name.
+	fxCore = c
 	parseTemplates()
 	db := c.Storage.DB()
 	if db == nil {

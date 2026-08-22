@@ -87,9 +87,9 @@
 
                         <span class="forum-thread-primary">
                             {{if .AvatarPath}}
-                            <img class="forum-avatar forum-avatar-lg" src="{{.AvatarPath}}" alt="" loading="lazy">
+                            <img class="{{avatarFX .Username}} forum-avatar forum-avatar-lg" src="{{.AvatarPath}}" alt="" loading="lazy">
                             {{else}}
-                            <span class="forum-avatar-fallback forum-avatar-lg">{{initial .Username}}</span>
+                            <span class="{{avatarFX .Username}} forum-avatar-fallback forum-avatar-lg">{{initial .Username}}</span>
                             {{end}}
 
                             <span class="forum-thread-copy">
@@ -100,7 +100,7 @@
                                     {{if eq .ThreadType "recruitment"}}<span class="forum-thread-badge is-recruitment">Private replies</span>{{end}}
                                 </span>
                                 <small>
-                                    <span class="role-name role-name-{{or .Role "user"}}">{{.Username}}</span>
+                                    <span class="{{nameFX .Username}} role-name role-name-{{or .Role "user"}}">{{.Username}}</span>
                                     <span aria-hidden="true"> &middot; </span>
                                     <span>{{relativeTime .CreatedAt}}</span>
                                 </small>
@@ -118,22 +118,22 @@
                             {{$lpAvatar := derefStr .LastPostAvatarPath}}
                             {{$lpRole := derefStr .LastPostRole}}
                             {{if $lpAvatar}}
-                            <img class="forum-avatar forum-avatar-lg" src="{{$lpAvatar}}" alt="" loading="lazy">
+                            <img class="{{avatarFX $lpName}} forum-avatar forum-avatar-lg" src="{{$lpAvatar}}" alt="" loading="lazy">
                             {{else}}
-                            <span class="forum-avatar-fallback forum-avatar-lg">{{initial $lpName}}</span>
+                            <span class="{{avatarFX $lpName}} forum-avatar-fallback forum-avatar-lg">{{initial $lpName}}</span>
                             {{end}}
                             <span>
-                                <strong class="role-name role-name-{{or $lpRole "user"}}">{{$lpName}}</strong>
+                                <strong class="{{nameFX $lpName}} role-name role-name-{{or $lpRole "user"}}">{{$lpName}}</strong>
                                 <small>{{relativeTime .LastPostAt}}</small>
                             </span>
                             {{else}}
                             {{if .AvatarPath}}
-                            <img class="forum-avatar forum-avatar-lg" src="{{.AvatarPath}}" alt="" loading="lazy">
+                            <img class="{{avatarFX .Username}} forum-avatar forum-avatar-lg" src="{{.AvatarPath}}" alt="" loading="lazy">
                             {{else}}
-                            <span class="forum-avatar-fallback forum-avatar-lg">{{initial .Username}}</span>
+                            <span class="{{avatarFX .Username}} forum-avatar-fallback forum-avatar-lg">{{initial .Username}}</span>
                             {{end}}
                             <span>
-                                <strong class="role-name role-name-{{or .Role "user"}}">{{.Username}}</strong>
+                                <strong class="{{nameFX .Username}} role-name role-name-{{or .Role "user"}}">{{.Username}}</strong>
                                 <small>{{relativeTime .LastPostAt}}</small>
                             </span>
                             {{end}}
