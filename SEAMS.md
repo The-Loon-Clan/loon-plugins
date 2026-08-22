@@ -178,11 +178,11 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 
 | Key | Contract | For |
 |---|---|---|
-| `catalog.taxonomy` | `CatalogName` | The Newznab category tree. |
+| `catalog.taxonomy` | `Catalog` | The Newznab category tree. |
 | `usenet.releasesink` / `.healthstore` / `.nfostore` / `.imagestore` / `.retitlestore` / `.activity` / `.catalog-stats` / `.junk-sweep` | various | The indexer's ports into a host's own domain. |
 | `usenet.index` / `.admin` / `.newznab` | `UsenetIndex`, various | The read surface, the operator surface, and the Newznab endpoint. What a host renders a release page from. |
-| `usenet.series` | `SeriesStore` | Every copy of an episode, grouped. What the /series pages read. |
-| `newznab:v1:` | `NewznabCachePrefix` | **Prefix.** Namespaces every cached Newznab response, so a worker can clear the whole search cache after an ingest (`cache.PrefixDeleter`, topic `EventIngested`). The one contract the 22 Aug recount found absent from this catalogue — which is the failure the warning at the top describes, happening again. |
+| `usenet.series` | `SeriesIndex` | Every copy of an episode, grouped. What the /series pages read. |
+| `newznab:v1:` | — | **Prefix.** Namespaces every cached Newznab response, so a worker can clear the whole search cache after an ingest (`cache.PrefixDeleter`, topic `EventIngested`). The one contract the 22 Aug recount found absent from this catalogue — which is the failure the warning at the top describes, happening again. |
 | `usenet.grabs` | `DownloadGrabLookup` | Which releases a member has taken — the check that stops a download report being writable by anyone who guesses an id. |
 | `usenet.recheck` | `ReleaseRecheckRequester` | Flag a release for the health sweep. A report is a signal; **the sweep decides from the articles themselves**. |
 | `tracker.mirrors` / `tracker.mirror.make` | `TorrentMirrors`, `TorrentMirrorMaker` | Which releases also exist as torrents, and making one on demand. On-demand because an index of 160,000 releases would otherwise pre-build gigabytes of info dictionaries nobody asked for. |
