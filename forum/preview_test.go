@@ -14,8 +14,8 @@ import (
 // These five templates render only on the RenderPage contract, and the one host
 // that exists still wires the legacy BaseData one -- so it serves its OWN copies
 // and these are never executed anywhere a person can look at them. That is how
-// they came to use 136 forum-* class names that no stylesheet defines: nothing
-// renders them, so nothing showed the gap.
+// they came to use 144 class names that no stylesheet defines: nothing renders
+// them, so nothing showed the gap.
 //
 // Reading CSS is not a substitute for looking at a page, so this exists to make
 // looking possible. Skipped unless FORUM_PREVIEW_DIR is set, because it writes
