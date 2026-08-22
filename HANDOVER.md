@@ -81,7 +81,15 @@ python scripts/audit_a11y.py         # in loon-demo-site, stack running
 
 Every one is in `ranks/templates/groups.html`, rendered at `/admin/p/groups`.
 The host's a11y baseline is a single entry for that one shape; nothing else on
-117 checked pages has a finding.
+133 checked pages has a finding.
+
+That figure was 117 when this was written, and the difference is worth a line
+because it makes the claim stronger, not weaker. The audit gets its pages from
+`audit_links.discover()`, which was stopping at a 250-page cap and handing over
+a half-crawled list; the cap was replaced on 22 Aug 2026 with per-shape
+sampling, and thirteen findings surfaced on six community, playlist and news
+shapes that had never been checked. Those are fixed. This entry is what is
+left, now measured against a crawl that reaches every page shape on the site.
 
 They are one repeated pattern, not 63 different problems: an inline edit row
 whose eleven controls — `name`, `kind`, `color`, `title_color`,
