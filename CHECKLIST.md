@@ -369,7 +369,20 @@ Verify: open `/admin` as a mod — the page is reachable from the hub;
       README says which component names it assumes.
 - [ ] **MUST** — no CDN assets, no external calls from pages: hosts ship
       `script-src 'self'`, so a CDN framework arrives as dead toggles with a
-      lying `aria-expanded`. Prefer `<details>` and CSS over scripts.
+      lying `aria-expanded`. Prefer `<details>` and CSS over scripts. Twelve
+      such toggles were live across five plugins — `data-bs-toggle="modal"`,
+      `"collapse"` and `"dropdown"` against a host that ships neither
+      Bootstrap's CSS nor its JS, so the panels rendered permanently open and
+      the buttons opened nothing. Two were worse: they guarded on
+      `window.bootstrap`, which IS truthy because the host defines a Tab shim
+      on it, so the guard passed and the next line threw.
+- [ ] **MUST** — a class JavaScript APPLIES has a rule somewhere. The element
+      gets the class, no rule matches it, and the state change is invisible:
+      a reaction you left looks like one you did not, a picker "opens" with
+      `display:none` still winning. Nothing errors, and a screenshot of the
+      page BEFORE the click looks correct. The mirror of the dead-selector
+      check, and the half nothing looked at until a `.show` written against a
+      script that toggles `'open'` shipped.
 - [ ] **MUST** — accessibility: every data table has a `<caption>`
       (`visually-hidden` is fine), heading levels do not skip, icons are
       `aria-hidden` beside text, controls are reachable without a mouse.
@@ -403,9 +416,15 @@ Verify: open `/admin` as a mod — the page is reachable from the hub;
 Verify: host `make a11y` and `make mobile` (0 findings, every page fits);
 **`make resources`** (hardcoded images, unresolvable icons — reads the plugin
 tree too when it is checked out beside the host, since the sprite sheet is the
-host's and that check can only be made there); `make shot NAME=x URL=/y` and
-LOOK at it — two of this month's real bugs were visible only in the rendered
-page, never in the CSS.
+host's and that check can only be made there); **`make bootstrap`** (inert
+`data-bs-*`); **`make css`** (classes no stylesheet defines, dead JS
+selectors, JS states nothing styles); `make shot NAME=x URL=/y` and LOOK at it
+— two of this month's real bugs were visible only in the rendered page, never
+in the CSS.
+
+`make mobile` discovers what it checks from the host's own `/sitemap` page, so
+a page missing from that list is a page it never opens. Three were, including
+one linked from the top nav.
 
 ## 9. Widgets
 
@@ -438,10 +457,31 @@ Verify: place it on `/admin/widgets`, view as a member with and without data.
 - [ ] **MUST (today)** — dates, relative times and byte counts go through
       host-supplied helpers (the `RelativeTime` seam pattern), so locale
       formatting lands in one place.
+- [ ] **MUST** — no site's NAME or identity in the plugin. A plugin here is
+      installed by whoever wants it, and a sentence naming a particular site
+      renders that name on every host that installs it with no configuration
+      that takes it back out. Fifteen places in five plugins named the site
+      these were lifted out of, four of them in text that LEAVES the
+      deployment — a claim snippet a group owner pastes into their own bio, a
+      scraper's User-Agent, and two bots announcing it in other people's
+      channels. Take a `SiteName` seam (wiki and donations were first) and
+      fall back to something true everywhere: "this site" on a page, the host
+      part of `BaseURL` in anything a stranger reads. The same rule covers
+      site VOCABULARY — a donor ladder named Rain / Storm / Monsoon is one
+      site's motif, and what the tiers are called is the operator's decision.
 
 Verify: **`make resources`** counts member-facing sentences built in Go and
-holds them to a RATCHET — 111 across these plugins on 18 Aug 2026, and the
-number may only go down. A check that failed on all 111 would have been
+holds them to a RATCHET — 111 across these plugins on 18 Aug 2026, 26 on
+22 Aug, and the number may only go down. **`make branding`** refuses a site's
+name outright, with no ratchet: the baseline is empty because everything it
+found is fixed.
+
+The ratchet was itself wrong until 22 Aug, in two directions at once. It
+matched `c.String(http.StatusInternalServerError, "…")` and not
+`c.String(500, "…")`, so the same sentence was counted in one plugin and
+invisible in twelve; and its three routes to a sink disagreed about what a
+sentence is, so the direct one over-counted. The errors partly cancelled,
+which is why the total looked stable. A check that failed on all 111 would have been
 switched off the day it was written; one that refuses the 112th is a check
 that survives. Lower the baseline in `audit_resources.py` in the same commit
 that converts one. Review question — "if `T()` arrived tomorrow, is this a
