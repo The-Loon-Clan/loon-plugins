@@ -17,8 +17,8 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **63** of them, counted from the `…Name` and
-`…Prefix` constants in `pluginapi` on 20 Aug 2026. They are discoverable: an
+importing the other. There are **59** of them, counted from the EXPORTED `…Name` and
+`…Prefix` constants in `pluginapi` on 22 Aug 2026. They are discoverable: an
 author reading `pluginapi` sees what exists, the compiler catches interface
 skew, and `/admin/contracts` can report an unwired one.
 
@@ -27,8 +27,16 @@ skew, and `/admin/contracts` can report an unwired one.
 > and none of them reached the catalogue below, which is the exact failure this
 > page exists to prevent. One line does it:
 >
+> The line changed on 22 Aug 2026, because running it did not reproduce the
+> number above it. The stated 63 had been counted WITH test files, so
+> `pluginapi`'s own `testPrefix = "test.thing."` was in it; and the pattern
+> matched any identifier, so it also counted `backupPrefix` and `statsPrefix` —
+> lowercase, unexported, and unreachable from another package, which makes them
+> not contracts by the definition three paragraphs up. Requiring an initial
+> capital is what makes the recount and the number the same question.
+>
 > ```
-> grep -rhoE '[A-Za-z]+(Name|Prefix)\s+=\s+"[^"]+"' pluginapi/*.go \n>   --exclude='*_test.go' | sort -u
+> grep -rhoE '\b[A-Z][A-Za-z]*(Name|Prefix)\s+=\s+"[^"]+"' pluginapi/*.go \n>   --exclude='*_test.go' | sort -u
 > ```
 >
 > Diff that against the tables below when you add a contract.
@@ -115,6 +123,7 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 | `usenet.releasesink` / `.healthstore` / `.nfostore` / `.imagestore` / `.retitlestore` / `.activity` / `.catalog-stats` / `.junk-sweep` | various | The indexer's ports into a host's own domain. |
 | `usenet.index` / `.admin` / `.newznab` | `UsenetIndex`, various | The read surface, the operator surface, and the Newznab endpoint. What a host renders a release page from. |
 | `usenet.series` | `SeriesStore` | Every copy of an episode, grouped. What the /series pages read. |
+| `newznab:v1:` | `NewznabCachePrefix` | **Prefix.** Namespaces every cached Newznab response, so a worker can clear the whole search cache after an ingest (`cache.PrefixDeleter`, topic `EventIngested`). The one contract the 22 Aug recount found absent from this catalogue — which is the failure the warning at the top describes, happening again. |
 | `usenet.grabs` | `DownloadGrabLookup` | Which releases a member has taken — the check that stops a download report being writable by anyone who guesses an id. |
 | `usenet.recheck` | `ReleaseRecheckRequester` | Flag a release for the health sweep. A report is a signal; **the sweep decides from the articles themselves**. |
 | `tracker.mirrors` / `tracker.mirror.make` | `TorrentMirrors`, `TorrentMirrorMaker` | Which releases also exist as torrents, and making one on demand. On-demand because an index of 160,000 releases would otherwise pre-build gigabytes of info dictionaries nobody asked for. |

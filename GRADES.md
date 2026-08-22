@@ -22,7 +22,7 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 
 | plugin | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| agent | ✓ | — | ✓ | — | — | ~ | ✓ | ✗ | ✓ | ~ | — | — | ✓ | ✓ |
+| agent | ✗ | — | ✓ | — | — | ~ | ✓ | ✗ | ✓ | ~ | — | — | ✓ | ✓ |
 | anidbscraper | ✓ | — | ~ | ✗ | ~ | ✗ | — | — | — | ✓ | — | ✓ | ✓ | ✗ |
 | backup | ✓ | ✓ | ✓ | ~ | ✓ | ✓ | ✓ | ~ | — | ~ | ✓ | ✓ | ✓ | ✓ |
 | backups | ✓ | — | ✓ | ~ | ~ | ~ | ~ | — | — | — | — | ~ | ✓ | ✓ |
@@ -48,10 +48,10 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 | perks | ✓ | ~ | ~ | ✗ | ~ | ✓ | ✗ | ~ | ✓ | ~ | — | ~ | ✓ | ~ |
 | playlists | ✓ | ✓ | ~ | ✓ | — | ~ | ✗ | ~ | ~ | ~ | — | ✗ | ✓ | ~ |
 | pointstore | ✓ | ~ | ~ | ✗ | — | ~ | ✗ | ✗ | ✓ | ~ | — | ~ | ✓ | ~ |
-| ranks | ✓ | ✓ | ~ | ~ | ✓ | ✓ | ~ | ~ | ✓ | ~ | — | ✓ | ~ | ✓ |
+| ranks | ✗ | ✓ | ~ | ~ | ✓ | ✓ | ~ | ~ | ✓ | ~ | — | ✓ | ~ | ✓ |
 | releasegroups | ✓ | — | ✓ | ✗ | ✓ | ✓ | ~ | ✗ | ~ | ~ | — | ~ | ✓ | ✓ |
 | reports | ✓ | — | ~ | ~ | — | ~ | ✓ | ✗ | — | ~ | — | ✓ | ✓ | ✓ |
-| requests | ✓ | — | ✓ | ✗ | ~ | ~ | ✗ | ✗ | ~ | ~ | — | ~ | ~ | ✓ |
+| requests | ✗ | — | ✓ | ✗ | ~ | ~ | ✗ | ✗ | ~ | ~ | — | ~ | ~ | ✓ |
 | rewards | ✓ | ✓ | ~ | ~ | ~ | ✓ | ✓ | ✗ | ✓ | ~ | ~ | ✓ | ✓ | ✓ |
 | roadmap | ~ | ✗ | ~ | ✗ | ✓ | ✓ | ✗ | ✗ | ~ | ~ | ~ | ~ | ~ | ✓ |
 | scraper | ✓ | — | ✓ | ~ | ✓ | ~ | — | — | — | ✓ | — | ✓ | ✓ | ~ |
@@ -67,6 +67,30 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 *Post-snapshot: the achievements half of rewards was extracted into its own
 `achievements` plugin (2026-08-16). Neither row is regraded here — this file
 is a snapshot; regrade after real work and replace it wholesale.*
+
+---
+
+## What has been re-verified since, and what has not
+
+**22 Aug 2026.** The table above is the 16 Aug judgment. These columns were
+re-checked mechanically on 22 Aug; everything else in it is still that day's
+review and should be read as such.
+
+| column | how it was checked | result |
+|---|---|---|
+| 1 contract | `python scripts/audit_flavours.py` | **3 cells corrected.** agent, ranks and requests do not declare `Metadata.Flavours`, which section 1 makes a MUST. All three were marked pass. 45 of 48 declare it. |
+| 8 ui | host `make mobile`, `make a11y`, `make resources`, `audit_css`, `audit_bootstrap` | Not regraded, because the column has eight MUSTs and no single check settles it — but the inputs moved a long way. Every one of the 48 pages the host checks fits 390px; the a11y ratchet's remaining findings are all in one file (`ranks/templates/groups.html`); no plugin ships an inert `data-bs-*` outside `requests`; undefined-class counts fell furthest in forum (144 → 9), releasegroups (24 → 12) and roadmap (39 → 31). |
+| 10 i18n | host `make resources` | The ratchet itself was wrong in two directions and is fixed (loon-demo-site, 22 Aug). The corrected count is 26 for this tree, unchanged in total but not composed of the same sentences. |
+| 13 docs | read | Four READMEs described a render contract that no longer exists; corrected in the commit that removed it. |
+
+**Not re-verified:** columns 2, 3, 4, 5, 6, 7, 9, 11, 12, 14. Nothing here
+should be read as confirming them.
+
+A note about the branding rule, which is new since the snapshot and which
+section 8 did not name: five plugins were asserting one site's identity —
+donations, roadmap, releasegroups, discord, irc — and `audit_branding.py` in
+the host now refuses it. That is a MUST nobody had written down, so no column
+was failing for it.
 
 ## Confirmed defects — verified beyond the reviewer's word
 
