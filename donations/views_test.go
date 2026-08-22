@@ -54,7 +54,7 @@ func testRenderDonate(t *testing.T, signedIn bool, name string, vm donateVM) str
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("GET", "/help/donate", nil)
-	h.render(c, 200, "t", name, vm, gin.H{})
+	h.render(c, 200, "t", name, vm)
 	if captured == "" {
 		// Re-execute directly to surface the underlying template error in
 		// the failure message.
@@ -318,7 +318,7 @@ func renderDonateWithSiteName(t *testing.T, name func() string) string {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("GET", "/help/donate", nil)
-	h.render(c, 200, "t", "help_donate.html", donatePageFixture(), gin.H{})
+	h.render(c, 200, "t", "help_donate.html", donatePageFixture())
 	return string(captured)
 }
 
@@ -483,11 +483,6 @@ func TestFragmentSetParses(t *testing.T) {
 // seam when it is wired.
 func TestRenderContracts(t *testing.T) {
 	t.Cleanup(func() { deps = nil })
-
-	legacy := &Deps{BaseData: func(c *gin.Context, extra gin.H) gin.H { return extra }}
-	if !legacy.renderContractOK() {
-		t.Fatal("a host on the previous contract is refused — this breaks loon-demo-site")
-	}
 
 	half := &Deps{RenderPage: func(*gin.Context, int, string, template.HTML) {}}
 	if half.renderContractOK() {

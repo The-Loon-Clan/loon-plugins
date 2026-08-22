@@ -205,8 +205,6 @@ func (h *Handlers) ForumCategory(c *gin.Context) {
 		"TotalPages": totalPages,
 		"PaginationHTML": paginate(page, total,
 			fmt.Sprintf("/community/forums/category/%d?", id)),
-		"Pagination": legacyPaginate(page, totalPages,
-			fmt.Sprintf("/community/forums/category/%d?", id)),
 	})
 }
 
@@ -296,8 +294,6 @@ func (h *Handlers) ForumThread(c *gin.Context) {
 		"TotalPages":    totalPages,
 		"CurrentUserID": currentUserID,
 		"PaginationHTML": paginate(page, total,
-			fmt.Sprintf("/community/forums/thread/%d?", id)),
-		"Pagination": legacyPaginate(page, totalPages,
 			fmt.Sprintf("/community/forums/thread/%d?", id)),
 		"ReplyEditorHTML": editor(map[string]any{
 			"Name": "body", "Rows": 4, "Placeholder": "Write your reply…", "Required": true,

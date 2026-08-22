@@ -50,13 +50,6 @@ func (h *Handlers) render(c *gin.Context, status int, name string, data gin.H) {
 		data = gin.H{}
 	}
 
-	// Legacy contract: render by NAME from the host's own template set. See
-	// Deps.BaseData for why this branch exists and when it goes.
-	if deps.RenderPage == nil {
-		c.HTML(status, name, deps.BaseData(c, data))
-		return
-	}
-
 	data["SignedIn"] = h.viewer(c) != 0
 	data["CSRFToken"] = deps.CSRFToken(c)
 
@@ -97,13 +90,6 @@ func paginationHTML(page, pageSize, totalItems int, baseURL string) template.HTM
 // legacyPagination is the host's pagination VIEW-MODEL, or nil.
 //
 // Only the host's own copies of these templates read it, and only on the
-// previous contract. It goes when Deps.Pagination does.
-func legacyPagination(page, pageSize, totalItems int, baseURL string) any {
-	if deps.Pagination == nil {
-		return nil
-	}
-	return deps.Pagination(page, pageSize, totalItems, baseURL)
-}
 
 // userTag is the host's username chip, or a plain link to the profile.
 //

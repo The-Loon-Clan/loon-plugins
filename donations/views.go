@@ -152,19 +152,13 @@ type adminDonateVM struct {
 	BTCPayMsg     string
 }
 
-// render draws one page: fragment from the plugin's set, chrome from the
-// host.
+// render draws one page: fragment from the plugin's set, chrome from the host.
 //
-// Two contracts, two data shapes, both built by the caller: vm feeds the
-// plugin's own fragment on the current contract; legacy is the exact gin.H
-// the pre-lift handler passed, still rendered by template NAME through the
-// host's BaseData when the host wired the previous contract (loon-demo-site
-// does — see Deps.BaseData for when that branch goes).
-func (h *Handlers) render(c *gin.Context, status int, title, name string, vm donateVM, legacy gin.H) {
-	if h.deps.RenderPage == nil {
-		c.HTML(status, name, h.deps.BaseData(c, legacy))
-		return
-	}
+// It used to take a second argument beside vm — the exact gin.H the pre-lift
+// handler passed, for hosts still rendering these templates by NAME. Both call
+// sites therefore built two descriptions of the same page and threw one away.
+// That contract is gone, and so is the duplicate.
+func (h *Handlers) render(c *gin.Context, status int, title, name string, vm donateVM) {
 	_, signedIn := h.auth.CurrentUser(c)
 	vm.setChrome(h.deps.CSRFToken(c), !signedIn)
 
@@ -185,15 +179,6 @@ func (h *Handlers) render(c *gin.Context, status int, title, name string, vm don
 // the page every visitor sees when anything breaks. What donations needs is
 // only to reach it — offers and lists cross the same way — with a title
 // parameter added because the BTCPay-unconfigured 503 carries custom copy.
-// The legacy branch is the pre-lift call, byte for byte.
 func (h *Handlers) renderError(c *gin.Context, code int, title, msg string) {
-	if h.deps.RenderError != nil {
-		h.deps.RenderError(c, code, title, msg)
-		return
-	}
-	c.HTML(code, "error.html", h.deps.BaseData(c, gin.H{
-		"Code":    code,
-		"Title":   title,
-		"Message": msg,
-	}))
+	h.deps.RenderError(c, code, title, msg)
 }

@@ -78,10 +78,6 @@ reached via `Core.Storage.DB()`:
     - `RenderError` — shows the host's error page (see the error.html note below).
     - `CSRFToken` — minted by host middleware; feeds the pages' inline token inputs.
     - `RelativeTime` — the site's time wording.
-  - Previous render contract, kept working while `loon-demo-site` still wires it (remove once
-    the demo moves to `RenderPage`):
-    - `BaseData` — page-chrome injector; the plugin then renders the host's *own* copies of
-      `help_donate.html` / `admin_donate.html` / `error.html` by name.
 - **Config keys**: none. No `plugins.donations.*` namespace; all runtime config lives in
   `site_settings` via `Deps.Settings`.
 - **Metadata.Requires**: none (leaf plugin; depends only on always-available core services).

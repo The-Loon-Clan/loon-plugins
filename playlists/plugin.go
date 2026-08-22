@@ -72,20 +72,10 @@ type Deps struct {
 	// than copied for consistency of phrasing across the site.
 	RelativeTime func(any) string
 
-	// BaseData and Pagination are the PREVIOUS contract, where the HOST owned
-	// these four templates and the plugin rendered them by name.
-	//
-	// Kept working so a host mid-migration keeps building. Remove both, and
-	// the branches in render()/paginationHTML() that read them, once every
-	// host has moved to RenderPage.
-	BaseData func(c *gin.Context, extra gin.H) gin.H
-
-	// PageOffset and Pagination are the host's paging helpers. Taken rather
-	// than reimplemented: the view-model is consumed by the host's own
-	// pagination partial, so a lifted copy renders correctly right up until
-	// that partial changes.
+	// PageOffset is the host's paging arithmetic. Taken rather than
+	// reimplemented so one definition of "page 2 starts here" serves the host
+	// and every plugin that pages.
 	PageOffset func(page, pageSize int) int
-	Pagination func(page, pageSize, totalItems int, baseURL string) any
 
 	// LookupReleases resolves release ids to something renderable. Ids that no
 	// longer exist must simply be ABSENT from the result — retention removes
@@ -121,8 +111,7 @@ type Plugin struct {
 func (d Deps) renderContractOK() bool {
 	modern := d.RenderPage != nil && d.CSRFToken != nil &&
 		d.RenderPagination != nil && d.RelativeTime != nil
-	legacy := d.BaseData != nil && d.Pagination != nil
-	return modern || legacy
+	return modern
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -141,9 +130,8 @@ const pageSize = 24
 func (p *Plugin) Provision(c *core.Core) error {
 	if !deps.renderContractOK() || deps.PageOffset == nil {
 		return fmt.Errorf("playlists: SetDeps not called, or a render seam is missing — " +
-			"PageOffset plus either the current contract (RenderPage, CSRFToken, " +
-			"RenderPagination, RelativeTime) or the previous one (BaseData, Pagination); " +
-			"wire it in main() before core.Boot")
+			"wire PageOffset, RenderPage, CSRFToken, RenderPagination and " +
+			"RelativeTime in main() before core.Boot")
 	}
 	// Parsed here, not at package init: RelativeTime is a Deps function.
 	// Forgetting this leaves pageTmpl nil and panics on the first page view
@@ -242,7 +230,6 @@ func (h *Handlers) Index(c *gin.Context) {
 		// Both, for as long as both contracts are accepted: the legacy
 		// markup in the host reads .Pagination's view-model, the plugin's own
 		// reads .PaginationHTML. Each renders nothing on the other's path.
-		"Pagination":     legacyPagination(page, pageSize, total, "/playlists"),
 		"PaginationHTML": paginationHTML(page, pageSize, total, "/playlists"),
 	})
 }
@@ -257,14 +244,14 @@ func (h *Handlers) Index(c *gin.Context) {
 // an i18n one, and it is why these are worth converting rather than merely
 // counting.
 func (h *Handlers) fail(c *gin.Context, status int, code string) {
-	// No BaseData means no host chrome to render into — Provision refuses to
+	// No RenderPage means no host chrome to render into — Provision refuses to
 	// start without it, so this is the unit-test path rather than a live one.
 	// The fallback writes the CODE, not a sentence: machine-readable, and
 	// still identical for two callers who passed the same code, which is what
 	// TestOwnedAnswersTheSameForMissingAndNotYours depends on. A response that
 	// differs between "not yours" and "does not exist" is an oracle for
 	// whether a private playlist exists.
-	if deps.BaseData == nil {
+	if deps.RenderPage == nil {
 		c.String(status, code)
 		return
 	}

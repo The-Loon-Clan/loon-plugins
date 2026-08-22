@@ -57,9 +57,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// and keeps the rest, which is a configuration rather than a fault.
 	if !deps.ready() {
 		return fmt.Errorf("communities: SetDeps not called, or a render seam is missing — " +
-			"Markdown and PageOffset plus either the current contract (RenderPage, CSRFToken, " +
-			"RenderPagination, RenderEditor, RelativeTime) or the previous one (BaseData, " +
-			"Pagination); wire it in main() before core.Boot")
+			"wire Markdown, PageOffset, RenderPage, CSRFToken, RenderPagination, " +
+			"RenderEditor and RelativeTime in main() before core.Boot")
 	}
 	// Parsed here, not at package init: the FuncMap binds deps.RelativeTime,
 	// which SetDeps only just supplied. A parse failure fails boot rather

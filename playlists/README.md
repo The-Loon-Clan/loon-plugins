@@ -72,8 +72,12 @@ can see what they lost. Templates must handle a nil `Release`.
 
 | Seam | Required | Why the host supplies it |
 |---|---|---|
-| `BaseData(c, extra)` | yes | Page chrome — user, nav, CSRF, theme. These pages render inside the host layout. |
-| `PageOffset`, `Pagination` | yes | The host's own paging helpers. Taken rather than reimplemented: the view model is consumed by the host's pagination partial, so a lifted copy renders correctly right up until that partial changes. |
+| `RenderPage(c, status, title, body)` | yes | Chrome around a finished fragment. `status` crosses because the create form re-renders on a validation failure, and a seam fixed at 200 reports success while showing an error. |
+| `CSRFToken(c)` | yes | Only the middleware that mints it can answer. Injected once in `render()`, so no call site can forget it and ship a form that 403s. |
+| `RenderPagination(...)` | yes | The site's pager as finished HTML. The index used to build its own `<nav>` from a view model — six fields where one seam does. |
+| `RelativeTime(v)` | yes | The site's time wording. |
+| `RenderUserTag(name)` | no | The site's username chip — role colour, name effects, profile link. Without it the owner is a plain link to their profile. |
+| `PageOffset(page, size)` | yes | The host's paging arithmetic: it shapes the query, not the markup. |
 | `LookupReleases(ctx, ids)` | yes | Resolves release ids to something renderable, in ONE call for a whole page. Ids the host does not return stay nil. `Provision` refuses to start without it — a playlist that cannot resolve its releases has nothing to show. |
 | `LookupUsername(ctx, id)` | no | Owner display name. Without it the owner shows as a bare id: ugly, not wrong. |
 

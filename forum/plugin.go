@@ -53,18 +53,6 @@ type Deps struct {
 	// the weaker of the two reasons, and worth saying so.
 	RelativeTime func(any) string
 
-	// BaseData and Paginate are the PREVIOUS contract, where the HOST owned
-	// these five templates and the plugin rendered them by name.
-	//
-	// Kept working because loon-demo-site still wires it and compiles against
-	// this working tree — breaking it would surface as a build error in
-	// someone else's session about code they did not write. Remove both, and
-	// the branches in render()/paginate() that read them, once the demo has
-	// moved to RenderPage. See TestLegacyContractIsStillAccepted, which also
-	// refuses a MIXTURE of the two.
-	BaseData func(c *gin.Context, extra gin.H) gin.H
-	Paginate func(page, totalPages int, baseURL string) any
-
 	// RepBadge names the earned reputation tier shown beside a poster's name.
 	//
 	// OPTIONAL, and the only Deps entry here that is site VOCABULARY rather
@@ -118,9 +106,8 @@ func (p *Plugin) Metadata() core.Metadata {
 func (p *Plugin) Provision(c *core.Core) error {
 	if !deps.ready() {
 		return fmt.Errorf("forum: SetDeps not called, or a render seam is missing — " +
-			"Markdown plus either the current contract (RenderPage, CSRFToken, " +
-			"RenderEditor, RenderPagination, RenderReportModal, RelativeTime) or the " +
-			"previous one (BaseData, Paginate); wire it in main() before core.Boot")
+			"wire Markdown, RenderPage, CSRFToken, RenderEditor, RenderPagination, " +
+			"RenderReportModal and RelativeTime in main() before core.Boot")
 	}
 	// Parsed here, not at package init: RelativeTime is a Deps function.
 	// Forgetting this leaves pageTmpl nil and panics on the first page view
@@ -220,6 +207,5 @@ func (d Deps) ready() bool {
 	}
 	modern := d.RenderPage != nil && d.CSRFToken != nil && d.RenderEditor != nil &&
 		d.RenderPagination != nil && d.RenderReportModal != nil && d.RelativeTime != nil
-	legacy := d.BaseData != nil && d.Paginate != nil
-	return modern || legacy
+	return modern
 }

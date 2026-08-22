@@ -52,15 +52,6 @@ type Deps struct {
 	// RelativeTime is the site's time wording ("2 hours ago").
 	RelativeTime func(v any) string
 
-	// BaseData is the PREVIOUS contract, where the HOST owned
-	// help_donate.html / admin_donate.html / error.html and the
-	// plugin rendered them by name. Kept working because
-	// loon-demo-site still wires it and compiles against this
-	// working tree; remove it, and the branches in
-	// render()/renderError() that read it, once the demo has moved
-	// to RenderPage.
-	BaseData func(c *gin.Context, extra gin.H) gin.H
-
 	// SiteName is what this deployment calls itself.
 	//
 	// It exists because this page said "ameNZB" five times in copy a visitor
@@ -95,14 +86,14 @@ var deps *Deps
 // core.Boot.
 func SetDeps(d Deps) { deps = &d }
 
-// renderContractOK reports whether Deps carries a complete render contract —
-// the current one (fragments + host chrome/error seams) or the previous one
-// (BaseData, render-by-name). Half of either is not a contract: a host that
-// wired some seams would serve some pages and blank others.
+// renderContractOK reports whether Deps carries a complete render contract:
+// fragments plus the host's chrome and error seams. Half of one is not a
+// contract — a host that wired some seams would serve some pages and blank
+// others, which reads as a broken site rather than a missing call.
 func (d *Deps) renderContractOK() bool {
 	modern := d.RenderPage != nil && d.RenderError != nil &&
 		d.CSRFToken != nil && d.RelativeTime != nil
-	return modern || d.BaseData != nil
+	return modern
 }
 
 // siteName resolves the deployment's name, or a neutral stand-in.
@@ -159,15 +150,15 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if deps == nil {
 		return fmt.Errorf("donations: SetDeps was not called before core.Boot — wire it in main()")
 	}
-	// Data seams are required on both contracts; the render side accepts
-	// either the current one (RenderPage + RenderError + CSRFToken +
-	// RelativeTime) or the previous one (BaseData, render-by-name).
+	// Data seams, checked separately from the render ones so the error can
+	// say which half is missing.
 	if deps.Settings == nil || deps.IsDonateEnabled == nil ||
 		deps.SetDonateEnabled == nil || deps.LookupUsername == nil || deps.LookupUserID == nil {
 		return fmt.Errorf("donations: Deps missing a required field")
 	}
 	if !deps.renderContractOK() {
-		return fmt.Errorf("donations: Deps carries neither render contract — wire RenderPage/RenderError/CSRFToken/RelativeTime, or the legacy BaseData")
+		return fmt.Errorf("donations: SetDeps not called, or a render seam is missing — " +
+			"wire RenderPage, RenderError, CSRFToken and RelativeTime in main() before core.Boot")
 	}
 	// Parsed here, not at package init: the FuncMap binds deps.RelativeTime.
 	// A parse failure fails boot rather than the first page view. Skipped on

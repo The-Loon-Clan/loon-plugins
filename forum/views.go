@@ -133,12 +133,6 @@ func (h *Handlers) render(c *gin.Context, status int, title, name string, data g
 	data["CurrentUserID"] = uid
 	data["IsAdmin"] = isAdmin
 
-	// Legacy contract: render by NAME from the host's own template set. See
-	// Deps.BaseData for why this branch exists and when it goes.
-	if deps.RenderPage == nil {
-		c.HTML(status, name, deps.BaseData(c, data))
-		return
-	}
 	data["CSRFToken"] = deps.CSRFToken(c)
 
 	var sb strings.Builder
@@ -184,10 +178,3 @@ func paginate(page, total int, baseURL string) template.HTML {
 }
 
 // legacyPaginate builds the view model a host template consumes by field
-// name. Nil on the current contract, where the pager arrives as finished HTML.
-func legacyPaginate(page, totalPages int, baseURL string) any {
-	if deps.Paginate == nil {
-		return nil
-	}
-	return deps.Paginate(page, totalPages, baseURL)
-}

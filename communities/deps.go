@@ -50,20 +50,10 @@ type Deps struct {
 	// Required on BOTH contracts.
 	Markdown func(src string) template.HTML
 
-	// PageOffset is the host's paging arithmetic, needed on both contracts —
-	// it shapes the query, not the markup.
+	// PageOffset is the host's paging arithmetic: it shapes the query, not
+	// the markup, so one definition of "page 2 starts here" serves the host
+	// and every plugin that pages.
 	PageOffset func(page, pageSize int) int
-
-	// BaseData and Pagination are the PREVIOUS contract, where the HOST
-	// owned these seven templates and the plugin rendered them by name.
-	//
-	// Kept working because loon-demo-site still wires it and compiles against
-	// this working tree — breaking it would surface as a build error in
-	// someone else's session about code they did not write. Remove both, and
-	// the branches in render()/legacyPager() that read them, once the demo
-	// has moved to RenderPage. See TestLegacyContractIsStillAccepted.
-	BaseData   func(c *gin.Context, extra gin.H) gin.H
-	Pagination func(page, pageSize, totalItems int, baseURL string) any
 
 	// Files stores banner/icon uploads under the community/ namespace.
 	// Optional on either contract.
@@ -76,9 +66,11 @@ var deps Deps
 // Provision fails loud if anything required is missing.
 func SetDeps(d Deps) { deps = d }
 
-// ready reports whether SetDeps supplied a complete contract — the current
-// one (RenderPage + widgets) or the previous one (BaseData + Pagination).
-// Markdown and PageOffset are required on both; uploads are optional — a
+// ready reports whether SetDeps supplied a complete contract.
+//
+// It used to accept a previous one as well — BaseData + Pagination, the host
+// rendering its own copies of these templates by name — which is gone now
+// that no host wires it. Uploads stay optional — a
 // host with no blob store simply cannot take banner images, which degrades
 // one feature rather than the whole surface.
 func (d Deps) ready() bool {
@@ -87,8 +79,7 @@ func (d Deps) ready() bool {
 	}
 	modern := d.RenderPage != nil && d.CSRFToken != nil && d.RenderPagination != nil &&
 		d.RenderEditor != nil && d.RelativeTime != nil
-	legacy := d.BaseData != nil && d.Pagination != nil
-	return modern || legacy
+	return modern
 }
 
 // noRowsAsNil collapses sql.ErrNoRows to a nil error, so "row not found" is

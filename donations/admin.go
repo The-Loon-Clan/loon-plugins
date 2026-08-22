@@ -177,26 +177,6 @@ func (h *Handlers) AdminDonatePage(c *gin.Context) {
 			ErrCode:       c.Query("err"),
 			BTCPayTest:    c.Query("btcpay_test"),
 			BTCPayMsg:     c.Query("btcpay_msg"),
-		},
-		gin.H{
-			"PageTitle":     "Donate (admin)",
-			"IsAdmin":       isAdmin,
-			"Costs":         costs,
-			"Edit":          editCost,
-			"Config":        cfg,
-			"LockingGroups": lockingGroups,
-			"Preview":       preview,
-			"DonateEnabled": donateEnabled,
-			"Donations":     donations,
-			"Usernames":     usernames,
-			"Wallet":        wallet,
-			"TipJar":        tipJar,
-			"Packages":      pkgs,
-			"EditPkg":       editPkg,
-			"Saved":         c.Query("ok"),
-			"ErrCode":       c.Query("err"),
-			"BTCPayTest":    c.Query("btcpay_test"),
-			"BTCPayMsg":     c.Query("btcpay_msg"),
 		})
 }
 

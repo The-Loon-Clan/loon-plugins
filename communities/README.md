@@ -73,15 +73,6 @@ Current contract (the plugin renders its own embedded fragments):
   new-thread form uses it).
 - `RelativeTime` — the site's time wording.
 
-Previous contract, kept working while `loon-demo-site` still wires it (see
-`TestLegacyContractIsStillAccepted`; remove once the demo moves to
-`RenderPage`):
-
-- `BaseData` — merges host page chrome into a template map; the plugin then
-  renders the host's *own* copies of these templates by name.
-- `Pagination` — the host's pager view-model builder, consumed by the host's
-  pagination partial.
-
 Optional on either contract:
 
 - `Files` — `blob.Store` for banner/icon uploads. A host without one loses
@@ -136,7 +127,7 @@ Config keys: none. `Metadata.Requires`: none.
   chrome-leak check proving no host chrome is embedded; every POST form is
   counted against its `_csrf` field (a mismatch is a form that 403s on
   submit); the empty states render; the fragment set parses in one pass; and
-  the legacy contract stays accepted while a half-wired mixture is refused.
+  a half-wired mixture is refused — a host that wired some render seams would serve some pages and blank others.
 - Needs integration (live DB): `PGStore` is a SQL passthrough — the join-escrow
   flow in particular spans several statements and a points call, and only a
   real database shows whether the escrow is refunded on deny. That gap predates

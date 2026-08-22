@@ -363,33 +363,17 @@ func TestEveryPostFormCarriesTheCSRFField(t *testing.T) {
 	}
 }
 
-// The legacy contract must keep working, because loon-demo-site still wires it
-// and builds against this working tree. A host that sets BaseData/Paginate
-// instead of the render seams renders by template NAME from its own directory
-// — so ready() must accept it, and nothing on that path may deref a seam it
-// did not wire.
-func TestLegacyContractIsStillAccepted(t *testing.T) {
+// Half of a contract is not a contract.
+//
+// This was TestLegacyContractIsStillAccepted, which guaranteed the previous
+// BaseData/Paginate contract kept working "because loon-demo-site still wires
+// it". It does not any more, and that contract is gone; what survives is the
+// half of the test that was never about it.
+func TestHalfAContractIsRefused(t *testing.T) {
 	t.Cleanup(func() { deps = Deps{} })
 
-	SetDeps(Deps{
-		Markdown: func(string) template.HTML { return "" },
-		BaseData: func(c *gin.Context, extra gin.H) gin.H { return extra },
-		Paginate: func(p, tp int, u string) any { return nil },
-	})
-	if !deps.ready() {
-		t.Fatal("a host on the previous contract is refused — this breaks loon-demo-site")
-	}
-	// The optional-seam helpers must degrade rather than deref nil.
-	if editor(nil) != "" || paginate(1, 0, "/x") != "" || reportModal(nil) != "" {
-		t.Error("the legacy path should yield empty chrome, not panic or invent markup")
-	}
-	if legacyPaginate(1, 1, "/x") != nil {
-		t.Error("legacyPaginate should return what the host's builder returned")
-	}
-
-	// And half of each contract is not a contract: a host that wired some of
-	// the render seams would serve some pages and blank others, which reads
-	// as a broken site rather than a missing call.
+	// A host that wired SOME of the render seams would serve some pages and
+	// blank others, which reads as a broken site rather than a missing call.
 	SetDeps(Deps{
 		Markdown:   func(string) template.HTML { return "" },
 		RenderPage: func(*gin.Context, int, string, template.HTML) {},
@@ -398,13 +382,25 @@ func TestLegacyContractIsStillAccepted(t *testing.T) {
 	if deps.ready() {
 		t.Error("a half-wired host was accepted")
 	}
-	// Markdown alone is never optional — it is the sanitiser.
+
+	// Markdown alone is never optional — it is the sanitiser, and forum posts
+	// are user-authored.
 	SetDeps(Deps{
-		BaseData: func(c *gin.Context, extra gin.H) gin.H { return extra },
-		Paginate: func(p, tp int, u string) any { return nil },
+		RenderPage:        func(*gin.Context, int, string, template.HTML) {},
+		CSRFToken:         func(*gin.Context) string { return "" },
+		RenderEditor:      func(map[string]any) template.HTML { return "" },
+		RenderPagination:  func(int, int, int, string) template.HTML { return "" },
+		RenderReportModal: func(*gin.Context) template.HTML { return "" },
+		RelativeTime:      func(any) string { return "" },
 	})
 	if deps.ready() {
 		t.Error("a host that wired no Markdown was accepted; forum posts are user-authored")
+	}
+
+	// The optional-seam helpers still degrade rather than deref nil.
+	deps = Deps{}
+	if editor(nil) != "" || paginate(1, 0, "/x") != "" || reportModal(nil) != "" {
+		t.Error("an unwired optional seam should yield empty chrome, not panic")
 	}
 }
 

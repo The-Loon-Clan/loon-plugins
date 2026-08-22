@@ -326,23 +326,5 @@ func (h *Handlers) DonatePage(c *gin.Context) {
 			Tiers:           donorTiers(ctx, h.deps.Settings),
 			Packages:        pkgViews,
 			FundedPackages:  fundedPkgs,
-		},
-		gin.H{
-			"PageTitle":       "Donate & Costs",
-			"ActiveNav":       "support",
-			"Groups":          groups,
-			"PointsConfig":    cfg,
-			"PointsPreview":   preview,
-			"BTCAddress":      btcAddr,
-			"ETHAddress":      ethAddr,
-			"XMRAddress":      xmrAddr,
-			"RecentDonations": recent,
-			"AddressesHidden": addressesHidden,
-			"TotalMonthlyUSD": totalMonthlyUSD,
-			"TotalYearlyUSD":  totalYearlyUSD,
-			"TotalAnnualUSD":  totalAnnualUSD,
-			"TipJarGoals":     tipJarGoals,
-			"Packages":        pkgViews,
-			"FundedPackages":  fundedPkgs,
 		})
 }

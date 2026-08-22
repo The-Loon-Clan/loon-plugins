@@ -171,25 +171,17 @@ type errorVM struct {
 // code and community_error.html holds the words.
 func (h *Handlers) fail(c *gin.Context, status int, reason string) {
 	h.render(c, status, "Communities", "community_error.html",
-		&errorVM{Reason: reason},
-		gin.H{"Reason": reason})
+		&errorVM{Reason: reason})
 }
 
 // render draws one page: fragment from the plugin's set, chrome from the
 // host.
 //
-// Two contracts, two data shapes, both built by the caller: vm feeds the
-// plugin's own fragment on the current contract; legacy is the exact gin.H
-// the pre-lift handler passed, still rendered by template NAME through the
-// host's BaseData when the host wired the previous contract (loon-demo-site
-// does — see Deps.BaseData for when that branch goes). Keeping both shapes
-// visible at each call site is what lets them be compared line-by-line
-// instead of drifting apart in a conversion helper.
-func (h *Handlers) render(c *gin.Context, status int, title, name string, vm pageVM, legacy gin.H) {
-	if deps.RenderPage == nil {
-		c.HTML(status, name, deps.BaseData(c, legacy))
-		return
-	}
+// It used to take a second argument beside vm — the exact gin.H the pre-lift
+// handler passed, for a host still rendering these templates by NAME. All
+// eight call sites therefore built two descriptions of the same page and the
+// plugin threw one away. That contract is gone, and so are the duplicates.
+func (h *Handlers) render(c *gin.Context, status int, title, name string, vm pageVM) {
 	vm.setChrome(deps.CSRFToken(c), h.viewerID(c) != 0)
 
 	var sb strings.Builder
@@ -213,15 +205,6 @@ func pager(page, totalItems int, baseURL string) template.HTML {
 		return ""
 	}
 	return deps.RenderPagination(page, communityPageSize, totalItems, baseURL)
-}
-
-// legacyPager builds the view model the host's own pagination partial
-// consumes by field name (previous contract).
-func legacyPager(page, totalItems int, baseURL string) any {
-	if deps.Pagination == nil {
-		return nil
-	}
-	return deps.Pagination(page, communityPageSize, totalItems, baseURL)
 }
 
 // editorHTML is the host's shared markdown editor for the new-thread form,

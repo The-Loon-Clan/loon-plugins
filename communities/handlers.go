@@ -27,8 +27,8 @@ const (
 
 // Handlers serves the /c/* surface. Ported from
 // web/handlers.CommunitiesHandler during the plugin extraction;
-// host seams are the exported handlers helpers (BaseData,
-// pagination, RenderForumMarkdown) and the Core services (Auth
+// host seams are the Deps funcs (RenderPage, RenderPagination,
+// Markdown) and the Core services (Auth
 // for the session user, Points for the join-cost escrow, Errors
 // for 500s).
 type Handlers struct {
@@ -108,11 +108,6 @@ func (h *Handlers) Index(c *gin.Context) {
 			Communities: rows,
 			Total:       total,
 			Pagination:  pager(page, total, "/c?"),
-		},
-		gin.H{
-			"Communities": rows,
-			"Total":       total,
-			"Pagination":  legacyPager(page, total, "/c?"),
 		})
 }
 
@@ -121,7 +116,7 @@ func (h *Handlers) Index(c *gin.Context) {
 // redirects to /login.
 func (h *Handlers) NewCommunityForm(c *gin.Context) {
 	h.render(c, http.StatusOK, "Create community", "community_new.html",
-		&communityNewVM{}, gin.H{})
+		&communityNewVM{})
 }
 
 // newCommunityFormError re-renders the create form with the entered values
@@ -129,8 +124,7 @@ func (h *Handlers) NewCommunityForm(c *gin.Context) {
 // the status line should say so.
 func (h *Handlers) newCommunityFormError(c *gin.Context, msg, slug, name, description string) {
 	h.render(c, http.StatusBadRequest, "Create community", "community_new.html",
-		&communityNewVM{Error: msg, Slug: slug, Name: name, Description: description},
-		gin.H{"Error": msg, "Slug": slug, "Name": name, "Description": description})
+		&communityNewVM{Error: msg, Slug: slug, Name: name, Description: description})
 }
 
 // CreateCommunity — POST /c. Validates slug + name, inserts the
@@ -263,20 +257,6 @@ func (h *Handlers) View(c *gin.Context) {
 			Flash:           flash,
 			SidebarHTML:     sidebarHTML,
 			DescriptionHTML: descriptionHTML,
-		},
-		gin.H{
-			"Community":       comm,
-			"Threads":         threads,
-			"Total":           total,
-			"Pagination":      legacyPager(page, total, fmt.Sprintf("/c/%s?", slug)),
-			"Rules":           rules,
-			"Mods":            mods,
-			"Role":            role,
-			"MyRequest":       myRequest,
-			"PendingCount":    pendingCount,
-			"Flash":           flash,
-			"SidebarHTML":     sidebarHTML,
-			"DescriptionHTML": descriptionHTML,
 		})
 }
 
@@ -462,8 +442,7 @@ func (h *Handlers) NewThreadForm(c *gin.Context) {
 		return
 	}
 	h.render(c, http.StatusOK, fmt.Sprintf("New thread in /c/%s", comm.Slug), "community_new_thread_c.html",
-		&communityNewThreadVM{Community: comm, Editor: editorHTML()},
-		gin.H{"Community": comm})
+		&communityNewThreadVM{Community: comm, Editor: editorHTML()})
 }
 
 // CreateThread — POST /c/:slug/submit.
@@ -570,18 +549,6 @@ func (h *Handlers) ViewThread(c *gin.Context) {
 			Mods:        mods,
 			Role:        role,
 			SidebarHTML: sidebarHTML,
-		},
-		gin.H{
-			"Community":   comm,
-			"Thread":      thread,
-			"BodyHTML":    bodyHTML,
-			"Posts":       views,
-			"Total":       total,
-			"Pagination":  legacyPager(page, total, fmt.Sprintf("/c/%s/thread/%d?", slug, threadID)),
-			"Rules":       rules,
-			"Mods":        mods,
-			"Role":        role,
-			"SidebarHTML": sidebarHTML,
 		})
 }
 
@@ -735,8 +702,7 @@ func (h *Handlers) RequestQueue(c *gin.Context) {
 	invites, _ := h.store.ListCommunityInvites(c.Request.Context(), comm.ID)
 	flash := h.popFlash(c)
 	h.render(c, http.StatusOK, fmt.Sprintf("Join requests - /c/%s", comm.Slug), "community_join_requests.html",
-		&communityJoinRequestsVM{Community: comm, Requests: pending, Invites: invites, Flash: flash},
-		gin.H{"Community": comm, "Requests": pending, "Invites": invites, "Flash": flash})
+		&communityJoinRequestsVM{Community: comm, Requests: pending, Invites: invites, Flash: flash})
 }
 
 // ApproveRequest — POST /c/:slug/requests/:rid/approve (mod).
@@ -867,8 +833,7 @@ func (h *Handlers) Settings(c *gin.Context) {
 	}
 	flash := h.popFlash(c)
 	h.render(c, http.StatusOK, fmt.Sprintf("Settings - /c/%s", comm.Slug), "community_settings.html",
-		&communitySettingsVM{Community: comm, Flash: flash},
-		gin.H{"Community": comm, "Flash": flash})
+		&communitySettingsVM{Community: comm, Flash: flash})
 }
 
 // SaveSettings — POST /c/:slug/settings. Persists join config +
