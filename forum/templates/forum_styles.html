@@ -100,7 +100,14 @@
 
 /* role-name-<role> is built by concatenation in the markup, so the base class
    sets the shape and each suffix only sets a colour. */
-.role-name { font-weight: 600; color: var(--text, #e7e9ee); text-decoration: none; }
+/* The colour is SPLIT out and guarded; the weight and the underline are not.
+   .role-name sets a colour too, and it is one class like .fx-glow-* — so
+   guarding only the role variants left this one still overriding an equipped
+   effect. It was the reason a name showed the effect's text-shadow in the
+   effect's colour-less form: the glow was there and the colour was the
+   theme's. */
+.role-name { font-weight: 600; text-decoration: none; }
+.role-name:not([class*="fx-"]) { color: var(--text, #e7e9ee); }
 .role-name:hover { text-decoration: underline; }
 /* :not([class*="fx-"]) on every role colour, and it is load-bearing rather
    than decorative.
