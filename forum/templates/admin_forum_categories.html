@@ -3,7 +3,7 @@
 
     <div class="container mt-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3 class="m-0">Forum Categories</h3>
+            <h1 class="m-0" style="font-size:1.4rem;">Forum Categories</h1>
             <small style="color:var(--text-muted);">
                 Migration 196 added a UNIQUE constraint on <code>name</code>;
                 the seed insert in 18 will now no-op on re-runs. Use this page
@@ -50,6 +50,7 @@
 
         <div class="card">
             <table class="table mb-0 align-middle">
+                    <caption class="visually-hidden">Forum categories, with inline editing</caption>
                 <thead>
                     <tr>
                         <th style="width:60px;">ID</th>
@@ -75,43 +76,43 @@
                                 <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <div class="d-flex gap-2 align-items-center">
                                     <span class="forum-cat-icon forum-cat-icon-{{.Color}}" style="width:28px;height:28px;border-radius:7px;font-size:0.85rem;flex-shrink:0;"><svg class="icon" aria-hidden="true"><use href="#forums"></use></svg></span>
-                                    <input type="text"   name="name"        class="form-control form-control-sm" value="{{.Name}}" required maxlength="64" style="max-width:140px;">
-                                    <input type="text"   name="description" class="form-control form-control-sm" value="{{.Description}}" maxlength="256">
-                                    <input type="text"   name="icon"        class="form-control form-control-sm" value="{{.Icon}}" maxlength="48" style="max-width:150px;" title="Bootstrap Icons name">
-                                    <select name="color" class="form-select form-select-sm" style="max-width:100px;">
+                                    <input aria-label="Name for {{.Name}}" type="text"   name="name"        class="form-control form-control-sm" value="{{.Name}}" required maxlength="64" style="max-width:140px;">
+                                    <input aria-label="Description for {{.Name}}" type="text"   name="description" class="form-control form-control-sm" value="{{.Description}}" maxlength="256">
+                                    <input aria-label="Icon for {{.Name}}" type="text"   name="icon"        class="form-control form-control-sm" value="{{.Icon}}" maxlength="48" style="max-width:150px;" title="Bootstrap Icons name">
+                                    <select aria-label="Colour for {{.Name}}" name="color" class="form-select form-select-sm" style="max-width:100px;">
                                         {{$cur := .Color}}
                                         {{range $c := $.Colors}}<option value="{{$c}}" {{if eq $c $cur}}selected{{end}}>{{$c}}</option>{{end}}
                                     </select>
-                                    <input type="number" name="ordinal"     class="form-control form-control-sm" value="{{.Ordinal}}" style="max-width:80px;">
+                                    <input aria-label="Sort order for {{.Name}}" type="number" name="ordinal"     class="form-control form-control-sm" value="{{.Ordinal}}" style="max-width:80px;">
                                     <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
                                 </div>
                                 <div class="d-flex gap-2 align-items-center mt-1 flex-wrap" style="font-size:0.78rem;">
                                     <span style="color:var(--text-muted);" title="who can pass each gate: the selected role or above, OR the selected earned tier or above">Access:</span>
                                     <span style="color:var(--text-muted);">see</span>
-                                    <select name="see_role" class="form-select form-select-sm py-0" style="max-width:110px;">
+                                    <select aria-label="See role for {{.Name}}" name="see_role" class="form-select form-select-sm py-0" style="max-width:110px;">
                                         {{$sr := .SeeRole}}{{range $r := $.GateRoles}}<option value="{{$r}}" {{if eq $r $sr}}selected{{end}}>{{$r}}</option>{{end}}
                                     </select>
-                                    <select name="see_tier" class="form-select form-select-sm py-0" style="max-width:110px;">
+                                    <select aria-label="See rank for {{.Name}}" name="see_tier" class="form-select form-select-sm py-0" style="max-width:110px;">
                                         <option value="0" {{if eq .SeeTier 0}}selected{{end}}>any rank</option>
                                         <option value="1" {{if eq .SeeTier 1}}selected{{end}}>Trusted+</option>
                                         <option value="2" {{if eq .SeeTier 2}}selected{{end}}>Curator+</option>
                                         <option value="3" {{if eq .SeeTier 3}}selected{{end}}>Archivist+</option>
                                     </select>
                                     <span style="color:var(--text-muted);">read</span>
-                                    <select name="read_role" class="form-select form-select-sm py-0" style="max-width:110px;">
+                                    <select aria-label="Read role for {{.Name}}" name="read_role" class="form-select form-select-sm py-0" style="max-width:110px;">
                                         {{$rr := .ReadRole}}{{range $r := $.GateRoles}}<option value="{{$r}}" {{if eq $r $rr}}selected{{end}}>{{$r}}</option>{{end}}
                                     </select>
-                                    <select name="read_tier" class="form-select form-select-sm py-0" style="max-width:110px;">
+                                    <select aria-label="Read rank for {{.Name}}" name="read_tier" class="form-select form-select-sm py-0" style="max-width:110px;">
                                         <option value="0" {{if eq .ReadTier 0}}selected{{end}}>any rank</option>
                                         <option value="1" {{if eq .ReadTier 1}}selected{{end}}>Trusted+</option>
                                         <option value="2" {{if eq .ReadTier 2}}selected{{end}}>Curator+</option>
                                         <option value="3" {{if eq .ReadTier 3}}selected{{end}}>Archivist+</option>
                                     </select>
                                     <span style="color:var(--text-muted);">write</span>
-                                    <select name="write_role" class="form-select form-select-sm py-0" style="max-width:110px;">
+                                    <select aria-label="Write role for {{.Name}}" name="write_role" class="form-select form-select-sm py-0" style="max-width:110px;">
                                         {{$wr := .WriteRole}}{{range $r := $.GateRoles}}<option value="{{$r}}" {{if eq $r $wr}}selected{{end}}>{{$r}}</option>{{end}}
                                     </select>
-                                    <select name="write_tier" class="form-select form-select-sm py-0" style="max-width:110px;">
+                                    <select aria-label="Write rank for {{.Name}}" name="write_tier" class="form-select form-select-sm py-0" style="max-width:110px;">
                                         <option value="0" {{if eq .WriteTier 0}}selected{{end}}>any rank</option>
                                         <option value="1" {{if eq .WriteTier 1}}selected{{end}}>Trusted+</option>
                                         <option value="2" {{if eq .WriteTier 2}}selected{{end}}>Curator+</option>
@@ -130,7 +131,7 @@
                                 <form method="POST" action="/admin/forum-categories/{{.ID}}/merge" class="d-flex gap-1"
                                       onsubmit="return confirm('Move all threads from {{.Name}} into the selected destination, then delete {{.Name}}?')">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                    <select name="dst" class="form-select form-select-sm" required style="max-width:160px;">
+                                    <select aria-label="Merge {{.Name}} into" name="dst" class="form-select form-select-sm" required style="max-width:160px;">
                                         <option value="">Merge into…</option>
                                         {{$srcID := .ID}}
                                         {{range $.Categories}}

@@ -21,7 +21,10 @@
         </nav>
 
         <div class="card">
-            <div class="card-header" style="font-weight:500;">New Thread</div>
+            {{/* An <h1>, not a styled <div>. The page had no heading element at
+                 all, so its outline began at the chrome's and it announced no
+                 name of its own. */}}
+            <h1 class="card-header" style="font-weight:500;font-size:1.05rem;margin:0;">New Thread</h1>
             <div class="card-body">
                 <form method="POST" action="/community/forums/threads">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
