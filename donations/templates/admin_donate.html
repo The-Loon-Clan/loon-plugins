@@ -21,7 +21,7 @@
         .section-anchor:first-of-type { border-top:none; padding-top:0; }
     </style>
     <div class="container mt-3 page">
-        <h2 style="font-size:1.3rem;font-weight:600;">Donate &mdash; admin</h2>
+        <h1 style="font-size:1.3rem;font-weight:600;">Donate &mdash; admin</h1>
         <p style="color:var(--text-muted);font-size:0.85rem;">
             Every donation setting on one page &mdash; the admin hub links here and nowhere else. Saves on each form apply immediately
             to the public <a href="/help/donate" style="color:var(--blue);">/help/donate</a> page.
@@ -112,6 +112,7 @@
                 <div class="card-header">All cost line items</div>
                 <div class="card-body p-0">
                     <table class="table table-sm mb-0" style="font-size:0.82rem;">
+                        <caption class="visually-hidden">Site costs, and what each covers</caption>
                         <thead>
                             <tr style="color:var(--text-muted);">
                                 <th>Label</th><th>Group</th><th>Period</th><th class="text-end">Amount</th><th>Active</th><th></th>
@@ -169,7 +170,7 @@
                                 </div>
                                 <div class="mb-2">
                                     <label class="form-label" style="font-size:0.78rem;">Points per dollar (base rate)</label>
-                                    <input type="number" step="0.01" min="0" name="points_per_dollar" class="form-control form-control-sm"
+                                    <input aria-label="Points per dollar (base rate)" type="number" step="0.01" min="0" name="points_per_dollar" class="form-control form-control-sm"
                                            value="{{printf "%.2f" .Config.PointsPerDollar}}">
                                 </div>
                                 <div class="mb-2">
@@ -201,6 +202,7 @@
                         <div class="card-header">Curve preview (current saved values)</div>
                         <div class="card-body">
                             <table class="preview-table">
+                        <caption class="visually-hidden">Points awarded per dollar donated</caption>
                                 <thead><tr><th class="dollar">$</th><th>Points</th></tr></thead>
                                 <tbody>
                                     {{range .Preview}}
@@ -227,7 +229,7 @@
                     {{if .IsAdmin}}
                     <form method="POST" action="/admin/donate/wallet">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                        <h6 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Receive addresses</h6>
+                        <h2 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Receive addresses</h2>
                         <div class="row g-2 mb-3">
                             <div class="col-md-4">
                                 <label class="form-label" style="font-size:0.78rem;">Bitcoin (BTC)</label>
@@ -242,7 +244,7 @@
                                 <input aria-label="Monero (XMR)" type="text" name="addr_xmr" class="form-control form-control-sm" maxlength="200" value="{{index .Wallet "xmr"}}" placeholder="4...">
                             </div>
                         </div>
-                        <h6 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-top:1rem;">BTCPay Server</h6>
+                        <h2 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-top:1rem;">BTCPay Server</h2>
                         <div class="row g-2">
                             <div class="col-md-6">
                                 <label class="form-label" style="font-size:0.78rem;">Server URL</label>
@@ -393,6 +395,7 @@
                         <div class="card-header">Existing packages</div>
                         <div class="card-body p-0">
                             <table class="table table-sm mb-0" style="font-size:0.78rem;">
+                                <caption class="visually-hidden">Donation packages</caption>
                                 <thead>
                                     <tr style="color:var(--text-muted);">
                                         <th>Label</th><th class="text-end">USD</th><th class="text-end">Stock</th><th>Active</th><th></th>
@@ -441,11 +444,11 @@
                     <form method="POST" action="/admin/donate/tipjar">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         {{range $slot := list 1 2}}
-                        <h6 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;{{if gt $slot 1}}margin-top:1rem;{{end}}">Goal {{$slot}}</h6>
+                        <h2 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;{{if gt $slot 1}}margin-top:1rem;{{end}}">Goal {{$slot}}</h2>
                         <div class="row g-2 mb-2">
                             <div class="col-md-6">
                                 <label class="form-label" style="font-size:0.78rem;">Name</label>
-                                <input type="text" name="goal_{{$slot}}_name" class="form-control form-control-sm" maxlength="80" value="{{index $.TipJar (printf "goal_%d_name" $slot)}}" placeholder="e.g. Animated Profile Effects">
+                                <input aria-label="Goal {{$slot}} name" type="text" name="goal_{{$slot}}_name" class="form-control form-control-sm" maxlength="80" value="{{index $.TipJar (printf "goal_%d_name" $slot)}}" placeholder="e.g. Animated Profile Effects">
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label" style="font-size:0.78rem;">Target USD</label>
@@ -515,6 +518,7 @@
                         <div class="card-header">Recent donations (last 200)</div>
                         <div class="card-body p-0">
                             <table class="table table-sm mb-0" style="font-size:0.78rem;">
+                                <caption class="visually-hidden">Recorded donations</caption>
                                 <thead>
                                     <tr style="color:var(--text-muted);">
                                         <th>When</th><th>Asset</th><th class="text-end">USD</th><th>Donor</th><th>Note</th>
