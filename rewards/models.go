@@ -47,6 +47,23 @@ const (
 	PayoutLootbox PayoutKind = "lootbox"
 )
 
+// InternalPayoutKinds are the kinds this plugin delivers itself, without a
+// host registering anything under "rewards.payout.<kind>".
+//
+// Exported because a HOST cannot otherwise tell "handled internally" from
+// "promised and undeliverable", and one that guesses will guess a list that
+// stops being true. loon-demo-site's contract audit hardcoded points, was
+// written before lootbox existed, and reported every lootbox reward on the
+// demo site as a feature that could not be delivered — a false finding on
+// the page whose whole purpose is to be believed.
+//
+// Keep this beside the engine.Handle calls in Provision that implement
+// them: adding a third internal kind means adding it here, and nothing
+// else anywhere.
+func InternalPayoutKinds() []string {
+	return []string{string(PayoutPoints), string(PayoutLootbox)}
+}
+
 // GrantState tracks a grant from offered to settled.
 type GrantState string
 
