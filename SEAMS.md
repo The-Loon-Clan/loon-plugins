@@ -17,8 +17,9 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **59** of them, counted from the EXPORTED `…Name` and
-`…Prefix` constants in `pluginapi` on 22 Aug 2026. They are discoverable: an
+importing the other. There are **58** of them, counted from the EXPORTED `…Name` and
+`…Prefix` constants in `pluginapi` whose value is a NAMESPACED key, on
+22 Aug 2026. They are discoverable: an
 author reading `pluginapi` sees what exists, the compiler catches interface
 skew, and `/admin/contracts` can report an unwired one.
 
@@ -27,8 +28,25 @@ skew, and `/admin/contracts` can report an unwired one.
 > and none of them reached the catalogue below, which is the exact failure this
 > page exists to prevent. One line does it:
 >
-> The line changed on 22 Aug 2026, because running it did not reproduce the
-> number above it. The stated 63 had been counted WITH test files, so
+> The line changed TWICE on 22 Aug 2026, the second time because a check
+> was finally written to run it (`audit_seams.py` in loon-demo-site) and it
+> disagreed with the number above by one. Three faults, partly cancelling:
+>
+> * `[A-Z][A-Za-z]*` excludes DIGITS, so `I18nDeclarerName` — a real,
+>   exported, wired contract — was never counted. A pattern that cannot
+>   spell `i18n` will not find the next `oauth2` or `sha256` either.
+> * `SlotName = "name"` is a slot ATTRIBUTE and `NewznabCachePrefix =
+>   "newznab:v1:"` is a cache key. Neither is on the registry; both were
+>   counted. Requiring a dot in the value is what separates a registry key
+>   from a constant that merely ends in `Name`.
+> * `HealthReporterName = "health."` is a bare prefix with nothing after the
+>   dot, and `[^"]+` requires at least one character. A pattern that cannot
+>   spell the shortest possible prefix is not counting prefixes.
+> * Three wrongs and two misses came to 59, which looked stable enough to
+>   restate. They no longer cancel, and the number and the command agree: 58.
+>
+> The earlier change, also 22 Aug 2026, was because running it did not
+> reproduce the number above it. The stated 63 had been counted WITH test files, so
 > `pluginapi`'s own `testPrefix = "test.thing."` was in it; and the pattern
 > matched any identifier, so it also counted `backupPrefix` and `statsPrefix` —
 > lowercase, unexported, and unreachable from another package, which makes them
@@ -36,7 +54,7 @@ skew, and `/admin/contracts` can report an unwired one.
 > capital is what makes the recount and the number the same question.
 >
 > ```
-> grep -rhoE '\b[A-Z][A-Za-z]*(Name|Prefix)\s+=\s+"[^"]+"' pluginapi/*.go \n>   --exclude='*_test.go' | sort -u
+> grep -rhoE '\b[A-Z][A-Za-z0-9]*(Name|Prefix)\s+=\s+"[a-z0-9]+\.[^"]*"' \n>   pluginapi/*.go --exclude='*_test.go' | sort -u
 > ```
 >
 > Diff that against the tables below when you add a contract.
@@ -56,8 +74,26 @@ need a token invents an eleventh key — or, as actually happened, ships without
 one and every form 403s. **Every seam in the second tier is a seam that will be
 reinvented.**
 
-**All of them are now collapsed**, and the tier is empty of live seams — the
-csrf keys on 18 Aug 2026, the l10n, icon and file keys on 20 Aug. Every one is
+**The ones listed above are collapsed** — the csrf keys on 18 Aug 2026, the
+l10n, icon and file keys on 20 Aug.
+
+This paragraph used to end "and the tier is empty of live seams". It was
+not, and saying so is the reason it stayed that way: two live bare-string
+seams were never on the list, so nothing contradicted the claim.
+
+```
+notify.fanout      the host's notification channel. Registered as a bare
+                   string in the host and looked up the same way, so the
+                   type is agreed in a comment and nowhere else.
+rewards.payout.    a PREFIX, and the worst shape of all: neither side has
+                   a constant, because both COMPUTE the key --
+                   "rewards.payout." + kind, in the plugin and again in
+                   the host. A typo in either is a seam that silently
+                   does not connect.
+```
+
+Both were found on 22 Aug 2026 by `audit_seams.py`, which is what now
+keeps this section honest. Every one is
 still READ, so a host that has not moved keeps working, and nothing new should
 add to the list.
 
@@ -69,6 +105,29 @@ icon list is the other failure mode: agreed twice for one list, with two
 different TYPES — `func() []string` and a plain `[]string` — so one consumer saw
 sprites added later and the other went on offering the list as it stood at
 Provision, with nothing to say which was right.
+
+**A third position, which this page did not have a name for.** Nine live seams
+are neither of the two tiers above: the key IS a named constant, but the
+constant lives in the PROVIDER's package, not in `pluginapi`. They are spelled
+`…Extension` or `…Name` and they are properly documented — at their
+declaration, and nowhere a plugin author would look.
+
+That is better than a bare string and worse than a contract. A consumer either
+imports the provider — the coupling `pluginapi` exists to remove — or retypes
+the string and gets no compiler help when it changes. All nine were invisible
+to this document until `audit_seams.py` was written on 22 Aug 2026.
+
+| Key | Declared as | For |
+|---|---|---|
+| `achievements.list` | `achievements.ListExtension` | The defined achievements. Absent means the plugin is not installed, which a host handles by not offering the page. |
+| `achievements.metrics.` | `achievements.MetricSourcePrefix` | **Prefix.** A plugin contributes a metric an achievement can be scored on; achievements scans by prefix and type-asserts. |
+| `catalog.registry` | `catalog.RegistryExtension` | Core publishes the catalog `Registry` here. The scraper reads it. |
+| `communities.followed` | `communities.FollowedName` | The communities a member follows. Looked up after Boot and duck-typed in the template, so the plugin owes the host no shared type. |
+| `dailyreward.status` | `dailyreward.StatusExtension` | Whether today's claim is available, so a stat-bar button or nav badge can show it without duplicating the once-per-day rule or reading the plugin's table. |
+| `forum.spotlight` | `forum.SpotlightName` | Feeds the Community Spotlight card. A host without one simply does not look it up. |
+| `news.home` | `news.HomeFeedName` | Feeds the home page's news card. Same shape as the spotlight. |
+| `rewards.sources` | `rewards.SourceCatalogExtension` | The reward source catalogue. Seeded once, then owned by the operator, so a host changing its seed will not rewrite what they edited. |
+| `store.flavour` | `store.FlavourExtension` | `func() (indexer, tracker bool)` — the host's answer to which half of a site this is. |
 
 > **Rule of thumb.** If a second plugin could ever want it, it belongs in
 > `pluginapi` with a name constant and a type. If a second plugin could ever
