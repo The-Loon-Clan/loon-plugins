@@ -68,6 +68,21 @@ Columns: 1 contract · 2 data · 3 security · 4 events · 5 jobs · 6 self-audi
 `achievements` plugin (2026-08-16). Neither row is regraded here — this file
 is a snapshot; regrade after real work and replace it wholesale.*
 
+> **The table covers 41 plugins. There are 53.** (22 Aug 2026.) Twelve have
+> never been graded against anything, and they are precisely the ones built
+> after the snapshot: `achievements`, `applications`, `comments`, `cosmetics`,
+> `downloads`, `games`, `magic`, `medals`, `mediainfo`, `polls`, `predb`, and
+> `pluginapi` — which is the contract library rather than a plugin, so eleven
+> real omissions.
+>
+> That is the failure mode of a snapshot nobody can afford to retake: it does
+> not go wrong, it goes **narrow**. Every row above is still a judgment from
+> one day, and the plugins added since are not judged at all — so a reader
+> scanning for a plugin's grade and not finding it learns nothing, and a reader
+> who finds one cannot tell how old it is. The measured section below exists
+> because of this: what a program can decide, it decides every time it is run,
+> for every plugin, including the ones nobody has reviewed.
+
 ---
 
 ## What has been re-verified since, and what has not
@@ -83,8 +98,29 @@ review and should be read as such.
 | 10 i18n | host `make resources` | The ratchet itself was wrong in two directions and is fixed (loon-demo-site, 22 Aug). The corrected count is 26 for this tree, unchanged in total but not composed of the same sentences. |
 | 13 docs | read | Four READMEs described a render contract that no longer exists; corrected in the commit that removed it. |
 
-**Not re-verified:** columns 2, 3, 4, 5, 6, 7, 9, 11, 12, 14. Nothing here
-should be read as confirming them.
+**Later the same day**, three of those columns stopped being opinion. The
+MUSTs in sections 4, 5 and 8 that a *program* can decide are now decided by
+one — `python scripts/audit_plugins.py`, run over all 53 plugins including the
+twelve the table omits:
+
+| column | what the program decides | result, 22 Aug 2026 |
+|---|---|---|
+| 4 events | a declared event that nothing emits. `lists.created` was declared and never fired: a subscriber could wait on it forever. | **clean.** Every declared event has an emit. |
+| 5 jobs | a function that calls `SetRunning` and can return reaching neither `SetIdle` nor `SetError`, and the deferred-`SetIdle`-erases-`SetError` trap that shipped in tracker's cheat sweep. | **clean**, with irc and discord exempt as daemons (section 5 names the exception). |
+| 8 ui (CDN half) | `<script src="http…">`, dead under the host's `script-src 'self'` and an undisclosed external call besides. Eleven shipped across seven plugins. | **one left**: roadmap's cytoscape, recorded in the script's own baseline with the reason. |
+
+What the program does **not** decide is said in its docstring and is worth
+repeating here: it does no path analysis. The dbmaint bug — one branch of a
+switch returning early — needs a control-flow graph, and a regex that guessed
+at it would flag the careful jobs and miss the careless one. Sections 4, 5 and
+8 still contain MUSTs that only a reader can settle; what moved is that their
+*decidable* half now cannot rot.
+
+Each check was probed against a deliberately broken tree before being believed
+— including by restoring the real `lists.created` bug, which it names exactly.
+
+**Not re-verified:** columns 2, 3, 6, 7, 9, 11, 12, 14, and the judgment half
+of 4, 5 and 8. Nothing here should be read as confirming them.
 
 A note about the branding rule, which is new since the snapshot and which
 section 8 did not name: five plugins were asserting one site's identity —
@@ -96,12 +132,27 @@ was failing for it.
 
 Most severe first. These are bugs, not style.
 
-> **Status, same day (a42b37d + host a49239e):** 1–6, 8 (bootstrap tags — 17
-> found, not 11) and 10 are FIXED and verified live; the crawler now counts
-> tokens per form so class 1 cannot ship silently again. Still open: 7
-> (anidbscraper — finish or retire is an owner decision), 9 (scraper's
-> disclosure/SSRF rework), and roadmap's cytoscape, which needs local
-> bundling rather than deletion.
+> **Status, re-verified item by item against the tree on 22 Aug 2026.** The
+> previous note said "1–6, 8 and 10 are FIXED" and also listed 9 as still
+> open, while entry 9 below is struck through as fixed on 20 Aug — a summary
+> disagreeing with the list it summarises, which is how a status line stops
+> being read. So each was checked in the code rather than carried forward:
+>
+> | # | what was checked | now |
+> |---|---|---|
+> | 1 news/wiki CSRF | every plugin-owned admin form in both templates | **fixed** — `name="_csrf"` on all of them |
+> | 2 pointstore refund | the deduct/equip path | **fixed** — views.go documents the refund |
+> | 3 tracker deferred SetIdle | `audit_plugins.py`, whole tree | **fixed** — zero instances anywhere |
+> | 4 dbmaint verifyAborted | jobs.go:338 | **fixed** — `SetIdle` on that branch, with the reason in a comment |
+> | 5 hitrun AtRisk | store.go / views.go | **fixed** — the field is gone; callers compute it, and store.go says why |
+> | 6 lists dead event | `audit_plugins.py`, whole tree | **fixed** — emitted at handlers.go:49; zero dead events tree-wide |
+> | 7 anidbscraper stub | plugin.go, README, tests | **open, now honest** — still a stub, still zero tests, but plugin.go and a README say so rather than a job reporting success |
+> | 8 CDN scripts | `audit_plugins.py`, whole tree | **10 of 11 gone**; roadmap's cytoscape remains and is in the script's baseline |
+> | 9 scraper disclosure | — | fixed 20 Aug, as the struck-through entry says |
+> | 10 dailyreward event order | — | fixed |
+>
+> Six of the ten had been fixed before anyone re-read this file, and two of
+> those (3 and 6) are now guarded by a check rather than by memory.
 
 1. **news + wiki: every plugin-owned admin POST form lacks a CSRF token and
    403s.** Verified against the running site, form by form: news create and
@@ -181,23 +232,23 @@ repeat it here unless it is the worst instance).
 - **communities** — declare events (join/thread/reply); drop host-table FKs from schema.sql; admin oversight page.
 - **curation** — caption the worklist table; candidate first Proposer.
 - **dailyreward** — retire the CSP-dead inline script; emit after the award; ladder into settings.
-- **dbmaint** — fix jobs.go:338; allowlist configured table names like backup's pgIdentifier.
+- **dbmaint** — ~~fix jobs.go:338~~ *(done, verified 22 Aug 2026.)*; allowlist configured table names like backup's pgIdentifier.
 - **discord** — execute both inline templates in tests; longer verify token, check rand error.
 - **donations** — own schema + migrations instead of host tables; SlotAdminPage; member-deletion note.
 - **economy** — core.Scheduler not schedule.RegisterJob; fix stale two-jobs README.
 - **events** — SetError on generator failure; real SetIdle horizon.
 - **feeds** — pause check on manual trigger; nekoBT key into the settings store; emit on auto-created requests.
 - **forum** — SlotAdminPage for categories; PG integration tags for the LATERAL rollups.
-- **hitrun** — fix the AtRisk widget; admin page with a ClearWarning path; README.
+- **hitrun** — ~~fix the AtRisk widget~~ *(done, verified 22 Aug 2026.)*; admin page with a ClearWarning path; README.
 - **irc** — SlotAdminSettings for the twelve irc_* keys; declare nick-link events.
-- **lists** — emit lists.created and stop discarding Create's error; CSRF fields via seam.
+- **lists** — ~~emit lists.created and stop discarding Create's error~~ *(done, verified 22 Aug 2026.)*; CSRF fields via seam.
 - **logs** — pause check on manual trigger; drop the duplicated heading.
-- **messages** — delete the CDN script; SlotAdminPage for the broadcast composer; fix README's no-MemStore claim.
-- **news** — wire the CSRF seam (forms 403 today); declare publish events; adopt host RelativeTime.
-- **offers** — drop three CDN scripts; SlotAdminPage ×2; pause + one interval const.
+- **messages** — ~~delete the CDN script~~ *(done, verified 22 Aug 2026.)*; SlotAdminPage for the broadcast composer; fix README's no-MemStore claim.
+- **news** — ~~wire the CSRF seam (forms 403 today)~~ *(done, verified 22 Aug 2026.)*; declare publish events; adopt host RelativeTime.
+- **offers** — ~~drop three CDN scripts~~ *(done, verified 22 Aug 2026.)*; SlotAdminPage ×2; pause + one interval const.
 - **perks** — README (the tracker cross-schema read is undisclosed); admin oversight for tokens; grant/spend events.
 - **playlists** — README, stop swallowing lookup errors; oversight page. *(Tests done 20 Aug — and they found that `owned()` treated an anonymous viewer id of 0 as an owner id; hardened.)*
-- **pointstore** — refund on SetFlair failure (points are lost today); host vocabulary; operator-editable catalog.
+- **pointstore** — ~~refund on SetFlair failure~~ *(done, verified 22 Aug 2026.)*; host vocabulary; operator-editable catalog.
 - **ranks** — refresh the stale README (SetJobDeps/mirror both gone); declare promote/derank events; NavHint.
 - **releasegroups** — recut five templates; declare claim/news/follow events; followed-groups widget.
 - **reports** — CSRF token on the resolve form; drop the CDN script; report-resolved event.

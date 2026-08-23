@@ -103,5 +103,18 @@ consumers:
 flavours:
 	@$(PYTHON) scripts/audit_flavours.py
 
+## plugins: the decidable MUSTs of CHECKLIST sections 4, 5 and 8
+##
+## A declared event nothing emits, a job that starts and cannot finish, a
+## script loaded from someone else's server. GRADES.md is a snapshot of one
+## day's judgment and cannot be retaken cheaply -- it grades 41 of 53 plugins
+## and every row is dated. This runs over all of them every time, so the half
+## of those sections that is fact rather than opinion cannot go stale.
+##
+## In `check` because it needs nothing but the source: no database, no running
+## host, no network.
+plugins:
+	@$(PYTHON) scripts/audit_plugins.py --strict
+
 ## check: everything CI runs except itest
-check: vet sqllint sentinels test
+check: vet sqllint sentinels plugins test

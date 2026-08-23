@@ -683,7 +683,18 @@ From THIS repository, which the host's targets cannot see into:
 ```
 python scripts/audit_flavours.py            # who declares which half (section 1)
 python scripts/audit_flavours.py --strict   # non-zero while any are undeclared
+python scripts/audit_plugins.py             # sections 4, 5 and 8, the decidable half
+python scripts/audit_plugins.py --strict    # non-zero while anything fails
 ```
+
+`audit_plugins.py` exists because GRADES.md could not keep up with itself. It
+decides the MUSTs in sections 4, 5 and 8 that are facts rather than judgments —
+a declared event nothing emits, a job that starts and cannot finish, a script
+loaded from someone else's server — for every plugin, including the twelve the
+grades table has never covered. It deliberately does NO path analysis, and says
+so: the dbmaint bug needs a control-flow graph, and a regex guessing at one
+would flag the careful jobs and miss the careless one. The rest of those three
+sections is still a review question.
 
 That one is a script rather than a review note for a specific reason worth
 repeating: an empty `Flavours` behaves exactly like `FlavourAny`, so the
