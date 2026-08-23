@@ -17,7 +17,7 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **58** of them, counted from the EXPORTED `…Name` and
+importing the other. There are **59** of them, counted from the EXPORTED `…Name` and
 `…Prefix` constants in `pluginapi` whose value is a NAMESPACED key, on
 22 Aug 2026. They are discoverable: an
 author reading `pluginapi` sees what exists, the compiler catches interface
@@ -208,6 +208,7 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 | `i18n.catalogue` | `MessageCatalogue` | READ the catalogue: the slug list for a definition form, and slug → text for the current viewer. One key for every consumer — it replaced four. |
 | `icons.set.*` | `IconCatalogue` | **Prefix.** A CURATED icon list for a purpose (`icons.set.achievement-badge`). Falls back to the full catalogue when a host has curated nothing — a picker with too much in it beats one with nothing. |
 | `icons.catalogue` | `IconCatalogue` | What icons this site can draw. Offer these in a picker instead of a free-text box. A func, not a slice: a sprite added later changes the answer. |
+| `css.stylesheet` | `StylesheetRegistrar` | A plugin's own CSS, handed over ONCE at Provision. The host gives it a URL, a content hash and the caching; the plugin never sees any of those. Absent means the plugin keeps its in-fragment `<style>`, which every browser honours — see docs/BACKLOG.md #13 in loon-demo-site for the three costs that carries. |
 | `files.store` | `blob.Store` | Somewhere to put a plugin's uploads. One key for every plugin; the plugin picks the name it saves under. Absent means HIDE the upload control, never offer one that fails on submit. |
 | *(core)* `RegisterWidget` | `core.Widget` | A placeable card. The host may also expose it as a `[widget …]` shortcode in page bodies. |
 
