@@ -35,7 +35,7 @@
         {{/* Flash banner for refresh action — whitelisted to known
              values so a hand-edited query string can't inject content. */}}
         {{if .RefreshFlash}}
-        <div class="notice {{if eq .RefreshFlash fs-sm"started"}} notice--info{{else if eq .RefreshFlash "cooldown"}}notice--info{{else if eq .RefreshFlash "not_found"}}notice--info{{else if eq .RefreshFlash "unlinked"}}notice--warning{{else}}notice--warning{{end}} py-2 mb-3">
+        <div class="notice fs-sm {{if eq .RefreshFlash "started"}} notice--info{{else if eq .RefreshFlash "cooldown"}}notice--info{{else if eq .RefreshFlash "not_found"}}notice--info{{else if eq .RefreshFlash "unlinked"}}notice--warning{{else}}notice--warning{{end}} py-2 mb-3">
             {{if eq .RefreshFlash "started"}}Refresh queued — should land within a minute or so. Reload to see new rows.
             {{else if eq .RefreshFlash "cooldown"}}Slow down — wait 15 minutes between owner-triggered refreshes.
             {{else if eq .RefreshFlash "forbidden"}}Only owners (or admins) can trigger a refresh.
@@ -48,7 +48,7 @@
         {{/* Bulk-request outcome banner. "ok" carries per-category
              counts in query params so the user gets a real receipt. */}}
         {{if .BulkFlash}}
-        <div class="notice {{if eq .BulkFlash fs-sm"ok"}} notice--success{{else if eq .BulkFlash "forbidden"}}notice--warning{{else}}notice--danger{{end}} py-2 mb-3">
+        <div class="notice fs-sm {{if eq .BulkFlash "ok"}} notice--success{{else if eq .BulkFlash "forbidden"}}notice--warning{{else}}notice--danger{{end}} py-2 mb-3">
             {{if eq .BulkFlash "ok"}}
                 Filed <strong>{{.BulkFiled}}</strong> new request{{if ne .BulkFiled "1"}}s{{end}}.
                 {{if and .BulkDup (ne .BulkDup "0")}}{{.BulkDup}} already pending. {{end}}

@@ -9,7 +9,7 @@
         {{$claimFlash := .ClaimFlash}}
         {{$verifyFlash := .VerifyFlash}}
         {{if $claimFlash}}
-        <div class="notice {{if eq $claimFlash fs-sm"created"}} notice--info{{else if eq $claimFlash "bad_url"}}notice--warning{{else}}notice--info{{end}} py-2 mb-3">
+        <div class="notice fs-sm {{if eq $claimFlash "created"}} notice--info{{else if eq $claimFlash "bad_url"}}notice--warning{{else}}notice--info{{end}} py-2 mb-3">
             {{if eq $claimFlash "created"}}Claim filed. Add the verification token below to your URL and click Verify.
             {{else if eq $claimFlash "already_owner"}}You already own this group.
             {{else if eq $claimFlash "already_pending"}}You already have a pending claim on this group.
@@ -18,7 +18,7 @@
         </div>
         {{end}}
         {{if $verifyFlash}}
-        <div class="notice {{if eq $verifyFlash fs-sm"approved"}} notice--success{{else if eq $verifyFlash "token_missing"}}notice--warning{{else if eq $verifyFlash "cooldown"}}notice--info{{else}}notice--danger{{end}} py-2 mb-3">
+        <div class="notice fs-sm {{if eq $verifyFlash "approved"}} notice--success{{else if eq $verifyFlash "token_missing"}}notice--warning{{else if eq $verifyFlash "cooldown"}}notice--info{{else}}notice--danger{{end}} py-2 mb-3">
             {{if eq $verifyFlash "approved"}}Verified — you're now an owner of this release group.
             {{else if eq $verifyFlash "token_missing"}}We couldn't find your verification code on that page. Make sure the snippet (or comment) is published at the URL you nominated, then try again.
             {{else if eq $verifyFlash "cooldown"}}Slow down — wait a minute between verification attempts.
@@ -125,7 +125,7 @@
         {{/* Hide-torrent action flash (mig 231). Whitelisted enum so
              a hand-edited query string can't inject content. */}}
         {{if .HideFlash}}
-        <div class="notice {{if eq .HideFlash fs-sm"ok"}} notice--success{{else}}notice--warning{{end}} mb-3">
+        <div class="notice fs-sm {{if eq .HideFlash "ok"}} notice--success{{else}}notice--warning{{end}} mb-3">
             {{if eq .HideFlash "ok"}}Hidden from this group's archive.
             {{else if eq .HideFlash "forbidden"}}Only owners (or admins) can hide torrents.
             {{else if eq .HideFlash "bad_id"}}Couldn't identify which torrent to hide.
@@ -137,7 +137,7 @@
              handler's redirect target; whitelisted to known values
              so a hand-edited query string can't inject content. */}}
         {{if .BioFlash}}
-        <div class="notice {{if eq .BioFlash fs-sm"saved"}} notice--success{{else}}notice--warning{{end}} mb-3">
+        <div class="notice fs-sm {{if eq .BioFlash "saved"}} notice--success{{else}}notice--warning{{end}} mb-3">
             {{if eq .BioFlash "saved"}}Bio updated.
             {{else if eq .BioFlash "forbidden"}}Only owners can edit the bio.
             {{else}}{{.BioFlash}}{{end}}
@@ -280,7 +280,7 @@
         {{/* News flash banner. Strings come from release_group_handler.go's
              redirect target (?news=...). Migration 222. */}}
         {{if .NewsFlash}}
-        <div class="notice {{if eq .NewsFlash fs-sm"posted"}} notice--success{{else if eq .NewsFlash "deleted"}}notice--info{{else}}notice--warning{{end}} py-2 mb-3">
+        <div class="notice fs-sm {{if eq .NewsFlash "posted"}} notice--success{{else if eq .NewsFlash "deleted"}}notice--info{{else}}notice--warning{{end}} py-2 mb-3">
             {{if eq .NewsFlash "posted"}}Posted. Followers have been notified.
             {{else if eq .NewsFlash "deleted"}}Post deleted.
             {{else if eq .NewsFlash "forbidden"}}Only owners and admins can manage news posts.
