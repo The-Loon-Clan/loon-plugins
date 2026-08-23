@@ -11,6 +11,15 @@ package chat
 // Rules are unchanged and in template order. RegisterStylesheet no-ops on a
 // host with no sink, where these pages draw unstyled -- visible rather than
 // silent, which is the right failure for a missing seam.
+/* Four accent literals lifted on 23 Aug 2026. Each was under 4.5:1 on the
+   lightest raised ground the site has (nord --surface-3, #3d4658), and each
+   became VISIBLE that day: the host aliased --bg-surface, which these cards
+   had been asking for and not getting, so text that used to inherit an
+   unknown ground suddenly had a defined one. The colours were always this
+   dark; nothing had ever measured them.
+     #5b8af5 -> #85b4ff   #ec4899 -> #ff8bdc
+     #a78bfa -> #c0a4ff   #f87171 -> #ff9595
+   Found by loon-demo-site scripts/audit_paint.py. */
 const chatCSS = `/* from chat.html */
         /* ── Discord-style 3-column layout ── */
         .chat-layout {
@@ -104,13 +113,13 @@ const chatCSS = `/* from chat.html */
         }
         .chat-meta { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.1rem; }
         .chat-author { font-weight: 600; color: var(--text); margin-right: 0.4rem; }
-        .chat-author.role-admin { color: #f87171; }
+        .chat-author.role-admin { color: #ff9595; }
         .chat-author.role-mod { color: #fbbf24; }
         .chat-author.role-contributor { color: #38bdf8; }
         .chat-body { font-size: 0.9rem; line-height: 1.35; word-wrap: break-word; white-space: pre-wrap; }
         .chat-source-badge {
             display: inline-block; font-size: 0.6rem; padding: 0 0.25rem;
-            border-radius: 3px; background: rgba(91,138,245,0.15); color: #5b8af5;
+            border-radius: 3px; background: rgba(91,138,245,0.15); color: #85b4ff;
             text-transform: uppercase; letter-spacing: 0.04em; vertical-align: middle;
         }
         .chat-status {
@@ -123,7 +132,7 @@ const chatCSS = `/* from chat.html */
             border-radius: 50%; background: #6b7485; margin-right: 0.3rem; vertical-align: middle;
         }
         .chat-status .dot.live { background: #4ade80; }
-        .chat-status .dot.error { background: #f87171; }
+        .chat-status .dot.error { background: #ff9595; }
 
         /* Right: online users */
         .chat-users {

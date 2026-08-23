@@ -11,6 +11,15 @@ package offers
 // Rules are unchanged and in template order. RegisterStylesheet no-ops on a
 // host with no sink, where these pages draw unstyled -- visible rather than
 // silent, which is the right failure for a missing seam.
+/* Four accent literals lifted on 23 Aug 2026. Each was under 4.5:1 on the
+   lightest raised ground the site has (nord --surface-3, #3d4658), and each
+   became VISIBLE that day: the host aliased --bg-surface, which these cards
+   had been asking for and not getting, so text that used to inherit an
+   unknown ground suddenly had a defined one. The colours were always this
+   dark; nothing had ever measured them.
+     #5b8af5 -> #85b4ff   #ec4899 -> #ff8bdc
+     #a78bfa -> #c0a4ff   #f87171 -> #ff9595
+   Found by loon-demo-site scripts/audit_paint.py. */
 const offersCSS = `/* from admin_offers.html */
         .ao-grid {
             display: grid;
@@ -48,7 +57,7 @@ const offersCSS = `/* from admin_offers.html */
         .ao-delivered  { background: rgba(74,222,128,0.18); color:#4ade80; }
         .ao-failed     { background: rgba(244,114,182,0.18); color:#f472b6; }
         .ao-cancelled  { background: rgba(148,163,184,0.18); color:#cbd5e1; }
-        .ao-stuck      { color:#f87171; font-weight:600; }
+        .ao-stuck      { color:#ff9595; font-weight:600; }
         table.ao-table { width: 100%; font-size: 0.82rem; }
         table.ao-table th { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; padding-bottom: 0.4rem; }
         table.ao-table td { padding: 0.45rem 0.45rem 0.45rem 0; border-top: 1px solid var(--border); vertical-align: top; }

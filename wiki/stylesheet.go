@@ -11,6 +11,15 @@ package wiki
 // Rules are unchanged and in template order. RegisterStylesheet no-ops on a
 // host with no sink, where these pages draw unstyled -- visible rather than
 // silent, which is the right failure for a missing seam.
+/* Four accent literals lifted on 23 Aug 2026. Each was under 4.5:1 on the
+   lightest raised ground the site has (nord --surface-3, #3d4658), and each
+   became VISIBLE that day: the host aliased --bg-surface, which these cards
+   had been asking for and not getting, so text that used to inherit an
+   unknown ground suddenly had a defined one. The colours were always this
+   dark; nothing had ever measured them.
+     #5b8af5 -> #85b4ff   #ec4899 -> #ff8bdc
+     #a78bfa -> #c0a4ff   #f87171 -> #ff9595
+   Found by loon-demo-site scripts/audit_paint.py. */
 const wikiCSS = `/* from admin_wiki_post_form.html */
         .editor-wrap { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; min-height: 520px; }
         .editor-wrap textarea {
@@ -220,13 +229,13 @@ const wikiCSS = `/* from admin_wiki_post_form.html */
            neutral blue when a slug isn't in the lookup. New topics
            default to blue until added here. */
         .cc-ico { background: var(--blue-tint, rgba(91,138,245,0.18)); color: var(--blue); }
-        .wiki-cat-card[data-slug="tools"]   .cc-ico { background: rgba(91,138,245,0.18);  color: #5b8af5; }
+        .wiki-cat-card[data-slug="tools"]   .cc-ico { background: rgba(91,138,245,0.18);  color: #85b4ff; }
         .wiki-cat-card[data-slug="usenet"]  .cc-ico { background: rgba(245,158,11,0.18);  color: #f59e0b; }
         .wiki-cat-card[data-slug="guides"]  .cc-ico { background: rgba(168,85,247,0.18);  color: #a855f7; }
         .wiki-cat-card[data-slug="api"]     .cc-ico { background: rgba(34,197,94,0.18);   color: #22c55e; }
         .wiki-cat-card[data-slug="policies"]   .cc-ico,
-        .wiki-cat-card[data-slug="security"]   .cc-ico { background: rgba(248,113,113,0.18); color: #f87171; }
-        .wiki-cat-card[data-slug="community"]  .cc-ico { background: rgba(91,138,245,0.18);  color: #5b8af5; }
+        .wiki-cat-card[data-slug="security"]   .cc-ico { background: rgba(248,113,113,0.18); color: #ff9595; }
+        .wiki-cat-card[data-slug="community"]  .cc-ico { background: rgba(91,138,245,0.18);  color: #85b4ff; }
 
         /* ── Recent Posts ─────────────────────────────────────────── */
         /* The BOX is the host panel's now (panelV2 + panel__body--flush), so
@@ -282,8 +291,8 @@ const wikiCSS = `/* from admin_wiki_post_form.html */
         .wiki-recent-item[data-slug="guides"]   .ri-ico { background: rgba(168,85,247,0.18);  color: #a855f7; }
         .wiki-recent-item[data-slug="api"]      .ri-ico { background: rgba(34,197,94,0.18);   color: #22c55e; }
         .wiki-recent-item[data-slug="policies"] .ri-ico,
-        .wiki-recent-item[data-slug="security"] .ri-ico { background: rgba(248,113,113,0.18); color: #f87171; }
-        .wiki-recent-item[data-slug="rules"]    .ri-ico { background: rgba(248,113,113,0.18); color: #f87171; }
+        .wiki-recent-item[data-slug="security"] .ri-ico { background: rgba(248,113,113,0.18); color: #ff9595; }
+        .wiki-recent-item[data-slug="rules"]    .ri-ico { background: rgba(248,113,113,0.18); color: #ff9595; }
         .wiki-recent-item .ri-body { flex: 1; min-width: 0; }
         .wiki-recent-item .ri-title {
             font-size: 0.95rem;
@@ -318,7 +327,7 @@ const wikiCSS = `/* from admin_wiki_post_form.html */
         .wiki-recent-item[data-slug="api"]      .ri-cat-badge { background: rgba(34,197,94,0.12);   color: #22c55e; border-color: rgba(34,197,94,0.40); }
         .wiki-recent-item[data-slug="policies"] .ri-cat-badge,
         .wiki-recent-item[data-slug="security"] .ri-cat-badge,
-        .wiki-recent-item[data-slug="rules"]    .ri-cat-badge { background: rgba(248,113,113,0.12); color: #f87171; border-color: rgba(248,113,113,0.40); }
+        .wiki-recent-item[data-slug="rules"]    .ri-cat-badge { background: rgba(248,113,113,0.12); color: #ff9595; border-color: rgba(248,113,113,0.40); }
         .wiki-recent-item .ri-when {
             font-size: 0.74rem;
             color: var(--text-muted);

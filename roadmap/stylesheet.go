@@ -11,6 +11,15 @@ package roadmap
 // Rules are unchanged and in template order. RegisterStylesheet no-ops on a
 // host with no sink, where these pages draw unstyled -- visible rather than
 // silent, which is the right failure for a missing seam.
+/* Four accent literals lifted on 23 Aug 2026. Each was under 4.5:1 on the
+   lightest raised ground the site has (nord --surface-3, #3d4658), and each
+   became VISIBLE that day: the host aliased --bg-surface, which these cards
+   had been asking for and not getting, so text that used to inherit an
+   unknown ground suddenly had a defined one. The colours were always this
+   dark; nothing had ever measured them.
+     #5b8af5 -> #85b4ff   #ec4899 -> #ff8bdc
+     #a78bfa -> #c0a4ff   #f87171 -> #ff9595
+   Found by loon-demo-site scripts/audit_paint.py. */
 const roadmapCSS = `/* from flow.html */
         body { overflow: hidden; }
         .flow-shell { display: flex; flex-direction: column; height: calc(100vh - 56px); }
@@ -414,8 +423,8 @@ const roadmapCSS = `/* from flow.html */
             border-radius: 999px; font-weight: 600;
             text-transform: uppercase; letter-spacing: 0.05em;
         }
-        .prop-tag-ui          { background: rgba(91,138,245,0.18);  color: #5b8af5; }
-        .prop-tag-bug         { background: rgba(248,113,113,0.18); color: #f87171; }
+        .prop-tag-ui          { background: rgba(91,138,245,0.18);  color: #85b4ff; }
+        .prop-tag-bug         { background: rgba(248,113,113,0.18); color: #ff9595; }
         .prop-tag-feature     { background: rgba(74,222,128,0.18);  color: #4ade80; }
         .prop-tag-performance { background: rgba(167,139,250,0.18); color: #c4b5fd; }
         .prop-tag-other       { background: rgba(148,163,184,0.18); color: #94a3b8; }
@@ -428,7 +437,7 @@ const roadmapCSS = `/* from flow.html */
         .prop-status-planned     { background: rgba(91,138,245,0.22);  color: #93c5fd; }
         .prop-status-in_progress { background: rgba(251,191,36,0.22);  color: #fbbf24; }
         .prop-status-done        { background: rgba(74,222,128,0.22);  color: #4ade80; }
-        .prop-status-declined    { background: rgba(248,113,113,0.22); color: #f87171; }
+        .prop-status-declined    { background: rgba(248,113,113,0.22); color: #ff9595; }
 
         .role-badge {
             font-size: 0.62rem; padding: 2px 8px; border-radius: 999px;

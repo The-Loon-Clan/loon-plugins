@@ -11,6 +11,15 @@ package logs
 // Rules are unchanged and in template order. RegisterStylesheet no-ops on a
 // host with no sink, where these pages draw unstyled -- visible rather than
 // silent, which is the right failure for a missing seam.
+/* Four accent literals lifted on 23 Aug 2026. Each was under 4.5:1 on the
+   lightest raised ground the site has (nord --surface-3, #3d4658), and each
+   became VISIBLE that day: the host aliased --bg-surface, which these cards
+   had been asking for and not getting, so text that used to inherit an
+   unknown ground suddenly had a defined one. The colours were always this
+   dark; nothing had ever measured them.
+     #5b8af5 -> #85b4ff   #ec4899 -> #ff8bdc
+     #a78bfa -> #c0a4ff   #f87171 -> #ff9595
+   Found by loon-demo-site scripts/audit_paint.py. */
 const logsCSS = `/* from logs.html */
         .log-layout { display:grid; grid-template-columns:210px 1fr; gap:1.25rem; }
         @media (max-width: 900px){ .log-layout{ grid-template-columns:1fr; } }
@@ -23,19 +32,19 @@ const logsCSS = `/* from logs.html */
         .facet .n { font-variant-numeric:tabular-nums; color:var(--text-muted); flex-shrink:0; }
         .histo { display:flex; align-items:flex-end; gap:2px; height:64px; margin:0.25rem 0 1rem;
                  padding:0.4rem 0.2rem; background:rgba(255,255,255,0.02); border-radius:6px; overflow-x:auto; }
-        .histo .bar { flex:1 0 6px; min-width:6px; background:var(--accent,#5b8af5); border-radius:2px 2px 0 0;
+        .histo .bar { flex:1 0 6px; min-width:6px; background:var(--accent,#85b4ff); border-radius:2px 2px 0 0;
                       opacity:0.75; }
         .histo .bar:hover { opacity:1; }
         .log-row.archiving { opacity:0.35; transition:opacity 0.3s; }
         .log-msg { font-family:monospace; font-size:0.78rem; max-width:640px;
                    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
         .log-msg.expanded { white-space:normal; word-break:break-word; max-width:none; }
-        .log-op { font-family:monospace; font-size:0.78rem; cursor:pointer; color:var(--accent,#5b8af5); }
+        .log-op { font-family:monospace; font-size:0.78rem; cursor:pointer; color:var(--accent,#85b4ff); }
         .log-count { font-variant-numeric:tabular-nums; }
         .dsl-help { font-size:0.78rem; background:rgba(255,255,255,0.03); border:1px solid var(--border,#2a2d37);
                     border-radius:6px; padding:0.75rem 1rem; margin-bottom:1rem; display:none; }
         .dsl-help.show { display:block; }
-        .dsl-help code { color:var(--accent,#5b8af5); }
+        .dsl-help code { color:var(--accent,#85b4ff); }
         #tailDot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#3ddc84; margin-right:4px;
                    animation:pulse 1.2s infinite; }
         @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.25;} }

@@ -11,6 +11,15 @@ package communities
 // Rules are unchanged and in template order. RegisterStylesheet no-ops on a
 // host with no sink, where these pages draw unstyled -- visible rather than
 // silent, which is the right failure for a missing seam.
+/* Four accent literals lifted on 23 Aug 2026. Each was under 4.5:1 on the
+   lightest raised ground the site has (nord --surface-3, #3d4658), and each
+   became VISIBLE that day: the host aliased --bg-surface, which these cards
+   had been asking for and not getting, so text that used to inherit an
+   unknown ground suddenly had a defined one. The colours were always this
+   dark; nothing had ever measured them.
+     #5b8af5 -> #85b4ff   #ec4899 -> #ff8bdc
+     #a78bfa -> #c0a4ff   #f87171 -> #ff9595
+   Found by loon-demo-site scripts/audit_paint.py. */
 const communitiesCSS = `/* from communities_index.html */
         .c-page { padding: 1.4rem 1rem 3rem; }
         /* One card per row: the banner IS the card. The card is a thin frame
@@ -232,7 +241,7 @@ const communitiesCSS = `/* from communities_index.html */
         .c-thread .t-meta { font-size: 0.74rem; color: var(--text-muted); display: flex; gap: 0.9rem; flex-wrap: wrap; align-items:center; }
         .c-thread .t-meta .pill { display:inline-flex; align-items:center; gap:0.3rem; }
         .badge-pinned { font-size:0.6rem;font-weight:700;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(34,197,94,0.18);color:#22c55e;border:1px solid rgba(34,197,94,0.4);vertical-align:2px;margin-right:0.35rem; }
-        .badge-locked { font-size:0.6rem;font-weight:700;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(248,113,113,0.18);color:#f87171;border:1px solid rgba(248,113,113,0.4);vertical-align:2px;margin-right:0.35rem; }
+        .badge-locked { font-size:0.6rem;font-weight:700;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(248,113,113,0.18);color:#ff9595;border:1px solid rgba(248,113,113,0.4);vertical-align:2px;margin-right:0.35rem; }
 
         /* Sidebar */
         .c-side { display: flex; flex-direction: column; gap: 0.9rem; }

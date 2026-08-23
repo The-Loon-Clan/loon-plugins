@@ -11,6 +11,15 @@ package donations
 // Rules are unchanged and in template order. RegisterStylesheet no-ops on a
 // host with no sink, where these pages draw unstyled -- visible rather than
 // silent, which is the right failure for a missing seam.
+/* Four accent literals lifted on 23 Aug 2026. Each was under 4.5:1 on the
+   lightest raised ground the site has (nord --surface-3, #3d4658), and each
+   became VISIBLE that day: the host aliased --bg-surface, which these cards
+   had been asking for and not getting, so text that used to inherit an
+   unknown ground suddenly had a defined one. The colours were always this
+   dark; nothing had ever measured them.
+     #5b8af5 -> #85b4ff   #ec4899 -> #ff8bdc
+     #a78bfa -> #c0a4ff   #f87171 -> #ff9595
+   Found by loon-demo-site scripts/audit_paint.py. */
 const donationsCSS = `/* from admin_donate.html */
         .preview-table { width:100%; font-size:0.84rem; }
         .preview-table th, .preview-table td { padding:3px 10px; text-align:right; font-variant-numeric:tabular-nums; }
@@ -41,7 +50,7 @@ const donationsCSS = `/* from admin_donate.html */
         .donate-hero p { color: rgba(255,255,255,0.78); font-size: 0.92rem; line-height: 1.5; max-width: 460px; margin-bottom: 1.25rem; }
         .donate-hero-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .donate-hero-actions .btn { font-size: 0.85rem; padding: 0.45rem 1rem; }
-        /* The host's token, not a hardcoded blue. #5b8af5 was 3.28:1 under
+        /* The host's token, not a hardcoded blue. #85b4ff was 3.28:1 under
            white — below AA for the label on it — and being a literal it did
            not follow the theme either, so the one button on this page was
            the same colour in all three. */
@@ -84,14 +93,14 @@ const donationsCSS = `/* from admin_donate.html */
         .annual-total-breakdown { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem; font-variant-numeric: tabular-nums; }
         .goal-card .goal-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem; }
         .goal-card .goal-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600; }
-        .goal-card .goal-title i { color: #5b8af5; margin-right: 4px; }
+        .goal-card .goal-title i { color: #85b4ff; margin-right: 4px; }
         .goal-card .goal-pct { font-size: 0.82rem; color: var(--text-muted); font-weight: 600; }
         .goal-card .goal-amounts { font-size: 1.55rem; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
         .goal-card .goal-amounts .goal-of { color: var(--text-muted); font-weight: 500; font-size: 1rem; }
         .goal-card .therm { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.05); overflow: hidden; margin: 0.75rem 0 1rem; }
         .goal-card .therm-bar {
             height: 100%; border-radius: 4px;
-            background: linear-gradient(90deg, #5b8af5, #b18cf2);
+            background: linear-gradient(90deg, #85b4ff, #b18cf2);
             transition: width 0.4s ease;
         }
         .goal-card .therm-bar.yearly { background: linear-gradient(90deg, #b18cf2, #f59ec0); }
@@ -114,16 +123,16 @@ const donationsCSS = `/* from admin_donate.html */
         .pkg-card:hover { transform: translateY(-2px); border-color: rgba(91,138,245,0.5); }
         .pkg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; margin-bottom: 0.4rem; }
         .pkg-label { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
-        .pkg-amount { font-size: 1.2rem; font-weight: 700; color: #5b8af5; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+        .pkg-amount { font-size: 1.2rem; font-weight: 700; color: #85b4ff; font-variant-numeric: tabular-nums; flex-shrink: 0; }
         .pkg-desc { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.5rem; line-height: 1.4; }
         .pkg-reward { font-size: 0.78rem; color: #b3c9ff; margin-bottom: 0.7rem; }
         .pkg-reward .reward-emoji { margin-right: 0.25rem; }
         .pkg-stock { margin-top: auto; margin-bottom: 0.7rem; }
         .pkg-stock-row { display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--text-muted); margin-bottom: 0.3rem; font-variant-numeric: tabular-nums; }
         .pkg-stock-row strong { color: var(--text-primary); }
-        .pkg-pct { color: #5b8af5; font-weight: 600; }
+        .pkg-pct { color: #85b4ff; font-weight: 600; }
         .pkg-bar { width: 100%; height: 6px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
-        .pkg-bar-fill { height: 100%; background: linear-gradient(90deg, #5b8af5, #a78bfa); transition: width 0.4s ease; }
+        .pkg-bar-fill { height: 100%; background: linear-gradient(90deg, #85b4ff, #c0a4ff); transition: width 0.4s ease; }
         .pkg-form { margin: 0; }
         .pkg-claim { width: 100%; }
         .pkg-card-funded {
@@ -160,13 +169,13 @@ const donationsCSS = `/* from admin_donate.html */
         .cost-card .cost-icon {
             width: 36px; height: 36px; border-radius: 8px;
             display: inline-flex; align-items: center; justify-content: center;
-            background: rgba(91,138,245,0.15); color: #5b8af5;
+            background: rgba(91,138,245,0.15); color: #85b4ff;
             font-size: 1.1rem; margin-bottom: 0.6rem;
         }
         .cost-card .cost-title { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
         .cost-card .cost-desc { font-size: 0.74rem; color: var(--text-muted); margin: 0.2rem 0 0.6rem; line-height: 1.35; }
         .cost-card .cost-amount {
-            font-size: 1.05rem; font-weight: 700; color: #5b8af5;
+            font-size: 1.05rem; font-weight: 700; color: #85b4ff;
             font-variant-numeric: tabular-nums;
             /* auto-margin-top is what does the bottom-pinning. Pair
                with the column flex on .cost-card above. */
@@ -192,14 +201,14 @@ const donationsCSS = `/* from admin_donate.html */
         .perk-card .perk-body { min-width: 0; }
         .perk-card .perk-title { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
         .perk-card .perk-desc { font-size: 0.7rem; color: var(--text-muted); line-height: 1.4; margin-top: 2px; }
-        .perk-immunity   .perk-icon { background: rgba(91,138,245,0.15); color: #5b8af5; }
-        .perk-avatar     .perk-icon { background: rgba(167,139,250,0.18); color: #a78bfa; }
+        .perk-immunity   .perk-icon { background: rgba(91,138,245,0.15); color: #85b4ff; }
+        .perk-avatar     .perk-icon { background: rgba(167,139,250,0.18); color: #c0a4ff; }
         .perk-border     .perk-icon { background: rgba(245,158,11,0.15); color: #f59e0b; }
-        .perk-effects    .perk-icon { background: rgba(236,72,153,0.15); color: #ec4899; }
+        .perk-effects    .perk-icon { background: rgba(236,72,153,0.15); color: #ff8bdc; }
         .perk-badge      .perk-icon { background: rgba(251,191,36,0.18); color: #fbbf24; }
-        .perk-perm       .perk-icon { background: rgba(167,139,250,0.18); color: #a78bfa; }
+        .perk-perm       .perk-icon { background: rgba(167,139,250,0.18); color: #c0a4ff; }
         .perk-points     .perk-icon { background: rgba(251,191,36,0.18); color: #fbbf24; }
-        .perk-extra      .perk-icon { background: rgba(167,139,250,0.18); color: #a78bfa; }
+        .perk-extra      .perk-icon { background: rgba(167,139,250,0.18); color: #c0a4ff; }
 
         .perks-note {
             background: rgba(91,138,245,0.10); border: 1px solid rgba(91,138,245,0.25);
@@ -276,7 +285,7 @@ const donationsCSS = `/* from admin_donate.html */
             flex-direction: column;
         }
         .panel h3 { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.8rem; display: flex; justify-content: space-between; align-items: baseline; }
-        .panel h3 .view-all { font-size: 0.78rem; font-weight: 500; color: #5b8af5; }
+        .panel h3 .view-all { font-size: 0.78rem; font-weight: 500; color: #85b4ff; }
         .panel h3 .view-all:hover { text-decoration: underline; }
 
         .top-row {
