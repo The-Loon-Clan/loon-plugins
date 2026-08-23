@@ -49,7 +49,7 @@
 <div class="panelV2 mt-3">
     <div class="panel__header">Index stats</div>
     <div class="panel__body">
-    <dl class="row mb-0" style="font-size:.9rem">
+    <dl class="row mb-0 fs-md">
         <dt class="col-sm-4">Newsgroups (active / total)</dt>
         <dd class="col-sm-8">{{.GroupsActive}} / {{.GroupsTotal}}</dd>
         {{if .HaveCatalog}}
@@ -83,11 +83,11 @@
   <div class="panel__header d-flex align-items-center">
     <span id="pass-title">{{if .Pass.Running}}Crawl in progress{{else if .Pass.Any}}Last crawl pass{{else}}Crawler{{end}}</span>
     <div class="ms-auto d-flex" style="gap:.5rem">
-      <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
+      <form class="d-inline" method="post" action="/admin/p/usenet/crawl">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <button class="button button--sm button--outlined" type="submit">Crawl now</button>
       </form>
-      <form method="post" action="/admin/p/usenet/backfill" style="display:inline">
+      <form class="d-inline" method="post" action="/admin/p/usenet/backfill">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <button class="button button--sm button--outlined" type="submit">Backfill now</button>
       </form>
@@ -102,13 +102,13 @@
         <span id="stat-staged">{{.TotalStaged}}</span> articles staged ·
         <span id="stat-backlog">{{.BackfillRemaining}}</span> articles left to backfill{{end}}
     </p>
-    <div id="pass-body"{{if not .Pass.Any}} style="display:none"{{end}}>
+    <div class="d-none" id="pass-body"{{if not .Pass.Any}}{{end}}>
     {{/* The legacy page's live block, lifted 1:1: "Group N / M — <group>" on
          the left, "new / fetched" on the right, striped bar underneath. The
          plugin fetches every group's batches on one flat queue, so the bar
          tracks batches (finer than the legacy per-group bar) and the group
          label shows what a worker most recently started reading. */}}
-    <div id="pass-live"{{if not .Pass.Running}} style="display:none"{{end}} class="mb-2">
+    <div id="pass-live"{{if not .Pass.Running}}{{end}} class="mb-2 d-none">
       <div class="d-flex justify-content-between mb-1">
         <span class="small text-muted">
           {{if gt .Pass.Round 1}}Round <strong id="pass-round">{{.Pass.Round}}</strong> &mdash; {{end}}Group <span id="pass-groups-done">{{.Pass.GroupsDone}}</span> / <span id="pass-groups-total">{{.Pass.Groups}}</span><span id="pass-reading-wrap"{{if not .Pass.Reading}} hidden{{end}}> — <strong id="pass-reading">{{.Pass.Reading}}</strong></span>
@@ -214,7 +214,7 @@
                      internal mode; in host mode the catalog-stats capability does,
                      from an hourly cache. Neither available -> the column is hidden,
                      because a column of zeros reads as "every group is dead". */}}
-                {{if $.HaveGroupCounts}}<th class="text-end" {{if $.GroupCountsCached}}title="from the host's hourly stats cache"{{end}}>NZBs{{if $.GroupCountsCached}} <span class="text-muted" style="font-weight:400">~1h</span>{{end}}</th>{{end}}<th class="text-end">Staged</th>
+                {{if $.HaveGroupCounts}}<th class="text-end" {{if $.GroupCountsCached}}title="from the host's hourly stats cache"{{end}}>NZBs{{if $.GroupCountsCached}} <span class="text-muted fw-normal">~1h</span>{{end}}</th>{{end}}<th class="text-end">Staged</th>
                 <th>Last crawl</th>
             </tr></thead>
             <tbody>
@@ -254,7 +254,7 @@
                         <div class="small" style="margin-top:2px">
                             {{if .BackAt}}
                                 {{if .BackfillDone}}<span class="text-success" title="backfill complete — reached the server's oldest article">✓ {{.BackAt}}</span>
-                                {{else}}<span class="text-warning" title="backfilling toward the server's oldest article">↩ {{.BackAt}}</span>{{if .RemainingFmt}} <span class="text-muted" style="font-size:.75rem">({{.RemainingFmt}} left{{if gt .Fragments 1}} · {{.Fragments}} runs{{end}})</span>{{end}}{{end}}
+                                {{else}}<span class="text-warning" title="backfilling toward the server's oldest article">↩ {{.BackAt}}</span>{{if .RemainingFmt}} <span class="text-muted fs-2xs">({{.RemainingFmt}} left{{if gt .Fragments 1}} · {{.Fragments}} runs{{end}})</span>{{end}}{{end}}
                                 <span class="text-muted">·</span>
                             {{end}}
                             {{if .FwdAt}}↑ {{.FwdAt}}{{else}}<span class="text-warning">not yet crawled</span>{{end}}

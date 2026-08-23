@@ -32,7 +32,7 @@
         <div class="panelV2">
             <div class="panel__header d-flex justify-content-between align-items-center">
                 <span>Sent Messages</span>
-                <small style="color:var(--text-muted);">{{.Total}} total</small>
+                <small class="text-muted">{{.Total}} total</small>
             </div>
             <table class="data-table mb-0">
             <caption class="visually-hidden">Sent site messages</caption>
@@ -53,14 +53,14 @@
                         <td>{{.Target}}</td>
                         <td style="white-space:nowrap;">{{.CreatedAt.Format "Jan 02 15:04"}}</td>
                         <td>
-                            <form method="POST" action="/admin/messages/{{.ID}}/delete" style="display:inline;">
+                            <form class="d-inline" method="POST" action="/admin/messages/{{.ID}}/delete">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <button type="submit" class="button button--sm button--danger">Delete</button>
                             </form>
                         </td>
                     </tr>
                     {{else}}
-                    <tr><td colspan="5" class="text-center" style="color:var(--text-muted);">No messages sent yet.</td></tr>
+                    <tr><td colspan="5" class="text-center text-muted">No messages sent yet.</td></tr>
                     {{end}}
                 </tbody>
             </table>

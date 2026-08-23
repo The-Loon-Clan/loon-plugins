@@ -3,7 +3,7 @@
     <div class="container mt-4">
         <div class="panelV2">
             <div class="panel__header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <span>Support Tickets <span class="text-muted" style="font-size:0.85rem;">({{.Total}})</span></span>
+                <span>Support Tickets <span class="text-muted fs-sm">({{.Total}})</span></span>
                 <div class="d-flex gap-2 flex-wrap align-items-center">
                     <div class="panel__actions">
                         <a href="/admin/tickets" class="button button--sm {{if eq .StatusFilter ""}}button--primary{{else}}button--outlined{{end}}">All</a>
@@ -19,9 +19,9 @@
             <caption class="visually-hidden">Support tickets</caption>
                 <thead>
                     <tr>
-                        <th style="font-size:0.85rem;">#</th>
-                        <th style="font-size:0.85rem;">User</th>
-                        <th style="font-size:0.85rem;">Subject</th>
+                        <th class="fs-sm">#</th>
+                        <th class="fs-sm">User</th>
+                        <th class="fs-sm">Subject</th>
                         <th style="font-size:0.85rem;width:80px;">Priority</th>
                         <th style="font-size:0.85rem;width:90px;">Status</th>
                         <th style="font-size:0.85rem;width:120px;">Submitted</th>
@@ -30,8 +30,8 @@
                 <tbody>
                     {{range .Tickets}}
                     <tr style="cursor:pointer;" onclick="window.location='/support/{{.ID}}'">
-                        <td style="color:var(--text-muted);font-size:0.85rem;">{{.ID}}</td>
-                        <td style="font-size:0.88rem;">{{.Username}}</td>
+                        <td class="text-muted fs-sm">{{.ID}}</td>
+                        <td class="fs-md">{{.Username}}</td>
                         <td>
                             <div style="font-size:0.88rem;font-weight:500;">{{.Subject}}</div>
                         </td>

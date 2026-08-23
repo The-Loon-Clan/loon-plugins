@@ -46,7 +46,7 @@
                 <td>{{if .Price}}{{.Price}}{{else}}award only{{end}}</td>
                 <td>{{if .Enabled}}<span class="tag tag--success">enabled</span>{{else}}<span class="tag">disabled</span>{{end}}</td>
                 <td>
-                    <form method="post" action="/admin/p/medals/toggle" style="display:inline">
+                    <form class="d-inline" method="post" action="/admin/p/medals/toggle">
                         <input type="hidden" name="_csrf" value="{{$csrf}}">
                         <input type="hidden" name="id" value="{{.ID}}">
                         <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
@@ -54,7 +54,7 @@
                     </form>
                 </td>
                 <td>
-                    <form method="post" action="/admin/p/medals/delete" style="display:inline"
+                    <form class="d-inline" method="post" action="/admin/p/medals/delete"
                           onsubmit="return confirm('Delete this medal? Every member holding it loses it.');">
                         <input type="hidden" name="_csrf" value="{{$csrf}}">
                         <input type="hidden" name="id" value="{{.ID}}">

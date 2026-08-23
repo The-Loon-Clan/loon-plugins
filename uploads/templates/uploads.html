@@ -33,7 +33,7 @@
 
     {{if eq .ActiveTab "public"}}
     <div class="panelV2 mb-3">
-        <div class="panel__body" style="font-size:0.9rem;color:var(--text-muted);">
+        <div class="panel__body fs-md text-muted">
             Everything you have uploaded publicly. Deleting hides a release from the site but keeps it
             recoverable here. Going <strong>anonymous</strong> hides your name publicly and can be
             undone. Going <strong>permanently anonymous</strong> unlinks the upload from your account
@@ -44,7 +44,7 @@
     <div class="panelV2">
         <div class="panel__header d-flex justify-content-between align-items-center">
             <span>Public uploads</span>
-            <small style="color:var(--text-muted);">{{.PublicTotal}} total</small>
+            <small class="text-muted">{{.PublicTotal}} total</small>
         </div>
         {{if .Public}}
         <div style="overflow-x:auto;">
@@ -56,15 +56,15 @@
             <tbody>
             {{range .Public}}
                 <tr{{if .Deleted}} style="opacity:.55"{{end}}>
-                    <td><a href="/release/{{.ID}}" style="color:var(--blue);">{{.Title}}</a></td>
+                    <td><a class="text-primary" href="/release/{{.ID}}">{{.Title}}</a></td>
                     <td class="text-end">{{bytes .SizeBytes}}</td>
                     <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt}}</td>
-                    <td style="font-size:0.85rem;">
-                        {{if .Anonymous}}<span class="tag">anonymous</span>{{else}}<span style="color:var(--text-muted);">named</span>{{end}}
+                    <td class="fs-sm">
+                        {{if .Anonymous}}<span class="tag">anonymous</span>{{else}}<span class="text-muted">named</span>{{end}}
                         {{if .Queued}} <span class="tag tag--info">queued</span>{{end}}
                     </td>
                     <td>
-                        <form method="POST" action="/account-settings/uploads/bulk" style="display:inline">
+                        <form class="d-inline" method="POST" action="/account-settings/uploads/bulk">
                             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <input type="hidden" name="id" value="{{.ID}}">
                             {{if .Deleted}}
@@ -96,13 +96,13 @@
     <div class="panelV2 mt-3">
         <div class="panel__header">Everything at once</div>
         <div class="panel__body">
-            <form method="POST" action="/account-settings/uploads/bulk" style="display:inline">
+            <form class="d-inline" method="POST" action="/account-settings/uploads/bulk">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                 <button name="action" value="delete" class="button button--sm button--outlined button--danger">Delete all</button>
                 <button name="action" value="restore" class="button button--sm button--outlined">Restore all</button>
                 <button name="action" value="anonymous" class="button button--sm button--outlined">Make all anonymous</button>
             </form>
-            <form method="POST" action="/account-settings/uploads/bulk" style="display:inline"
+            <form class="d-inline" method="POST" action="/account-settings/uploads/bulk"
                   onsubmit="return confirm('This unlinks every upload from your account permanently. They will leave this page and cannot be recovered. Continue?')">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                 <input type="hidden" name="confirm" value="permanent">
@@ -117,7 +117,7 @@
     <div class="panelV2">
         <div class="panel__header d-flex justify-content-between align-items-center">
             <span>Private NZB uploads</span>
-            <small style="color:var(--text-muted);">{{.PrivateNZBTotal}} total</small>
+            <small class="text-muted">{{.PrivateNZBTotal}} total</small>
         </div>
         {{if .PrivateNZB}}
         <div style="overflow-x:auto;">
@@ -126,7 +126,7 @@
             <tbody>
             {{range .PrivateNZB}}
                 <tr>
-                    <td><a href="/community/request/{{.ID}}?private=1" style="color:var(--blue);">{{.Title}}</a></td>
+                    <td><a class="text-primary" href="/community/request/{{.ID}}?private=1">{{.Title}}</a></td>
                     <td class="text-end">{{bytes .SizeBytes}}</td>
                     <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt}}</td>
                 </tr>
@@ -147,7 +147,7 @@
     <div class="panelV2">
         <div class="panel__header d-flex justify-content-between align-items-center">
             <span>Private torrent uploads</span>
-            <small style="color:var(--text-muted);">{{.PrivateTorrentTotal}} total</small>
+            <small class="text-muted">{{.PrivateTorrentTotal}} total</small>
         </div>
         {{if .PrivateTorrent}}
         <div style="overflow-x:auto;">
@@ -159,10 +159,10 @@
             <tbody>
             {{range .PrivateTorrent}}
                 <tr>
-                    <td><a href="/community/request/{{.ID}}?private=1" style="color:var(--blue);">{{.Title}}</a></td>
-                    <td><code style="font-size:0.72rem;">{{.InfoHash}}</code></td>
+                    <td><a class="text-primary" href="/community/request/{{.ID}}?private=1">{{.Title}}</a></td>
+                    <td><code class="fs-3xs">{{.InfoHash}}</code></td>
                     <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt}}</td>
-                    <td style="font-size:0.85rem;color:var(--text-muted);">
+                    <td class="fs-sm text-muted">
                         {{if .KeptPrivate}}Kept private{{else}}Published{{end}}
                     </td>
                     <td>

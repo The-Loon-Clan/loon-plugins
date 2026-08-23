@@ -3,8 +3,8 @@
         <div class="d-flex align-items-baseline justify-content-between gap-3 mb-3">
             <div>
                 <p class="mb-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:500;">Community</p>
-                <h2 class="mb-0" style="font-size:1.25rem;font-weight:600;">UI Mockups</h2>
-                <p class="mb-0 mt-1" style="font-size:0.78rem;color:var(--text-muted);">
+                <h2 class="mb-0 fs-2xl fw-semibold">UI Mockups</h2>
+                <p class="mb-0 mt-1 fs-xs text-muted">
                     Browse every mockup posted to the <a href="/flow">Feature Requests board</a>. Click a card to open the full-size view, vote, and read the discussion. Edit mockups by forking from the canvas.
                 </p>
             </div>
@@ -12,13 +12,13 @@
         </div>
 
         {{/* Filter / sort bar — purely query-string driven, no JS. */}}
-        <form method="get" class="d-flex gap-2 align-items-center mb-3" style="font-size:0.85rem;">
-            <span style="color:var(--text-muted);">Sort:</span>
+        <form method="get" class="d-flex gap-2 align-items-center mb-3 fs-sm">
+            <span class="text-muted">Sort:</span>
             <select name="sort" class="form__select" style="width:auto;" onchange="this.form.submit()">
                 <option value="newest" {{if eq .Sort "newest"}}selected{{end}}>Newest</option>
                 <option value="votes"  {{if eq .Sort "votes"}}selected{{end}}>Most voted</option>
             </select>
-            <span style="color:var(--text-muted);" class="ms-2">Show:</span>
+            <span class="ms-2 text-muted">Show:</span>
             <select name="scope" class="form__select" style="width:auto;" onchange="this.form.submit()">
                 <option value="all"        {{if eq .Scope "all"}}selected{{end}}>All</option>
                 <option value="edits"      {{if eq .Scope "edits"}}selected{{end}}>Proposed edits</option>
@@ -60,7 +60,7 @@
             {{end}}
         </div>
         {{else}}
-        <div class="notice notice--info py-3" style="font-size:0.88rem;">
+        <div class="notice notice--info py-3 fs-md">
             No mockups yet. Open the <a href="/flow">Feature Requests board</a> and click <strong>+ Mockup</strong> to add one.
         </div>
         {{end}}

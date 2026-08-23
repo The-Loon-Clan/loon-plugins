@@ -69,13 +69,13 @@
                         <td>{{.DownRatio}}&times;</td>
                         <td>{{if .Enabled}}<span class="tag tag--success">offered</span>{{else}}<span class="tag">hidden</span>{{end}}</td>
                         <td class="text-end">
-                            <form method="post" action="/admin/settings/magic/buff-toggle" style="display:inline">
+                            <form class="d-inline" method="post" action="/admin/settings/magic/buff-toggle">
                                 <input type="hidden" name="_csrf" value="{{$csrf}}">
                                 <input type="hidden" name="id" value="{{.ID}}">
                                 <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
                                 <button class="button button--sm" type="submit">{{if .Enabled}}Hide{{else}}Offer{{end}}</button>
                             </form>
-                            <form method="post" action="/admin/settings/magic/buff-delete" style="display:inline"
+                            <form class="d-inline" method="post" action="/admin/settings/magic/buff-delete"
                                   onsubmit="return confirm('Remove {{.Slug}}? Casts already made keep their own ratios and are unaffected.');">
                                 <input type="hidden" name="_csrf" value="{{$csrf}}">
                                 <input type="hidden" name="id" value="{{.ID}}">
@@ -117,7 +117,7 @@
             </table>
         </div>
         {{else}}
-        <div class="p-3 text-muted" style="font-size:0.85rem;">
+        <div class="p-3 text-muted fs-sm">
             No multipliers yet &mdash; the six classics are inserted at start-up.
         </div>
         {{end}}

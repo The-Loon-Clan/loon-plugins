@@ -35,7 +35,7 @@
   {{.Card}}
   {{else}}
   <div class="panelV2 mb-3" style="background:var(--bg-elevated); border:1px solid var(--border);">
-    <div class="panel__body py-3" style="font-size:0.88rem;">
+    <div class="panel__body py-3 fs-md">
       <span class="text-muted">
         You have not earned any achievements yet. Everything below is up for grabs.
       </span>
@@ -50,10 +50,10 @@
       <div class="form-check">
         <input class="form-check-input" type="checkbox" name="hidden" value="1" id="ach-hidden"
                {{if .Hidden}}checked{{end}}>
-        <label class="form-check-label" for="ach-hidden" style="font-size:0.85rem;">
+        <label class="form-check-label fs-sm" for="ach-hidden">
           Hide my achievements from other members
         </label>
-        <div class="form-text" style="font-size:0.75rem;">
+        <div class="form-text fs-2xs">
           Your badges are shown on your profile to anyone who visits it — that is what makes
           them worth earning. Tick this to keep them to yourself. You will still see them
           here and on your own profile either way.
@@ -64,14 +64,14 @@
   </form>
 {{else}}
   <div class="panelV2 mb-3" style="background:var(--bg-elevated); border:1px solid var(--border);">
-    <div class="panel__body py-3" style="font-size:0.88rem;">
+    <div class="panel__body py-3 fs-md">
       <span class="text-muted">Sign in to see which of these you have earned.</span>
     </div>
   </div>
 {{end}}
 
 <div class="panelV2" style="background:var(--bg-elevated); border:1px solid var(--border);">
-  <div class="panel__header py-2" style="font-weight:600;">Everything you can earn</div>
+  <div class="panel__header py-2 fw-semibold">Everything you can earn</div>
   <div class="panel__body py-2">
     {{.Catalogue}}
   </div>

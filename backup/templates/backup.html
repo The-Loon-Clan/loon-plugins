@@ -80,15 +80,15 @@
                         <td class="text-end">{{num .Files}}</td>
                         <td class="text-end">
                             {{if .PrevKnown}}
-                                {{if gt .Delta 0}}<span style="color:var(--success)">+{{num .Delta}}</span>
-                                {{else if lt .Delta 0}}<span style="color:var(--danger)">{{num .Delta}}</span>
+                                {{if gt .Delta 0}}<span class="text-success">+{{num .Delta}}</span>
+                                {{else if lt .Delta 0}}<span class="text-danger">{{num .Delta}}</span>
                                 {{else}}<span class="text-muted">—</span>{{end}}
                             {{else}}<span class="text-muted">new</span>{{end}}
                         </td>
                         <td class="text-end">{{bytes .Bytes}}</td>
                         <td class="text-end">{{if .Packs}}{{num .Packs}}{{else}}<span class="text-muted">—</span>{{end}}</td>
                         <td>
-                            {{if .Empty}}<span style="color:var(--warning)">empty — confirm this is genuinely empty and not an unmounted volume</span>{{end}}
+                            {{if .Empty}}<span class="text-warning">empty — confirm this is genuinely empty and not an unmounted volume</span>{{end}}
                             {{if .Rotates}}<span class="text-muted small">rotates</span>{{end}}
                         </td>
                     </tr>
@@ -156,12 +156,12 @@
                         <td class="text-muted small">{{.StartedAt.Format "01-02 15:04"}}</td>
                         <td class="text-muted small">
                             {{if .SealedAt.Valid}}{{.SealedAt.Time.Format "01-02 15:04"}}
-                            {{else}}<span style="color:var(--warning)">unsealed</span>{{end}}
+                            {{else}}<span class="text-warning">unsealed</span>{{end}}
                         </td>
                         <td class="text-end">{{num .Files}}</td>
                         <td class="text-end">{{bytes .Bytes}}</td>
                         <td class="text-end">{{num .Hashed}}</td>
-                        <td>{{if .Error}}<span style="color:var(--danger)">{{.Error}}</span>{{end}}</td>
+                        <td>{{if .Error}}<span class="text-danger">{{.Error}}</span>{{end}}</td>
                     </tr>
                 {{end}}
                 </tbody>

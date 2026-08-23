@@ -48,7 +48,7 @@
                     <div class="roadmap-title">{{.Title}}</div>
                     <div class="roadmap-desc">{{.Description}}</div>
                 </div>
-                <span>{{if .FlowNodeID}}<a href="/flow/proposals#node-{{deref64 .FlowNodeID}}" style="font-size:0.72rem;color:var(--blue);text-decoration:none;">Proposal &rarr;</a>{{end}}</span>
+                <span>{{if .FlowNodeID}}<a class="fs-3xs text-primary text-decoration-none" href="/flow/proposals#node-{{deref64 .FlowNodeID}}">Proposal &rarr;</a>{{end}}</span>
             </div>
             {{else}}
             <div class="roadmap-desc">Nothing actively in progress right now.</div>
@@ -64,7 +64,7 @@
                     <div class="roadmap-title">{{.Title}}</div>
                     <div class="roadmap-desc">{{.Description}}</div>
                 </div>
-                <span>{{if .FlowNodeID}}<a href="/flow/proposals#node-{{deref64 .FlowNodeID}}" style="font-size:0.72rem;color:var(--blue);text-decoration:none;">Proposal &rarr;</a>{{end}}</span>
+                <span>{{if .FlowNodeID}}<a class="fs-3xs text-primary text-decoration-none" href="/flow/proposals#node-{{deref64 .FlowNodeID}}">Proposal &rarr;</a>{{end}}</span>
             </div>
             {{else}}
             <div class="roadmap-desc">Backlog is clear.</div>
@@ -73,8 +73,8 @@
 
         <p style="font-size:0.78rem;color:var(--text-muted);margin-top:1.5rem;">
             Want to suggest something? Drop a thread in the
-            <a href="/community/forums" style="color:var(--blue);">forums</a>
-            or open a feature request via <a href="/flow/proposals" style="color:var(--blue);">/flow/proposals</a>.
+            <a class="text-primary" href="/community/forums">forums</a>
+            or open a feature request via <a class="text-primary" href="/flow/proposals">/flow/proposals</a>.
         </p>
 
         {{else}}
@@ -102,8 +102,8 @@
         {{end}}
 
         {{if gt .TotalPages 1}}
-        <div class="d-flex justify-content-between align-items-center mt-3" style="font-size:0.85rem;">
-            <span style="color:var(--text-muted);">Page {{.Page}} of {{.TotalPages}}</span>
+        <div class="d-flex justify-content-between align-items-center mt-3 fs-sm">
+            <span class="text-muted">Page {{.Page}} of {{.TotalPages}}</span>
             <div>
                 {{if gt .Page 1}}<a href="?tab={{.ActiveTab}}&amp;page={{sub (int64 .Page) 1}}" class="button button--sm button--outlined">&laquo; Prev</a>{{end}}
                 {{if lt .Page .TotalPages}}<a href="?tab={{.ActiveTab}}&amp;page={{inc .Page}}" class="button button--sm button--outlined">Next &raquo;</a>{{end}}

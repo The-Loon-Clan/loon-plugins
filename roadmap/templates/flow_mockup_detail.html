@@ -1,31 +1,31 @@
 {{define "flow_mockup_detail.html"}}
     <div class="container mt-4">
-        <nav aria-label="breadcrumb" class="mb-2" style="font-size:0.78rem;">
-            <a href="/flow/mockups" style="color:var(--text-muted);">UI Mockups</a>
+        <nav aria-label="breadcrumb" class="mb-2 fs-xs">
+            <a class="text-muted" href="/flow/mockups">UI Mockups</a>
             &nbsp;&rsaquo;&nbsp;
-            <span style="color:var(--text-primary);">#{{.Node.ID}}</span>
+            <span class="text-light">#{{.Node.ID}}</span>
         </nav>
 
         <div class="d-flex align-items-baseline justify-content-between gap-2 mb-2">
             <div>
-                <h2 class="mb-0" style="font-size:1.25rem;font-weight:600;">🖼 {{.Node.Label}}</h2>
+                <h2 class="mb-0 fs-2xl fw-semibold">🖼 {{.Node.Label}}</h2>
                 {{if .Parent}}
-                <p class="mb-0 mt-1" style="font-size:0.78rem;color:var(--text-muted);">
-                    <span class="tag tag--warning me-1" style="font-size:0.65rem;">edits</span>
+                <p class="mb-0 mt-1 fs-xs text-muted">
+                    <span class="tag tag--warning me-1 fs-3xs">edits</span>
                     Proposes a change to
                     <a href="/flow#node-{{.Parent.ID}}" style="color:var(--bs-warning);">{{.Parent.Label}}</a>
                 </p>
                 {{end}}
             </div>
             <div class="d-flex gap-2 align-items-center">
-                <span class="tag tag--sm" style="font-size:0.78rem;">▲ <span id="vote-count">{{.Node.VoteCount}}</span></span>
+                <span class="tag tag--sm fs-xs">▲ <span id="vote-count">{{.Node.VoteCount}}</span></span>
                 <button id="btn-vote" class="button button--sm button--outlined">👍 Vote</button>
                 <a href="/flow#node-{{.Node.ID}}" class="button button--sm button--outlined">🌐 Open in graph</a>
             </div>
         </div>
 
         {{if .Node.Description}}
-        <p class="mb-3" style="font-size:0.92rem;color:var(--text-muted);">{{.Node.Description}}</p>
+        <p class="mb-3 fs-base text-muted">{{.Node.Description}}</p>
         {{end}}
 
         <div class="row g-3">
@@ -54,14 +54,14 @@
                 {{end}}
 
                 {{if .MockupNotesHTML}}
-                <h6 class="mt-4 mb-2" style="font-size:0.85rem;color:var(--text-muted);">Notes</h6>
+                <h6 class="mt-4 mb-2 fs-sm text-muted">Notes</h6>
                 <div class="notes-rendered">{{.MockupNotesHTML}}</div>
                 {{end}}
             </div>
 
             <div class="col-12 col-lg-4">
                 <div class="panelV2">
-                    <div class="panel__header" style="font-size:0.85rem;color:var(--text-muted);">
+                    <div class="panel__header fs-sm text-muted">
                         Comments ({{len .Comments}})
                     </div>
                     <div class="panel__body p-0">
@@ -74,7 +74,7 @@
                             <div>{{.Body}}</div>
                         </div>
                         {{else}}
-                        <div class="p-3" style="font-size:0.82rem;color:var(--text-muted);">
+                        <div class="p-3 fs-xs text-muted">
                             No comments yet. Open this mockup on the <a href="/flow#node-{{.Node.ID}}">canvas</a> to start a thread.
                         </div>
                         {{end}}
@@ -82,7 +82,7 @@
                 </div>
 
                 <div class="panelV2 mt-3">
-                    <div class="panel__header" style="font-size:0.85rem;color:var(--text-muted);">Quick add</div>
+                    <div class="panel__header fs-sm text-muted">Quick add</div>
                     <div class="panel__body">
                         <div class="d-flex gap-1">
                             <input id="comment-input" class="form__input" type="text" placeholder="Leave a comment…" maxlength="2000">

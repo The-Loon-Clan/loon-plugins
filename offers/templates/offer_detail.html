@@ -14,7 +14,7 @@
                 </h1>
                 <div class="od-ident">
                     {{.Bucket.EntityType}}{{if .Bucket.EntityID}}
-                    <a href="/{{.Bucket.EntityType}}/{{deref .Bucket.EntityID}}" style="color:var(--blue);text-decoration:none;">#{{deref .Bucket.EntityID}}</a>{{end}}
+                    <a class="text-primary text-decoration-none" href="/{{.Bucket.EntityType}}/{{deref .Bucket.EntityID}}">#{{deref .Bucket.EntityID}}</a>{{end}}
                     {{if .Bucket.SeasonNum}} &middot; S{{deref .Bucket.SeasonNum}}{{end}}{{if .Bucket.EpisodeNum}}E{{deref .Bucket.EpisodeNum}}{{end}}
                 </div>
                 <div class="od-pills">
@@ -112,7 +112,7 @@
             <div class="od-note" style="margin-bottom:.5rem;">
                 Tick files to request only part of this offer — say, the episodes the
                 catalog is missing. Leave everything unticked to request it all.
-                <span class="js-of-pick-count" style="color:var(--blue);"></span>
+                <span class="js-of-pick-count text-primary"></span>
             </div>
             {{end}}
             {{if .Files}}
@@ -167,7 +167,7 @@
         </div>
 
         <div class="od-note">
-            <a href="/offers" style="color:var(--blue);text-decoration:none;">&larr; back to offers</a>
+            <a class="text-primary text-decoration-none" href="/offers">&larr; back to offers</a>
         </div>
     </div>
 

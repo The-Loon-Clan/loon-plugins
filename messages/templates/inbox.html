@@ -100,12 +100,12 @@
                     <form method="POST" action="/inbox/dm/send" class="ib-compose" style="display:contents;">
                         <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                         <div class="ib-pane-body">
-                            <label for="ib-compose-to">To <span style="color:var(--danger);">*</span></label>
+                            <label for="ib-compose-to">To <span class="text-danger">*</span></label>
                             <input type="text" name="recipient" id="ib-compose-to"
                                    placeholder="Enter username"
                                    value="{{.PrefillRecipient}}"
                                    autocomplete="off" required>
-                            <label>Message <span style="color:var(--danger);">*</span></label>
+                            <label>Message <span class="text-danger">*</span></label>
                             {{.EditorHTML}}
                         </div>
                         <div class="ib-pane-foot">

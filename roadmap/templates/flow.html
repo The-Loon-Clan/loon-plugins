@@ -25,7 +25,7 @@
                  right after the click. */}}
             <div class="flow-connect-banner" id="connect-banner">
                 <span id="connect-banner-text">🔗 Click another node to connect…</span>
-                <button type="button" id="connect-cancel" class="button button--sm button--outlined px-2 ms-3" style="font-size:0.72rem;">Cancel</button>
+                <button type="button" id="connect-cancel" class="button button--sm button--outlined px-2 ms-3 fs-3xs">Cancel</button>
             </div>
 
             {{/* Port picker. Surfaces only when the relevant node
@@ -47,8 +47,8 @@
                     <button type="button" class="button button--text button--sm" aria-label="Close"
                             onclick="this.closest('dialog').close()">✕</button>
                 </div>
-                <div class="dlg__body" id="history-modal-body" style="font-size:0.85rem;">
-                    <div style="color:var(--text-muted);">Loading…</div>
+                <div class="dlg__body fs-sm" id="history-modal-body">
+                    <div class="text-muted">Loading…</div>
                 </div>
             </dialog>
 
@@ -85,8 +85,8 @@
 
             <div class="flow-help" id="help-panel">
                 <p class="mb-2"><strong>Feature Requests board</strong></p>
-                <p class="mb-2" style="font-size:0.78rem;">Sketch out an idea by adding nodes around the existing site flow. Connect related ideas with edges, leave comments, and a mod can promote a good one into the canonical pipeline.</p>
-                <ul class="ps-3 mb-2" style="font-size:0.78rem;">
+                <p class="mb-2 fs-xs">Sketch out an idea by adding nodes around the existing site flow. Connect related ideas with edges, leave comments, and a mod can promote a good one into the canonical pipeline.</p>
+                <ul class="ps-3 mb-2 fs-xs">
                     <li><strong>+ Node</strong> / <kbd>N</kbd> — add a stand-alone idea node at canvas center.</li>
                     <li><strong>+ Mockup</strong> — add a UI mockup node. Edit its HTML in the inspector and the canvas thumbnail updates live; users can connect mockups to flow nodes via ports (e.g. "this Login click goes to <em>that mockup</em>").</li>
                     <li>Click a node — inspector opens with all actions.</li>
@@ -97,7 +97,7 @@
                     <li><kbd>F</kbd> fit graph, <kbd>Ctrl+Z</kbd> undo, <kbd>Ctrl+Shift+Z</kbd> redo.</li>
                     <li>Dotted-border nodes are canonical (mods edit). Amber-dashed nodes are proposed edits to a canonical.</li>
                 </ul>
-                <p class="mb-0" style="font-size:0.72rem;">Edits save to the server over REST. Click <strong>Refresh</strong> to pull other people's changes.</p>
+                <p class="mb-0 fs-3xs">Edits save to the server over REST. Click <strong>Refresh</strong> to pull other people's changes.</p>
             </div>
         </div>
     </div>
@@ -743,7 +743,7 @@
             const bodyEl  = document.getElementById('history-modal-body');
             if (!modalEl) return;
             titleEl.textContent = 'History — ' + (currentData.label || ('#' + nodeID));
-            bodyEl.innerHTML = '<div style="color:var(--text-muted);">Loading…</div>';
+            bodyEl.innerHTML = '<div class="text-muted">Loading…</div>';
             modalEl.showModal();
             try {
                 const r = await fetch('/flow/node/' + nodeID + '/history', { credentials: 'same-origin' });
@@ -751,21 +751,21 @@
                 const j = await r.json();
                 const revs = (j && j.revisions) || [];
                 if (revs.length === 0) {
-                    bodyEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.88rem;">No revisions recorded yet. History fills as proposals get merged or promoted into this node.</div>';
+                    bodyEl.innerHTML = '<div class="text-muted fs-md">No revisions recorded yet. History fills as proposals get merged or promoted into this node.</div>';
                     return;
                 }
                 bodyEl.innerHTML = revs.map((rev, i) => {
                     const when = new Date(rev.created_at).toLocaleString();
                     const actor = rev.actor_user_id ? ('user #' + rev.actor_user_id) : 'system';
                     return '<div class="mb-2 p-2" style="border:1px solid var(--border);border-radius:4px;">'
-                        + '<div style="font-size:0.78rem;">'
+                        + '<div class="fs-xs">'
                         +   '<strong>' + escapeText(rev.action_kind) + '</strong> '
                         +   '&middot; ' + escapeText(rev.summary || '')
                         + '</div>'
                         + '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">'
                         +   when + ' &middot; by ' + escapeText(actor)
                         + '</div>'
-                        + '<button class="button button--sm button--outlined mt-2" data-rev-idx="' + i + '" style="font-size:0.7rem;">Show before</button>'
+                        + '<button class="button button--sm button--outlined mt-2 fs-3xs" data-rev-idx="' + i + '">Show before</button>'
                         + '<div data-rev-diff="' + i + '" style="display:none;margin-top:6px;"></div>'  /* no class: the handler selects this by [data-rev-diff] and nothing draws it */
                     + '</div>';
                 }).join('');
@@ -790,7 +790,7 @@
                     });
                 });
             } catch (e) {
-                bodyEl.innerHTML = '<div class="text-danger" style="font-size:0.88rem;">Failed to load history: ' + escapeText(e.message) + '</div>';
+                bodyEl.innerHTML = '<div class="text-danger fs-md">Failed to load history: ' + escapeText(e.message) + '</div>';
             }
         }
 
@@ -831,7 +831,7 @@
                     + '</div>';
             }
             return '<table style="width:100%;border-collapse:collapse;">'
-                + '<thead><tr style="font-size:0.7rem;color:var(--text-muted);"><th></th><th style="text-align:left;padding:2px 6px;">Before</th><th style="text-align:left;padding:2px 6px;">Current</th></tr></thead>'
+                + '<thead><tr class="fs-3xs text-muted"><th></th><th style="text-align:left;padding:2px 6px;">Before</th><th style="text-align:left;padding:2px 6px;">Current</th></tr></thead>'
                 + '<tbody>'
                 + row('Label',       snap.label,       live.label)
                 + row('Description', snap.description, live.description)
@@ -1031,7 +1031,7 @@
                     '<span class="tag tag--sm me-1" title="' + escapeAttr(p.hint || '') + '" style="font-size:0.7rem;font-weight:500;">'
                     + escapeText(p.name || '') + '</span>'
                 ).join('');
-                return '<div class="mb-1" style="font-size:0.72rem;color:var(--text-muted);"><strong>' + label + ':</strong> ' + chips + '</div>';
+                return '<div class="mb-1 fs-3xs text-muted"><strong>' + label + ':</strong> ' + chips + '</div>';
             };
 
             // Side-by-side diff for proposals: pull the parent out of
@@ -1076,7 +1076,7 @@
                         '<div class="mt-2 mb-2 p-2" style="border:1px dashed rgba(251,191,36,0.5);border-radius:4px;background:rgba(63,47,26,0.35);">'
                         + '<div class="flow-meta mb-1">📝 Proposed change to <a href="#" id="diff-jump-parent" style="color:var(--bs-warning);">node #' + parentID + ' (' + escapeText(p.label || '') + ')</a></div>'
                         + '<table style="width:100%;border-collapse:collapse;">'
-                        + '<thead><tr style="font-size:0.7rem;color:var(--text-muted);"><th></th><th style="text-align:left;padding:2px 6px;">Current</th><th style="text-align:left;padding:2px 6px;">Proposed</th></tr></thead>'
+                        + '<thead><tr class="fs-3xs text-muted"><th></th><th style="text-align:left;padding:2px 6px;">Current</th><th style="text-align:left;padding:2px 6px;">Proposed</th></tr></thead>'
                         + '<tbody>'
                         + row('Label',       p.label,       data.label)
                         + row('Description', p.description, data.description)
@@ -1146,7 +1146,7 @@
                     '<hr style="border-color:rgba(167,139,250,0.3);">' +
                     '<div class="d-flex justify-content-between align-items-end mb-1">' +
                         '<label class="form__label mb-0">HTML</label>' +
-                        '<button id="btn-mockup-fullsize" class="button button--sm button--outlined px-2" type="button" style="font-size:0.7rem;">🔍 Open full-size</button>' +
+                        '<button id="btn-mockup-fullsize" class="button button--sm button--outlined px-2 fs-3xs" type="button">🔍 Open full-size</button>' +
                     '</div>' +
                     '<div class="mb-2">' +
                         '<textarea id="ins-mockup-html" class="form__input font-monospace" rows="8" ' + (editable ? '' : 'disabled') + '>' + escapedHTML + '</textarea>' +
@@ -1165,7 +1165,7 @@
                 '<input id="ins-label" class="form__input" type="text" value="' + escapeAttr(data.label || '') + '" ' + (editable ? '' : 'disabled') + '></div>' +
                 '<div class="mb-2"><label class="form__label">Description</label>' +
                 '<textarea id="ins-desc" class="form__input" ' + (editable ? '' : 'disabled') + '>' + escapeText(data.description || '') + '</textarea></div>' +
-                (VIEWER_IS_MOD ? '<div class="form-check mb-2"><input id="ins-locked" class="form-check-input" type="checkbox" ' + (data.locked ? 'checked' : '') + '><label class="form-check-label" for="ins-locked" style="font-size:0.78rem;">Locked (canonical)</label></div>' : '') +
+                (VIEWER_IS_MOD ? '<div class="form-check mb-2"><input id="ins-locked" class="form-check-input" type="checkbox" ' + (data.locked ? 'checked' : '') + '><label class="form-check-label fs-xs" for="ins-locked">Locked (canonical)</label></div>' : '') +
                 renderPortList('Inputs',  inPorts) +
                 renderPortList('Outputs', outPorts) +
                 '<div class="flow-meta">created_by: ' + (data.created_by || '—') + (data.locked ? ' &middot; <span class="flow-locked-badge">locked</span>' : '') + '</div>' +

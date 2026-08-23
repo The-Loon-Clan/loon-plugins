@@ -7,9 +7,9 @@
 {{define "community_thread_c.html"}}
     <div class="container page ct-page">
         <nav aria-label="breadcrumb" style="font-size:0.8rem;margin-bottom:0.6rem;">
-            <a href="/c" style="color:var(--text-muted);text-decoration:none;">Communities</a>
+            <a class="text-muted text-decoration-none" href="/c">Communities</a>
             &rsaquo;
-            <a href="/c/{{.Community.Slug}}" style="color:var(--blue);text-decoration:none;">/c/{{.Community.Slug}}</a>
+            <a class="text-primary text-decoration-none" href="/c/{{.Community.Slug}}">/c/{{.Community.Slug}}</a>
         </nav>
 
         <div class="ct-shell">
@@ -64,7 +64,7 @@
                         <form method="POST" action="/c/{{$.Community.Slug}}/thread/{{$.Thread.ID}}/post/{{.ID}}/remove" class="ms-auto"
                               onsubmit="return confirm('Remove this reply?')">
                             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                            <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.7rem;" type="submit">Remove</button>
+                            <button class="btn btn-sm btn-outline-danger py-0 px-2 fs-3xs" type="submit">Remove</button>
                         </form>
                         {{end}}
                     </div>
@@ -76,11 +76,11 @@
 
                 {{if .User}}
                 {{if .Thread.Locked}}
-                <div class="ct-reply-form text-center text-muted" style="font-size:0.85rem;">This thread is locked. New replies are disabled.</div>
+                <div class="ct-reply-form text-center text-muted fs-sm">This thread is locked. New replies are disabled.</div>
                 {{else}}
                 <form class="ct-reply-form" method="POST" action="/c/{{.Community.Slug}}/thread/{{.Thread.ID}}/reply">
                     <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                    <label class="form-label" style="font-size:0.85rem;">Reply</label>
+                    <label class="form-label fs-sm">Reply</label>
                     <textarea aria-label="Reply" name="body" required placeholder="Write a reply..."></textarea>
                     <div class="d-flex justify-content-end mt-2">
                         <button class="btn btn-sm btn-primary" type="submit">Post reply</button>
@@ -88,8 +88,8 @@
                 </form>
                 {{end}}
                 {{else}}
-                <div class="ct-reply-form text-center" style="font-size:0.85rem;">
-                    <a href="/login" style="color:var(--blue);">Sign in</a> to reply.
+                <div class="ct-reply-form text-center fs-sm">
+                    <a class="text-primary" href="/login">Sign in</a> to reply.
                 </div>
                 {{end}}
             </div>
@@ -99,8 +99,8 @@
                     <h2>About /c/{{.Community.Slug}}</h2>
                     {{if .Community.Description}}<div style="font-size:0.86rem;color:var(--text-primary);line-height:1.5;">{{.Community.Description}}</div>{{end}}
                     <div style="display:flex;gap:0.95rem;font-size:0.82rem;margin-top:0.55rem;">
-                        <div><strong style="color:var(--text-primary);font-size:0.95rem;">{{.Community.SubscriberCount}}</strong> <span style="color:var(--text-muted);">members</span></div>
-                        <div><strong style="color:var(--text-primary);font-size:0.95rem;">{{.Community.ThreadCount}}</strong> <span style="color:var(--text-muted);">threads</span></div>
+                        <div><strong class="text-light fs-base">{{.Community.SubscriberCount}}</strong> <span class="text-muted">members</span></div>
+                        <div><strong class="text-light fs-base">{{.Community.ThreadCount}}</strong> <span class="text-muted">threads</span></div>
                     </div>
                 </div>
 

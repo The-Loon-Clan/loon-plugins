@@ -2,8 +2,8 @@
     <div class="container mt-4 page-narrow">
 
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="h5 mb-0" style="font-weight:600;">Points</h2>
-            <span class="tag tag--warning" style="font-size:0.82rem;">{{.Balance}} pts</span>
+            <h2 class="h5 mb-0 fw-semibold">Points</h2>
+            <span class="tag tag--warning fs-xs">{{.Balance}} pts</span>
         </div>
 
         {{/* Page links rather than Bootstrap's JS tabs: the ledger pages
@@ -27,12 +27,12 @@
         </ul>
         {{end}}
 
-        {{if .Error}}<div class="notice notice--danger py-1 mb-3" style="font-size:0.82rem;">{{.Error}}</div>{{end}}
+        {{if .Error}}<div class="notice notice--danger py-1 mb-3 fs-xs">{{.Error}}</div>{{end}}
 
         {{if .Entries}}
         <div class="panelV2">
             <div class="data-table-wrapper">
-                <table class="data-table mb-0" style="font-size:0.78rem;">
+                <table class="data-table mb-0 fs-xs">
             <caption class="visually-hidden">Your points history</caption>
                     <thead>
                         <tr>
@@ -45,15 +45,15 @@
                     <tbody>
                         {{range .Entries}}
                         <tr>
-                            <td style="color:var(--text-muted);">
+                            <td class="text-muted">
                                 {{.Description}}
-                                {{if .ReferenceID}}<span style="font-size:0.7rem;color:var(--text-muted);">#{{deref64 .ReferenceID}}</span>{{end}}
+                                {{if .ReferenceID}}<span class="fs-3xs text-muted">#{{deref64 .ReferenceID}}</span>{{end}}
                             </td>
                             <td class="text-end {{if gt .Amount 0}}text-success{{else}}text-danger{{end}}">
                                 {{if gt .Amount 0}}+{{end}}{{.Amount}}
                             </td>
-                            <td class="text-end" style="color:var(--text-muted);">{{.Balance}}</td>
-                            <td style="color:var(--text-muted);">{{.CreatedAt.Format "Jan 02, 15:04"}}</td>
+                            <td class="text-end text-muted">{{.Balance}}</td>
+                            <td class="text-muted">{{.CreatedAt.Format "Jan 02, 15:04"}}</td>
                         </tr>
                         {{end}}
                     </tbody>
@@ -62,7 +62,7 @@
         </div>
         {{.PaginationHTML}}
         {{else}}
-        <div class="panelV2"><div class="panel__body" style="color:var(--text-muted);font-size:0.85rem;">
+        <div class="panelV2"><div class="panel__body text-muted fs-sm">
             No transactions yet. Points come in from uploads, grabs, reviews and wiki edits.
         </div></div>
         {{end}}

@@ -52,7 +52,7 @@
                 {{end}}
             </div>
             <div id="chat-stream" class="chat-stream">
-                <div class="text-center py-4" style="color:var(--text-muted);font-size:0.85rem;">Loading…</div>
+                <div class="text-center py-4 text-muted fs-sm">Loading…</div>
             </div>
             <div style="padding:0.5rem 1rem;border-top:1px solid var(--border);display:flex;gap:0.5rem;">
                 {{if .IsAnon}}
@@ -246,7 +246,7 @@
                     stream.innerHTML = '';
                     if (d.online || d.users) updateOnline({count: d.online || 0, users: d.users || []});
                     if (!d.messages || d.messages.length === 0) {
-                        stream.innerHTML = '<div class="text-center py-4" style="color:var(--text-muted);font-size:0.85rem;">No messages yet.</div>';
+                        stream.innerHTML = '<div class="text-center py-4 text-muted fs-sm">No messages yet.</div>';
                         return;
                     }
                     d.messages.forEach(appendMessage);
@@ -254,7 +254,7 @@
                     scrollToBottom();
                 })
                 .catch(function(e) {
-                    stream.innerHTML = '<div class="text-center py-4" style="color:var(--red);font-size:0.85rem;">Failed to load history.</div>';
+                    stream.innerHTML = '<div class="text-center py-4 text-danger fs-sm">Failed to load history.</div>';
                 });
         }
 

@@ -26,8 +26,8 @@ var cardTmpl = template.Must(template.New("irc-card").Parse(`
     <div class="card-body">
         {{if .Link}}
         <div class="d-flex align-items-center justify-content-between">
-            <div style="font-size:0.88rem;">
-                <span style="color:var(--green);font-weight:600;">&#10003; Linked</span>
+            <div class="fs-md">
+                <span class="text-success fw-semibold">&#10003; Linked</span>
                 &mdash; <strong>{{.Link.IRCNick}}</strong>
                 {{if .Link.AccountName}}<span style="color:var(--text-muted);font-size:0.78rem;margin-left:0.4rem;">(account: {{.Link.AccountName}})</span>{{end}}
                 <span style="color:var(--text-muted);font-size:0.78rem;margin-left:0.5rem;">since {{.Link.VerifiedAt.Format "Jan 02, 2006"}}</span>
@@ -35,7 +35,7 @@ var cardTmpl = template.Must(template.New("irc-card").Parse(`
             <form method="POST" action="/profile/irc-unlink" class="d-inline"
                   onsubmit="return confirm('Unlink your IRC account?')">
                 <input type="hidden" name="_csrf" value="{{.CSRF}}">
-                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.75rem;">Unlink</button>
+                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2 fs-2xs">Unlink</button>
             </form>
         </div>
         {{else}}
@@ -43,16 +43,16 @@ var cardTmpl = template.Must(template.New("irc-card").Parse(`
             Link your IRC nick to share chat across Discord, IRC, and the site widget, and to receive site whispers as IRC PMs.
         </div>
         <div class="d-flex align-items-center gap-2 mb-2">
-            <span style="font-size:0.82rem;color:var(--text-muted);">Verification token:</span>
+            <span class="fs-xs text-muted">Verification token:</span>
             <code style="background:var(--bg-elevated);padding:0.3rem 0.6rem;border-radius:4px;font-size:0.9rem;user-select:all;">{{.Token}}</code>
         </div>
         {{if and .Server .BotNick}}
-        <div style="font-size:0.75rem;color:var(--text-muted);">
+        <div class="fs-2xs text-muted">
             Connect to <code>{{.Server}}</code>{{if .Channel}} (channel: <code>{{.Channel}}</code>){{end}}, then PM the bot:<br>
             <code style="margin-top:0.3rem;display:inline-block;">/msg {{.BotNick}} link {{.Token}}</code>
         </div>
         {{else}}
-        <div style="font-size:0.75rem;color:var(--text-muted);">
+        <div class="fs-2xs text-muted">
             The IRC bot isn't configured yet. Once it is, you'll see the connect details + bot nick here.
         </div>
         {{end}}

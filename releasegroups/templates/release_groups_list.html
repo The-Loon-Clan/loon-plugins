@@ -15,7 +15,7 @@
         </div>
 
         {{if eq (.Suggested) "1"}}
-        <div class="notice notice--success py-2" style="font-size:0.85rem;">Thanks — your suggestion is awaiting review.</div>
+        <div class="notice notice--success py-2 fs-sm">Thanks — your suggestion is awaiting review.</div>
         {{end}}
 
         {{if .IsAdmin}}
@@ -36,7 +36,7 @@
                             <input class="form__input" name="logo_url" id="add-logo-url" type="text" placeholder="Paste a URL then click Scrape">
                             <button type="button" class="button button--outlined" onclick="scrapeLogoFromModal('add-name', 'add-logo-url', 'add-logo-status')">Scrape</button>
                         </div>
-                        <div id="add-logo-status" class="form-text" style="font-size:0.72rem;"></div>
+                        <div id="add-logo-status" class="form-text fs-3xs"></div>
                     </div>
                     <div class="mb-2"><label class="form__label small" for="add-description">Description</label><textarea class="form__input" name="description" id="add-description" rows="3"></textarea></div>
                     <button type="submit" class="button button--primary button--sm">Create</button>

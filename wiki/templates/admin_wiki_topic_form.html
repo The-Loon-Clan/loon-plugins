@@ -45,7 +45,7 @@
                                 <option value="{{.Key}}" {{if eq (printf "%s" .Key) $cur}}selected{{end}}>{{.Label}}</option>
                                 {{end}}
                             </select>
-                            <div class="form-text" style="font-size:0.78rem;">
+                            <div class="form-text fs-xs">
                                 Leave on Default to keep the icon this topic already gets from its slug.
                             </div>
                         </div>
@@ -67,7 +67,7 @@
                                 <button type="button" class="button button--outlined button--sm"
                                         onclick="document.getElementById('color').value = '';">Clear</button>
                             </div>
-                            <div class="form-text" style="font-size:0.78rem;">
+                            <div class="form-text fs-xs">
                                 Blank uses the theme default. Anything that is not #rrggbb is ignored.
                             </div>
                         </div>

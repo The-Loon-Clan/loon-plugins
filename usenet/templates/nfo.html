@@ -10,14 +10,14 @@
     </p>
 
     {{if .NoStore}}
-    <div class="notice notice--info" style="font-size:0.82rem;">
+    <div class="notice notice--info fs-xs">
       This host has not registered an NFO store, so there is nowhere for the text to go.
       The job will report the same and do nothing.
     </div>
     {{else}}
 
     {{if not .Enabled}}
-    <div class="notice notice--warning py-2" style="font-size:0.82rem;">
+    <div class="notice notice--warning py-2 fs-xs">
       <strong>Off.</strong> Set <code>nfo_enabled</code> in this plugin's config to start reading.
       It is off by default because it is the one job here that spends provider bytes —
       everything else is bookkeeping over data already paid for.
@@ -28,33 +28,33 @@
       <div class="col-4">
         <div class="p-2" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;">
           <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Stored</div>
-          <div style="font-size:1.3rem;font-weight:600;">{{.Stored}}</div>
+          <div class="fs-2xl fw-semibold">{{.Stored}}</div>
         </div>
       </div>
       <div class="col-4">
         <div class="p-2" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;">
           <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Waiting</div>
-          <div style="font-size:1.3rem;font-weight:600;">{{.Pending}}</div>
-          <div style="font-size:0.66rem;color:var(--text-muted);">article known, unread</div>
+          <div class="fs-2xl fw-semibold">{{.Pending}}</div>
+          <div class="fs-3xs text-muted">article known, unread</div>
         </div>
       </div>
       <div class="col-4">
         <div class="p-2" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;">
           <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Written off</div>
-          <div style="font-size:1.3rem;font-weight:600;">{{.Unavailable}}</div>
-          <div style="font-size:0.66rem;color:var(--text-muted);">gone, or not text</div>
+          <div class="fs-2xl fw-semibold">{{.Unavailable}}</div>
+          <div class="fs-3xs text-muted">gone, or not text</div>
         </div>
       </div>
     </div>
 
-    <p style="font-size:0.72rem;color:var(--text-muted);">
+    <p class="fs-3xs text-muted">
       Reading up to <strong>{{.BatchSize}}</strong> releases a pass, capped at
       <strong>{{.BudgetMB}} MB</strong> of article data per pass.
     </p>
 
     {{if .Rows}}
     <div class="data-table-wrapper">
-      <table class="data-table mb-0" style="font-size:0.8rem;">
+      <table class="data-table mb-0 fs-xs">
             <caption class="visually-hidden">NFO extraction results</caption>
         <thead>
           <tr>
@@ -68,12 +68,12 @@
         <tbody>
           {{range .Rows}}
           <tr>
-            <td><a href="/release/{{.ID}}" style="color:var(--blue);text-decoration:none;">#{{.ID}}</a></td>
+            <td><a class="text-primary text-decoration-none" href="/release/{{.ID}}">#{{.ID}}</a></td>
             <td style="max-width:0;">
               <a href="/release/{{.ID}}" title="{{.Preview}}"
                  style="color:var(--text-primary);text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.Title}}</a>
             </td>
-            <td style="color:var(--text-muted);">{{.Group}}</td>
+            <td class="text-muted">{{.Group}}</td>
             <td class="text-end" style="font-variant-numeric:tabular-nums;">{{.Lines}}</td>
             <td class="text-end" style="font-variant-numeric:tabular-nums;">{{.Bytes}}</td>
           </tr>

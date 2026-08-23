@@ -12,10 +12,10 @@
      which injects _csrf into each form as it is submitted. */}}
 {{define "admin_donate.html"}}
     <div class="container mt-3 page">
-        <h1 style="font-size:1.3rem;font-weight:600;">Donate &mdash; admin</h1>
-        <p style="color:var(--text-muted);font-size:0.85rem;">
+        <h1 class="fs-2xl fw-semibold">Donate &mdash; admin</h1>
+        <p class="text-muted fs-sm">
             Every donation setting on one page &mdash; the admin hub links here and nowhere else. Saves on each form apply immediately
-            to the public <a href="/help/donate" style="color:var(--blue);">/help/donate</a> page.
+            to the public <a class="text-primary" href="/help/donate">/help/donate</a> page.
         </p>
 
         {{/* Tabs, matching /admin/p/usenet and the rest of the admin pages —
@@ -34,12 +34,12 @@
 
         <div class="tab-content">
 
-        {{if .Saved}}<div class="alert alert-success py-1" style="font-size:0.85rem;">Saved ({{.Saved}}).</div>{{end}}
-        {{if .ErrCode}}<div class="alert alert-danger py-1" style="font-size:0.85rem;">Error: {{.ErrCode}}</div>{{end}}
+        {{if .Saved}}<div class="alert alert-success py-1 fs-sm">Saved ({{.Saved}}).</div>{{end}}
+        {{if .ErrCode}}<div class="alert alert-danger py-1 fs-sm">Error: {{.ErrCode}}</div>{{end}}
 
         {{/* ── Costs ─────────────────────────────────────── */}}
         <div id="costs" class="tab-pane active">
-            <p style="color:var(--text-muted);font-size:0.82rem;">
+            <p class="text-muted fs-xs">
                 Each row adds to the public thermometer goal. Goal group <code>site</code> locks donations when fully funded; other groups never close.
             </p>
             <div class="card mb-3">
@@ -50,47 +50,47 @@
                         {{if .Edit}}<input type="hidden" name="id" value="{{.Edit.ID}}">{{end}}
                         <div class="row g-2">
                             <div class="col-md-4">
-                                <label class="form-label" style="font-size:0.78rem;">Label</label>
+                                <label class="form-label fs-xs">Label</label>
                                 <input aria-label="Label" type="text" name="label" class="form-control form-control-sm" required maxlength="200"
                                        value="{{if .Edit}}{{.Edit.Label}}{{end}}" placeholder="e.g. VPS, Eweka block">
                             </div>
                             <div class="col-md-2">
-                                <label class="form-label" style="font-size:0.78rem;">Goal group</label>
+                                <label class="form-label fs-xs">Goal group</label>
                                 <input aria-label="Goal group" type="text" name="goal_group" class="form-control form-control-sm" maxlength="40"
                                        value="{{if .Edit}}{{.Edit.GoalGroup}}{{else}}site{{end}}" placeholder="site">
                             </div>
                             <div class="col-md-2">
-                                <label class="form-label" style="font-size:0.78rem;">Period</label>
+                                <label class="form-label fs-xs">Period</label>
                                 <select aria-label="Period" name="period" class="form-select form-select-sm">
                                     <option value="monthly" {{if and .Edit (eq .Edit.Period "monthly")}}selected{{end}}>monthly</option>
                                     <option value="yearly"  {{if and .Edit (eq .Edit.Period "yearly")}}selected{{end}}>yearly</option>
                                 </select>
                             </div>
                             <div class="col-md-2">
-                                <label class="form-label" style="font-size:0.78rem;">Amount USD</label>
+                                <label class="form-label fs-xs">Amount USD</label>
                                 <input aria-label="Amount USD" type="number" step="0.01" min="0" name="amount_usd" class="form-control form-control-sm" required
                                        value="{{if .Edit}}{{printf "%.2f" .Edit.AmountUSD}}{{end}}">
                             </div>
                             <div class="col-md-2">
-                                <label class="form-label" style="font-size:0.78rem;">Category</label>
+                                <label class="form-label fs-xs">Category</label>
                                 <input aria-label="Category" type="text" name="category" class="form-control form-control-sm" maxlength="40"
                                        value="{{if .Edit}}{{.Edit.Category}}{{else}}other{{end}}">
                             </div>
                         </div>
                         <div class="row g-2 mt-1">
                             <div class="col-md-8">
-                                <label class="form-label" style="font-size:0.78rem;">Notes</label>
+                                <label class="form-label fs-xs">Notes</label>
                                 <input aria-label="Notes" type="text" name="notes" class="form-control form-control-sm" maxlength="500" value="{{if .Edit}}{{.Edit.Notes}}{{end}}">
                             </div>
                             <div class="col-md-2">
-                                <label class="form-label" style="font-size:0.78rem;">Sort order</label>
+                                <label class="form-label fs-xs">Sort order</label>
                                 <input aria-label="Sort order" type="number" name="sort_order" class="form-control form-control-sm" value="{{if .Edit}}{{.Edit.SortOrder}}{{else}}0{{end}}">
                             </div>
                             <div class="col-md-2 d-flex align-items-end">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="cost-active" name="active" value="1"
                                            {{if or (not .Edit) (and .Edit .Edit.Active)}}checked{{end}}>
-                                    <label class="form-check-label" for="cost-active" style="font-size:0.85rem;">Active</label>
+                                    <label class="form-check-label fs-sm" for="cost-active">Active</label>
                                 </div>
                             </div>
                         </div>
@@ -103,31 +103,31 @@
                 <div class="card-header">All cost line items</div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                    <table class="table table-sm mb-0" style="font-size:0.82rem;">
+                    <table class="table table-sm mb-0 fs-xs">
                         <caption class="visually-hidden">Site costs, and what each covers</caption>
                         <thead>
-                            <tr style="color:var(--text-muted);">
+                            <tr class="text-muted">
                                 <th>Label</th><th>Group</th><th>Period</th><th class="text-end">Amount</th><th>Active</th><th></th>
                             </tr>
                         </thead>
                         <tbody>
                             {{range .Costs}}
                             <tr>
-                                <td>{{.Label}}{{if .Notes}}<br><span style="color:var(--text-muted);font-size:0.72rem;">{{.Notes}}</span>{{end}}</td>
+                                <td>{{.Label}}{{if .Notes}}<br><span class="text-muted fs-3xs">{{.Notes}}</span>{{end}}</td>
                                 <td><code>{{.GoalGroup}}</code></td>
                                 <td>{{.Period}}</td>
                                 <td class="text-end">${{printf "%.2f" .AmountUSD}}</td>
                                 <td>{{if .Active}}✓{{else}}—{{end}}</td>
                                 <td class="text-end">
-                                    <a class="btn btn-link p-0" href="/admin/donate?edit={{.ID}}#costs" style="font-size:0.72rem;">edit</a>
+                                    <a class="btn btn-link p-0 fs-3xs" href="/admin/donate?edit={{.ID}}#costs">edit</a>
                                     <form method="POST" action="/admin/donate/costs/{{.ID}}/del" class="d-inline" onsubmit="return confirm('Delete?')">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                        <button class="btn btn-link p-0 text-danger" style="font-size:0.72rem;">delete</button>
+                                        <button class="btn btn-link p-0 text-danger fs-3xs">delete</button>
                                     </form>
                                 </td>
                             </tr>
                             {{else}}
-                            <tr><td colspan="6" class="text-center" style="color:var(--text-muted);">No costs yet.</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted">No costs yet.</td></tr>
                             {{end}}
                         </tbody>
                     </table>
@@ -149,7 +149,7 @@
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="donate-enabled" name="donate_enabled" value="1"
                                                {{if .DonateEnabled}}checked{{end}}>
-                                        <label class="form-check-label" for="donate-enabled" style="font-size:0.85rem;font-weight:600;">
+                                        <label class="form-check-label fs-sm fw-semibold" for="donate-enabled">
                                             Donate page enabled (visible to all signed-in users)
                                         </label>
                                     </div>
@@ -162,23 +162,23 @@
                                     </div>
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label" style="font-size:0.78rem;">Points per dollar (base rate)</label>
+                                    <label class="form-label fs-xs">Points per dollar (base rate)</label>
                                     <input aria-label="Points per dollar (base rate)" type="number" step="0.01" min="0" name="points_per_dollar" class="form-control form-control-sm"
                                            value="{{printf "%.2f" .Config.PointsPerDollar}}">
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label" style="font-size:0.78rem;">Multiplier per $10</label>
+                                    <label class="form-label fs-xs">Multiplier per $10</label>
                                     <input aria-label="Multiplier per $10" type="number" step="0.01" min="1.0" max="3.0" name="multiplier_per_10" class="form-control form-control-sm"
                                            value="{{printf "%.2f" .Config.MultiplierPer10}}">
                                     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">1.0 = linear; 1.2 = mild bonus; capped at 3.0.</div>
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label" style="font-size:0.78rem;">Donator title threshold (USD lifetime)</label>
+                                    <label class="form-label fs-xs">Donator title threshold (USD lifetime)</label>
                                     <input aria-label="Donator title threshold (USD lifetime)" type="number" step="0.01" min="0" name="donator_threshold_usd" class="form-control form-control-sm"
                                            value="{{printf "%.2f" .Config.DonatorThresholdUSD}}">
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label" style="font-size:0.78rem;">Locking goal-groups (CSV)</label>
+                                    <label class="form-label fs-xs">Locking goal-groups (CSV)</label>
                                     <input aria-label="Locking goal-groups (CSV)" type="text" name="locking_groups" class="form-control form-control-sm"
                                            value="{{.LockingGroups}}" placeholder="site">
                                     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">
@@ -212,8 +212,8 @@
 
         {{/* ── Wallet + BTCPay ──────────────────────────── */}}
         <div id="wallet" class="tab-pane">
-            <p style="color:var(--text-muted);font-size:0.82rem;">
-                Receive addresses shown on <a href="/help/donate" style="color:var(--blue);">/help/donate</a>.
+            <p class="text-muted fs-xs">
+                Receive addresses shown on <a class="text-primary" href="/help/donate">/help/donate</a>.
                 BTCPay credentials power the auto-invoice + webhook flow. The webhook at
                 <code>POST /api/btcpay/webhook</code> rejects all traffic when the secret is empty (fail-closed).
             </p>
@@ -225,36 +225,36 @@
                         <h2 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Receive addresses</h2>
                         <div class="row g-2 mb-3">
                             <div class="col-md-4">
-                                <label class="form-label" style="font-size:0.78rem;">Bitcoin (BTC)</label>
+                                <label class="form-label fs-xs">Bitcoin (BTC)</label>
                                 <input aria-label="Bitcoin (BTC)" type="text" name="addr_btc" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "btc"}}" placeholder="bc1...">
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label" style="font-size:0.78rem;">Ethereum (ETH)</label>
+                                <label class="form-label fs-xs">Ethereum (ETH)</label>
                                 <input aria-label="Ethereum (ETH)" type="text" name="addr_eth" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "eth"}}" placeholder="0x...">
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label" style="font-size:0.78rem;">Monero (XMR)</label>
+                                <label class="form-label fs-xs">Monero (XMR)</label>
                                 <input aria-label="Monero (XMR)" type="text" name="addr_xmr" class="form-control form-control-sm" maxlength="200" value="{{index .Wallet "xmr"}}" placeholder="4...">
                             </div>
                         </div>
                         <h2 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-top:1rem;">BTCPay Server</h2>
                         <div class="row g-2">
                             <div class="col-md-6">
-                                <label class="form-label" style="font-size:0.78rem;">Server URL</label>
+                                <label class="form-label fs-xs">Server URL</label>
                                 <input aria-label="Server URL" type="text" name="btcpay_url" class="form-control form-control-sm" maxlength="200" value="{{index .Wallet "btcpay_url"}}" placeholder="https://btcpay.example.com">
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label" style="font-size:0.78rem;">Store ID</label>
+                                <label class="form-label fs-xs">Store ID</label>
                                 <input aria-label="Store ID" type="text" name="btcpay_store_id" class="form-control form-control-sm" maxlength="120" value="{{index .Wallet "btcpay_store_id"}}">
                             </div>
                         </div>
                         <div class="row g-2 mt-1">
                             <div class="col-md-6">
-                                <label class="form-label" style="font-size:0.78rem;">API key</label>
+                                <label class="form-label fs-xs">API key</label>
                                 <input aria-label="API key" type="password" name="btcpay_api_key" class="form-control form-control-sm" maxlength="200" value="" autocomplete="off" placeholder="{{if index .Wallet "btcpay_api_key"}}configured — leave blank to keep{{else}}BTCPay API key{{end}}">
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label" style="font-size:0.78rem;">Webhook secret <span style="color:var(--text-muted);font-weight:400;">(HMAC-SHA256; empty = webhook off)</span></label>
+                                <label class="form-label fs-xs">Webhook secret <span class="text-muted fw-normal">(HMAC-SHA256; empty = webhook off)</span></label>
                                 <input aria-label="Webhook secret (HMAC-SHA256; empty = webhook off)" type="password" name="btcpay_webhook_secret" class="form-control form-control-sm" maxlength="200" value="" autocomplete="off" placeholder="{{if index .Wallet "btcpay_secret"}}configured — leave blank to keep{{else}}HMAC-SHA256 secret{{end}}">
                             </div>
                         </div>
@@ -287,32 +287,32 @@
                     {{$test := .BTCPayTest}}
                     {{$msg := .BTCPayMsg}}
                     {{if eq $test "ok"}}
-                    <div class="alert alert-success mt-3 mb-0" style="font-size:0.85rem;">
+                    <div class="alert alert-success mt-3 mb-0 fs-sm">
                         ✅ <strong>BTCPay connection OK.</strong> URL, Store ID, and API key all verified. The "View Invoices" permission is present.
                         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
                             The first Claim attempt will also verify "Create Invoices" permission — if that's missing, you'll see it in <a href="/admin/errors">/admin/errors</a> under <code>donate/claim-invoice</code>.
                         </div>
                     </div>
                     {{else if eq $test "missing"}}
-                    <div class="alert alert-warning mt-3 mb-0" style="font-size:0.85rem;">
+                    <div class="alert alert-warning mt-3 mb-0 fs-sm">
                         ⚠ <strong>BTCPay not configured yet.</strong> Set BTCPay URL, Store ID, and API key above first.
                     </div>
                     {{else if eq $test "auth"}}
-                    <div class="alert alert-danger mt-3 mb-0" style="font-size:0.85rem;">
+                    <div class="alert alert-danger mt-3 mb-0 fs-sm">
                         ❌ <strong>API key rejected.</strong> {{if $msg}}{{$msg}}{{end}}
                         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
                             Generate a new key in BTCPay (Account → Manage Account → API Keys) with both <code>View invoices</code> and <code>Create invoices</code> permissions.
                         </div>
                     </div>
                     {{else if eq $test "store"}}
-                    <div class="alert alert-danger mt-3 mb-0" style="font-size:0.85rem;">
+                    <div class="alert alert-danger mt-3 mb-0 fs-sm">
                         ❌ <strong>Store not found.</strong> {{if $msg}}{{$msg}}{{end}}
                         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
                             Copy the store ID from the BTCPay URL when viewing the store (<code>/stores/&lt;id&gt;/...</code>).
                         </div>
                     </div>
                     {{else if eq $test "err"}}
-                    <div class="alert alert-danger mt-3 mb-0" style="font-size:0.85rem;">
+                    <div class="alert alert-danger mt-3 mb-0 fs-sm">
                         ❌ <strong>BTCPay test failed.</strong> {{if $msg}}{{$msg}}{{end}}
                         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
                             Check the URL (must include scheme, e.g. <code>https://btcpay.example.com</code>), DNS, and that the BTCPay container is up.
@@ -330,8 +330,8 @@
              BTCPay click-to-claim flow which stamps package_id on
              settlement. Stock counts settled donations YTD. */}}
         <div id="packages" class="tab-pane">
-            <p style="color:var(--text-muted);font-size:0.82rem;">
-                Limited-stock "buy this slot" cards on <a href="/help/donate#packages-section" style="color:var(--blue);">/help/donate</a>.
+            <p class="text-muted fs-xs">
+                Limited-stock "buy this slot" cards on <a class="text-primary" href="/help/donate#packages-section">/help/donate</a>.
                 Each settled BTCPay invoice with this package's id in its metadata consumes one slot. Stock resets every Jan 1.
                 Set <strong>active=false</strong> to retire a package without losing its historical donations.
             </p>
@@ -345,35 +345,35 @@
                                 <input type="hidden" name="id" value="{{if .EditPkg}}{{.EditPkg.ID}}{{end}}">
                                 <div class="row g-2 mb-2">
                                     <div class="col-md-7">
-                                        <label class="form-label" style="font-size:0.78rem;">Label</label>
+                                        <label class="form-label fs-xs">Label</label>
                                         <input aria-label="Label" type="text" name="label" class="form-control form-control-sm" maxlength="80" required value="{{if .EditPkg}}{{.EditPkg.Label}}{{end}}" placeholder="Server Patron 2026">
                                     </div>
                                     <div class="col-md-3">
-                                        <label class="form-label" style="font-size:0.78rem;">Amount USD</label>
+                                        <label class="form-label fs-xs">Amount USD</label>
                                         <input aria-label="Amount USD" type="number" step="0.01" min="0.01" name="amount_usd" class="form-control form-control-sm" required value="{{if .EditPkg}}{{printf "%.2f" .EditPkg.AmountUSD}}{{end}}" placeholder="250">
                                     </div>
                                     <div class="col-md-2">
-                                        <label class="form-label" style="font-size:0.78rem;">Stock</label>
+                                        <label class="form-label fs-xs">Stock</label>
                                         <input aria-label="Stock" type="number" min="1" name="stock_total" class="form-control form-control-sm" required value="{{if .EditPkg}}{{.EditPkg.StockTotal}}{{end}}" placeholder="2">
                                     </div>
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label" style="font-size:0.78rem;">Description <span style="color:var(--text-muted);font-weight:400;">(short, public)</span></label>
+                                    <label class="form-label fs-xs">Description <span class="text-muted fw-normal">(short, public)</span></label>
                                     <input aria-label="Description (short, public)" type="text" name="description" class="form-control form-control-sm" maxlength="200" value="{{if .EditPkg}}{{.EditPkg.Description}}{{end}}" placeholder="Covers one year of VPS hosting.">
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label" style="font-size:0.78rem;">Reward <span style="color:var(--text-muted);font-weight:400;">(what they get)</span></label>
+                                    <label class="form-label fs-xs">Reward <span class="text-muted fw-normal">(what they get)</span></label>
                                     <input aria-label="Reward (what they get)" type="text" name="reward" class="form-control form-control-sm" maxlength="200" value="{{if .EditPkg}}{{.EditPkg.Reward}}{{end}}" placeholder="Permanent 'Server Patron 2026' badge + Hall of Fame slot.">
                                 </div>
                                 <div class="row g-2 mb-3">
                                     <div class="col-md-3">
-                                        <label class="form-label" style="font-size:0.78rem;">Sort order</label>
+                                        <label class="form-label fs-xs">Sort order</label>
                                         <input aria-label="Sort order" type="number" name="sort_order" class="form-control form-control-sm" value="{{if .EditPkg}}{{.EditPkg.SortOrder}}{{else}}0{{end}}">
                                     </div>
                                     <div class="col-md-9 d-flex align-items-end">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="active" value="1" id="pkg_active" {{if or (not .EditPkg) .EditPkg.Active}}checked{{end}}>
-                                            <label class="form-check-label" for="pkg_active" style="font-size:0.82rem;">Active <span style="color:var(--text-muted);font-weight:400;">(uncheck to retire without deleting)</span></label>
+                                            <label class="form-check-label fs-xs" for="pkg_active">Active <span class="text-muted fw-normal">(uncheck to retire without deleting)</span></label>
                                         </div>
                                     </div>
                                 </div>
@@ -388,10 +388,10 @@
                         <div class="card-header">Existing packages</div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
-                            <table class="table table-sm mb-0" style="font-size:0.78rem;">
+                            <table class="table table-sm mb-0 fs-xs">
                                 <caption class="visually-hidden">Donation packages</caption>
                                 <thead>
-                                    <tr style="color:var(--text-muted);">
+                                    <tr class="text-muted">
                                         <th>Label</th><th class="text-end">USD</th><th class="text-end">Stock</th><th>Active</th><th></th>
                                     </tr>
                                 </thead>
@@ -401,12 +401,12 @@
                                         <td>{{.Label}}</td>
                                         <td class="text-end">${{printf "%.2f" .AmountUSD}}</td>
                                         <td class="text-end">{{.StockTotal}}</td>
-                                        <td>{{if .Active}}<span style="color:#4ade80;">yes</span>{{else}}<span style="color:var(--text-muted);">no</span>{{end}}</td>
+                                        <td>{{if .Active}}<span style="color:#4ade80;">yes</span>{{else}}<span class="text-muted">no</span>{{end}}</td>
                                         <td class="text-end">
-                                            <a href="/admin/donate?edit_pkg={{.ID}}#packages" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.72rem;">Edit</a>
-                                            <form method="POST" action="/admin/donate/packages/{{.ID}}/del" style="display:inline;" onsubmit="return confirm('Delete package &quot;{{.Label}}&quot;? Linked donations stay (package_id becomes NULL).');">
+                                            <a href="/admin/donate?edit_pkg={{.ID}}#packages" class="btn btn-sm btn-outline-secondary py-0 px-2 fs-3xs">Edit</a>
+                                            <form class="d-inline" method="POST" action="/admin/donate/packages/{{.ID}}/del" onsubmit="return confirm('Delete package &quot;{{.Label}}&quot;? Linked donations stay (package_id becomes NULL).');">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.72rem;">Del</button>
+                                                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2 fs-3xs">Del</button>
                                             </form>
                                         </td>
                                     </tr>
@@ -429,7 +429,7 @@
              blank hides that card on the public page. Raised is
              admin-set — update it manually as donations come in. */}}
         <div id="tipjar" class="tab-pane">
-            <p style="color:var(--text-muted);font-size:0.82rem;">
+            <p class="text-muted fs-xs">
                 Configure up to two named goals shown on the public donate page's Tip Jar panel.
                 Leave a slot's name or target blank to hide it. <strong>Raised</strong> is set manually here &mdash;
                 update as real donations come in.
@@ -442,15 +442,15 @@
                         <h2 style="font-size:0.88rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;{{if gt $slot 1}}margin-top:1rem;{{end}}">Goal {{$slot}}</h2>
                         <div class="row g-2 mb-2">
                             <div class="col-md-6">
-                                <label class="form-label" style="font-size:0.78rem;">Name</label>
+                                <label class="form-label fs-xs">Name</label>
                                 <input aria-label="Goal {{$slot}} name" type="text" name="goal_{{$slot}}_name" class="form-control form-control-sm" maxlength="80" value="{{index $.TipJar (printf "goal_%d_name" $slot)}}" placeholder="e.g. Animated Profile Effects">
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label" style="font-size:0.78rem;">Target USD</label>
+                                <label class="form-label fs-xs">Target USD</label>
                                 <input aria-label="Target USD" type="number" step="0.01" min="0" name="goal_{{$slot}}_target_usd" class="form-control form-control-sm" value="{{index $.TipJar (printf "goal_%d_target_usd" $slot)}}" placeholder="250">
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label" style="font-size:0.78rem;">Raised USD</label>
+                                <label class="form-label fs-xs">Raised USD</label>
                                 <input aria-label="Raised USD" type="number" step="0.01" min="0" name="goal_{{$slot}}_raised_usd" class="form-control form-control-sm" value="{{index $.TipJar (printf "goal_%d_raised_usd" $slot)}}" placeholder="0">
                             </div>
                         </div>
@@ -473,7 +473,7 @@
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <div class="row g-2">
                                     <div class="col-6">
-                                        <label class="form-label" style="font-size:0.78rem;">Asset</label>
+                                        <label class="form-label fs-xs">Asset</label>
                                         <select aria-label="Asset" name="asset" class="form-select form-select-sm">
                                             <option value="fiat" selected>fiat</option>
                                             <option value="BTC">BTC</option>
@@ -482,24 +482,24 @@
                                         </select>
                                     </div>
                                     <div class="col-6">
-                                        <label class="form-label" style="font-size:0.78rem;">Amount USD</label>
+                                        <label class="form-label fs-xs">Amount USD</label>
                                         <input aria-label="Amount USD" type="number" step="0.01" min="0" name="amount_usd" class="form-control form-control-sm" required>
                                     </div>
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label" style="font-size:0.78rem;">Native amount <span style="color:var(--text-muted);font-weight:400;">(optional, defaults to USD)</span></label>
+                                    <label class="form-label fs-xs">Native amount <span class="text-muted fw-normal">(optional, defaults to USD)</span></label>
                                     <input aria-label="Native amount (optional, defaults to USD)" type="number" step="0.00000001" min="0" name="amount_native" class="form-control form-control-sm">
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label" style="font-size:0.78rem;">Donor username <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+                                    <label class="form-label fs-xs">Donor username <span class="text-muted fw-normal">(optional)</span></label>
                                     <input aria-label="Donor username (optional)" type="text" name="donor_username" class="form-control form-control-sm" placeholder="leave blank for anon">
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label" style="font-size:0.78rem;">Display label</label>
+                                    <label class="form-label fs-xs">Display label</label>
                                     <input aria-label="Display label" type="text" name="donor_label" class="form-control form-control-sm" maxlength="80" placeholder="how the public sees them">
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label" style="font-size:0.78rem;">Note (admin only)</label>
+                                    <label class="form-label fs-xs">Note (admin only)</label>
                                     <textarea aria-label="Note (admin only)" name="note" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
                                 </div>
                                 <button type="submit" class="btn btn-primary btn-sm">Record donation</button>
@@ -513,10 +513,10 @@
                         <div class="card-header">Recent donations (last 200)</div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
-                            <table class="table table-sm mb-0" style="font-size:0.78rem;">
+                            <table class="table table-sm mb-0 fs-xs">
                                 <caption class="visually-hidden">Recorded donations</caption>
                                 <thead>
-                                    <tr style="color:var(--text-muted);">
+                                    <tr class="text-muted">
                                         <th>When</th><th>Asset</th><th class="text-end">USD</th><th>Donor</th><th>Note</th>
                                     </tr>
                                 </thead>
@@ -528,12 +528,12 @@
                                         <td class="text-end">${{printf "%.2f" .AmountUSD}}</td>
                                         <td>
                                             {{if .DonorUserID}}{{index $.Usernames (deref .DonorUserID)}}{{end}}
-                                            {{if .DonorLabel}}<br><span style="color:var(--text-muted);">{{.DonorLabel}}</span>{{end}}
+                                            {{if .DonorLabel}}<br><span class="text-muted">{{.DonorLabel}}</span>{{end}}
                                         </td>
-                                        <td style="color:var(--text-muted);">{{.Note}}</td>
+                                        <td class="text-muted">{{.Note}}</td>
                                     </tr>
                                     {{else}}
-                                    <tr><td colspan="5" class="text-center" style="color:var(--text-muted);">No donations recorded yet.</td></tr>
+                                    <tr><td colspan="5" class="text-center text-muted">No donations recorded yet.</td></tr>
                                     {{end}}
                                 </tbody>
                             </table>

@@ -24,7 +24,7 @@
     <div class="tab-content">
       {{range $i, $j := .Jobs}}
       <div class="tab-pane{{if eq $i 0}} active{{end}}" id="job-pane-{{$j.Slug}}" data-job="{{$j.Name}}">
-        <div class="d-flex align-items-center gap-3 flex-wrap mb-2" style="font-size:.9rem">
+        <div class="d-flex align-items-center gap-3 flex-wrap mb-2 fs-md">
           {{if $j.Running}}<span data-role="status" class="tag tag--success">running</span>
           {{else}}<span data-role="status" class="tag tag--sm">{{$j.Status}}</span>{{end}}
           <span class="text-muted small">next run: <span data-role="next">{{if $j.Next}}{{$j.Next}}{{else}}—{{end}}</span></span>
@@ -146,7 +146,7 @@
               <tr>
                 <td class="small" style="max-width:30rem;overflow-wrap:anywhere">
                   <code>{{.Base}}</code>
-                  {{if .PerFile}}<div class="text-muted" style="font-size:.75rem">declared per file: {{.PerFile}}</div>{{end}}
+                  {{if .PerFile}}<div class="text-muted fs-2xs">declared per file: {{.PerFile}}</div>{{end}}
                 </td>
                 <td class="small text-muted">{{.Group}}</td>
                 {{/* Both numbers are ARTICLE counts. This column used to label them

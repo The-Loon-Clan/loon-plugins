@@ -23,11 +23,11 @@
         {{with .Stats}}{{.TotalNZBs}} NZBs · {{.TotalStaged}} staged · {{.TotalBackfillRemaining}} to backfill{{end}}
     </span>
     <div style="margin-left:auto;display:flex;gap:.5rem">
-        <form method="post" action="/admin/p/usenet/crawl" style="display:inline">
+        <form class="d-inline" method="post" action="/admin/p/usenet/crawl">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
             <button class="button button--sm button--outlined" type="submit">Run crawl</button>
         </form>
-        <form method="post" action="/admin/p/usenet/backfill" style="display:inline">
+        <form class="d-inline" method="post" action="/admin/p/usenet/backfill">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
             <button class="button button--sm button--outlined" type="submit">Run backfill</button>
         </form>

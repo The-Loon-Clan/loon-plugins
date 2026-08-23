@@ -2,7 +2,7 @@
     <div class="container mt-4">
 
         <div class="d-flex align-items-center gap-3 mb-4">
-            <h2 class="mb-0" style="font-size:1rem;color:var(--text-muted);">Edit News Post</h2>
+            <h2 class="mb-0 fs-lg text-muted">Edit News Post</h2>
             <a href="/admin/news" class="button button--outlined button--sm ms-auto">← Back</a>
         </div>
 
@@ -11,12 +11,12 @@
                 <form method="POST" action="/admin/news/{{.Post.ID}}/update">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-3">
-                        <label class="form__label" style="font-size:0.85rem;">Title</label>
+                        <label class="form__label fs-sm">Title</label>
                         <input aria-label="Title" type="text" name="title" class="form__input" required maxlength="255"
                                value="{{.Post.Title}}">
                     </div>
                     <div class="mb-3">
-                        <label class="form__label" style="font-size:0.85rem;">Slug</label>
+                        <label class="form__label fs-sm">Slug</label>
                         <input aria-label="Slug" type="text" name="slug" class="form__input" maxlength="255"
                                value="{{.Post.Slug}}" placeholder="e.g. new-feature-announcement">
                         <div style="font-size:0.75rem;color:var(--text-muted);margin-top:3px;">
@@ -24,7 +24,7 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form__label" style="font-size:0.85rem;">Body (HTML allowed)</label>
+                        <label class="form__label fs-sm">Body (HTML allowed)</label>
                         <textarea aria-label="Body (HTML allowed)" name="body" class="form__input" rows="12" required
                             style="font-family:monospace;font-size:0.82rem;">{{.Post.Body}}</textarea>
                         <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
@@ -34,7 +34,7 @@
                     <div class="mb-4 form-check">
                         <input type="checkbox" class="form-check-input" name="published" value="1" id="edit-published"
                                {{if .Post.Published}}checked{{end}}>
-                        <label class="form-check-label" for="edit-published" style="font-size:0.85rem;">Published (visible to users)</label>
+                        <label class="form-check-label fs-sm" for="edit-published">Published (visible to users)</label>
                     </div>
                     <div class="d-flex gap-2">
                         <button type="submit" class="button button--primary">Save Changes</button>

@@ -3,7 +3,7 @@
     <div class="container mt-4">
 
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h6 mb-0" style="color:var(--text-muted);">Wiki Groups &amp; Posts</h2>
+            <h2 class="h6 mb-0 text-muted">Wiki Groups &amp; Posts</h2>
         </div>
 
         {{/* ── New Group form ── */}}
@@ -14,22 +14,22 @@
         <details class="mb-4" id="new-group-form">
             <summary class="button button--primary button--sm" style="display:inline-block;margin-bottom:.6rem;">+ New Group</summary>
             <div class="panelV2">
-                <div class="panel__header" style="font-size:0.85rem;color:var(--text-muted);">New Group</div>
+                <div class="panel__header fs-sm text-muted">New Group</div>
                 <div class="panel__body">
                     <form method="POST" action="/admin/wiki/topics">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         <div class="row g-3 mb-3">
                             <div class="col-sm-6">
-                                <label class="form__label" style="font-size:0.85rem;">Name <span class="text-danger">*</span></label>
+                                <label class="form__label fs-sm">Name <span class="text-danger">*</span></label>
                                 <input aria-label="Name" type="text" name="name" class="form__input" required maxlength="200">
                             </div>
                             <div class="col-sm-4">
-                                <label class="form__label" style="font-size:0.85rem;">Sort Order</label>
+                                <label class="form__label fs-sm">Sort Order</label>
                                 <input aria-label="Sort Order" type="number" name="sort_order" class="form__input" value="0">
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form__label" style="font-size:0.85rem;">Description</label>
+                            <label class="form__label fs-sm">Description</label>
                             <textarea aria-label="Description" name="description" class="form__input" rows="2" maxlength="500"></textarea>
                         </div>
                         <button type="submit" class="button button--primary button--sm">Create Group</button>
@@ -46,7 +46,7 @@
             <div class="panel__header d-flex align-items-center gap-2" style="overflow:visible;">
                 <span style="font-weight:600;flex-grow:1;">{{.Name}}</span>
                 {{if .Description}}
-                <span style="font-size:0.78rem;color:var(--text-muted);">{{.Description}}</span>
+                <span class="fs-xs text-muted">{{.Description}}</span>
                 {{end}}
                 <span class="tag tag--sm ms-1">{{.PostCount}} post{{if ne .PostCount 1}}s{{end}}</span>
                 <a href="/admin/wiki/posts/new?topic_id={{.ID}}" class="button button--sm button--outlined ms-2">+ New Post</a>
@@ -66,7 +66,7 @@
             <caption class="visually-hidden">Wiki groups and the posts in each</caption>
                 <thead>
                     <tr>
-                        <th style="font-size:0.8rem;">Title</th>
+                        <th class="fs-xs">Title</th>
                         <th style="width:110px;font-size:0.8rem;">Updated</th>
                         <th style="width:130px;"></th>
                     </tr>
@@ -75,10 +75,10 @@
                     {{range $posts}}
                     <tr>
                         <td>
-                            <a href="/wiki/{{$topicSlug}}/{{.Slug}}" target="_blank"
-                               style="color:var(--text-primary);font-size:0.875rem;">{{.Title}}</a>
+                            <a class="text-light fs-sm" href="/wiki/{{$topicSlug}}/{{.Slug}}" target="_blank"
+                              >{{.Title}}</a>
                         </td>
-                        <td style="font-size:0.78rem;color:var(--text-muted);">
+                        <td class="fs-xs text-muted">
                             {{.UpdatedAt.Format "Jan 02, 2006"}}
                         </td>
                         <td class="text-end">
@@ -94,12 +94,12 @@
                 </tbody>
             </table>
             {{else}}
-            <div class="p-3" style="font-size:0.85rem;color:var(--text-muted);">No posts yet — click <strong>+ New Post</strong> to add one.</div>
+            <div class="p-3 fs-sm text-muted">No posts yet — click <strong>+ New Post</strong> to add one.</div>
             {{end}}
         </div>
         {{end}}
         {{else}}
-        <div class="text-center py-5" style="color:var(--text-muted);">
+        <div class="text-center py-5 text-muted">
             No groups yet. Create one above to get started.
         </div>
         {{end}}

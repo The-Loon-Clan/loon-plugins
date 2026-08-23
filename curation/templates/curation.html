@@ -3,32 +3,32 @@
         <div class="row g-3 mb-3">
             <div class="col-md-3">
                 <div class="panelV2 text-center p-3">
-                    <div style="font-size:1.6rem;font-weight:600;">{{.SeasonPct}}%</div>
-                    <small style="color:var(--text-muted);">anime releases with a season</small>
+                    <div class="fs-3xl fw-semibold">{{.SeasonPct}}%</div>
+                    <small class="text-muted">anime releases with a season</small>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="panelV2 text-center p-3">
-                    <div style="font-size:1.6rem;font-weight:600;">{{.Stats.AnimeCompleted}}</div>
-                    <small style="color:var(--text-muted);">anime releases</small>
+                    <div class="fs-3xl fw-semibold">{{.Stats.AnimeCompleted}}</div>
+                    <small class="text-muted">anime releases</small>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="panelV2 text-center p-3">
-                    <div style="font-size:1.6rem;font-weight:600;">{{.Stats.SeasonNull}}</div>
-                    <small style="color:var(--text-muted);">season missing</small>
+                    <div class="fs-3xl fw-semibold">{{.Stats.SeasonNull}}</div>
+                    <small class="text-muted">season missing</small>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="panelV2 text-center p-3">
-                    <div style="font-size:1.6rem;font-weight:600;">{{.Stats.EpisodeNull}}</div>
-                    <small style="color:var(--text-muted);">episode missing</small>
+                    <div class="fs-3xl fw-semibold">{{.Stats.EpisodeNull}}</div>
+                    <small class="text-muted">episode missing</small>
                 </div>
             </div>
         </div>
 
         <div class="panelV2 mb-3">
-            <div class="panel__body" style="font-size:0.9rem;color:var(--text-muted);">
+            <div class="panel__body fs-md text-muted">
                 The daily <strong>Season Curation</strong> job applies rules in trust order:
                 <span class="tag tag--success">title</span> the release title carries a marker;
                 <span class="tag tag--info">meta-mapped</span> the community anidb&rarr;show mapping says which season this entry is;
@@ -36,14 +36,14 @@
                 <span class="tag tag--info">single-season</span> TMDB confirms the show has exactly one season;
                 <span class="tag tag--sm">non-seasonal</span> movies / OVAs / specials keep no season number.
                 What remains is <span class="tag tag--warning">unresolved</span> — the fail-to-parse queue below.
-                Trigger a run now from the <a href="/admin/jobs" style="color:var(--blue);">Jobs page</a>.
+                Trigger a run now from the <a class="text-primary" href="/admin/jobs">Jobs page</a>.
             </div>
         </div>
 
         <div class="panelV2">
             <div class="panel__header d-flex justify-content-between">
                 <span>Season worklist (newest first)</span>
-                <small style="color:var(--text-muted);">{{.Total}} rows</small>
+                <small class="text-muted">{{.Total}} rows</small>
             </div>
             <div style="overflow-x:auto;">
             <table class="data-table mb-0">
@@ -58,12 +58,12 @@
                 <tbody>
                     {{range .Rows}}
                     <tr>
-                        <td><a href="/release/{{.ID}}" style="color:var(--blue);">{{.Title}}</a></td>
-                        <td style="font-size:0.85rem;">
-                            {{if .AnimeName}}<a href="/anime/{{.AnimeID}}" style="color:var(--blue);">{{.AnimeName}}</a>
-                            {{else}}<span style="color:var(--text-muted);">aid {{.AnimeID}}</span>{{end}}
+                        <td><a class="text-primary" href="/release/{{.ID}}">{{.Title}}</a></td>
+                        <td class="fs-sm">
+                            {{if .AnimeName}}<a class="text-primary" href="/anime/{{.AnimeID}}">{{.AnimeName}}</a>
+                            {{else}}<span class="text-muted">aid {{.AnimeID}}</span>{{end}}
                         </td>
-                        <td style="font-size:0.85rem;color:var(--text-muted);">{{.Facts}}</td>
+                        <td class="fs-sm text-muted">{{.Facts}}</td>
                         <td>
                             {{if eq .Rule "unresolved"}}<span class="tag tag--warning">unresolved</span>
                             {{else if eq .Rule "non-seasonal"}}<span class="tag tag--sm">non-seasonal</span>

@@ -3,8 +3,8 @@
 
     <div class="container mt-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h1 class="m-0" style="font-size:1.4rem;">Forum Categories</h1>
-            <small style="color:var(--text-muted);">
+            <h1 class="m-0 fs-2xl">Forum Categories</h1>
+            <small class="text-muted">
                 Migration 196 added a UNIQUE constraint on <code>name</code>;
                 the seed insert in 18 will now no-op on re-runs. Use this page
                 to merge any existing duplicates left over from older deploys.
@@ -28,7 +28,7 @@
                         <input aria-label="Description" type="text" name="description" class="form-control" maxlength="256">
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label">Icon <a href="https://icons.getbootstrap.com/" target="_blank" rel="noopener" style="font-size:0.75rem;">(names)</a></label>
+                        <label class="form-label">Icon <a class="fs-2xs" href="https://icons.getbootstrap.com/" target="_blank" rel="noopener">(names)</a></label>
                         <input aria-label="Icon (names)" type="text" name="icon" class="form-control" value="chat-square-text" maxlength="48">
                     </div>
                     <div class="col-md-1">
@@ -87,9 +87,9 @@
                                     <input aria-label="Sort order for {{.Name}}" type="number" name="ordinal"     class="form-control form-control-sm" value="{{.Ordinal}}" style="max-width:80px;">
                                     <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
                                 </div>
-                                <div class="d-flex gap-2 align-items-center mt-1 flex-wrap" style="font-size:0.78rem;">
-                                    <span style="color:var(--text-muted);" title="who can pass each gate: the selected role or above, OR the selected earned tier or above">Access:</span>
-                                    <span style="color:var(--text-muted);">see</span>
+                                <div class="d-flex gap-2 align-items-center mt-1 flex-wrap fs-xs">
+                                    <span class="text-muted" title="who can pass each gate: the selected role or above, OR the selected earned tier or above">Access:</span>
+                                    <span class="text-muted">see</span>
                                     <select aria-label="See role for {{.Name}}" name="see_role" class="form-select form-select-sm py-0" style="max-width:110px;">
                                         {{$sr := .SeeRole}}{{range $r := $.GateRoles}}<option value="{{$r}}" {{if eq $r $sr}}selected{{end}}>{{$r}}</option>{{end}}
                                     </select>
@@ -99,7 +99,7 @@
                                         <option value="2" {{if eq .SeeTier 2}}selected{{end}}>Curator+</option>
                                         <option value="3" {{if eq .SeeTier 3}}selected{{end}}>Archivist+</option>
                                     </select>
-                                    <span style="color:var(--text-muted);">read</span>
+                                    <span class="text-muted">read</span>
                                     <select aria-label="Read role for {{.Name}}" name="read_role" class="form-select form-select-sm py-0" style="max-width:110px;">
                                         {{$rr := .ReadRole}}{{range $r := $.GateRoles}}<option value="{{$r}}" {{if eq $r $rr}}selected{{end}}>{{$r}}</option>{{end}}
                                     </select>
@@ -109,7 +109,7 @@
                                         <option value="2" {{if eq .ReadTier 2}}selected{{end}}>Curator+</option>
                                         <option value="3" {{if eq .ReadTier 3}}selected{{end}}>Archivist+</option>
                                     </select>
-                                    <span style="color:var(--text-muted);">write</span>
+                                    <span class="text-muted">write</span>
                                     <select aria-label="Write role for {{.Name}}" name="write_role" class="form-select form-select-sm py-0" style="max-width:110px;">
                                         {{$wr := .WriteRole}}{{range $r := $.GateRoles}}<option value="{{$r}}" {{if eq $r $wr}}selected{{end}}>{{$r}}</option>{{end}}
                                     </select>
@@ -150,7 +150,7 @@
                         </td>
                     </tr>
                     {{else}}
-                    <tr><td colspan="7" class="text-center py-4" style="color:var(--text-muted);">No categories. Create one above.</td></tr>
+                    <tr><td colspan="7" class="text-center py-4 text-muted">No categories. Create one above.</td></tr>
                     {{end}}
                 </tbody>
             </table>

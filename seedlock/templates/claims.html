@@ -48,7 +48,7 @@
                     <td>{{.Name}}</td>
                     <td class="text-muted small">{{.Host}}</td>
                     <td class="data-table__nowrap">
-                        <form method="post" action="/seedlock/clear" style="display:inline">
+                        <form class="d-inline" method="post" action="/seedlock/clear">
                             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="info_hash" value="{{.InfoHash}}">
                             <button class="button button--sm button--outlined" type="submit">Clear</button>

@@ -8,19 +8,19 @@
 {{define "community_new_thread_c.html"}}
     <div class="container page-narrow" style="padding: 1.6rem 1rem 3rem;">
         <nav aria-label="breadcrumb" style="font-size:0.8rem;margin-bottom:0.6rem;">
-            <a href="/c" style="color:var(--text-muted);text-decoration:none;">Communities</a>
+            <a class="text-muted text-decoration-none" href="/c">Communities</a>
             &rsaquo;
-            <a href="/c/{{.Community.Slug}}" style="color:var(--text-muted);text-decoration:none;">/c/{{.Community.Slug}}</a>
+            <a class="text-muted text-decoration-none" href="/c/{{.Community.Slug}}">/c/{{.Community.Slug}}</a>
         </nav>
         <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:1rem;">New thread in {{.Community.Name}}</h1>
         <form method="POST" action="/c/{{.Community.Slug}}/submit">
             <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
             <div class="mb-3">
-                <label class="form-label" style="font-size:0.85rem;">Title</label>
+                <label class="form-label fs-sm">Title</label>
                 <input aria-label="Title" type="text" name="title" class="form-control" required maxlength="300" placeholder="Thread title">
             </div>
             <div class="mb-3">
-                <label class="form-label" style="font-size:0.85rem;">Body</label>
+                <label class="form-label fs-sm">Body</label>
                 {{.Editor}}
             </div>
             <div class="d-flex justify-content-between">

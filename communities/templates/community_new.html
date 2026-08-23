@@ -9,28 +9,28 @@
             Communities are user-owned sub-forums. You'll be the permanent owner; you can promote other moderators after creation.
         </p>
         {{if .Error}}
-        <div class="alert alert-danger" style="font-size:0.85rem;">{{.Error}}</div>
+        <div class="alert alert-danger fs-sm">{{.Error}}</div>
         {{end}}
         <form method="POST" action="/c">
             <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
             <div class="mb-3">
-                <label class="form-label" for="c-slug" style="font-size:0.85rem;">Slug</label>
+                <label class="form-label fs-sm" for="c-slug">Slug</label>
                 <div class="input-group">
-                    <span class="input-group-text" style="font-size:0.82rem;">/c/</span>
+                    <span class="input-group-text fs-xs">/c/</span>
                     <input type="text" name="slug" id="c-slug" class="form-control" required minlength="3" maxlength="32"
                            pattern="[a-z][a-z0-9_-]{2,31}" autocomplete="off"
                            value="{{.Slug}}" placeholder="my-community">
                 </div>
-                <div class="form-text" style="font-size:0.74rem;">3–32 chars, lowercase letters/digits/_/-, must start with a letter.</div>
+                <div class="form-text fs-2xs">3–32 chars, lowercase letters/digits/_/-, must start with a letter.</div>
             </div>
             <div class="mb-3">
-                <label class="form-label" for="c-name" style="font-size:0.85rem;">Name</label>
+                <label class="form-label fs-sm" for="c-name">Name</label>
                 <input type="text" name="name" id="c-name" class="form-control" required maxlength="80" value="{{.Name}}" placeholder="Display name shown on the banner">
             </div>
             <div class="mb-4">
-                <label class="form-label" style="font-size:0.85rem;">Description</label>
+                <label class="form-label fs-sm">Description</label>
                 <textarea aria-label="Description" name="description" class="form-control" rows="3" maxlength="500" placeholder="One-line tagline shown on the community card.">{{.Description}}</textarea>
-                <div class="form-text" style="font-size:0.74rem;">Optional. Up to 500 chars.</div>
+                <div class="form-text fs-2xs">Optional. Up to 500 chars.</div>
             </div>
             <div class="d-flex justify-content-between">
                 <a href="/c" class="btn btn-sm btn-outline-secondary">Cancel</a>

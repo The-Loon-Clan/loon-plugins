@@ -3,7 +3,7 @@
     <div class="container mt-4 page-wide">
 
         <div class="d-flex align-items-center gap-3 mb-3">
-            <h2 class="mb-0" style="color:var(--text-muted);font-size:1rem;">{{.Action}} Post</h2>
+            <h2 class="mb-0 text-muted fs-lg">{{.Action}} Post</h2>
             <a href="/admin/wiki" class="button button--outlined button--sm ms-auto">← Back</a>
         </div>
 
@@ -20,15 +20,15 @@
                 {{end}}
 
                     <div class="mb-3">
-                        <label class="form__label" for="post-title" style="font-size:0.85rem;">Title <span class="text-danger">*</span></label>
+                        <label class="form__label fs-sm" for="post-title">Title <span class="text-danger">*</span></label>
                         <input type="text" class="form__input" id="post-title" name="title" required maxlength="512"
                                value="{{if .Post}}{{.Post.Title}}{{end}}">
                     </div>
 
                     <div class="mb-1">
                         <div class="d-flex justify-content-between align-items-center mb-1">
-                            <label class="form__label mb-0" for="content" style="font-size:0.85rem;">Content (HTML)</label>
-                            <div style="font-size:0.75rem;color:var(--text-muted);">Editor ↔ Live Preview</div>
+                            <label class="form__label mb-0 fs-sm" for="content">Content (HTML)</label>
+                            <div class="fs-2xs text-muted">Editor ↔ Live Preview</div>
                         </div>
 
                         <div class="toolbar" id="toolbar">
@@ -49,7 +49,7 @@
                             <button type="button" data-insert="&lt;p&gt;&lt;/p&gt;" title="Paragraph">P</button>
                             <label title="Upload image" style="margin:0;">
                                 📎 Image
-                                <input type="file" id="img-upload" accept="image/*" style="display:none;">
+                                <input class="d-none" type="file" id="img-upload" accept="image/*">
                             </label>
                         </div>
 

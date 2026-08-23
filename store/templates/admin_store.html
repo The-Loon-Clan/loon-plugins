@@ -7,30 +7,30 @@
              so itself — so .collapse styled nothing and the toggle did nothing:
              the create form was permanently open and "+ New Item" was inert. */}}
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="h5 mb-0" style="font-weight:600;">Store Catalog</h2>
+            <h2 class="h5 mb-0 fw-semibold">Store Catalog</h2>
         </div>
 
-        {{if .Error}}<div class="notice notice--danger py-1 mb-3" style="font-size:0.82rem;">{{.Error}}</div>{{end}}
-        {{if .Ok}}<div class="notice notice--success py-1 mb-3" style="font-size:0.82rem;">Item saved.</div>{{end}}
+        {{if .Error}}<div class="notice notice--danger py-1 mb-3 fs-xs">{{.Error}}</div>{{end}}
+        {{if .Ok}}<div class="notice notice--success py-1 mb-3 fs-xs">Item saved.</div>{{end}}
 
         <details class="mb-4" id="create-item-form">
             <summary class="button button--primary button--sm" style="display:inline-block;margin-bottom:.6rem;">+ New Item</summary>
             <div class="panelV2">
-                <div class="panel__header" style="font-size:0.85rem;">Create Item</div>
+                <div class="panel__header fs-sm">Create Item</div>
                 <div class="panel__body">
                     <form method="POST" action="/admin/store/create">
                         <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                         <div class="row g-3 mb-3">
                             <div class="col-sm-4">
-                                <label class="form__label" style="font-size:0.85rem;">Name <span class="text-danger">*</span></label>
+                                <label class="form__label fs-sm">Name <span class="text-danger">*</span></label>
                                 <input aria-label="Name" type="text" name="name" class="form__input" required maxlength="80" placeholder="e.g. VIP for 30 days">
                             </div>
                             <div class="col-sm-2">
-                                <label class="form__label" style="font-size:0.85rem;">Cost (pts) <span class="text-danger">*</span></label>
+                                <label class="form__label fs-sm">Cost (pts) <span class="text-danger">*</span></label>
                                 <input aria-label="Cost (pts)" type="number" name="points_cost" class="form__input" value="100" min="1">
                             </div>
                             <div class="col-sm-2">
-                                <label class="form__label" style="font-size:0.85rem;" for="new-reward-type">Reward</label>
+                                <label class="form__label fs-sm" for="new-reward-type">Reward</label>
                                 {{/* Built from the registry, not written out: the
                                      store's own types plus whatever a plugin
                                      contributed under store.itemtype.*, so a
@@ -41,7 +41,7 @@
                                 </select>
                             </div>
                             <div class="col-sm-2">
-                                <label class="form__label" style="font-size:0.85rem;" for="new-flavour">Flavour</label>
+                                <label class="form__label fs-sm" for="new-flavour">Flavour</label>
                                 <select id="new-flavour" name="flavour" class="form__select">
                                     <option value="both">Both</option>
                                     <option value="tracker">Tracker</option>
@@ -49,40 +49,40 @@
                                 </select>
                             </div>
                             <div class="col-sm-2">
-                                <label class="form__label" style="font-size:0.85rem;" for="new-reward-ref">Ref</label>
+                                <label class="form__label fs-sm" for="new-reward-ref">Ref</label>
                                 <input type="text" name="reward_ref" id="new-reward-ref" class="form__input" placeholder="depends on the reward">
                             </div>
                             <div class="col-12">
                                 {{/* What Ref means, per type, from the types
                                      themselves — a contributed type explains its
                                      own field without this page learning it. */}}
-                                <p class="mb-0" style="font-size:0.72rem;color:var(--text-muted);">
+                                <p class="mb-0 fs-3xs text-muted">
                                     Ref: {{range $i, $t := .Types}}{{if $i}} · {{end}}{{$t.Label}} → {{if $t.RefLabel}}{{$t.RefLabel}}{{else}}unused{{end}}{{end}}
                                 </p>
                             </div>
                             <div class="col-sm-2">
-                                <label class="form__label" style="font-size:0.85rem;">Days</label>
+                                <label class="form__label fs-sm">Days</label>
                                 <input aria-label="Days" type="number" name="reward_days" class="form__input" value="30" min="0">
                             </div>
                         </div>
                         <div class="row g-3 mb-3">
                             <div class="col-sm-6">
-                                <label class="form__label" style="font-size:0.85rem;">Description</label>
+                                <label class="form__label fs-sm">Description</label>
                                 <input aria-label="Description" type="text" name="description" class="form__input" maxlength="240" placeholder="Shown on the store card">
                             </div>
                             <div class="col-sm-2">
-                                <label class="form__label" style="font-size:0.85rem;">Stock</label>
+                                <label class="form__label fs-sm">Stock</label>
                                 <input aria-label="Stock" type="number" name="stock" class="form__input" placeholder="&#8734;">
-                                <div style="font-size:0.68rem;color:var(--text-muted);">blank = unlimited</div>
+                                <div class="fs-3xs text-muted">blank = unlimited</div>
                             </div>
                             <div class="col-sm-2">
-                                <label class="form__label" style="font-size:0.85rem;">Sort Order</label>
+                                <label class="form__label fs-sm">Sort Order</label>
                                 <input aria-label="Sort Order" type="number" name="sort_order" class="form__input" value="0" min="0">
                             </div>
                             <div class="col-sm-2 d-flex align-items-end">
                                 <div class="form-check">
                                     <input type="checkbox" name="active" class="form-check-input" id="new-active" checked>
-                                    <label class="form-check-label" for="new-active" style="font-size:0.85rem;">Active</label>
+                                    <label class="form-check-label fs-sm" for="new-active">Active</label>
                                 </div>
                             </div>
                         </div>
@@ -96,7 +96,7 @@
             <div class="panel__body p-0">
                 {{if .Items}}
                 <div class="data-table-wrapper">
-                <table class="data-table mb-0" style="font-size:0.82rem;">
+                <table class="data-table mb-0 fs-xs">
             <caption class="visually-hidden">Store catalogue</caption>
                     <thead>
                         <tr>
@@ -113,11 +113,11 @@
                         {{range $it := .Items}}
                         <tr>
                             <td>{{.Name}}</td>
-                            <td style="color:var(--text-muted);">{{.RewardType}} #{{.RewardRef}}{{if .RewardDays}} · {{.RewardDays}}d{{end}}</td>
+                            <td class="text-muted">{{.RewardType}} #{{.RewardRef}}{{if .RewardDays}} · {{.RewardDays}}d{{end}}</td>
                             <td class="text-center"><span style="color:var(--bs-warning);">{{.PointsCost}}</span></td>
-                            <td class="text-center">{{if lt .Stock 0}}<span style="color:var(--text-muted);">&#8734;</span>{{else}}{{.Stock}}{{end}}</td>
+                            <td class="text-center">{{if lt .Stock 0}}<span class="text-muted">&#8734;</span>{{else}}{{.Stock}}{{end}}</td>
                             <td class="text-center">{{if .Active}}<span class="tag tag--success">yes</span>{{else}}<span class="tag tag--sm">no</span>{{end}}</td>
-                            <td class="text-center" style="color:var(--text-muted);">{{.SortOrder}}</td>
+                            <td class="text-center text-muted">{{.SortOrder}}</td>
                             <td class="text-end">
                                 {{/* The Edit control is the <summary> in the row below —
                                      a data-bs-toggle button here did nothing, because
@@ -125,7 +125,7 @@
                                 <form method="POST" action="/admin/store/{{.ID}}/delete" class="d-inline"
                                       onsubmit="return confirm('Delete {{.Name}}?')">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                    <button type="submit" class="button button--sm button--outlined button--danger px-1" style="font-size:0.7rem;">Del</button>
+                                    <button type="submit" class="button button--sm button--outlined button--danger px-1 fs-3xs">Del</button>
                                 </form>
                             </td>
                         </tr>
@@ -143,25 +143,25 @@
                                              {{range}}, so one id would appear once per
                                              item and duplicate ids break every label-for
                                              on the page. */}}
-                                        <label style="font-size:0.72rem;">Name</label>
+                                        <label class="fs-3xs">Name</label>
                                         <input aria-label="Name" type="text" name="name" class="form__input" value="{{.Name}}" style="width:150px;">
                                     </div>
                                     <div>
-                                        <label style="font-size:0.72rem;">Description</label>
+                                        <label class="fs-3xs">Description</label>
                                         <input aria-label="Description" type="text" name="description" class="form__input" value="{{.Description}}" style="width:200px;">
                                     </div>
                                     <div>
-                                        <label style="font-size:0.72rem;">Cost</label>
+                                        <label class="fs-3xs">Cost</label>
                                         <input aria-label="Cost" type="number" name="points_cost" class="form__input" value="{{.PointsCost}}" style="width:70px;">
                                     </div>
                                     <div>
-                                        <label style="font-size:0.72rem;" for="rt-{{.ID}}">Reward</label>
+                                        <label class="fs-3xs" for="rt-{{.ID}}">Reward</label>
                                         <select name="reward_type" id="rt-{{.ID}}" class="form__select" style="width:110px;">
                                             {{range $t := $.Types}}<option value="{{$t.Kind}}" {{if eq $it.RewardType $t.Kind}}selected{{end}}>{{$t.Label}}</option>{{end}}
                                         </select>
                                     </div>
                                     <div>
-                                        <label style="font-size:0.72rem;">Flavour</label>
+                                        <label class="fs-3xs">Flavour</label>
                                         <select aria-label="Flavour" name="flavour" class="form__select" style="width:90px;">
                                             <option value="both" {{if eq .Flavour "both"}}selected{{end}}>Both</option>
                                             <option value="tracker" {{if eq .Flavour "tracker"}}selected{{end}}>Tracker</option>
@@ -169,24 +169,24 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <label style="font-size:0.72rem;">Ref</label>
+                                        <label class="fs-3xs">Ref</label>
                                         <input aria-label="Ref" type="text" name="reward_ref" class="form__input" value="{{.RewardRef}}" style="width:70px;">
                                     </div>
                                     <div>
-                                        <label style="font-size:0.72rem;">Days</label>
+                                        <label class="fs-3xs">Days</label>
                                         <input aria-label="Days" type="number" name="reward_days" class="form__input" value="{{.RewardDays}}" style="width:60px;">
                                     </div>
                                     <div>
-                                        <label style="font-size:0.72rem;">Stock (-1=&#8734;)</label>
+                                        <label class="fs-3xs">Stock (-1=&#8734;)</label>
                                         <input aria-label="Stock (-1=&#8734;)" type="number" name="stock" class="form__input" value="{{.Stock}}" style="width:80px;">
                                     </div>
                                     <div>
-                                        <label style="font-size:0.72rem;">Order</label>
+                                        <label class="fs-3xs">Order</label>
                                         <input aria-label="Order" type="number" name="sort_order" class="form__input" value="{{.SortOrder}}" style="width:60px;">
                                     </div>
                                     <div class="form-check">
                                         <input type="checkbox" name="active" class="form-check-input" id="act-{{.ID}}" {{if .Active}}checked{{end}}>
-                                        <label class="form-check-label" for="act-{{.ID}}" style="font-size:0.72rem;">Active</label>
+                                        <label class="form-check-label fs-3xs" for="act-{{.ID}}">Active</label>
                                     </div>
                                     <button type="submit" class="button button--sm button--primary">Save</button>
                                 </form>
@@ -198,7 +198,7 @@
                 </table>
                 </div>
                 {{else}}
-                <div class="p-3" style="color:var(--text-muted);font-size:0.82rem;">No items yet. Create one above.</div>
+                <div class="p-3 text-muted fs-xs">No items yet. Create one above.</div>
                 {{end}}
             </div>
         </div>

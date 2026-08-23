@@ -28,15 +28,15 @@ var cardTmpl = template.Must(template.New("discord-card").Parse(`
     <div class="card-body">
         {{if .Link}}
         <div class="d-flex align-items-center justify-content-between">
-            <div style="font-size:0.88rem;">
-                <span style="color:var(--green);font-weight:600;">&#10003; Linked</span>
+            <div class="fs-md">
+                <span class="text-success fw-semibold">&#10003; Linked</span>
                 &mdash; <strong>{{.Link.DiscordName}}</strong>
                 <span style="color:var(--text-muted);font-size:0.78rem;margin-left:0.5rem;">since {{.Link.VerifiedAt.Format "Jan 02, 2006"}}</span>
             </div>
             <form method="POST" action="/profile/discord-unlink" class="d-inline"
                   onsubmit="return confirm('Unlink your Discord account?')">
                 <input type="hidden" name="_csrf" value="{{.CSRF}}">
-                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.75rem;">Unlink</button>
+                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2 fs-2xs">Unlink</button>
             </form>
         </div>
         {{else}}
@@ -44,7 +44,7 @@ var cardTmpl = template.Must(template.New("discord-card").Parse(`
             Link your Discord account to sync your rank role and get notified about new releases.
         </div>
         <div class="d-flex align-items-center gap-2">
-            <span style="font-size:0.82rem;color:var(--text-muted);">Verification Key:</span>
+            <span class="fs-xs text-muted">Verification Key:</span>
             <code style="background:var(--bg-elevated);padding:0.3rem 0.6rem;border-radius:4px;font-size:0.9rem;user-select:all;">{{.Token}}</code>
         </div>
         <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">

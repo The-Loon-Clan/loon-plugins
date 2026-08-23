@@ -2,10 +2,10 @@
     <div class="container mt-4 page">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Admin · Roadmap</h1>
-            <a href="/help/roadmap" style="font-size:0.85rem;color:var(--blue);">Public view &rarr;</a>
+            <a class="fs-sm text-primary" href="/help/roadmap">Public view &rarr;</a>
         </div>
 
-        {{if .Saved}}<div class="notice notice--success py-2" style="font-size:0.85rem;">Saved.</div>{{end}}
+        {{if .Saved}}<div class="notice notice--success py-2 fs-sm">Saved.</div>{{end}}
 
         {{/* New-item form (id=0 → create). Reused on the row-level
              edit modal below; here it's the top-of-page quick-add. */}}
@@ -18,8 +18,8 @@
 
         <div class="panelV2" style="background:var(--bg-surface);border-color:var(--border);">
             <div class="panel__body p-0">
-                <table class="data-table mb-0" style="font-size:0.85rem;">
-                    <thead style="font-size:0.72rem;color:var(--text-muted);">
+                <table class="data-table mb-0 fs-sm">
+                    <thead class="fs-3xs text-muted">
                         <tr>
                             <th style="width:90px;">Status</th>
                             <th style="width:60px;">Sort</th>
@@ -32,16 +32,16 @@
                         {{range .Items}}
                         <tr>
                             <td>
-                                {{if eq .Status "in_flight"}}<span class="tag tag--warning" style="font-size:0.62rem;">in flight</span>
-                                {{else if eq .Status "backlog"}}<span class="tag tag--sm" style="font-size:0.62rem;">backlog</span>
-                                {{else}}<span class="tag" style="font-size:0.62rem;">archived</span>{{end}}
+                                {{if eq .Status "in_flight"}}<span class="tag tag--warning fs-3xs">in flight</span>
+                                {{else if eq .Status "backlog"}}<span class="tag tag--sm fs-3xs">backlog</span>
+                                {{else}}<span class="tag fs-3xs">archived</span>{{end}}
                             </td>
-                            <td style="color:var(--text-muted);">{{.SortOrder}}</td>
+                            <td class="text-muted">{{.SortOrder}}</td>
                             <td>
-                                <div style="font-weight:600;">{{.Title}}</div>
-                                <div style="font-size:0.75rem;color:var(--text-muted);">{{.Description}}</div>
+                                <div class="fw-semibold">{{.Title}}</div>
+                                <div class="fs-2xs text-muted">{{.Description}}</div>
                             </td>
-                            <td style="font-size:0.75rem;color:var(--text-muted);">{{relativeTime .UpdatedAt}}</td>
+                            <td class="fs-2xs text-muted">{{relativeTime .UpdatedAt}}</td>
                             <td style="text-align:right;white-space:nowrap;">
                                 {{/* The Edit control is the <summary> in the row
                                      below: a data-bs-toggle button here did nothing,
@@ -49,7 +49,7 @@
                                 <form method="POST" action="/admin/roadmap/{{.ID}}/delete" class="d-inline"
                                       onsubmit="return confirm('Delete this roadmap item?');">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                    <button type="submit" class="button button--outlined button--danger button--sm px-2" style="font-size:0.7rem;">Del</button>
+                                    <button type="submit" class="button button--outlined button--danger button--sm px-2 fs-3xs">Del</button>
                                 </form>
                             </td>
                         </tr>
@@ -115,7 +115,7 @@
                     </option>
                     {{end}}
                 </select>
-                <div class="form-text" style="font-size:0.7rem;">
+                <div class="form-text fs-3xs">
                     Surfaces a "View on graph" link on the public roadmap, and shows this row when admins expand the linked proposal on /flow/proposals.
                 </div>
             </div>

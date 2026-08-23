@@ -16,7 +16,7 @@
                 <form method="POST" action="/community/forums/threads">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-3">
-                        <label class="form-label" style="font-size:0.85rem;">Category</label>
+                        <label class="form-label fs-sm">Category</label>
                         <select aria-label="Category" name="category_id" class="form-select" required>
                             <option value="">Select a category…</option>
                             {{range .Categories}}
@@ -25,7 +25,7 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" style="font-size:0.85rem;">Title</label>
+                        <label class="form-label fs-sm">Title</label>
                         <input aria-label="Title" type="text" name="title" class="form-control" required maxlength="200" placeholder="Thread title">
                     </div>
                     {{/* Thread type selector. Discussion = default
@@ -35,14 +35,14 @@
                          the thread author + admins see them. Backed
                          by mig 251's thread_type column. */}}
                     <div class="mb-3">
-                        <label class="form-label" style="font-size:0.85rem;">Thread type</label>
-                        <div class="form-check" style="font-size:0.85rem;">
+                        <label class="form-label fs-sm">Thread type</label>
+                        <div class="form-check fs-sm">
                             <input class="form-check-input" type="radio" name="thread_type" id="tt-discussion" value="discussion" checked>
                             <label class="form-check-label" for="tt-discussion">
                                 <strong>Discussion</strong> — open thread, every reply visible to everyone.
                             </label>
                         </div>
-                        <div class="form-check" style="font-size:0.85rem;">
+                        <div class="form-check fs-sm">
                             <input class="form-check-input" type="radio" name="thread_type" id="tt-recruitment" value="recruitment">
                             <label class="form-check-label" for="tt-recruitment">
                                 <strong>Recruitment</strong> — public post, private replies. Other users can submit a reply (email / contact info / pitch) but won't see anyone else's. Only you and admins see the full list.
@@ -50,7 +50,7 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" style="font-size:0.85rem;">Message</label>
+                        <label class="form-label fs-sm">Message</label>
                         {{.EditorHTML}}
                     </div>
                     <div class="d-flex justify-content-between">

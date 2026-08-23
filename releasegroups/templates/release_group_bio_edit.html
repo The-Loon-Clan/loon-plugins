@@ -3,19 +3,19 @@
     <div class="container page-narrow bio-page">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h1 style="font-size:1.25rem;margin:0;">
-                <a href="/release-groups/{{.Group.Slug}}" style="color:var(--text-muted);text-decoration:none;">&larr; {{.Group.Name}}</a>
-                <span style="color:var(--text-muted);">/ bio</span>
+                <a class="text-muted text-decoration-none" href="/release-groups/{{.Group.Slug}}">&larr; {{.Group.Name}}</a>
+                <span class="text-muted">/ bio</span>
             </h1>
         </div>
 
         {{if eq .BioFlash "saved"}}
-        <div class="notice notice--success py-2 mb-3" style="font-size:0.85rem;">Bio updated.</div>
+        <div class="notice notice--success py-2 mb-3 fs-sm">Bio updated.</div>
         {{end}}
 
         <form method="POST" action="/release-groups/{{.Group.Slug}}/bio">
             <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
             <div class="mb-3">
-                <label class="form__label" style="font-size:0.85rem;font-weight:600;">Bio markdown</label>
+                <label class="form__label fs-sm fw-semibold">Bio markdown</label>
                 <textarea aria-label="Bio markdown" name="bio_markdown" class="form__input" maxlength="16384" placeholder="## About us
 Brief intro...
 

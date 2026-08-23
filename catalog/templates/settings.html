@@ -13,7 +13,7 @@
                     <td><strong>{{.Name}}</strong> <span class="text-muted small">{{.ID}}</span></td>
                     <td class="text-muted small">{{.Subcats}}</td>
                     <td>
-                        <form method="post" action="/admin/settings/catalog/toggle" style="display:inline">
+                        <form class="d-inline" method="post" action="/admin/settings/catalog/toggle">
                             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <input type="hidden" name="id" value="{{.ID}}">
                             <input type="hidden" name="enabled" value="{{if .Enabled}}false{{else}}true{{end}}">

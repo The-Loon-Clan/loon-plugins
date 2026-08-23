@@ -6,9 +6,9 @@
 {{define "community_join_requests.html"}}
     <div class="container page-narrow" style="padding: 1.4rem 1rem 3rem;">
         <nav aria-label="breadcrumb" style="font-size:0.8rem;margin-bottom:0.6rem;">
-            <a href="/c" style="color:var(--text-muted);text-decoration:none;">Communities</a> &rsaquo;
-            <a href="/c/{{.Community.Slug}}" style="color:var(--blue);text-decoration:none;">/c/{{.Community.Slug}}</a> &rsaquo;
-            <span style="color:var(--text-muted);">requests</span>
+            <a class="text-muted text-decoration-none" href="/c">Communities</a> &rsaquo;
+            <a class="text-primary text-decoration-none" href="/c/{{.Community.Slug}}">/c/{{.Community.Slug}}</a> &rsaquo;
+            <span class="text-muted">requests</span>
         </nav>
         <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:1rem;">Join requests — {{.Community.Name}}</h1>
 
@@ -20,7 +20,7 @@
             <div class="rq-head">
                 <span class="rq-avatar">{{if .AvatarPath}}<img src="{{.AvatarPath}}" alt="">{{else}}{{initial .Username}}{{end}}</span>
                 <div>
-                    <a href="/u/{{.Username}}" style="color:var(--text-primary);font-weight:600;text-decoration:none;">{{.Username}}</a>
+                    <a class="text-light fw-semibold text-decoration-none" href="/u/{{.Username}}">{{.Username}}</a>
                     <div class="rq-stats">
                         <span>{{.Role}}</span>
                         <span>{{.UserPoints}} pts</span>
@@ -71,15 +71,15 @@
             {{range .Invites}}
             <div class="inv-row">
                 <span class="inv-code">/c/join/{{.Code}}</span>
-                {{if .Note}}<span style="color:var(--text-muted);">{{.Note}}</span>{{end}}
-                <span class="ms-auto" style="color:var(--text-muted);">
+                {{if .Note}}<span class="text-muted">{{.Note}}</span>{{end}}
+                <span class="ms-auto text-muted">
                     {{.UseCount}}{{if gt .MaxUses 0}}/{{.MaxUses}}{{end}} used
                     {{if .ExpiresAt}}· expires {{.ExpiresAt.Format "Jan 02"}}{{end}}
                 </span>
             </div>
             {{end}}
             {{else}}
-            <div style="font-size:0.8rem;color:var(--text-muted);">No invites yet.</div>
+            <div class="fs-xs text-muted">No invites yet.</div>
             {{end}}
         </div>
     </div>

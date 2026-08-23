@@ -17,8 +17,8 @@
             hit</strong>. Most articles a busy feed ingests are junk, so a high-volume rule
             sitting late means nearly every article pays for everything above it first.
             <em>Drift</em> is how far a rule sits from where its catch rate would put it:
-            <span style="color:var(--danger)">+n</span> means it runs later than it earns
-            (the expensive direction), <span style="color:var(--text-muted)">-n</span> earlier.
+            <span class="text-danger">+n</span> means it runs later than it earns
+            (the expensive direction), <span class="text-muted">-n</span> earlier.
         </p>
         {{if .JunkRules}}
         <div class="data-table-wrapper">
@@ -41,7 +41,7 @@
                         <td class="text-end">{{.HitsFmt}}</td>
                         <td class="text-end text-muted small">{{printf "%.2f%%" .Share}}</td>
                         <td class="text-end">
-                            {{if gt .Drift 0}}<span style="color:var(--danger)">+{{.Drift}}</span>
+                            {{if gt .Drift 0}}<span class="text-danger">+{{.Drift}}</span>
                             {{else if lt .Drift 0}}<span class="text-muted">{{.Drift}}</span>
                             {{else}}<span class="text-muted">·</span>{{end}}
                         </td>
@@ -49,19 +49,19 @@
                             {{if .LastSample}}{{.LastSample}}{{else}}<em>never</em>{{end}}
                         </td>
                         <td class="text-nowrap">
-                            <form method="post" action="/admin/p/usenet/junk-move" style="display:inline">
+                            <form class="d-inline" method="post" action="/admin/p/usenet/junk-move">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                                 <input type="hidden" name="name" value="{{.Name}}">
                                 <input type="hidden" name="dir" value="up">
                                 <button class="button button--sm button--outlined" type="submit" title="run earlier">&uarr;</button>
                             </form>
-                            <form method="post" action="/admin/p/usenet/junk-move" style="display:inline">
+                            <form class="d-inline" method="post" action="/admin/p/usenet/junk-move">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                                 <input type="hidden" name="name" value="{{.Name}}">
                                 <input type="hidden" name="dir" value="down">
                                 <button class="button button--sm button--outlined" type="submit" title="run later">&darr;</button>
                             </form>
-                            <form method="post" action="/admin/p/usenet/junk-toggle" style="display:inline">
+                            <form class="d-inline" method="post" action="/admin/p/usenet/junk-toggle">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                                 <input type="hidden" name="name" value="{{.Name}}">
                                 <input type="hidden" name="enabled" value="{{if .Enabled}}false{{else}}true{{end}}">
@@ -132,13 +132,13 @@
                 <tr>
                     <td>
                         <code>{{.Pattern}}</code>
-                        {{if .Invalid}}<div class="text-danger" style="font-size:.75rem">
+                        {{if .Invalid}}<div class="text-danger fs-2xs">
                             does not compile — this rule is inert: {{.Invalid}}
                         </div>{{end}}
                     </td>
                     <td class="small text-muted">{{.Field}}</td>
                     <td>
-                        <form method="post" action="/admin/p/usenet/filter-toggle" style="display:inline">
+                        <form class="d-inline" method="post" action="/admin/p/usenet/filter-toggle">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="id" value="{{.ID}}">
                             <button class="button button--sm {{if .Enabled}}button--primary{{else}}button--outlined{{end}}"
@@ -146,7 +146,7 @@
                         </form>
                     </td>
                     <td class="text-end">
-                        <form method="post" action="/admin/p/usenet/filter-del" style="display:inline"
+                        <form class="d-inline" method="post" action="/admin/p/usenet/filter-del"
                               onsubmit="return confirm('Delete this rule? Releases it was blocking will be indexed from the next build pass.')">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="id" value="{{.ID}}">
@@ -402,7 +402,7 @@
     {{if .Watched}}
     <div class="d-flex mb-3" style="gap:.4rem;flex-wrap:wrap">
       {{range .Watched}}
-      <form method="post" action="/admin/p/usenet/poster-watch-del" style="display:inline">
+      <form class="d-inline" method="post" action="/admin/p/usenet/poster-watch-del">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <input type="hidden" name="pattern" value="{{.}}">
         <button class="button button--sm button--outlined" type="submit"

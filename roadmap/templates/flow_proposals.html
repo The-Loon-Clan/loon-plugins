@@ -10,7 +10,7 @@
                 <p>
                     Have an idea to make this site better? Share it here, vote on what
                     others have asked for, and help shape what gets built next.
-                    {{if .IsAdmin}}<br><span style="color:var(--blue);">As a mod you can set status, retag, and promote a request to the canonical site flow.</span>{{end}}
+                    {{if .IsAdmin}}<br><span class="text-primary">As a mod you can set status, retag, and promote a request to the canonical site flow.</span>{{end}}
                 </p>
             </div>
             {{if .CurrentUserID}}
@@ -117,7 +117,7 @@
                         <a class="filter-pill {{if or (eq $sort "newest") (not $sort)}}active{{end}}" href="/flow/proposals?sort=newest{{$qsTagStatus}}">Newest</a>
                         <a class="filter-pill {{if eq $sort "top"}}active{{end}}"    href="/flow/proposals?sort=top{{$qsTagStatus}}">Top</a>
                         <a class="filter-pill {{if eq $sort "active"}}active{{end}}" href="/flow/proposals?sort=active{{$qsTagStatus}}">Active</a>
-                        <span class="ms-auto" style="font-size:0.7rem;color:var(--text-muted);">
+                        <span class="ms-auto fs-3xs text-muted">
                             {{.TotalCount}} request{{if ne .TotalCount 1}}s{{end}}{{if .FilterMine}} by you{{end}}
                         </span>
                     </div>
@@ -137,7 +137,7 @@
                         {{if .AvatarPath}}
                         <a href="/u/{{.Username}}" onclick="event.stopPropagation();"><img class="prop-avatar" src="{{.AvatarPath}}" alt=""></a>
                         {{else}}
-                        <a href="/u/{{.Username}}" onclick="event.stopPropagation();" style="text-decoration:none;"><div class="prop-avatar-fallback">{{initial .Username}}</div></a>
+                        <a class="text-decoration-none" href="/u/{{.Username}}" onclick="event.stopPropagation();"><div class="prop-avatar-fallback">{{initial .Username}}</div></a>
                         {{end}}
                         <div style="flex:1;min-width:0;">
                             <div class="prop-title" style="overflow:hidden;text-overflow:ellipsis;">
@@ -146,7 +146,7 @@
                                 <span class="prop-status prop-status-{{.Status}} ms-1">{{statusLabel .Status}}</span>
                             </div>
                             <div class="prop-meta">
-                                <a href="/u/{{.Username}}" onclick="event.stopPropagation();" style="color:var(--text-muted);text-decoration:none;">{{.Username}}</a>
+                                <a class="text-muted text-decoration-none" href="/u/{{.Username}}" onclick="event.stopPropagation();">{{.Username}}</a>
                                 {{if eq .UserRole "admin"}}<span class="role-badge role-admin ms-1">Admin</span>
                                 {{else if eq .UserRole "mod"}}<span class="role-badge role-mod ms-1">Mod</span>
                                 {{else if eq .UserRole "contributor"}}<span class="role-badge role-contributor ms-1">Contributor</span>{{end}}
@@ -158,7 +158,7 @@
                             &#9650; <span class="js-vote-count">{{.VoteCount}}</span>
                         </button>
                     </div>
-                    <div class="prop-detail" id="detail-{{.ID}}" style="display:none;"></div>
+                    <div class="prop-detail d-none" id="detail-{{.ID}}"></div>
                     {{end}}
                 </div>
             </div>
@@ -169,7 +169,7 @@
                     <p style="font-size:0.88rem;margin:0 0 0.5rem;">
                         {{if .FilterMine}}You haven't filed a request yet.{{else}}No requests match these filters.{{end}}
                     </p>
-                    <a href="/flow/proposals" class="button button--sm button--outlined" style="font-size:0.76rem;">Show everything</a>
+                    <a href="/flow/proposals" class="button button--sm button--outlined fs-2xs">Show everything</a>
                     {{else}}
                     <p style="font-size:0.88rem;margin:0 0 0.35rem;">No requests yet.</p>
                     <p style="font-size:0.76rem;color:var(--text-muted);margin:0;">The form above is the whole process — say what you'd like and it lands here.</p>
@@ -203,7 +203,7 @@
                                 <input id="new-title" class="form__input" type="text" maxlength="100"
                                        placeholder="Summarise your request in one line">
                                 <div class="fr-counter"><span id="title-count">0</span> / 100</div>
-                                <div id="dup-hint" class="dup-hint" style="display:none;"></div>
+                                <div id="dup-hint" class="dup-hint d-none"></div>
                             </div>
                         </div>
 
@@ -277,11 +277,11 @@
                         <div class="fr-step">
                             <div class="fr-step-n">4</div>
                             <div class="fr-step-body">
-                                <div class="fr-step-title">Screenshots <span style="font-weight:400;color:var(--text-muted);font-size:0.8rem;">(optional)</span></div>
+                                <div class="fr-step-title">Screenshots <span class="fw-normal text-muted fs-xs">(optional)</span></div>
                                 <div class="fr-step-hint">A picture of the problem, or a mockup of the idea. Added to the description as markdown.</div>
                                 <div class="fr-drop" id="drop-zone" tabindex="0" role="button" aria-label="Add a screenshot">
                                     <div class="fr-drop-text">Drag an image here, or <b>choose a file</b><br>
-                                        <span style="font-size:0.68rem;">PNG, JPEG, GIF or WebP &middot; up to 2 MB each</span>
+                                        <span class="fs-3xs">PNG, JPEG, GIF or WebP &middot; up to 2 MB each</span>
                                     </div>
                                     <input type="file" id="file-input" accept="image/*" multiple hidden>
                                 </div>
@@ -293,7 +293,7 @@
                         <div class="d-flex gap-2 align-items-center pt-3" style="border-top:1px solid var(--border);">
                             <button id="btn-new" class="button button--sm button--primary" type="button">Submit request</button>
                             <button id="btn-cancel" class="button button--sm button--outlined" type="button">Clear</button>
-                            <span id="new-status" style="font-size:0.78rem;color:var(--text-muted);"></span>
+                            <span class="fs-xs text-muted" id="new-status"></span>
                         </div>
                     </div>
                 </div>
@@ -357,7 +357,7 @@
                                 </div>
                             </a>
                             {{end}}
-                            <button type="button" class="button button--sm button--outlined w-100 mt-2 js-show-requests" style="font-size:0.74rem;">View all requests</button>
+                            <button type="button" class="button button--sm button--outlined w-100 mt-2 js-show-requests fs-2xs">View all requests</button>
                             {{else}}
                             <p style="font-size:0.74rem;color:var(--text-muted);margin:0.4rem 0 0;">
                                 Nothing yet — yours would be the first.
@@ -371,9 +371,9 @@
         </div>
 
 
-        <p class="mt-3" style="font-size:0.72rem;color:var(--text-muted);">
-            Prefer the visual canvas? <a href="/flow" style="color:var(--blue);">Open it here</a> — same data, graph view with mockups and history.
-            Need help instead? Try the <a href="/help" style="color:var(--blue);">help docs</a> or ask in the <a href="/community" style="color:var(--blue);">forums</a>.
+        <p class="mt-3 fs-3xs text-muted">
+            Prefer the visual canvas? <a class="text-primary" href="/flow">Open it here</a> — same data, graph view with mockups and history.
+            Need help instead? Try the <a class="text-primary" href="/help">help docs</a> or ask in the <a class="text-primary" href="/community">forums</a>.
         </p>
     </div>
 
@@ -460,7 +460,7 @@
                 for (const m of matches) {
                     html += '<li><a href="/flow/proposals#prop-' + m.id + '">'
                           + escapeHtml(m.label)
-                          + '</a> <span style="color:var(--text-muted);">— &#9650;'
+                          + '</a> <span class="text-muted">— &#9650;'
                           + (m.vote_count|0) + ' · ' + escapeHtml(m.username)
                           + '</span></li>';
                 }
@@ -647,7 +647,7 @@
                 wireDetail(id, detail);
                 return;
             }
-            detail.innerHTML = '<span style="color:var(--text-muted);">Loading…</span>';
+            detail.innerHTML = '<span class="text-muted">Loading…</span>';
             fetch('/flow/proposals/' + id + '/details')
                 .then(r => r.json())
                 .then(body => {
@@ -725,17 +725,17 @@
             if (roadmap.length || changelog.length) {
                 html += '<div class="my-2 p-2" style="background:rgba(74,222,128,0.06);border-left:3px solid rgba(74,222,128,0.5);border-radius:4px;font-size:0.78rem;">';
                 if (roadmap.length) {
-                    html += '<div><strong style="color:var(--text-muted);">Tracked on roadmap:</strong></div>';
+                    html += '<div><strong class="text-muted">Tracked on roadmap:</strong></div>';
                     for (const r of roadmap) {
-                        html += '<div style="margin-left:0.5rem;">&middot; <a href="/help/roadmap" style="color:var(--blue);">' + escapeHtml(r.title) + '</a>'
-                             +  ' <span style="color:var(--text-muted);">(' + escapeHtml(r.status) + ')</span></div>';
+                        html += '<div style="margin-left:0.5rem;">&middot; <a class="text-primary" href="/help/roadmap">' + escapeHtml(r.title) + '</a>'
+                             +  ' <span class="text-muted">(' + escapeHtml(r.status) + ')</span></div>';
                     }
                 }
                 if (changelog.length) {
-                    html += '<div' + (roadmap.length ? ' style="margin-top:0.35rem;"' : '') + '><strong style="color:var(--text-muted);">Shipped:</strong></div>';
+                    html += '<div' + (roadmap.length ? ' style="margin-top:0.35rem;"' : '') + '><strong class="text-muted">Shipped:</strong></div>';
                     for (const cl of changelog) {
-                        html += '<div style="margin-left:0.5rem;">&middot; <a href="/help/roadmap?tab=changelog" style="color:var(--blue);">' + escapeHtml(cl.title) + '</a>'
-                             +  ' <span style="color:var(--text-muted);">(' + escapeHtml(cl.category) + ', ' + escapeHtml(cl.released_at) + ')</span></div>';
+                        html += '<div style="margin-left:0.5rem;">&middot; <a class="text-primary" href="/help/roadmap?tab=changelog">' + escapeHtml(cl.title) + '</a>'
+                             +  ' <span class="text-muted">(' + escapeHtml(cl.category) + ', ' + escapeHtml(cl.released_at) + ')</span></div>';
                     }
                 }
                 html += '</div>';
@@ -746,11 +746,11 @@
             if (IS_ADMIN) {
                 html += '<div class="d-flex flex-wrap align-items-center gap-2 my-2 p-2"'
                      +  ' style="background:rgba(91,138,245,0.06);border-radius:4px;font-size:0.78rem;">'
-                     +  '<strong style="color:var(--text-muted);">Mod:</strong>';
+                     +  '<strong class="text-muted">Mod:</strong>';
                 html += statusSelect(d.id, d.status);
                 html += tagSelect(d.id, d.tag);
-                html += '<button class="button button--sm button--outlined js-btn-promote" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Promote</button>';
-                html += '<button class="button button--sm button--outlined button--danger js-btn-delete ms-auto" data-id="' + d.id + '" type="button" style="font-size:0.72rem;">Delete</button>';
+                html += '<button class="button button--sm button--outlined js-btn-promote fs-3xs" data-id="' + d.id + '" type="button">Promote</button>';
+                html += '<button class="button button--sm button--outlined button--danger js-btn-delete ms-auto fs-3xs" data-id="' + d.id + '" type="button">Delete</button>';
                 html += '</div>';
             }
             // Comments thread.
@@ -767,8 +767,8 @@
             html += '<div class="mt-2">'
                  +  '<textarea class="form__input js-reply-body" rows="2" maxlength="2000" placeholder="Reply or suggest something — markdown supported."></textarea>'
                  +  '<div class="d-flex gap-2 align-items-center mt-1">'
-                 +  '<button class="button button--sm button--primary js-btn-reply" data-id="' + d.id + '" type="button" style="font-size:0.78rem;">Post reply</button>'
-                 +  '<span class="js-reply-status" style="font-size:0.72rem;color:var(--text-muted);"></span>'
+                 +  '<button class="button button--sm button--primary js-btn-reply fs-xs" data-id="' + d.id + '" type="button">Post reply</button>'
+                 +  '<span class="js-reply-status fs-3xs text-muted"></span>'
                  +  '</div></div>';
             return html;
         }

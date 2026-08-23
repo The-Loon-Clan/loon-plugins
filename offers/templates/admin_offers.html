@@ -4,15 +4,15 @@
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <div>
                 <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Admin · Offers</h1>
-                <div style="color:var(--text-muted);font-size:0.85rem;">
+                <div class="text-muted fs-sm">
                     Read-only view of the fulfillment queue. Stuck claims highlighted red;
                     sweeper auto-reopens them on its next tick.
                 </div>
             </div>
-            <div style="font-size:0.85rem;">
-                <a href="/admin/trackers" style="color:var(--blue);">Trackers</a>
+            <div class="fs-sm">
+                <a class="text-primary" href="/admin/trackers">Trackers</a>
                 &middot;
-                <a href="/admin" style="color:var(--blue);">Admin home</a>
+                <a class="text-primary" href="/admin">Admin home</a>
             </div>
         </div>
 
@@ -23,7 +23,7 @@
                 <span class="ao-status-pill ao-{{.Status}}">{{.Status}}: {{.Count}}</span>
                 {{end}}
             {{else}}
-                <span style="color:var(--text-muted);font-size:0.85rem;">No requests yet.</span>
+                <span class="text-muted fs-sm">No requests yet.</span>
             {{end}}
         </div>
 
@@ -46,7 +46,7 @@
                         <tbody>
                         {{range .Recent}}
                             <tr>
-                                <td style="color:var(--text-muted);">{{.RequestID}}</td>
+                                <td class="text-muted">{{.RequestID}}</td>
                                 <td>
                                     <span class="ao-status-pill ao-{{.Status}}">{{.Status}}</span>
                                     {{if and (eq .Status "claimed") .ClaimExpiresAt}}
@@ -56,13 +56,13 @@
                                     {{end}}
                                 </td>
                                 <td>
-                                    <div style="color:var(--text-primary);font-weight:600;font-size:0.85rem;">
+                                    <div class="text-light fw-semibold fs-sm">
                                         {{.EntityType}}
-                                        {{if .EntityID}}<a href="/{{.EntityType}}/{{.EntityID}}" style="color:var(--blue);text-decoration:none;">#{{.EntityID}}</a>{{end}}
+                                        {{if .EntityID}}<a class="text-primary text-decoration-none" href="/{{.EntityType}}/{{.EntityID}}">#{{.EntityID}}</a>{{end}}
                                         {{if .SeasonNum}}· S{{.SeasonNum}}{{end}}
                                         {{if .EpisodeNum}}E{{.EpisodeNum}}{{end}}
                                     </div>
-                                    <div style="color:var(--text-muted);font-size:0.72rem;">
+                                    <div class="text-muted fs-3xs">
                                         {{if .Resolution}}{{.Resolution}} · {{end}}
                                         {{if .SourceTag}}{{.SourceTag}} · {{end}}
                                         {{.SizeBucket}}
@@ -70,23 +70,23 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <a href="/u/{{.RequesterUsername}}" style="color:var(--blue);text-decoration:none;">{{.RequesterUsername}}</a>
+                                    <a class="text-primary text-decoration-none" href="/u/{{.RequesterUsername}}">{{.RequesterUsername}}</a>
                                 </td>
                                 <td>
                                     {{if .ClaimerUsername}}
-                                        <a href="/u/{{.ClaimerUsername}}" style="color:var(--blue);text-decoration:none;">{{.ClaimerUsername}}</a>
-                                        {{if .TrackerName}}<div style="color:var(--text-muted);font-size:0.7rem;">via {{.TrackerName}}</div>{{end}}
+                                        <a class="text-primary text-decoration-none" href="/u/{{.ClaimerUsername}}">{{.ClaimerUsername}}</a>
+                                        {{if .TrackerName}}<div class="text-muted fs-3xs">via {{.TrackerName}}</div>{{end}}
                                     {{else}}
-                                        <span style="color:var(--text-muted);">—</span>
+                                        <span class="text-muted">—</span>
                                     {{end}}
                                 </td>
-                                <td style="color:var(--text-muted);font-size:0.74rem;">{{.CreatedAt.Format "Jan 2 15:04"}}</td>
+                                <td class="text-muted fs-2xs">{{.CreatedAt.Format "Jan 2 15:04"}}</td>
                             </tr>
                         {{end}}
                         </tbody>
                     </table>
                     {{else}}
-                    <div style="color:var(--text-muted);font-size:0.85rem;">No requests yet.</div>
+                    <div class="text-muted fs-sm">No requests yet.</div>
                     {{end}}
                 </div>
             </div>
@@ -98,17 +98,17 @@
                         {{range .Leaders}}
                         <div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
                             <div style="flex:1;min-width:0;">
-                                <a href="/u/{{.Username}}" style="color:var(--text-primary);font-weight:600;text-decoration:none;">{{.Username}}</a>
-                                <div style="color:var(--text-muted);font-size:0.72rem;">{{.OfferCount}} offer{{if ne .OfferCount 1}}s{{end}}</div>
+                                <a class="text-light fw-semibold text-decoration-none" href="/u/{{.Username}}">{{.Username}}</a>
+                                <div class="text-muted fs-3xs">{{.OfferCount}} offer{{if ne .OfferCount 1}}s{{end}}</div>
                             </div>
                             <div style="text-align:right;">
-                                <strong style="color:var(--text-primary);">{{.FulfilledCount}}</strong>
-                                {{if gt .FailedCount 0}}<span style="color:var(--text-muted);font-size:0.72rem;">/ {{.FailedCount}} fail</span>{{end}}
+                                <strong class="text-light">{{.FulfilledCount}}</strong>
+                                {{if gt .FailedCount 0}}<span class="text-muted fs-3xs">/ {{.FailedCount}} fail</span>{{end}}
                             </div>
                         </div>
                         {{end}}
                     {{else}}
-                    <div style="color:var(--text-muted);font-size:0.85rem;">No deliveries yet.</div>
+                    <div class="text-muted fs-sm">No deliveries yet.</div>
                     {{end}}
                 </div>
 
@@ -118,8 +118,8 @@
                         {{range .Trackers}}
                         <div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
                             <div style="flex:1;min-width:0;">
-                                <div style="color:var(--text-primary);font-weight:600;">{{.TrackerName}}</div>
-                                <div style="color:var(--text-muted);font-size:0.72rem;">
+                                <div class="text-light fw-semibold">{{.TrackerName}}</div>
+                                <div class="text-muted fs-3xs">
                                     {{if eq .TrackerVisibility "private"}}<span class="of-pill of-pill-priv">private</span>{{end}}
                                     {{if eq .TrackerVisibility "public"}}<span class="of-pill of-pill-pub">public</span>{{end}}
                                     {{if eq .TrackerVisibility "personal"}}<span class="of-pill of-pill-per">personal</span>{{end}}
@@ -127,13 +127,13 @@
                                 </div>
                             </div>
                             <div style="text-align:right;">
-                                <strong style="color:var(--text-primary);">{{.DeliveriesWeek}}</strong>
-                                <div style="color:var(--text-muted);font-size:0.7rem;">7d</div>
+                                <strong class="text-light">{{.DeliveriesWeek}}</strong>
+                                <div class="text-muted fs-3xs">7d</div>
                             </div>
                         </div>
                         {{end}}
                     {{else}}
-                    <div style="color:var(--text-muted);font-size:0.85rem;">No tracker activity.</div>
+                    <div class="text-muted fs-sm">No tracker activity.</div>
                     {{end}}
                 </div>
             </div>

@@ -4,7 +4,7 @@
         <div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
             <div>
                 <h1 style="font-size:1.4rem;font-weight:700;margin:0;">Offers</h1>
-                <div style="color:var(--text-muted);font-size:0.88rem;">
+                <div class="text-muted fs-md">
                     Catalog of releases users can deliver from private trackers, public indexers, or personal collections.
                     Source identities stay anonymous — click an offer to send a request.
                 </div>
@@ -85,7 +85,7 @@
                         <div style="min-width:0;flex:1;">
                             {{/* stopPropagation so the title stays a LINK to the
                                  catalogue page; the rest of the header toggles. */}}
-                            <a href="/{{.EntityType}}/{{.EntityID}}" onclick="event.stopPropagation()" style="color:var(--text-primary);text-decoration:none;font-weight:600;">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{.EntityID}}{{end}}</a>
+                            <a class="text-light text-decoration-none fw-semibold" href="/{{.EntityType}}/{{.EntityID}}" onclick="event.stopPropagation()">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{.EntityID}}{{end}}</a>
                             <div class="of-hint">{{.EntityType}} #{{.EntityID}} &middot; {{len .Buckets}} variant{{if ne (len .Buckets) 1}}s{{end}}{{if .TotalFiles}} &middot; {{.TotalFiles}} file{{if ne .TotalFiles 1}}s{{end}}{{end}}</div>
                         </div>
                         <span class="of-chevron" aria-hidden="true">&#9656;</span>
@@ -114,7 +114,7 @@
                                 {{if eq $.Tab "fulfilled"}}
                                 <td style="width:200px;font-size:0.82rem;">
                                     {{if .DeliveredNzbID}}<a href="/release/{{.DeliveredNzbID}}" style="color:#4ade80;text-decoration:none;">view the release &rarr;</a>
-                                    <div style="color:var(--text-muted);font-size:0.7rem;">reopens here if the release dies</div>{{end}}
+                                    <div class="text-muted fs-3xs">reopens here if the release dies</div>{{end}}
                                 </td>
                                 {{else}}
                                 <td style="width:110px;font-size:0.82rem;color:var(--text-muted);">
@@ -154,9 +154,9 @@
 
         <div style="color:var(--text-muted);font-size:0.78rem;margin-top:0.9rem;">
             Want to contribute? Register a source — tracker access or a local folder — on
-            <a href="/account-settings#offers" style="color:var(--blue);">account settings</a>.
+            <a class="text-primary" href="/account-settings#offers">account settings</a>.
             Source identities stay anonymous; public leaderboards live on the
-            <a href="/stats" style="color:var(--blue);">stats page</a> and count only publicly-published work.
+            <a class="text-primary" href="/stats">stats page</a> and count only publicly-published work.
         </div>
     </div>
 

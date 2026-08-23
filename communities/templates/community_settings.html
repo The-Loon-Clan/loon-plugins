@@ -8,9 +8,9 @@
 {{define "community_settings.html"}}
     <div class="container page-narrow" style="padding: 1.4rem 1rem 3rem;">
         <nav aria-label="breadcrumb" style="font-size:0.8rem;margin-bottom:0.6rem;">
-            <a href="/c" style="color:var(--text-muted);text-decoration:none;">Communities</a> &rsaquo;
-            <a href="/c/{{.Community.Slug}}" style="color:var(--blue);text-decoration:none;">/c/{{.Community.Slug}}</a> &rsaquo;
-            <span style="color:var(--text-muted);">settings</span>
+            <a class="text-muted text-decoration-none" href="/c">Communities</a> &rsaquo;
+            <a class="text-primary text-decoration-none" href="/c/{{.Community.Slug}}">/c/{{.Community.Slug}}</a> &rsaquo;
+            <span class="text-muted">settings</span>
         </nav>
         <h1 style="font-size:1.4rem;font-weight:800;margin-bottom:1rem;">Settings — {{.Community.Name}}</h1>
 
@@ -21,23 +21,23 @@
 
             {{/* ── Appearance ── */}}
             <div class="card mb-3">
-                <div class="card-header" style="font-size:0.8rem;color:var(--text-muted);">Appearance</div>
+                <div class="card-header fs-xs text-muted">Appearance</div>
                 <div class="card-body">
                     <div class="mb-3">
-                        <label class="form-label" style="font-size:0.85rem;">Name</label>
+                        <label class="form-label fs-sm">Name</label>
                         <input aria-label="Name" type="text" name="name" class="form-control" maxlength="80" value="{{.Community.Name}}">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" style="font-size:0.85rem;">Description (card tagline)</label>
+                        <label class="form-label fs-sm">Description (card tagline)</label>
                         <textarea aria-label="Description (card tagline)" name="description" class="form-control" rows="2" maxlength="500">{{.Community.Description}}</textarea>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" style="font-size:0.85rem;">Sidebar (markdown)</label>
+                        <label class="form-label fs-sm">Sidebar (markdown)</label>
                         <textarea aria-label="Sidebar (markdown)" name="sidebar_md" class="form-control" rows="5" placeholder="Rendered in the community sidebar. Markdown supported.">{{.Community.SidebarMD}}</textarea>
                     </div>
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="form-label" for="bp-file" style="font-size:0.85rem;">Banner</label>
+                            <label class="form-label fs-sm" for="bp-file">Banner</label>
                             {{/* Live WYSIWYG preview: a banner-shaped strip
                                  the same height as the real header. The
                                  position slider moves the focal point in
@@ -51,21 +51,21 @@
                             </div>
                             <input type="file" name="banner" id="bp-file" accept="image/*" class="form-control form-control-sm mt-2">
                             <input type="text" name="banner_url" id="bp-url" aria-label="Banner image URL" class="form-control form-control-sm mt-1" value="{{.Community.BannerURL}}" placeholder="…or paste an image URL">
-                            <div class="form-text" style="font-size:0.7rem;">Uploads are auto-compressed (capped ~1600px wide). Wide format reads best.</div>
-                            <label class="form-label mt-2" for="bp-range" style="font-size:0.8rem;">Banner position <span id="bp-val" style="color:var(--text-muted);">{{.Community.BannerPosition}}%</span></label>
+                            <div class="form-text fs-3xs">Uploads are auto-compressed (capped ~1600px wide). Wide format reads best.</div>
+                            <label class="form-label mt-2 fs-xs" for="bp-range">Banner position <span class="text-muted" id="bp-val">{{.Community.BannerPosition}}%</span></label>
                             <input type="range" name="banner_position" id="bp-range" min="0" max="100" step="1"
                                    value="{{.Community.BannerPosition}}" class="form-range">
-                            <div class="form-text" style="font-size:0.7rem;">0% = top of image, 50% = centre, 100% = bottom. Drag to preview above.</div>
+                            <div class="form-text fs-3xs">0% = top of image, 50% = centre, 100% = bottom. Drag to preview above.</div>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label" for="c-icon-file" style="font-size:0.85rem;">Icon</label>
+                            <label class="form-label fs-sm" for="c-icon-file">Icon</label>
                             {{if .Community.IconURL}}<div class="mb-1"><img src="{{.Community.IconURL}}" alt="" style="height:48px;width:48px;object-fit:cover;border-radius:8px;border:1px solid var(--border);"></div>{{end}}
                             <input type="file" name="icon" id="c-icon-file" accept="image/*" class="form-control form-control-sm">
                             <input type="text" name="icon_url" aria-label="Icon image URL" class="form-control form-control-sm mt-1" value="{{.Community.IconURL}}" placeholder="…or paste an image URL">
-                            <div class="form-text" style="font-size:0.7rem;">Square works best.</div>
+                            <div class="form-text fs-3xs">Square works best.</div>
                         </div>
                     </div>
-                    <div class="form-check mt-3" style="font-size:0.85rem;">
+                    <div class="form-check mt-3 fs-sm">
                         <input class="form-check-input" type="checkbox" name="nsfw" value="1" id="nsfw" {{if .Community.NSFW}}checked{{end}}>
                         <label class="form-check-label" for="nsfw">Mark community NSFW</label>
                     </div>
@@ -74,32 +74,32 @@
 
             {{/* ── Access / join gating ── */}}
             <div class="card mb-3">
-                <div class="card-header" style="font-size:0.8rem;color:var(--text-muted);">Access</div>
+                <div class="card-header fs-xs text-muted">Access</div>
                 <div class="card-body">
                     <div class="mb-3">
-                        <label class="form-label" style="font-size:0.85rem;">Who can join?</label>
-                        <div class="form-check" style="font-size:0.85rem;">
+                        <label class="form-label fs-sm">Who can join?</label>
+                        <div class="form-check fs-sm">
                             <input class="form-check-input" type="radio" name="join_type" id="jt-open" value="open" {{if eq .Community.JoinType "open"}}checked{{end}}>
                             <label class="form-check-label" for="jt-open"><strong>Open</strong> — anyone who meets the requirements joins instantly.</label>
                         </div>
-                        <div class="form-check" style="font-size:0.85rem;">
+                        <div class="form-check fs-sm">
                             <input class="form-check-input" type="radio" name="join_type" id="jt-request" value="request" {{if eq .Community.JoinType "request"}}checked{{end}}>
                             <label class="form-check-label" for="jt-request"><strong>Request to join</strong> — applicants queue for your approval (with an optional message).</label>
                         </div>
-                        <div class="form-check" style="font-size:0.85rem;">
+                        <div class="form-check fs-sm">
                             <input class="form-check-input" type="radio" name="join_type" id="jt-invite" value="invite_only" {{if eq .Community.JoinType "invite_only"}}checked{{end}}>
                             <label class="form-check-label" for="jt-invite"><strong>Invite only</strong> — no public join; members come in via invite links you issue.</label>
                         </div>
                     </div>
 
-                    <div class="mb-1" style="font-size:0.8rem;color:var(--text-muted);">Requirements (applied to open joins + queued requests; invites bypass them):</div>
+                    <div class="mb-1 fs-xs text-muted">Requirements (applied to open joins + queued requests; invites bypass them):</div>
                     <div class="row g-2">
                         <div class="col-md-4">
-                            <label class="form-label" for="c-min-age" style="font-size:0.8rem;">Min account age (days)</label>
+                            <label class="form-label fs-xs" for="c-min-age">Min account age (days)</label>
                             <input type="number" name="min_account_age_days" id="c-min-age" class="form-control form-control-sm" min="0" max="3650" value="{{.Community.MinAccountAgeDays}}">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label" style="font-size:0.8rem;">Min rank</label>
+                            <label class="form-label fs-xs">Min rank</label>
                             <select aria-label="Min rank" name="min_role_level" class="form-select form-select-sm">
                                 <option value="0" {{if eq .Community.MinRoleLevel 0}}selected{{end}}>Any (user)</option>
                                 <option value="1" {{if eq .Community.MinRoleLevel 1}}selected{{end}}>Contributor+</option>
@@ -107,7 +107,7 @@
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label" style="font-size:0.8rem;">Points to join (spent)</label>
+                            <label class="form-label fs-xs">Points to join (spent)</label>
                             <input aria-label="Points to join (spent)" type="number" name="join_points_cost" class="form-control form-control-sm" min="0" value="{{.Community.JoinPointsCost}}">
                         </div>
                     </div>

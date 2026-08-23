@@ -3,7 +3,7 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
                 <h4 class="mb-0">Log Search</h4>
-                <div style="font-size:0.78rem;color:var(--text-muted);">
+                <div class="fs-xs text-muted">
                     Search the persistent error sink. Rows merge by op + normalised message; counts rise on repeats. Pruned after 30 days.
                 </div>
             </div>
@@ -45,14 +45,14 @@
                 <div class="facet" data-add="severity:{{.Key}}">
                     <span class="k">{{.Key}}</span><span class="n">{{.Count}}</span>
                 </div>
-                {{else}}<div style="font-size:0.8rem;color:var(--text-muted);">—</div>{{end}}
+                {{else}}<div class="fs-xs text-muted">—</div>{{end}}
 
                 <h6>Top ops</h6>
                 {{range .OpFacets}}
                 <div class="facet" data-add="op:{{.Key}}" title="{{.Rows}} rows, {{.Count}} occurrences">
                     <span class="k">{{.Key}}</span><span class="n">{{.Count}}</span>
                 </div>
-                {{else}}<div style="font-size:0.8rem;color:var(--text-muted);">—</div>{{end}}
+                {{else}}<div class="fs-xs text-muted">—</div>{{end}}
             </div>
 
             <div>
@@ -67,7 +67,7 @@
                 <div class="data-table-wrapper">
                     <table class="data-table">
                         <thead>
-                            <tr style="font-size:0.75rem;">
+                            <tr class="fs-2xs">
                                 <th>Sev</th><th>Op</th><th>Message</th>
                                 <th class="text-end">Count</th><th>Last</th><th>User</th><th></th>
                             </tr>
@@ -86,7 +86,7 @@
                                 </td>
                                 <td class="text-end log-count">{{if gt .Count 1}}<span class="tag">{{.Count}}</span>{{else}}{{.Count}}{{end}}</td>
                                 <td style="font-size:0.75rem;white-space:nowrap;">{{.LastAt.Format "01-02 15:04"}}</td>
-                                <td style="font-size:0.75rem;">{{if .UserID}}<a href="/admin/users/{{.UserID}}">#{{.UserID}}</a>{{end}}</td>
+                                <td class="fs-2xs">{{if .UserID}}<a href="/admin/users/{{.UserID}}">#{{.UserID}}</a>{{end}}</td>
                                 <td><button class="button button--sm button--outlined js-dismiss-btn" title="Dismiss">&times;</button></td>
                             </tr>
                             {{else}}
@@ -161,7 +161,7 @@
                    '<td><div class="log-msg" title="click to expand">' + esc(r.message) + '</div>' + path + '</td>' +
                    '<td class="text-end log-count">' + cnt + '</td>' +
                    '<td style="font-size:.75rem;white-space:nowrap;">' + when + '</td>' +
-                   '<td style="font-size:.75rem;">' + user + '</td>' +
+                   '<td class="fs-2xs">' + user + '</td>' +
                    '<td><button class="button button--sm button--outlined js-dismiss-btn" title="Dismiss">&times;</button></td></tr>';
         }).join('');
     }

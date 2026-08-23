@@ -1,16 +1,16 @@
 {{define "release_lists.html"}}
     <div class="container mt-4">
         <div class="mb-3">
-            <a href="/release/{{.Nzb.ID}}" style="color:var(--blue);">&#8592; Back to release</a>
+            <a class="text-primary" href="/release/{{.Nzb.ID}}">&#8592; Back to release</a>
         </div>
-        <h6 style="color:var(--text-muted);margin-bottom:1rem;">Lists containing <strong style="color:var(--text-primary);">{{.Nzb.Title}}</strong></h6>
+        <h6 style="color:var(--text-muted);margin-bottom:1rem;">Lists containing <strong class="text-light">{{.Nzb.Title}}</strong></h6>
         <div class="panelV2">
             <table class="data-table mb-0">
                 <tbody>
                     {{range .Lists}}
                     <tr>
                         <td><a href="/lists/{{.ID}}" style="color:var(--text-primary);font-weight:500;">{{.Name}}</a>
-                            <div style="color:var(--text-muted);font-size:0.8rem;">by {{.Username}}</div>
+                            <div class="text-muted fs-xs">by {{.Username}}</div>
                         </td>
                         <td style="color:var(--text-muted);font-size:0.85rem;width:80px;">{{.ItemCount}} items</td>
                     </tr>

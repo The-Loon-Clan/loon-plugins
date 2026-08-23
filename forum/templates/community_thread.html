@@ -183,7 +183,7 @@
 
                     <div class="post-content" id="post-body-{{.ID}}">{{.BodyHTML}}</div>
 
-                    <div class="post-edit-form" id="post-edit-{{.ID}}" style="display:none;">
+                    <div class="post-edit-form d-none" id="post-edit-{{.ID}}">
                         <form method="POST" action="/community/forums/post/{{.ID}}/edit">
                             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <input type="hidden" name="thread_id" value="{{$.Thread.ID}}">

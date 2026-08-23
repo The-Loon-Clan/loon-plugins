@@ -109,7 +109,7 @@
                 {{if $admin}}
                 <td>
                     {{if eq .Status "Active"}}
-                    <form method="post" action="/p/magic/terminate" style="display:inline">
+                    <form class="d-inline" method="post" action="/p/magic/terminate">
                         <input type="hidden" name="_csrf" value="{{$csrf}}">
                         <input type="hidden" name="id" value="{{.ID}}">
                         <button class="button button--sm" type="submit">Terminate</button>

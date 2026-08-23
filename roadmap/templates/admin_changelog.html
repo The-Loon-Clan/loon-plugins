@@ -2,10 +2,10 @@
     <div class="container mt-4 page">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Admin · Changelog</h1>
-            <a href="/help/roadmap?tab=changelog" style="font-size:0.85rem;color:var(--blue);">Public view &rarr;</a>
+            <a class="fs-sm text-primary" href="/help/roadmap?tab=changelog">Public view &rarr;</a>
         </div>
 
-        {{if .Saved}}<div class="notice notice--success py-2" style="font-size:0.85rem;">Saved.</div>{{end}}
+        {{if .Saved}}<div class="notice notice--success py-2 fs-sm">Saved.</div>{{end}}
 
         <details class="panelV2 mb-3" style="background:var(--bg-surface);border-color:var(--border);">
             <summary class="panel__header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add changelog entry</summary>
@@ -16,8 +16,8 @@
 
         <div class="panelV2" style="background:var(--bg-surface);border-color:var(--border);">
             <div class="panel__body p-0">
-                <table class="data-table mb-0" style="font-size:0.85rem;">
-                    <thead style="font-size:0.72rem;color:var(--text-muted);">
+                <table class="data-table mb-0 fs-sm">
+                    <thead class="fs-3xs text-muted">
                         <tr>
                             <th style="width:100px;">Released</th>
                             <th style="width:90px;">Category</th>
@@ -28,11 +28,11 @@
                     <tbody>
                         {{range .Entries}}
                         <tr>
-                            <td style="font-size:0.78rem;color:var(--text-muted);">{{.ReleasedAt.Format "2006-01-02"}}</td>
-                            <td><span class="tag tag--sm" style="font-size:0.62rem;">{{.Category}}</span></td>
+                            <td class="fs-xs text-muted">{{.ReleasedAt.Format "2006-01-02"}}</td>
+                            <td><span class="tag tag--sm fs-3xs">{{.Category}}</span></td>
                             <td>
-                                <div style="font-weight:600;">{{.Title}}</div>
-                                <div style="font-size:0.75rem;color:var(--text-muted);">{{.Description}}</div>
+                                <div class="fw-semibold">{{.Title}}</div>
+                                <div class="fs-2xs text-muted">{{.Description}}</div>
                             </td>
                             <td style="text-align:right;white-space:nowrap;">
                                 {{/* The Edit control is the <summary> in the row
@@ -41,7 +41,7 @@
                                 <form method="POST" action="/admin/changelog/{{.ID}}/delete" class="d-inline"
                                       onsubmit="return confirm('Delete this changelog entry?');">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                    <button type="submit" class="button button--outlined button--danger button--sm px-2" style="font-size:0.7rem;">Del</button>
+                                    <button type="submit" class="button button--outlined button--danger button--sm px-2 fs-3xs">Del</button>
                                 </form>
                             </td>
                         </tr>
@@ -60,7 +60,7 @@
                 </table>
             </div>
             {{if gt .TotalPages 1}}
-            <div class="card-footer d-flex justify-content-between align-items-center py-2" style="font-size:0.75rem;color:var(--text-muted);">
+            <div class="card-footer d-flex justify-content-between align-items-center py-2 fs-2xs text-muted">
                 <span>Page {{.Page}} of {{.TotalPages}}</span>
                 <div>
                     {{if gt .Page 1}}<a href="?page={{sub (int64 .Page) 1}}" class="button button--sm button--outlined">&laquo; Prev</a>{{end}}
@@ -118,7 +118,7 @@
                     </option>
                     {{end}}
                 </select>
-                <div class="form-text" style="font-size:0.7rem;">
+                <div class="form-text fs-3xs">
                     Surfaces a "Proposal" link on the public changelog, and shows this row when someone expands the linked proposal on /flow/proposals.
                 </div>
             </div>

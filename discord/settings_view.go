@@ -29,45 +29,45 @@ var settingsTmpl = template.Must(template.New("discord-settings").Parse(`
                     <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
-                            <label class="form-label" style="font-size:0.78rem;">Bot Token</label>
+                            <label class="form-label fs-xs">Bot Token</label>
                             <input type="password" name="discord_bot_token" class="form-control form-control-sm" value="" autocomplete="off" placeholder="{{if .BotTokenSet}}configured — leave blank to keep{{else}}Bot token from Discord Developer Portal{{end}}">
                         </div>
                         <div class="col-sm-3">
-                            <label class="form-label" style="font-size:0.78rem;">Guild (Server) ID</label>
+                            <label class="form-label fs-xs">Guild (Server) ID</label>
                             <input type="text" name="discord_guild_id" class="form-control form-control-sm" value="{{.GuildID}}" placeholder="Server ID">
                         </div>
                         <div class="col-sm-3">
-                            <label class="form-label" style="font-size:0.78rem;">Releases Channel ID</label>
+                            <label class="form-label fs-xs">Releases Channel ID</label>
                             <input type="text" name="discord_releases_channel_id" class="form-control form-control-sm" value="{{.ReleasesChannelID}}" placeholder="Channel ID">
                         </div>
                     </div>
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
-                            <label class="form-label" style="font-size:0.78rem;">Chat Channel ID</label>
+                            <label class="form-label fs-xs">Chat Channel ID</label>
                             <input type="text" name="discord_chat_channel_id" class="form-control form-control-sm" value="{{.ChatChannelID}}" placeholder="Channel ID for the site /chat bridge">
                             <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">Messages posted in this channel show up live on the site Chat page. Bot needs the "Message Content" privileged intent enabled.</div>
                         </div>
                         <div class="col-sm-6">
-                            <label class="form-label" style="font-size:0.78rem;">Chat Webhook URL <span style="color:var(--text-muted);">(Phase 2)</span></label>
+                            <label class="form-label fs-xs">Chat Webhook URL <span class="text-muted">(Phase 2)</span></label>
                             <input type="password" name="discord_chat_webhook_url" class="form-control form-control-sm" value="" autocomplete="off" placeholder="{{if .WebhookSet}}configured — leave blank to keep{{else}}https://discord.com/api/webhooks/...{{end}}">
                             <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">Used by Phase 2 to post site users' messages back to Discord with their site username and avatar.</div>
                         </div>
                     </div>
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
-                            <label class="form-label" style="font-size:0.78rem;">Invite URL</label>
+                            <label class="form-label fs-xs">Invite URL</label>
                             <input type="text" name="discord_invite_url" class="form-control form-control-sm" value="{{.InviteURL}}" placeholder="https://discord.gg/...">
                             <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">Public invite link shown on the site Chat page so users can hop into the Discord server. Leave blank to hide the link.</div>
                         </div>
                     </div>
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
-                            <label class="form-label" style="font-size:0.78rem;">Verify Channel ID</label>
+                            <label class="form-label fs-xs">Verify Channel ID</label>
                             <input type="text" name="discord_verify_channel_id" class="form-control form-control-sm" value="{{.VerifyChannelID}}" placeholder="Bot-only channel for the Verify button">
                             <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">Channel where /setup-verify posts the Verify button. Use a bot-only channel: each /setup-verify run wipes prior bot messages so updates don't leave duplicates. Restrict member send/manage permissions in Discord so only the bot can post here.</div>
                         </div>
                         <div class="col-sm-6">
-                            <label class="form-label" style="font-size:0.78rem;">Ops Channel ID</label>
+                            <label class="form-label fs-xs">Ops Channel ID</label>
                             <input type="text" name="discord_ops_channel_id" class="form-control form-control-sm" value="{{.OpsChannelID}}" placeholder="Staff channel for operational digests">
                             <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">Daily job digests (season curation, review alerts) land here. Leave empty to disable Discord delivery; the admin pages carry the same information.</div>
                         </div>
@@ -75,7 +75,7 @@ var settingsTmpl = template.Must(template.New("discord-settings").Parse(`
                     <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.5rem;">Role IDs (create roles in Discord, right-click &rarr; Copy Role ID)</div>
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
-                            <label class="form-label" style="font-size:0.78rem;">Member Role <span style="color:var(--bs-success);">(baseline)</span></label>
+                            <label class="form-label fs-xs">Member Role <span style="color:var(--bs-success);">(baseline)</span></label>
                             <input type="text" name="discord_role_member" class="form-control form-control-sm" value="{{.RoleMember}}" placeholder="Role ID — granted to every linked user">
                             <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">Granted automatically when a user links their account via the Verify button. Independent of every other role — added on top, never removed by the role sync. Use this as the "you've verified, you can see the server" gate: deny @everyone read access to your channels, allow Member.</div>
                         </div>
@@ -83,15 +83,15 @@ var settingsTmpl = template.Must(template.New("discord-settings").Parse(`
                     <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.3rem;margin-top:0.6rem;">Account roles &mdash; site authority. Synced independently of paid ranks: an admin who's also a Kirisame keeps both roles.</div>
                     <div class="row g-3 mb-3">
                         <div class="col-sm-4">
-                            <label class="form-label" style="font-size:0.78rem;">Contributor Role</label>
+                            <label class="form-label fs-xs">Contributor Role</label>
                             <input type="text" name="discord_role_contributor" class="form-control form-control-sm" value="{{.RoleContributor}}" placeholder="Role ID">
                         </div>
                         <div class="col-sm-4">
-                            <label class="form-label" style="font-size:0.78rem;">Moderator Role</label>
+                            <label class="form-label fs-xs">Moderator Role</label>
                             <input type="text" name="discord_role_moderator" class="form-control form-control-sm" value="{{.RoleModerator}}" placeholder="Role ID">
                         </div>
                         <div class="col-sm-4">
-                            <label class="form-label" style="font-size:0.78rem;">Admin Role</label>
+                            <label class="form-label fs-xs">Admin Role</label>
                             <input type="text" name="discord_role_admin" class="form-control form-control-sm" value="{{.RoleAdmin}}" placeholder="Role ID">
                         </div>
                     </div>
@@ -103,11 +103,11 @@ var settingsTmpl = template.Must(template.New("discord-settings").Parse(`
                     <div class="row g-3 mb-3">
                         {{range .RankRoles}}
                         <div class="col-sm-3">
-                            <label class="form-label" style="font-size:0.78rem;">{{.Label}} Role</label>
+                            <label class="form-label fs-xs">{{.Label}} Role</label>
                             <input type="text" name="discord_role_{{.Key}}" class="form-control form-control-sm" value="{{.Value}}" placeholder="Role ID">
                         </div>
                         {{else}}
-                        <div class="col-12" style="font-size:0.78rem;color:var(--text-muted);">
+                        <div class="col-12 fs-xs text-muted">
                             No paid ranks configured — add one in <a href="/admin/p/groups">Groups &amp; Ranks</a> and its Discord role field appears here.
                         </div>
                         {{end}}
@@ -115,7 +115,7 @@ var settingsTmpl = template.Must(template.New("discord-settings").Parse(`
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" name="discord_enabled" value="1" id="discord-enabled"
                                {{if .Enabled}}checked{{end}}>
-                        <label class="form-check-label" for="discord-enabled" style="font-size:0.85rem;">Enable Discord Bot</label>
+                        <label class="form-check-label fs-sm" for="discord-enabled">Enable Discord Bot</label>
                     </div>
                     <button type="submit" class="btn btn-primary btn-sm">Save Discord Settings</button>
                 </form>

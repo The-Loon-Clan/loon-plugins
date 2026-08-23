@@ -7,7 +7,7 @@
         <div class="panelV2">
             <div class="panel__header d-flex justify-content-between">
                 <span>{{if .Resolved}}Resolved Reports{{else}}Open Reports{{end}}</span>
-                <small style="color:var(--text-muted);">{{.Total}} total</small>
+                <small class="text-muted">{{.Total}} total</small>
             </div>
             <table class="data-table mb-0">
                 <thead>
@@ -23,15 +23,15 @@
                 <tbody>
                     {{range .Reports}}
                     <tr>
-                        <td><a href="/release/{{.NzbID}}" style="color:var(--blue);">{{.NzbTitle}}</a></td>
+                        <td><a class="text-primary" href="/release/{{.NzbID}}">{{.NzbTitle}}</a></td>
                         <td>
                             {{if eq .Reason "malware"}}<span class="tag tag--danger">Malware</span>
                             {{else if eq .Reason "broken"}}<span class="tag tag--warning">Broken</span>
                             {{else if eq .Reason "mislabeled"}}<span class="tag tag--sm">Mislabeled</span>
                             {{else}}<span class="tag tag--sm">{{.Reason}}</span>{{end}}
                         </td>
-                        <td style="font-size:0.85rem;">{{.Username}}</td>
-                        <td style="font-size:0.85rem;color:var(--text-muted);">{{.Detail}}</td>
+                        <td class="fs-sm">{{.Username}}</td>
+                        <td class="fs-sm text-muted">{{.Detail}}</td>
                         <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt.Format "Jan 02 15:04"}}</td>
                         {{if not $.Resolved}}
                         <td>

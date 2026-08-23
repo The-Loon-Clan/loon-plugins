@@ -10,7 +10,7 @@
          or how to get one had nowhere to go. /p/<slug> is the host's mounting
          convention for a SlotSitePage, which fragments hardcode. */}}
     <a href="/p/achievements" style="font-weight:600; color:inherit;">Achievements</a>
-    <span class="text-muted" style="font-size:0.75rem;">
+    <span class="text-muted fs-2xs">
       {{.Unlocked}} earned{{if .Pending}} &middot; {{.Pending}} pending{{end}}
     </span>
   </div>
@@ -23,7 +23,7 @@
             style="background:var(--bg-surface); border:1px solid var(--border); color:var(--text); font-weight:500; padding:0.4rem 0.7rem;"
             title="{{.Description}}{{if not .EarnedAt.IsZero}} — earned {{ts .EarnedAt}}{{end}}">
         {{.Name}}
-        {{if eq (printf "%s" .State) "pending"}}<span class="text-warning" style="font-size:0.7rem;"> (awaiting payout)</span>{{end}}
+        {{if eq (printf "%s" .State) "pending"}}<span class="text-warning fs-3xs"> (awaiting payout)</span>{{end}}
       </span>
       {{end}}
     </div>
@@ -31,10 +31,10 @@
 
     {{if .InProgress}}
     <div class="mt-3">
-      <div class="text-muted mb-1" style="font-size:0.72rem;">In progress</div>
+      <div class="text-muted mb-1 fs-3xs">In progress</div>
       {{range .InProgress}}
       <div class="mb-2">
-        <div class="d-flex justify-content-between" style="font-size:0.8rem;">
+        <div class="d-flex justify-content-between fs-xs">
           <span title="{{.Description}}">{{.Name}}</span>
           <span class="text-muted">{{.Progress}} / {{.Threshold}}</span>
         </div>

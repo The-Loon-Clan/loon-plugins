@@ -24,7 +24,7 @@
         <td><strong>{{.Name}}</strong></td>
         <td>
           {{if .Description}}{{.Description}}{{else}}<span class="text-muted">&mdash;</span>{{end}}
-          <div class="text-muted" style="font-size:0.72rem;"><code>{{if .Metric}}{{.Metric}}{{else}}{{.Trigger}}{{end}}</code></div>
+          <div class="text-muted fs-3xs"><code>{{if .Metric}}{{.Metric}}{{else}}{{.Trigger}}{{end}}</code></div>
         </td>
         <td class="text-end">{{if .Metric}}{{.Threshold}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
         <td>{{if .Pays}}<code>{{.Pays}}</code>{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>

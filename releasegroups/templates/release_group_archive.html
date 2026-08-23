@@ -4,13 +4,13 @@
         <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-3">
             <div>
                 <h1 style="font-size:1.25rem;margin:0;">
-                    <a href="/release-groups/{{.Group.Slug}}" style="color:var(--text-muted);text-decoration:none;">&larr; {{.Group.Name}}</a>
-                    <span style="color:var(--text-muted);">/ archive</span>
+                    <a class="text-muted text-decoration-none" href="/release-groups/{{.Group.Slug}}">&larr; {{.Group.Name}}</a>
+                    <span class="text-muted">/ archive</span>
                 </h1>
                 <div class="arch-meta-row mt-2">
                     <span><strong>{{.Total}}</strong> torrent{{if ne .Total 1}}s{{end}} on nekoBT</span>
                     {{if .Group.ArchiveLastRefreshAt}}
-                    <span style="color:var(--text-muted);">&middot; refreshed {{relativeTime .Group.ArchiveLastRefreshAt}}</span>
+                    <span class="text-muted">&middot; refreshed {{relativeTime .Group.ArchiveLastRefreshAt}}</span>
                     {{end}}
                 </div>
             </div>
@@ -35,7 +35,7 @@
         {{/* Flash banner for refresh action — whitelisted to known
              values so a hand-edited query string can't inject content. */}}
         {{if .RefreshFlash}}
-        <div class="notice {{if eq .RefreshFlash "started"}} notice--info{{else if eq .RefreshFlash "cooldown"}}notice--info{{else if eq .RefreshFlash "not_found"}}notice--info{{else if eq .RefreshFlash "unlinked"}}notice--warning{{else}}notice--warning{{end}} py-2 mb-3" style="font-size:0.85rem;">
+        <div class="notice {{if eq .RefreshFlash fs-sm"started"}} notice--info{{else if eq .RefreshFlash "cooldown"}}notice--info{{else if eq .RefreshFlash "not_found"}}notice--info{{else if eq .RefreshFlash "unlinked"}}notice--warning{{else}}notice--warning{{end}} py-2 mb-3">
             {{if eq .RefreshFlash "started"}}Refresh queued — should land within a minute or so. Reload to see new rows.
             {{else if eq .RefreshFlash "cooldown"}}Slow down — wait 15 minutes between owner-triggered refreshes.
             {{else if eq .RefreshFlash "forbidden"}}Only owners (or admins) can trigger a refresh.
@@ -48,7 +48,7 @@
         {{/* Bulk-request outcome banner. "ok" carries per-category
              counts in query params so the user gets a real receipt. */}}
         {{if .BulkFlash}}
-        <div class="notice {{if eq .BulkFlash "ok"}} notice--success{{else if eq .BulkFlash "forbidden"}}notice--warning{{else}}notice--danger{{end}} py-2 mb-3" style="font-size:0.85rem;">
+        <div class="notice {{if eq .BulkFlash fs-sm"ok"}} notice--success{{else if eq .BulkFlash "forbidden"}}notice--warning{{else}}notice--danger{{end}} py-2 mb-3">
             {{if eq .BulkFlash "ok"}}
                 Filed <strong>{{.BulkFiled}}</strong> new request{{if ne .BulkFiled "1"}}s{{end}}.
                 {{if and .BulkDup (ne .BulkDup "0")}}{{.BulkDup}} already pending. {{end}}
@@ -80,21 +80,21 @@
                             <td>
                                 <div class="arch-title">{{.Title}}</div>
                                 <div class="arch-meta">
-                                    {{if .ImportedNyaaID}}<span class="tag tag--sm" style="font-size:0.6rem;">via Nyaa</span>{{end}}
+                                    {{if .ImportedNyaaID}}<span class="tag tag--sm fs-3xs">via Nyaa</span>{{end}}
                                     {{if .InfoHash}}<span title="{{.InfoHash}}">{{slice .InfoHash 0 12}}…</span>{{end}}
                                 </div>
                             </td>
-                            <td style="color:var(--text-muted);">{{if .FilesizeBytes}}{{formatBytes .FilesizeBytes}}{{else}}—{{end}}</td>
-                            <td style="color:var(--text-muted);font-size:0.78rem;">
+                            <td class="text-muted">{{if .FilesizeBytes}}{{formatBytes .FilesizeBytes}}{{else}}—{{end}}</td>
+                            <td class="text-muted fs-xs">
                                 {{if .AudioLang}}<span title="audio">A:{{.AudioLang}}</span>{{end}}
                                 {{if .FsubLang}}<span title="fansub" style="margin-left:0.35rem;">F:{{.FsubLang}}</span>{{end}}
                                 {{if .SubLang}}<span title="sub" style="margin-left:0.35rem;">S:{{.SubLang}}</span>{{end}}
                             </td>
-                            <td style="color:var(--text-muted);font-size:0.78rem;">{{.UploadedAt.Format "Jan 02 2006"}}</td>
-                            <td style="color:var(--text-muted);font-size:0.78rem;">{{.Seeders}}</td>
+                            <td class="text-muted fs-xs">{{.UploadedAt.Format "Jan 02 2006"}}</td>
+                            <td class="text-muted fs-xs">{{.Seeders}}</td>
                             <td>
                                 {{if .OurNzbID}}
-                                <a href="/release/{{deref64 .OurNzbID}}" class="tag arch-badge-avail" style="font-size:0.65rem;text-decoration:none;">&#10003; Available</a>
+                                <a href="/release/{{deref64 .OurNzbID}}" class="tag arch-badge-avail fs-3xs text-decoration-none">&#10003; Available</a>
                                 {{else}}
                                 {{/* Inline request form. POSTs into the existing
                                      /community/requests handler with the cached
@@ -110,10 +110,10 @@
                                     <input type="hidden" name="nyaa_url"   value="https://nekobt.to/torrents/{{.NekobtTorrentID}}">
                                     <input type="hidden" name="info_hash"  value="{{.InfoHash}}">
                                     <input type="hidden" name="seed_count" value="{{.Seeders}}">
-                                    <button type="submit" class="button button--outlined button--sm px-2" style="font-size:0.7rem;">Request</button>
+                                    <button type="submit" class="button button--outlined button--sm px-2 fs-3xs">Request</button>
                                 </form>
                                 {{else}}
-                                <a href="/login" class="button button--outlined button--sm px-2" style="font-size:0.7rem;" title="Sign in to file a request">Request</a>
+                                <a href="/login" class="button button--outlined button--sm px-2 fs-3xs" title="Sign in to file a request">Request</a>
                                 {{end}}
                                 {{end}}
                             </td>
@@ -124,13 +124,13 @@
             </div>
             {{if gt .TotalPages 1}}
             <div class="card-footer d-flex justify-content-between align-items-center py-2">
-                <span style="font-size:0.75rem;color:var(--text-muted);">Page {{.Page}} of {{.TotalPages}}</span>
+                <span class="fs-2xs text-muted">Page {{.Page}} of {{.TotalPages}}</span>
                 <div>
                     {{if gt .Page 1}}
-                    <a href="?page={{sub (int64 .Page) 1}}" class="button button--sm button--outlined" style="font-size:0.75rem;">&laquo; Prev</a>
+                    <a href="?page={{sub (int64 .Page) 1}}" class="button button--sm button--outlined fs-2xs">&laquo; Prev</a>
                     {{end}}
                     {{if lt .Page .TotalPages}}
-                    <a href="?page={{inc .Page}}" class="button button--sm button--outlined" style="font-size:0.75rem;">Next &raquo;</a>
+                    <a href="?page={{inc .Page}}" class="button button--sm button--outlined fs-2xs">Next &raquo;</a>
                     {{end}}
                 </div>
             </div>
@@ -138,7 +138,7 @@
         </div>
         {{else}}
         <div class="panelV2">
-            <div class="panel__body" style="color:var(--text-muted);font-size:0.88rem;">
+            <div class="panel__body text-muted fs-md">
                 {{if eq .Group.NekobtStatus "not_found"}}
                 This group isn't on nekoBT — the scanner already confirmed there's nothing to pull.
                 {{else if eq .Group.NekobtStatus "linked"}}

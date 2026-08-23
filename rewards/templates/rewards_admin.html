@@ -311,7 +311,7 @@
                  does not answer it without arithmetic. */}}
             <td class="text-end">{{printf "%.1f" (.Chance $total)}}%</td>
             <td class="text-end">
-              <form method="post" action="/admin/p/rewards/lootbox-remove" style="display:inline">
+              <form class="d-inline" method="post" action="/admin/p/rewards/lootbox-remove">
                 <input type="hidden" name="_csrf" value="{{$csrf}}">
                 <input type="hidden" name="id" value="{{.ID}}">
                 <input type="hidden" name="box" value="{{$box}}">

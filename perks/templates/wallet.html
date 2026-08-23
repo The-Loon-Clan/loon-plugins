@@ -68,7 +68,7 @@
                              button, because it reads as the site being broken
                              rather than as the perk already being there. */}}
                         {{range .Offers}}
-                        <form method="post" action="/perks/spend" style="display:inline">
+                        <form class="d-inline" method="post" action="/perks/spend">
                             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="info_hash" value="{{.InfoHash}}">
                             <input type="hidden" name="kind" value="{{.Kind}}">

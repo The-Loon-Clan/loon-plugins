@@ -1,7 +1,7 @@
 {{define "support_ticket.html"}}
     <div class="container mt-4">
 
-        <nav aria-label="breadcrumb" style="font-size:0.85rem;" class="mb-3">
+        <nav aria-label="breadcrumb" class="mb-3 fs-sm">
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item"><a href="/support">Support</a></li>
                 <li class="breadcrumb-item active">Ticket #{{.Ticket.ID}}</li>
@@ -11,7 +11,7 @@
         <div class="panelV2 mb-3">
             <div class="panel__header d-flex justify-content-between align-items-center">
                 <div>
-                    <span style="font-weight:600;">{{.Ticket.Subject}}</span>
+                    <span class="fw-semibold">{{.Ticket.Subject}}</span>
                     {{if eq .Ticket.Priority "high"}}<span class="tag tag--danger ms-2">High</span>
                     {{else if eq .Ticket.Priority "low"}}<span class="tag tag--sm ms-2">Low</span>
                     {{else}}<span class="tag tag--info ms-2">Normal</span>{{end}}
@@ -23,8 +23,8 @@
                 </div>
             </div>
             {{if .IsAdmin}}
-            <div class="panel__actions" style="font-size:0.82rem;">
-                <span style="color:var(--text-muted);">Status:</span>
+            <div class="panel__actions fs-xs">
+                <span class="text-muted">Status:</span>
                 <form method="POST" action="/admin/tickets/{{.Ticket.ID}}/update" class="d-flex gap-1 align-items-center">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <select name="status" class="form__select" style="width:auto;font-size:0.8rem;">
@@ -33,12 +33,12 @@
                         <option value="closed" {{if eq .Ticket.Status "closed"}}selected{{end}}>Closed</option>
                     </select>
                     <input type="hidden" name="admin_note" value="">
-                    <button type="submit" class="button button--sm button--outlined" style="font-size:0.78rem;">Update</button>
+                    <button type="submit" class="button button--sm button--outlined fs-xs">Update</button>
                 </form>
                 <form method="POST" action="/admin/tickets/{{.Ticket.ID}}/delete" class="ms-auto"
                       onsubmit="return confirm('Delete this ticket permanently?')">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                    <button type="submit" class="button button--sm button--outlined button--danger" style="font-size:0.78rem;">Delete Ticket</button>
+                    <button type="submit" class="button button--sm button--outlined button--danger fs-xs">Delete Ticket</button>
                 </form>
             </div>
             {{end}}
@@ -91,7 +91,7 @@
             </div>
         </div>
         {{else}}
-        <div class="text-center" style="color:var(--text-muted);font-size:0.85rem;">This ticket is closed.</div>
+        <div class="text-center text-muted fs-sm">This ticket is closed.</div>
         {{end}}
 
     </div>
