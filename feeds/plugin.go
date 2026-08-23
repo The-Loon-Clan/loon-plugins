@@ -51,6 +51,28 @@ type Config struct {
 	// here when this is unset, so existing deployments need no config edit.)
 	NekoBTAPIKey string `json:"nekobt_api_key"`
 
+	// TorznabURL overrides where the SEARCH capability queries. Empty keeps
+	// nekoBT, which is what every deployment used before this existed.
+	//
+	// It is here for Prowlarr, and Prowlarr needs no code of its own: it
+	// aggregates a dozen indexers — public ones and an operator's private
+	// trackers — behind a single endpoint that speaks Torznab, which is the
+	// protocol this already speaks. Point this at it and "search the torrent
+	// sites we have" stops meaning "search nekoBT".
+	//
+	//	torznab_url: http://prowlarr:9696/api/v1/indexer/-/newznab
+	//	nekobt_api_key: <the Prowlarr API key>
+	//
+	// The key field is reused rather than a second one added, because Torznab
+	// carries exactly one apikey and a site pointing this elsewhere is not
+	// talking to nekoBT any more. The name is now wrong for that case and
+	// renaming it would break every existing config, which is the worse trade.
+	//
+	// The IMPORTER still polls nekoBT directly and is unaffected: it reads
+	// nekoBT's own RSS shape and its own /torrents/<id> links, neither of which
+	// an aggregator reproduces.
+	TorznabURL string `json:"torznab_url"`
+
 	// SourceProxies routes individual sources' fetches through an HTTP
 	// proxy, keyed by source name ("nyaa", "anirena", "tokyotosho",
 	// "nekobt"):
@@ -133,7 +155,11 @@ func (p *Plugin) Provision(c *core.Core) error {
 
 	// The search capability follows the nekobt source's routing, so an
 	// IP-blocked nekoBT would be one config line away from working too.
-	p.search = &torznabSearch{key: p.cfg.NekoBTAPIKey, client: p.sourceClient("nekobt")}
+	p.search = &torznabSearch{
+		endpoint: p.cfg.TorznabURL,
+		key:      p.cfg.NekoBTAPIKey,
+		client:   p.sourceClient("nekobt"),
+	}
 	if err := c.RegisterDef(core.ExtensionDef{
 		Name:    lpapi.TorznabSearchName,
 		Kind:    core.ExtService,

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	lpapi "github.com/the-loon-clan/loon-plugins/pluginapi"
 )
@@ -15,15 +16,38 @@ import (
 // deps, which is why it registers in every process while the importer runs
 // only in the worker.
 type torznabSearch struct {
-	key    string
-	client *http.Client
+	// endpoint is the full Torznab API URL, defaulting to nekoBT's.
+	//
+	// Configurable because "search the torrent sites we have" is a different
+	// question from "search nekoBT", and the second was hardcoded. A site with
+	// Prowlarr in front of a dozen indexers — public ones and the operator's
+	// own private trackers — exposes one aggregate Torznab endpoint that
+	// speaks exactly this protocol, so pointing this at it turns a
+	// single-index lookup into a search across everything they hold, without a
+	// line of Prowlarr-specific code. That is the whole integration: Torznab
+	// is the contract, and Prowlarr is one more thing that speaks it.
+	endpoint string
+	key      string
+	client   *http.Client
 }
+
+// defaultTorznabEndpoint is nekoBT, which is what every deployment used before
+// the endpoint was configurable. Kept as the default so an unconfigured site
+// behaves exactly as it did.
+const defaultTorznabEndpoint = "https://nekobt.to/api/torznab/api"
 
 func (t *torznabSearch) Available() bool {
 	return t != nil && t.key != ""
 }
 
-// Search performs an on-demand nekoBT Torznab query. When season>0 and
+func (t *torznabSearch) url() string {
+	if t.endpoint != "" {
+		return t.endpoint
+	}
+	return defaultTorznabEndpoint
+}
+
+// Search performs an on-demand Torznab query against the configured endpoint. When season>0 and
 // episode>0 we issue a t=tvsearch with those params (the Torznab-spec way to
 // scope results to a specific episode); otherwise we fall back to freeform
 // t=search. Returns (nil, nil) when no API key is configured so callers can
@@ -45,7 +69,14 @@ func (t *torznabSearch) Search(ctx context.Context, query string, season, episod
 	} else {
 		q.Set("t", "search")
 	}
-	items, err := fetchNekoBTURL(ctx, t.client, "https://nekobt.to/api/torznab/api?"+q.Encode())
+	// The response parser is unchanged and does not need to change: Torznab is
+	// an RSS dialect, and an aggregator returns the same <item> shape with the
+	// same newznab:attr fields. What differs is how MANY indexers answered.
+	sep := "?"
+	if strings.Contains(t.url(), "?") {
+		sep = "&"
+	}
+	items, err := fetchNekoBTURL(ctx, t.client, t.url()+sep+q.Encode())
 	if err != nil {
 		return nil, err
 	}
