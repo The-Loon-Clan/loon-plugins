@@ -3,6 +3,7 @@ package tickets
 import (
 	"context"
 	"fmt"
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 
 	"github.com/the-loon-clan/loon/core"
 )
@@ -25,6 +26,8 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
+	// The stylesheet these pages used to carry inline. See stylesheet.go.
+	pluginapi.RegisterStylesheet(c, "tickets", ticketsCSS)
 	// One check for every seam a render cannot proceed without. Notifications
 	// and role chrome are excluded on purpose: each degrades a feature rather
 	// than the page, so a host without them still has working support tickets.

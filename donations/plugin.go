@@ -147,6 +147,8 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
+	// The stylesheet these pages used to carry inline. See stylesheet.go.
+	pluginapi.RegisterStylesheet(c, "donations", donationsCSS)
 	if deps == nil {
 		return fmt.Errorf("donations: SetDeps was not called before core.Boot — wire it in main()")
 	}

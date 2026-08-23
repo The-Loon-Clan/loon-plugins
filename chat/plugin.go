@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 
 	"github.com/the-loon-clan/loon/core"
 )
@@ -29,6 +30,8 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
+	// The stylesheet these pages used to carry inline. See stylesheet.go.
+	pluginapi.RegisterStylesheet(c, "chat", chatCSS)
 	if c.Process != "web" && c.Process != "all" {
 		return nil
 	}

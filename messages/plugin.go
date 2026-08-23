@@ -119,6 +119,8 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
+	// The stylesheet these pages used to carry inline. See stylesheet.go.
+	pluginapi.RegisterStylesheet(c, "messages", messagesCSS)
 	if deps == nil {
 		return fmt.Errorf("messages: SetDeps was not called before core.Boot — wire it in main()")
 	}

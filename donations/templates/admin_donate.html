@@ -11,15 +11,6 @@
      input; every other form here relies on the host chrome's csrf-js,
      which injects _csrf into each form as it is submitted. */}}
 {{define "admin_donate.html"}}
-    <style>
-        .preview-table { width:100%; font-size:0.84rem; }
-        .preview-table th, .preview-table td { padding:3px 10px; text-align:right; font-variant-numeric:tabular-nums; }
-        .preview-table th { color:var(--text-muted); border-bottom:1px solid var(--border); }
-        .preview-table td.dollar { text-align:left; color:var(--text-muted); }
-        .donate-section { scroll-margin-top: 70px; }
-        .section-anchor { padding-top:1rem; margin-top:1.5rem; border-top:2px solid var(--border); }
-        .section-anchor:first-of-type { border-top:none; padding-top:0; }
-    </style>
     <div class="container mt-3 page">
         <h1 style="font-size:1.3rem;font-weight:600;">Donate &mdash; admin</h1>
         <p style="color:var(--text-muted);font-size:0.85rem;">

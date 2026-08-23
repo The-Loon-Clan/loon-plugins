@@ -1,46 +1,5 @@
 {{define "community_watchlists.html"}}
 {{.NzbCardCSS}}
-    <style>
-        /* Watchlist-specific overrides on top of nzb-card-css. The
-           card body shows creator + title + item count; no resolution
-           overlay since lists aren't single-NZB rows. */
-        .wl-card { box-shadow: 0 2px 6px rgba(0,0,0,0.45); }
-        .wl-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.55); }
-        .wl-creator {
-            display: flex; align-items: center; gap: 4px;
-            font-size: 0.78rem; font-weight: 600;
-            color: var(--bs-info);
-            text-decoration: none;
-            margin-bottom: 4px;
-        }
-        .wl-creator:hover { color: var(--bs-primary); }
-        .wl-title {
-            font-size: 0.92rem; font-weight: 600; color: var(--text-primary);
-            line-height: 1.25; overflow: hidden;
-            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-            margin-bottom: 8px;
-        }
-        .wl-itemcount {
-            text-align: center; padding: 6px 0;
-            font-size: 0.82rem; color: var(--text-muted);
-            border-top: 1px solid var(--border);
-        }
-        .wl-toolbar {
-            display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;
-            margin-bottom: 1rem;
-        }
-        .wl-toolbar input, .wl-toolbar select {
-            min-width: 0;
-        }
-        .wl-no-cover {
-            background:
-                repeating-linear-gradient(
-                    45deg,
-                    var(--bg-elevated) 0 12px,
-                    rgba(255,255,255,0.025) 12px 14px
-                );
-        }
-    </style>
     <div class="container mt-4 page-wide">
 
         <div class="d-flex justify-content-between align-items-center mb-3">

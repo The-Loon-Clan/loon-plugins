@@ -112,6 +112,8 @@ func (p *Plugin) Metadata() core.Metadata {
 // /admin/forum-categories/*) via Router.Engine() — moving them
 // would break every bookmark and template link for zero gain.
 func (p *Plugin) Provision(c *core.Core) error {
+	// The stylesheet these pages used to carry inline. See stylesheet.go.
+	pluginapi.RegisterStylesheet(c, "forum", forumCSS)
 	if !deps.ready() {
 		return fmt.Errorf("forum: SetDeps not called, or a render seam is missing — " +
 			"wire Markdown, RenderPage, CSRFToken, RenderEditor, RenderPagination, " +
