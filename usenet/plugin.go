@@ -267,6 +267,14 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return err
 	}
 
+	// The article probe: STAT and a body-head read, for whoever is planning a
+	// repair. Every process, because it is read-only and the caller may be a
+	// worker job or an ops endpoint on web. This plugin owns the pool and the
+	// provider credentials, so nothing else has to grow a second copy of them.
+	if err := c.Register(pluginapi.ArticleProbeName, articleProbe{p: p}); err != nil {
+		return err
+	}
+
 	// web/all/api: publish the READ capabilities — the public site pages AND the
 	// standalone api process both serve search / browse / Newznab / download.
 	if c.Process == "web" || c.Process == "all" || c.Process == "api" {
