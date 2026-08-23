@@ -21,7 +21,16 @@ package roadmap
      #a78bfa -> #c0a4ff   #f87171 -> #ff9595
    Found by loon-demo-site scripts/audit_paint.py. */
 const roadmapCSS = `/* from flow.html */
-        body { overflow: hidden; }
+        /* The flow graph is a fullscreen pan/zoom canvas, and ON THAT PAGE
+           locking body scroll is correct — the page's old inline <style>
+           made that scoping automatic by only existing there. This sheet is
+           plugin-GLOBAL, and every page links every registered sheet, so the
+           bare rule froze scrolling on the entire site the moment a host
+           served it (found on ameNZB within the hour: /release-groups and
+           /wiki stopped scrolling). :has() re-scopes it to the one page that
+           renders the shell; a browser without :has() simply keeps its
+           scrollbar, which is the harmless direction to fail. */
+        body:has(.flow-shell) { overflow: hidden; }
         .flow-shell { display: flex; flex-direction: column; height: calc(100vh - 56px); }
         .flow-toolbar {
             display: flex; align-items: center; gap: 0.5rem;
