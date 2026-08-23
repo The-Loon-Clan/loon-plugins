@@ -122,6 +122,14 @@
                         {{end}}
                     </a>
                     <a class="{{nameFX .Username}} forum-post-author-name role-name role-name-{{or .UserRole "user"}}" href="/u/{{.Username}}">{{.Username}}</a>
+                    {{/* Their own words, above the role — the same order the
+                         host uses on a profile, and for the reason it gives
+                         there: the role is what the SITE says they are and the
+                         title is what they say they are, and a reader wants the
+                         person before the category. Staff passed these words;
+                         MemberTitle returns only approved ones. */}}
+                    {{$t := memberTitle .Username}}
+                    {{with $t.Text}}<span class="forum-post-author-title{{if $t.FX}} {{$t.FX}}{{end}}">{{.}}</span>{{end}}
                     {{if eq .UserID $.Thread.UserID}}<span class="forum-post-op-badge">Original poster</span>{{end}}
                     {{/* The mod branch was missing, so a moderator fell to the
                          default and was labelled "Member" -- worse than no badge,

@@ -579,6 +579,18 @@
 }
 .forum-post-author-avatar > img { background: none; }
 .forum-post-author-name { font-size: 0.88rem; }
+/* Their own words. Smaller and quieter than the name above it, and italic
+   so it reads as a phrase rather than as another label — the badges under
+   it are the site's vocabulary and this is not. Wraps, because a title is
+   a sentence somebody wrote and this column is narrow. */
+.forum-post-author-title {
+    font-size: 0.68rem;
+    font-style: italic;
+    line-height: 1.25;
+    color: var(--text-muted, #8b90a0);
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
 .forum-post-op-badge {
     font-size: 0.6rem;
     font-weight: 700;

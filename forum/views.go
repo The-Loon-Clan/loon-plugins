@@ -51,6 +51,11 @@ func parseTemplates() {
 		"profileFX": func(name string) string {
 			return pluginapi.SlotClass(fxCore, pluginapi.SlotProfile, name)
 		},
+		// A member's own approved words, and the effect worn on them. Text is
+		// empty for almost everybody, which the markup guards on.
+		"memberTitle": func(name string) pluginapi.Title {
+			return pluginapi.MemberTitle(fxCore, name)
+		},
 
 		// The rest are pure and are reimplemented rather than crossed. The
 		// rule this follows: a helper crosses the seam when the two copies
