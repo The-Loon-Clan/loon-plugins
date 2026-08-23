@@ -52,7 +52,7 @@
                     <a class="text-primary text-decoration-none" href="{{.Group.WebsiteURL}}" target="_blank" rel="noopener" title="{{.Group.WebsiteURL}}">{{urlPlatform .Group.WebsiteURL}} ↗</a>
                     {{end}}
                     {{if and .Group.ScrapeURL (ne .Group.ScrapeURL .Group.WebsiteURL)}}
-                    {{if .Group.WebsiteURL}}<span style="color:var(--text-muted);margin:0 0.3rem;">·</span>{{end}}
+                    {{if .Group.WebsiteURL}}<span class="rg-dot">·</span>{{end}}
                     <a class="text-primary text-decoration-none" href="{{.Group.ScrapeURL}}" target="_blank" rel="noopener" title="{{.Group.ScrapeURL}}">{{urlPlatform .Group.ScrapeURL}} ↗</a>
                     {{end}}
                 </span>
@@ -61,7 +61,7 @@
                 <div class="desc">{{.Group.Description}}</div>
                 {{end}}
                 {{if .Owners}}
-                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.4rem;">
+                <div class="rg-sub">
                     Owners: {{range $i, $o := .Owners}}{{if $i}}, {{end}}<a class="text-light text-decoration-none" href="/u/{{$o.Username}}">@{{$o.Username}}</a>{{if ne $o.Role "owner"}} <span class="text-subtle">({{$o.Role}})</span>{{end}}{{end}}
                 </div>
                 {{end}}
@@ -74,11 +74,11 @@
                              back to the configured scrape source +
                              scrape URL (typically a Nyaa user page). */}}
                         {{if .Group.NekobtGroupID}}
-                        <a href="https://nekobt.to/groups/{{.Group.NekobtGroupID}}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;" title="Open this group on nekoBT">
+                        <a href="https://nekobt.to/groups/{{.Group.NekobtGroupID}}" target="_blank" rel="noopener" class="rg-plain-link" title="Open this group on nekoBT">
                             <strong>{{.Group.ArchiveTorrentCountCached}}</strong> on nekoBT ↗
                         </a>
                         {{else if and (eq .Group.ScrapeSource "nyaa") .Group.ScrapeURL}}
-                        <a href="{{.Group.ScrapeURL}}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;" title="Open this user on Nyaa">
+                        <a href="{{.Group.ScrapeURL}}" target="_blank" rel="noopener" class="rg-plain-link" title="Open this user on Nyaa">
                             <strong>{{.Group.ArchiveTorrentCountCached}}</strong> on Nyaa ↗
                         </a>
                         {{else}}
@@ -150,8 +150,8 @@
              renders when content exists, so a fresh group doesn't
              show an empty box. */}}
         {{if .BioHTML}}
-        <div class="panelV2 mb-3" style="background:var(--bg-surface);border-color:var(--border);">
-            <div class="panel__body rg-bio" style="font-size:0.9rem;line-height:1.55;">
+        <div class="panelV2 mb-3 rg-panel-quiet">
+            <div class="panel__body rg-bio">
                 {{.BioHTML}}
             </div>
         </div>
@@ -184,10 +184,10 @@
         {{$tok := .ViewerClaim.VerificationToken}}
         {{$verifyURL := printf "%s/v/%s" $.BaseURL $tok}}
         {{$hiddenSnippet := printf `<a href="%s">%s</a>` $verifyURL $.SiteName}}
-        <div class="panelV2 mb-3" style="border-color:var(--blue);">
+        <div class="panelV2 mb-3 rg-panel-accent">
             <div class="panel__body fs-sm">
-                <h6 style="margin:0 0 0.5rem;font-weight:600;">Your pending ownership claim</h6>
-                <p style="margin:0 0 0.8rem;color:var(--text-muted);">
+                <h6 class="rg-claim-title">Your pending ownership claim</h6>
+                <p class="rg-claim-note">
                     Pick one of the snippets below and paste it into your group's description at
                     {{if .ViewerClaim.VerificationURL}}<a class="text-primary" href="{{.ViewerClaim.VerificationURL}}" target="_blank" rel="noopener">{{.ViewerClaim.VerificationURL}} ↗</a>{{else}}the URL you nominated{{end}}.
                     Each snippet bundles a unique verification token in a trailing comment — that's the part our scraper matches on, so you only have to paste one thing. Hit <strong>Verify now</strong> when it's live.
@@ -199,8 +199,8 @@
                      keep hrefs even when they kill styles and comments.
                      Renders as a small "amnzb" link the user can keep
                      in their description footer. */}}
-                <div class="mb-3" style="background:var(--bg-elevated);border-radius:6px;padding:0.85rem 0.95rem;">
-                    <div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:0.5rem;">
+                <div class="mb-3 rg-snippet-box">
+                    <div class="rg-label">
                         Copy this snippet &amp; paste it anywhere in your description
                     </div>
                     <div class="d-flex align-items-center gap-3 mb-2">
@@ -213,7 +213,7 @@
                             Copy HTML
                         </button>
                     </div>
-                    <code id="rg-snippet-hidden" style="display:block;background:var(--bg-base);padding:0.45rem 0.7rem;border-radius:4px;font-size:0.78rem;user-select:all;overflow:auto;white-space:nowrap;">{{$hiddenSnippet}}</code>
+                    <code id="rg-snippet-hidden" class="rg-snippet">{{$hiddenSnippet}}</code>
                     <div class="fs-3xs text-muted mt-2">
                         The token in the href is unique to this claim &mdash; nobody else has the same one. Sanitizing platforms (nekobt strips HTML comments) preserve hrefs, so this snippet survives where a plain comment doesn't.
                     </div>
@@ -243,7 +243,7 @@
              undefined and no Bootstrap JS is loaded, so this block always sat
              open here and its Cancel button cancelled nothing. */}}
         <details id="claim-ownership" class="mb-3">
-            <summary class="button button--outlined button--sm" style="display:inline-block;margin-bottom:.6rem;">Claim ownership of {{.Group.Name}}</summary>
+            <summary class="button button--outlined button--sm rg-disclosure">Claim ownership of {{.Group.Name}}</summary>
             <div class="panelV2">
                 <form method="POST" action="/release-groups/{{.Group.Slug}}/claim">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
@@ -297,13 +297,13 @@
         {{$canPostNews := or .IsAdmin .ViewerIsOwner}}
         {{if or $canPostNews .NewsPosts}}
         <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 style="font-size:0.85rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin:0;">News</h6>
+            <h6 class="rg-label rg-label--lg">News</h6>
             <span class="fs-xs text-muted">{{.NewsTotal}} post{{if ne .NewsTotal 1}}s{{end}}</span>
         </div>
 
         {{if $canPostNews}}
-        <details class="panelV2 mb-3" style="border-color:var(--blue);">
-            <summary class="panel__header" style="font-size:0.82rem;font-weight:600;cursor:pointer;list-style:none;">
+        <details class="panelV2 mb-3 rg-panel-accent">
+            <summary class="panel__header rg-summary">
                 + New post <span class="text-muted fw-normal fs-xs">(visible to everyone; fans out to all followers)</span>
             </summary>
             <div class="panel__body">
@@ -327,9 +327,9 @@
             <div class="panelV2 mb-2" id="news-{{.ID}}">
                 <div class="panel__body fs-md">
                     <div class="d-flex justify-content-between align-items-start mb-2">
-                        <div style="min-width:0;">
+                        <div class="rg-min0">
                             <h6 class="m-0 fs-base fw-semibold">{{.Title}}</h6>
-                            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
+                            <div class="rg-item-sub">
                                 by <a class="text-light text-decoration-none" href="/u/{{.AuthorName}}">@{{.AuthorName}}</a> &middot; {{.CreatedAt.Format "Jan 2, 2006 15:04"}}
                             </div>
                         </div>
@@ -445,12 +445,12 @@
                         <table class="data-table mb-0 fs-sm">
                             <thead class="fs-3xs text-muted">
                                 <tr>
-                                    <th style="width:60px;"></th>
+                                    <th class="rg-col-cover"></th>
                                     <th>Title</th>
-                                    <th style="width:90px;">Size</th>
-                                    <th style="width:110px;">Languages</th>
-                                    <th style="width:90px;">Uploaded</th>
-                                    <th style="width:220px;text-align:right;">&nbsp;</th>
+                                    <th class="rg-col-size">Size</th>
+                                    <th class="rg-col-lang">Languages</th>
+                                    <th class="rg-col-size">Uploaded</th>
+                                    <th class="rg-col-actions">&nbsp;</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -471,15 +471,15 @@
                                     {{$primaryURL   = printf "https://nyaa.si/view/%s" (derefStr .ImportedNyaaID)}}
                                 {{end}}
                                 <tr>
-                                    <td style="vertical-align:middle;width:60px;padding:4px;">
+                                    <td class="rg-cover-cell">
                                         {{if $cover}}
-                                        <img src="{{$cover}}" alt="" style="width:48px;height:64px;object-fit:cover;border-radius:3px;background:var(--bg-elevated);" loading="lazy">
+                                        <img src="{{$cover}}" alt="" class="rg-cover" loading="lazy">
                                         {{else}}
-                                        <div style="width:48px;height:64px;display:flex;align-items:center;justify-content:center;border-radius:3px;background:var(--bg-elevated);color:var(--text-muted);font-size:1.2rem;">?</div>
+                                        <div class="rg-cover--none">?</div>
                                         {{end}}
                                     </td>
                                     <td class="align-middle">
-                                        <div style="font-weight:500;">{{.Title}}</div>
+                                        <div class="rg-title">{{.Title}}</div>
                                         {{if .InfoHash}}
                                         <div class="fs-3xs text-muted" title="{{.InfoHash}}">{{slice .InfoHash 0 12}}…</div>
                                         {{end}}
@@ -560,21 +560,21 @@
                             {{$primaryURL   = printf "https://nyaa.si/view/%s" (derefStr .ImportedNyaaID)}}
                         {{end}}
                         <div class="col">
-                            <div class="panelV2 h-100" style="background:var(--bg-elevated);border-color:var(--border);">
-                                <div style="aspect-ratio:2/3;background:var(--bg-surface);overflow:hidden;border-radius:6px 6px 0 0;">
+                            <div class="panelV2 h-100 rg-poster-card">
+                                <div class="rg-poster">
                                     {{if $cover}}
-                                    <img src="{{$cover}}" alt="" style="width:100%;height:100%;object-fit:cover;" loading="lazy">
+                                    <img src="{{$cover}}" alt="" loading="lazy">
                                     {{else}}
-                                    <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:2.5rem;">?</div>
+                                    <div class="rg-poster--none">?</div>
                                     {{end}}
                                 </div>
                                 <div class="panel__body p-2 fs-xs">
-                                    <div class="text-truncate" style="font-weight:500;" title="{{.Title}}">{{.Title}}</div>
-                                    <div style="color:var(--text-muted);font-size:0.7rem;margin-top:2px;">
+                                    <div class="text-truncate rg-title" title="{{.Title}}">{{.Title}}</div>
+                                    <div class="rg-poster-meta">
                                         {{if .FilesizeBytes}}{{formatBytes .FilesizeBytes}}{{else}}—{{end}}
                                         &middot; {{.UploadedAt.Format "Jan 02 2006"}}
                                     </div>
-                                    <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">
+                                    <div class="rg-poster-tags">
                                         {{if .OurNzbID}}
                                         <a href="/release/{{deref64 .OurNzbID}}" class="button button--primary button--sm px-2 fs-3xs">NZB</a>
                                         {{end}}
@@ -627,7 +627,7 @@
                         {{if .IsAdmin}}
                         <div class="mt-3">
                             <a class="button button--primary button--sm" href="#edit-group">Link to nekoBT</a>
-                            <div style="font-size:0.74rem;margin-top:0.4rem;">
+                            <div class="rg-note">
                                 Paste the group's nekoBT ID (the numeric part of <code class="fs-3xs">nekobt.to/groups/<strong>11101956255038</strong></code>).
                             </div>
                         </div>
@@ -644,7 +644,7 @@
     {{if .IsAdmin}}
     {{/* <details>, not a modal -- see the claim panel above. */}}
     <details id="edit-group" class="container mb-4">
-        <summary class="button button--outlined button--sm" style="display:inline-block;margin-bottom:.6rem;">Edit {{.Group.Name}}</summary>
+        <summary class="button button--outlined button--sm rg-disclosure">Edit {{.Group.Name}}</summary>
         <div class="panelV2">
             <form method="POST" action="/admin/release-groups/{{.Group.ID}}/edit">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
@@ -667,8 +667,8 @@
                                 Upstream snowflake from <code class="fs-3xs">https://nekobt.to/groups/&lt;id&gt;</code>. Takes priority for both archive scraping AND claim verification.
                             </div>
                         </div>
-                        <fieldset class="mb-2" style="border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.6rem;">
-                            <legend class="form__label small" style="float:none;width:auto;padding:0 0.3rem;font-size:0.78rem;">Alternate archive source</legend>
+                        <fieldset class="mb-2 rg-fieldset">
+                            <legend class="form__label small rg-legend">Alternate archive source</legend>
                             <div class="mb-2">
                                 <label class="form__label small">Scrape source</label>
                                 <select aria-label="Scrape source" class="form__select" name="scrape_source">

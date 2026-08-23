@@ -221,4 +221,69 @@ const releasegroupsCSS = `/* from release_group_archive.html */
             font-size: 0.9rem;
         }
 
+
+        /* ── release_group_detail: off the style attributes, 23 Aug 2026 ──
+           Thirty-eight inline attributes, thirty-three of them distinct, which
+           is what the tail of that sweep looks like: not repetition a script
+           can fold, but one-off component styling that had never been given a
+           name. Font sizes take the host's --fs-* scale on the way in, so the
+           values stop being opinions; the largest move is 0.03rem.
+
+           The style attribute is not a formatting preference. It is the last
+           thing keeping 'unsafe-inline' in the host's style-src, and there is
+           no nonce for an attribute the way there is for a <style> element. */
+        .rg-dot { color: var(--text-muted); margin: 0 0.3rem; }
+        .rg-sub { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 0.4rem; }
+        .rg-plain-link { color: inherit; text-decoration: none; }
+        .rg-panel-quiet { background: var(--bg-surface); border-color: var(--border); }
+        .rg-bio { font-size: var(--fs-md); line-height: 1.55; }
+        .rg-panel-accent { border-color: var(--primary-tint); }
+        .rg-claim-title { margin: 0 0 0.5rem; font-weight: 600; }
+        .rg-claim-note { margin: 0 0 0.8rem; color: var(--text-muted); }
+        .rg-snippet-box { background: var(--bg-elevated); border-radius: 6px; padding: 0.85rem 0.95rem; }
+        .rg-label {
+            font-size: var(--fs-2xs); font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 0.5rem;
+        }
+        .rg-label--lg { font-size: var(--fs-sm); margin: 0; }
+        .rg-snippet {
+            display: block; background: var(--bg-base); padding: 0.45rem 0.7rem;
+            border-radius: 4px; font-size: var(--fs-xs); user-select: all;
+            overflow: auto; white-space: nowrap;
+        }
+        .rg-disclosure { display: inline-block; margin-bottom: 0.6rem; }
+        .rg-summary { font-size: var(--fs-xs); font-weight: 600; cursor: pointer; list-style: none; }
+        .rg-min0 { min-width: 0; }
+        .rg-item-sub { font-size: var(--fs-2xs); color: var(--text-muted); margin-top: 0.15rem; }
+        /* Column widths, named for the column rather than the number. */
+        .rg-col-cover { width: 60px; }
+        .rg-col-size { width: 90px; }
+        .rg-col-lang { width: 110px; }
+        .rg-col-actions { width: 220px; text-align: right; }
+        .rg-cover-cell { vertical-align: middle; width: 60px; padding: 4px; }
+        .rg-cover {
+            width: 48px; height: 64px; object-fit: cover;
+            border-radius: 3px; background: var(--bg-elevated);
+        }
+        .rg-cover--none {
+            width: 48px; height: 64px; display: flex; align-items: center;
+            justify-content: center; border-radius: 3px; background: var(--bg-elevated);
+            color: var(--text-muted); font-size: var(--fs-2xl);
+        }
+        .rg-title { font-weight: 500; }
+        .rg-poster-card { background: var(--bg-elevated); border-color: var(--border); }
+        .rg-poster {
+            aspect-ratio: 2 / 3; background: var(--bg-surface);
+            overflow: hidden; border-radius: 6px 6px 0 0;
+        }
+        .rg-poster img { width: 100%; height: 100%; object-fit: cover; }
+        .rg-poster--none {
+            width: 100%; height: 100%; display: flex; align-items: center;
+            justify-content: center; color: var(--text-muted); font-size: 2.5rem;
+        }
+        .rg-poster-meta { color: var(--text-muted); font-size: var(--fs-3xs); margin-top: 2px; }
+        .rg-poster-tags { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
+        .rg-note { font-size: var(--fs-2xs); margin-top: 0.4rem; }
+        .rg-fieldset { border: 1px solid var(--border); border-radius: 4px; padding: 0.4rem 0.6rem; }
+        .rg-legend { float: none; width: auto; padding: 0 0.3rem; font-size: var(--fs-xs); }
 `
