@@ -101,6 +101,11 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	p.handlers = &Handlers{store: NewPGStore(db), errs: c.Errors}
 
+	// The stylesheet these pages used to carry inline. No-ops on a host with
+	// no sink, where the fragments draw unstyled — visible rather than
+	// silent, which is the right failure for a missing seam.
+	pluginapi.RegisterStylesheet(c, "news", newsCSS)
+
 	// Home page "Latest news" card — sanitized, template-ready rows.
 	// Published as an extension rather than set directly on a host
 	// hook: the plugin has no host import, so the host pulls the feed

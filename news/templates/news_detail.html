@@ -1,24 +1,4 @@
 {{define "news_detail.html"}}
-    <style>
-        /* Full-strength text, same reasoning as the feed's excerpt: this is
-           the post talking, and muted grey is the colour of captions. */
-        .news-body { font-size: 0.95rem; line-height: 1.7; color: var(--text-primary); }
-        .news-body p { margin-bottom: 0.8rem; }
-        .news-body h2, .news-body h3 { color: var(--text-primary); margin-top: 1.5rem; }
-        .news-body a { color: var(--blue); }
-        .news-body img { max-width: 100%; border-radius: 4px; margin: 0.5rem 0; }
-        .news-body ul, .news-body ol { padding-left: 1.5rem; margin-bottom: 0.8rem; }
-        /* The same card the FEED draws its previews in — a reader clicks a
-           card there and lands on bare text floating on the page background
-           here, which reads as leaving the news section rather than opening
-           the post. Same tokens, same fallbacks. */
-        .news-post-card {
-            background: var(--surface-3, var(--bg-elevated, transparent));
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 1.6rem 1.75rem 1.5rem;
-        }
-    </style>
     {{/* No breadcrumb here, and no heading.
 
          This page used to draw its own <ol class="breadcrumb"> with Bootstrap's
