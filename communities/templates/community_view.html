@@ -24,9 +24,9 @@
                     <a href="/c/{{.Community.Slug}}/submit" class="c-btn primary">New thread</a>
                 {{else if .Role.HasPendingRequest}}
                     {{/* Outstanding request — disabled "Requested" pill. */}}
-                    <button class="c-btn" type="button" disabled style="opacity:0.7;">Requested</button>
+                    <button class="c-btn text-muted" type="button" disabled>Requested</button>
                 {{else if eq .Community.JoinType "invite_only"}}
-                    <button class="c-btn" type="button" disabled style="opacity:0.7;" title="Invite-only — you need an invite link">Invite only</button>
+                    <button class="c-btn text-muted" type="button" disabled title="Invite-only — you need an invite link">Invite only</button>
                 {{else if eq .Community.JoinType "request"}}
                     {{/* Request-to-join: a small form with an optional
                          pitch message. Requirements (age/role/points)

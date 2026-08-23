@@ -62,7 +62,7 @@
                 {{end}}
                 {{if .Owners}}
                 <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.4rem;">
-                    Owners: {{range $i, $o := .Owners}}{{if $i}}, {{end}}<a class="text-light text-decoration-none" href="/u/{{$o.Username}}">@{{$o.Username}}</a>{{if ne $o.Role "owner"}} <span style="opacity:0.6;">({{$o.Role}})</span>{{end}}{{end}}
+                    Owners: {{range $i, $o := .Owners}}{{if $i}}, {{end}}<a class="text-light text-decoration-none" href="/u/{{$o.Username}}">@{{$o.Username}}</a>{{if ne $o.Role "owner"}} <span class="text-subtle">({{$o.Role}})</span>{{end}}{{end}}
                 </div>
                 {{end}}
                 <div class="rg-header-stats">
