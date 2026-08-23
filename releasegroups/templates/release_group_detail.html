@@ -38,7 +38,7 @@
                 <h1>
                     {{.Group.Name}}
                     {{if eq .Group.Status "confirmed"}}<span class="badge-status badge-confirmed">Confirmed</span>{{else}}<span class="badge-status badge-unknown">Unknown</span>{{end}}
-                    {{if .Owners}}<span class="tag tag--success ms-2" style="font-size:0.6rem;vertical-align:middle;" title="Claimed by an owner">Owned</span>{{end}}
+                    {{if .Owners}}<span class="tag tag--success ms-2 fs-3xs align-middle" title="Claimed by an owner">Owned</span>{{end}}
                 </h1>
                 {{/* External links — admin-set. WebsiteURL is the
                      group's own site (used as the claim-verify URL
@@ -205,7 +205,7 @@
                     </div>
                     <div class="d-flex align-items-center gap-3 mb-2">
                         <a class="fs-sm text-primary" href="{{$verifyURL}}" target="_blank" rel="noopener">{{$.SiteName}}</a>
-                        <span style="flex:1;font-size:0.78rem;color:var(--text-muted);">
+                        <span class="flex-1 fs-xs text-muted">
                             Renders as a small &ldquo;{{$.SiteName}}&rdquo; link &mdash; your per-claim token lives in the URL.
                         </span>
                         <button type="button" class="button button--primary button--sm"
@@ -214,7 +214,7 @@
                         </button>
                     </div>
                     <code id="rg-snippet-hidden" style="display:block;background:var(--bg-base);padding:0.45rem 0.7rem;border-radius:4px;font-size:0.78rem;user-select:all;overflow:auto;white-space:nowrap;">{{$hiddenSnippet}}</code>
-                    <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.5rem;">
+                    <div class="fs-3xs text-muted mt-2">
                         The token in the href is unique to this claim &mdash; nobody else has the same one. Sanitizing platforms (nekobt strips HTML comments) preserve hrefs, so this snippet survives where a plain comment doesn't.
                     </div>
                 </div>
@@ -224,7 +224,7 @@
                     <button type="submit" class="button button--primary button--sm">Verify now</button>
                 </form>
                 {{if gt .ViewerClaim.VerificationAttempts 0}}
-                <span style="margin-left:0.5rem;color:var(--text-muted);font-size:0.75rem;">{{.ViewerClaim.VerificationAttempts}} attempt{{if ne .ViewerClaim.VerificationAttempts 1}}s{{end}} so far</span>
+                <span class="ms-2 text-muted fs-2xs">{{.ViewerClaim.VerificationAttempts}} attempt{{if ne .ViewerClaim.VerificationAttempts 1}}s{{end}} so far</span>
                 {{end}}
             </div>
         </div>
@@ -328,13 +328,13 @@
                 <div class="panel__body fs-md">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div style="min-width:0;">
-                            <h6 style="margin:0;font-size:0.95rem;font-weight:600;">{{.Title}}</h6>
+                            <h6 class="m-0 fs-base fw-semibold">{{.Title}}</h6>
                             <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
                                 by <a class="text-light text-decoration-none" href="/u/{{.AuthorName}}">@{{.AuthorName}}</a> &middot; {{.CreatedAt.Format "Jan 2, 2006 15:04"}}
                             </div>
                         </div>
                         {{if or $.IsAdmin (and $.User (eq .AuthorUserID $.User.ID)) $.ViewerIsOwner}}
-                        <form method="POST" action="/release-groups/{{$.Group.Slug}}/news/{{.ID}}/delete" onsubmit="return confirm('Delete this post?');" style="margin:0;">
+                        <form class="m-0" method="POST" action="/release-groups/{{$.Group.Slug}}/news/{{.ID}}/delete" onsubmit="return confirm('Delete this post?');">
                             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <button type="submit" class="button button--sm button--outlined button--danger px-2 fs-3xs">Delete</button>
                         </form>
@@ -478,20 +478,20 @@
                                         <div style="width:48px;height:64px;display:flex;align-items:center;justify-content:center;border-radius:3px;background:var(--bg-elevated);color:var(--text-muted);font-size:1.2rem;">?</div>
                                         {{end}}
                                     </td>
-                                    <td style="vertical-align:middle;">
+                                    <td class="align-middle">
                                         <div style="font-weight:500;">{{.Title}}</div>
                                         {{if .InfoHash}}
                                         <div class="fs-3xs text-muted" title="{{.InfoHash}}">{{slice .InfoHash 0 12}}…</div>
                                         {{end}}
                                     </td>
-                                    <td style="vertical-align:middle;color:var(--text-muted);">{{if .FilesizeBytes}}{{formatBytes .FilesizeBytes}}{{else}}—{{end}}</td>
-                                    <td style="vertical-align:middle;color:var(--text-muted);font-size:0.75rem;">
+                                    <td class="align-middle text-muted">{{if .FilesizeBytes}}{{formatBytes .FilesizeBytes}}{{else}}—{{end}}</td>
+                                    <td class="align-middle text-muted fs-2xs">
                                         {{if .AudioLang}}A:{{.AudioLang}}{{end}}
                                         {{if .FsubLang}} F:{{.FsubLang}}{{end}}
                                         {{if .SubLang}} S:{{.SubLang}}{{end}}
                                     </td>
-                                    <td style="vertical-align:middle;color:var(--text-muted);font-size:0.75rem;">{{.UploadedAt.Format "Jan 02 2006"}}</td>
-                                    <td style="vertical-align:middle;text-align:right;white-space:nowrap;">
+                                    <td class="align-middle text-muted fs-2xs">{{.UploadedAt.Format "Jan 02 2006"}}</td>
+                                    <td class="align-middle text-end text-nowrap">
                                         {{/* NZB: only when we have a matching infohash. */}}
                                         {{if .OurNzbID}}
                                         <a href="/release/{{deref64 .OurNzbID}}" class="button button--primary button--sm px-2 fs-3xs">NZB</a>

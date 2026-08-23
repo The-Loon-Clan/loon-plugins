@@ -30,7 +30,7 @@ var cardTmpl = template.Must(template.New("irc-card").Parse(`
                 <span class="text-success fw-semibold">&#10003; Linked</span>
                 &mdash; <strong>{{.Link.IRCNick}}</strong>
                 {{if .Link.AccountName}}<span style="color:var(--text-muted);font-size:0.78rem;margin-left:0.4rem;">(account: {{.Link.AccountName}})</span>{{end}}
-                <span style="color:var(--text-muted);font-size:0.78rem;margin-left:0.5rem;">since {{.Link.VerifiedAt.Format "Jan 02, 2006"}}</span>
+                <span class="text-muted fs-xs ms-2">since {{.Link.VerifiedAt.Format "Jan 02, 2006"}}</span>
             </div>
             <form method="POST" action="/profile/irc-unlink" class="d-inline"
                   onsubmit="return confirm('Unlink your IRC account?')">

@@ -58,7 +58,7 @@
                 <tr{{if .Deleted}} style="opacity:.55"{{end}}>
                     <td><a class="text-primary" href="/release/{{.ID}}">{{.Title}}</a></td>
                     <td class="text-end">{{bytes .SizeBytes}}</td>
-                    <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt}}</td>
+                    <td class="fs-sm text-muted text-nowrap">{{.CreatedAt}}</td>
                     <td class="fs-sm">
                         {{if .Anonymous}}<span class="tag">anonymous</span>{{else}}<span class="text-muted">named</span>{{end}}
                         {{if .Queued}} <span class="tag tag--info">queued</span>{{end}}
@@ -128,7 +128,7 @@
                 <tr>
                     <td><a class="text-primary" href="/community/request/{{.ID}}?private=1">{{.Title}}</a></td>
                     <td class="text-end">{{bytes .SizeBytes}}</td>
-                    <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt}}</td>
+                    <td class="fs-sm text-muted text-nowrap">{{.CreatedAt}}</td>
                 </tr>
             {{end}}
             </tbody>
@@ -161,7 +161,7 @@
                 <tr>
                     <td><a class="text-primary" href="/community/request/{{.ID}}?private=1">{{.Title}}</a></td>
                     <td><code class="fs-3xs">{{.InfoHash}}</code></td>
-                    <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt}}</td>
+                    <td class="fs-sm text-muted text-nowrap">{{.CreatedAt}}</td>
                     <td class="fs-sm text-muted">
                         {{if .KeptPrivate}}Kept private{{else}}Published{{end}}
                     </td>

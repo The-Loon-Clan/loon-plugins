@@ -32,7 +32,7 @@
                         </td>
                         <td class="fs-sm">{{.Username}}</td>
                         <td class="fs-sm text-muted">{{.Detail}}</td>
-                        <td style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">{{.CreatedAt.Format "Jan 02 15:04"}}</td>
+                        <td class="fs-sm text-muted text-nowrap">{{.CreatedAt.Format "Jan 02 15:04"}}</td>
                         {{if not $.Resolved}}
                         <td>
                             <form method="POST" action="/admin/p/reports/resolve">

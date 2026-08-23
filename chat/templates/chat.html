@@ -35,7 +35,7 @@
 
         {{/* ── Center: messages ── */}}
         <div class="chat-center">
-            <div class="chat-header" style="display:flex;align-items:center;gap:0.5rem;">
+            <div class="chat-header d-flex align-items-center gap-2">
                 <span class="hash">#</span>
                 <span id="chat-header-name">{{if .Active}}{{range .Channels}}{{if eq $.Active .ChannelID}}{{.ChannelName}}{{end}}{{end}}{{else}}all{{end}}</span>
                 <span class="desc">Live bridge from Discord</span>

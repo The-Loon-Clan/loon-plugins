@@ -203,7 +203,7 @@
                                     {{end}}
                                 </tbody>
                             </table>
-                            <p style="font-size:0.72rem;color:var(--text-muted);margin-top:0.5rem;">Save and refresh to see the table reflect new values.</p>
+                            <p class="fs-3xs text-muted mt-2">Save and refresh to see the table reflect new values.</p>
                         </div>
                     </div>
                 </div>
@@ -276,7 +276,7 @@
                         </button>
                     </form>
                     {{else}}
-                    <p style="color:var(--text-muted);font-size:0.85rem;margin:0;">
+                    <p class="text-muted fs-sm m-0">
                         Wallet addresses and BTCPay credentials are managed by an administrator.
                     </p>
                     {{end}}
@@ -289,7 +289,7 @@
                     {{if eq $test "ok"}}
                     <div class="alert alert-success mt-3 mb-0 fs-sm">
                         ✅ <strong>BTCPay connection OK.</strong> URL, Store ID, and API key all verified. The "View Invoices" permission is present.
-                        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
+                        <div class="fs-xs text-muted mt-1">
                             The first Claim attempt will also verify "Create Invoices" permission — if that's missing, you'll see it in <a href="/admin/errors">/admin/errors</a> under <code>donate/claim-invoice</code>.
                         </div>
                     </div>
@@ -300,21 +300,21 @@
                     {{else if eq $test "auth"}}
                     <div class="alert alert-danger mt-3 mb-0 fs-sm">
                         ❌ <strong>API key rejected.</strong> {{if $msg}}{{$msg}}{{end}}
-                        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
+                        <div class="fs-xs text-muted mt-1">
                             Generate a new key in BTCPay (Account → Manage Account → API Keys) with both <code>View invoices</code> and <code>Create invoices</code> permissions.
                         </div>
                     </div>
                     {{else if eq $test "store"}}
                     <div class="alert alert-danger mt-3 mb-0 fs-sm">
                         ❌ <strong>Store not found.</strong> {{if $msg}}{{$msg}}{{end}}
-                        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
+                        <div class="fs-xs text-muted mt-1">
                             Copy the store ID from the BTCPay URL when viewing the store (<code>/stores/&lt;id&gt;/...</code>).
                         </div>
                     </div>
                     {{else if eq $test "err"}}
                     <div class="alert alert-danger mt-3 mb-0 fs-sm">
                         ❌ <strong>BTCPay test failed.</strong> {{if $msg}}{{$msg}}{{end}}
-                        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.25rem;">
+                        <div class="fs-xs text-muted mt-1">
                             Check the URL (must include scheme, e.g. <code>https://btcpay.example.com</code>), DNS, and that the BTCPay container is up.
                         </div>
                     </div>

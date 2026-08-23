@@ -3,7 +3,7 @@
     <div class="container mt-4 page">
         <div class="mb-3">
             <h1 style="font-size:1.4rem;font-weight:700;margin-bottom:0.2rem;">Roadmap &amp; Changelog</h1>
-            <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:0;">
+            <p class="text-muted fs-md mb-0">
                 Where the project is heading, and what's already shipped.
                 The site is moving toward fully community-driven governance.
             </p>
@@ -71,7 +71,7 @@
             {{end}}
         </div>
 
-        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:1.5rem;">
+        <p class="fs-xs text-muted mt-4">
             Want to suggest something? Drop a thread in the
             <a class="text-primary" href="/community/forums">forums</a>
             or open a feature request via <a class="text-primary" href="/flow/proposals">/flow/proposals</a>.
@@ -90,7 +90,7 @@
             <div>
                 <div class="changelog-title">
                     {{.Title}}
-                    {{if .FlowNodeID}}<a href="/flow/proposals#node-{{deref64 .FlowNodeID}}" style="font-size:0.72rem;color:var(--blue);text-decoration:none;margin-left:0.5rem;">Proposal &rarr;</a>{{end}}
+                    {{if .FlowNodeID}}<a class="fs-3xs text-primary text-decoration-none ms-2" href="/flow/proposals#node-{{deref64 .FlowNodeID}}">Proposal &rarr;</a>{{end}}
                 </div>
                 {{if .Description}}<div class="changelog-desc">{{.Description}}</div>{{end}}
             </div>

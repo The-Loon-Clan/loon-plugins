@@ -172,7 +172,7 @@
                     <a href="/flow/proposals" class="button button--sm button--outlined fs-2xs">Show everything</a>
                     {{else}}
                     <p style="font-size:0.88rem;margin:0 0 0.35rem;">No requests yet.</p>
-                    <p style="font-size:0.76rem;color:var(--text-muted);margin:0;">The form above is the whole process — say what you'd like and it lands here.</p>
+                    <p class="fs-2xs text-muted m-0">The form above is the whole process — say what you'd like and it lands here.</p>
                     {{end}}
                 </div>
             </div>
@@ -191,9 +191,9 @@
                 <div class="panelV2" id="new-request-card">
                     <div class="panel__body">
                         <div class="d-flex align-items-center gap-2 mb-1">
-                            <h3 style="font-size:1rem;font-weight:600;margin:0;">Create a new feature request</h3>
+                            <h3 class="fs-lg fw-semibold m-0">Create a new feature request</h3>
                         </div>
-                        <p style="font-size:0.76rem;color:var(--text-muted);margin:0;">Let us know what you'd like to see.</p>
+                        <p class="fs-2xs text-muted m-0">Let us know what you'd like to see.</p>
 
                         <div class="fr-step">
                             <div class="fr-step-n">1</div>
@@ -727,14 +727,14 @@
                 if (roadmap.length) {
                     html += '<div><strong class="text-muted">Tracked on roadmap:</strong></div>';
                     for (const r of roadmap) {
-                        html += '<div style="margin-left:0.5rem;">&middot; <a class="text-primary" href="/help/roadmap">' + escapeHtml(r.title) + '</a>'
+                        html += '<div class="ms-2">&middot; <a class="text-primary" href="/help/roadmap">' + escapeHtml(r.title) + '</a>'
                              +  ' <span class="text-muted">(' + escapeHtml(r.status) + ')</span></div>';
                     }
                 }
                 if (changelog.length) {
                     html += '<div' + (roadmap.length ? ' style="margin-top:0.35rem;"' : '') + '><strong class="text-muted">Shipped:</strong></div>';
                     for (const cl of changelog) {
-                        html += '<div style="margin-left:0.5rem;">&middot; <a class="text-primary" href="/help/roadmap?tab=changelog">' + escapeHtml(cl.title) + '</a>'
+                        html += '<div class="ms-2">&middot; <a class="text-primary" href="/help/roadmap?tab=changelog">' + escapeHtml(cl.title) + '</a>'
                              +  ' <span class="text-muted">(' + escapeHtml(cl.category) + ', ' + escapeHtml(cl.released_at) + ')</span></div>';
                     }
                 }

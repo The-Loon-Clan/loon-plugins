@@ -42,7 +42,7 @@
                              *int64. Delivered guarantees it is non-nil. */}}
                         &mdash; <a href="/release/{{.Request.NzbID}}" style="color:#4ade80;">view the release &rarr;</a>
                     </div>
-                    <div class="od-note" style="margin-top:.25rem;">
+                    <div class="od-note mt-1">
                         {{if eq .Health "healthy"}}Health checked: articles are retrievable.
                         {{else if .CanReRequest}}Health checked: this copy is {{.Health}} — its articles have expired. You can request a fresh delivery below.
                         {{else}}Health not verified yet — the health job probes new releases within a day.
@@ -65,12 +65,12 @@
                         {{else}}Requested by {{.Request.BackerCount}} member{{if ne .Request.BackerCount 1}}s{{end}}{{if .Request.PoolPoints}} &middot; {{.Request.PoolPoints}} pts staked{{end}}{{end}}
                     </div>
                     {{if .Backers}}
-                    <div class="od-note" style="margin-top:.25rem;">
+                    <div class="od-note mt-1">
                         {{range $i, $b := .Backers}}{{if $i}}, {{end}}{{$b.Username}}{{if $b.Points}} ({{$b.Points}} pts){{end}}{{end}}
                     </div>
                     {{end}}
                     {{if .Request.FileFilter}}
-                    <details class="od-note" style="margin-top:.25rem;">
+                    <details class="od-note mt-1">
                         <summary style="cursor:pointer;">Scoped to {{len .Request.FileFilter}} of the offered files</summary>
                         <div style="margin-top:.3rem;font-family:var(--bs-font-monospace,monospace);font-size:.78rem;">
                             {{range .Request.FileFilter}}<div>{{.}}</div>{{end}}
@@ -96,7 +96,7 @@
                     </button>
                 </div>
                 {{end}}
-                <div class="od-note" style="margin-top:.5rem;">
+                <div class="od-note mt-2">
                     Nothing is stored here. Requesting asks an offerer to fetch it and deliver an NZB.
                 </div>
             </div>
@@ -109,7 +109,7 @@
                  its scope, so ticking boxes there would lie. */}}
             {{$canScope := or .CanReRequest (and (not .Delivered) (not .RequestLive))}}
             {{if and $canScope (gt (len .Files) 1)}}
-            <div class="od-note" style="margin-bottom:.5rem;">
+            <div class="od-note mb-2">
                 Tick files to request only part of this offer — say, the episodes the
                 catalog is missing. Leave everything unticked to request it all.
                 <span class="js-of-pick-count text-primary"></span>

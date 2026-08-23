@@ -72,7 +72,7 @@ var settingsTmpl = template.Must(template.New("discord-settings").Parse(`
                             <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">Daily job digests (season curation, review alerts) land here. Leave empty to disable Discord delivery; the admin pages carry the same information.</div>
                         </div>
                     </div>
-                    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.5rem;">Role IDs (create roles in Discord, right-click &rarr; Copy Role ID)</div>
+                    <div class="fs-xs text-muted mb-2">Role IDs (create roles in Discord, right-click &rarr; Copy Role ID)</div>
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
                             <label class="form-label fs-xs">Member Role <span style="color:var(--bs-success);">(baseline)</span></label>

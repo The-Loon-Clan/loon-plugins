@@ -85,7 +85,7 @@
                                     {{if .RequestPath}}<div style="font-size:0.7rem;color:var(--text-muted);font-family:monospace;">{{.RequestPath}}</div>{{end}}
                                 </td>
                                 <td class="text-end log-count">{{if gt .Count 1}}<span class="tag">{{.Count}}</span>{{else}}{{.Count}}{{end}}</td>
-                                <td style="font-size:0.75rem;white-space:nowrap;">{{.LastAt.Format "01-02 15:04"}}</td>
+                                <td class="fs-2xs text-nowrap">{{.LastAt.Format "01-02 15:04"}}</td>
                                 <td class="fs-2xs">{{if .UserID}}<a href="/admin/users/{{.UserID}}">#{{.UserID}}</a>{{end}}</td>
                                 <td><button class="button button--sm button--outlined js-dismiss-btn" title="Dismiss">&times;</button></td>
                             </tr>
@@ -160,7 +160,7 @@
                    '<td><span class="log-op" data-add="op:' + esc(r.op) + '">' + esc(r.op) + '</span></td>' +
                    '<td><div class="log-msg" title="click to expand">' + esc(r.message) + '</div>' + path + '</td>' +
                    '<td class="text-end log-count">' + cnt + '</td>' +
-                   '<td style="font-size:.75rem;white-space:nowrap;">' + when + '</td>' +
+                   '<td class="fs-2xs text-nowrap">' + when + '</td>' +
                    '<td class="fs-2xs">' + user + '</td>' +
                    '<td><button class="button button--sm button--outlined js-dismiss-btn" title="Dismiss">&times;</button></td></tr>';
         }).join('');

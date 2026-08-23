@@ -238,7 +238,7 @@
         {{/* ─────────── 4. Donator Perks (left col) + Tiers & Rewards (right col) ─────────── */}}
         <div class="row g-3 mb-4">
             <div class="col-lg-7">
-                <div class="section-head" style="margin-top:0;">
+                <div class="section-head mt-0">
                     <h2>Donator Perks</h2>
                 </div>
                 <p class="section-sub">Thank you! Your support comes with some awesome perks.</p>
@@ -309,7 +309,7 @@
             </div>
 
             <div class="col-lg-5">
-                <div class="section-head" style="margin-top:0;">
+                <div class="section-head mt-0">
                     <h2>Donator Tiers &amp; Rewards</h2>
                 </div>
                 <p class="section-sub">Higher tiers include all lower tier perks.</p>
@@ -375,9 +375,9 @@
                         </div>
                         {{end}}
                     </div>
-                    <div class="stretch-cta" style="margin-top:auto;">⭐ Let's build something epic together! 🚀</div>
+                    <div class="stretch-cta mt-auto">⭐ Let's build something epic together! 🚀</div>
                     {{else}}
-                    <p style="font-size:0.85rem;color:var(--text-muted);margin:0;">
+                    <p class="fs-sm text-muted m-0">
                         No tip-jar goals configured yet. Admin can set them at <a href="/admin/donate">/admin/donate</a>.
                     </p>
                     {{end}}
@@ -408,7 +408,7 @@
                         </div>
                         {{end}}
                     {{else}}
-                    <p style="font-size:0.82rem;color:var(--text-muted);margin:0;">No donations recorded yet.</p>
+                    <p class="fs-xs text-muted m-0">No donations recorded yet.</p>
                     {{end}}
                 </div>
             </div>
@@ -507,7 +507,7 @@
                     </div>
                     {{end}}
                 {{else}}
-                <p style="font-size:0.85rem;color:var(--text-muted);margin:0;">No donations recorded yet — you could be first.</p>
+                <p class="fs-sm text-muted m-0">No donations recorded yet — you could be first.</p>
                 {{end}}
             </div>
         </div>
@@ -517,11 +517,11 @@
         <div class="panel mb-4" id="send-section">
             <h3>Send a Donation</h3>
             {{if .IsAnon}}
-            <p style="font-size:0.82rem;color:var(--text-muted);margin-top:0;">
+            <p class="fs-xs text-muted mt-0">
                 Tip: <a href="/login">log in</a> first so we can credit points and the Donator title to your account.
             </p>
             {{end}}
-            <div style="margin-top:0.5rem;">
+            <div class="mt-2">
                 {{if .BTCAddress}}
                 <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.04);">
                     <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);width:50px;">BTC</span>
@@ -544,7 +544,7 @@
                 </div>
                 {{end}}
                 {{if and (not .BTCAddress) (not .ETHAddress) (not .XMRAddress)}}
-                <p style="font-size:0.82rem;color:var(--text-muted);margin-top:0.5rem;">
+                <p class="fs-xs text-muted mt-2">
                     (No receive addresses configured yet — admin sets them in <code>/admin/settings</code>.)
                 </p>
                 {{end}}

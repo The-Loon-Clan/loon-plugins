@@ -18,11 +18,11 @@
         </tbody>
     </table>
 </div>
-<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.25rem">
+<div class="d-flex gap-2 align-items-center flex-wrap mt-1">
     <span class="text-muted small">
         {{with .Stats}}{{.TotalNZBs}} NZBs · {{.TotalStaged}} staged · {{.TotalBackfillRemaining}} to backfill{{end}}
     </span>
-    <div style="margin-left:auto;display:flex;gap:.5rem">
+    <div class="ms-auto d-flex gap-2">
         <form class="d-inline" method="post" action="/admin/p/usenet/crawl">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
             <button class="button button--sm button--outlined" type="submit">Run crawl</button>

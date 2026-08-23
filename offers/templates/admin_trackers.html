@@ -3,7 +3,7 @@
     <div class="container mt-4 page-wide">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <div>
-                <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Admin · Private Trackers</h1>
+                <h1 class="fs-2xl fw-bold m-0">Admin · Private Trackers</h1>
                 <div class="text-muted fs-sm">Offer-system tracker catalog (mig 238) — users opt into these on their account page; the offer-search surface groups offers by tracker visibility.</div>
             </div>
             <a class="fs-sm text-primary" href="/admin">&larr; Admin home</a>
@@ -43,7 +43,7 @@
                             <td><span class="vis-pill st-{{.Status}}">{{.Status}}</span></td>
                             <td>{{.AccessCount}}</td>
                             <td>{{.OfferCount}}</td>
-                            <td style="text-align:right;white-space:nowrap;">
+                            <td class="text-end text-nowrap">
                                 {{/* The Edit control is the <summary> in the row
                                      below: a data-bs-toggle button here did nothing,
                                      because this host ships no Bootstrap JS. */}}
@@ -57,7 +57,7 @@
                             </td>
                         </tr>
                         <tr id="tr-edit-{{.ID}}">
-                            <td colspan="7" style="background:var(--bg-elevated);">
+                            <td class="bg-elevated" colspan="7">
                                 {{/* <details>, the shape rewards_admin.html uses: a <tr> cannot be
                                      wrapped in one, but the cell can hold it. */}}
                                 <details>
@@ -67,7 +67,7 @@
                             </td>
                         </tr>
                         {{else}}
-                        <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1rem;">No trackers yet. Add one above.</td></tr>
+                        <tr><td class="text-center text-muted p-3" colspan="7">No trackers yet. Add one above.</td></tr>
                         {{end}}
                     </tbody>
                 </table>

@@ -73,7 +73,7 @@
                                  Second line: the three access gates (see / read / write), each a
                                  role + earned-tier pair composed with OR (staff-role OR earned-tier —
                                  the site's standard permission model). */}}
-                            <form method="POST" action="/admin/forum-categories/{{.ID}}" class="p-2" style="margin:0;">
+                            <form method="POST" action="/admin/forum-categories/{{.ID}}" class="p-2 m-0">
                                 <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <div class="d-flex gap-2 align-items-center">
                                     <span class="forum-cat-icon forum-cat-icon-{{.Color}}" style="width:28px;height:28px;border-radius:7px;font-size:0.85rem;flex-shrink:0;"><svg class="icon" aria-hidden="true"><use href="#forums"></use></svg></span>

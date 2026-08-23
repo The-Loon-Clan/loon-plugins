@@ -390,7 +390,7 @@
       instead of microseconds). Remove watches you are done with; the build log says
       when this trade is in effect.
     </p>
-    <form method="post" action="/admin/p/usenet/poster-watch" class="d-flex mb-3" style="gap:.5rem;flex-wrap:wrap">
+    <form method="post" action="/admin/p/usenet/poster-watch" class="d-flex mb-3 gap-2 flex-wrap">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
       <input aria-label="Poster pattern to watch" class="form__input" type="text" name="pattern"
              placeholder="tsukihime" style="max-width:16rem" required>

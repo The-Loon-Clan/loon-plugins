@@ -82,7 +82,7 @@
 <div class="panelV2 mt-3" id="pass-card">
   <div class="panel__header d-flex align-items-center">
     <span id="pass-title">{{if .Pass.Running}}Crawl in progress{{else if .Pass.Any}}Last crawl pass{{else}}Crawler{{end}}</span>
-    <div class="ms-auto d-flex" style="gap:.5rem">
+    <div class="ms-auto d-flex gap-2">
       <form class="d-inline" method="post" action="/admin/p/usenet/crawl">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
         <button class="button button--sm button--outlined" type="submit">Crawl now</button>
@@ -152,13 +152,13 @@
   <div class="panel__header">Recent errors ({{len .Errors}})</div>
   <div class="panel__body">
     <div style="max-height:14rem;overflow:auto;font-size:.85rem">
-      <table class="data-table" style="margin:0">
+      <table class="data-table m-0">
         <caption class="visually-hidden">Recent crawler errors</caption>
         <tbody>
         {{range .Errors}}
           <tr>
             <td style="white-space:nowrap;opacity:.6;width:5rem">{{.When}}</td>
-            <td style="white-space:nowrap"><code>{{.Op}}</code></td>
+            <td class="text-nowrap"><code>{{.Op}}</code></td>
             <td style="word-break:break-word">{{.Msg}}</td>
           </tr>
         {{end}}
@@ -310,7 +310,7 @@
 <div class="panelV2 mt-3">
   <div class="panel__header">Crawler hosts</div>
   <div class="panel__body">
-    <table class="data-table" style="font-size:.88rem;margin:0">
+    <table class="data-table fs-md m-0">
             <caption class="visually-hidden">Crawler workers and the groups each holds</caption>
       <thead><tr><th>Worker</th><th>Groups held</th></tr></thead>
       <tbody>

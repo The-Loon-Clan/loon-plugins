@@ -109,7 +109,7 @@
         <td><input aria-label="Conns" class="form__input" form="prov-{{.ID}}" type="text" name="connections" value="{{.Connections}}"></td>
         <td><input aria-label="Cap" class="form__input" form="prov-{{.ID}}" type="text" name="account_cap" value="{{.AccountCap}}"></td>
         <td><input aria-label="Backbone" class="form__input" form="prov-{{.ID}}" type="text" name="backbone" value="{{.Backbone}}" placeholder="auto" style="min-width:7rem"></td>
-        <td style="white-space:nowrap">
+        <td class="text-nowrap">
           <label class="me-1" title="unchecked providers keep their credentials but are not crawled"><input form="prov-{{.ID}}" type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> on</label>
           <button class="button button--sm button--primary" form="prov-{{.ID}}" type="submit">Save</button>
           <button class="button button--sm button--outlined" form="prov-{{.ID}}" type="submit" formaction="/admin/p/usenet/provider-test">Test</button>
@@ -139,7 +139,7 @@
         <td><input aria-label="Conns" class="form__input" form="prov-new" type="text" name="connections" value="0"></td>
         <td><input aria-label="Cap" class="form__input" form="prov-new" type="text" name="account_cap" value="0"></td>
         <td><input aria-label="Backbone" class="form__input" form="prov-new" type="text" name="backbone" placeholder="auto"></td>
-        <td style="white-space:nowrap">
+        <td class="text-nowrap">
           <button class="button button--sm button--primary" form="prov-new" type="submit">Add</button>
           <button class="button button--sm button--outlined" form="prov-new" type="submit" formaction="/admin/p/usenet/provider-test">Test</button>
         </td>
@@ -232,7 +232,7 @@
             <input type="hidden" name="has_rot18_repair_enabled" value="1">
             <input type="checkbox" name="rot18_repair_enabled" {{if .Rot18RepairEnabled}}checked{{end}}> Repair ROT18 titles (rewrites catalogue titles stored before the crawler could decode rotated subjects &mdash; only rows matching a literal marker, and never one already decoded. Spends no provider bytes; it walks the catalogue once)
         </label>
-        <div style="margin-top:.5rem">
+        <div class="mt-2">
             <button class="button button--primary" type="submit">Save settings</button>
             <span class="text-muted small">applied on each job's next run (intervals take effect next cycle)</span>
         </div>
@@ -270,7 +270,7 @@
                     title="NNTP LIST against the primary provider — adds EVERY group it carries as disabled; existing groups untouched">Fetch full group list…</button>
         </form>
         <form method="get" action="/admin/p/usenet" style="display:flex;gap:.5rem;flex:1;min-width:220px">
-            <input aria-label="Search newsgroups" class="form__input" type="search" name="gq" value="{{.GroupQuery}}" placeholder="search groups…" style="flex:1">
+            <input aria-label="Search newsgroups" class="form__input flex-1" type="search" name="gq" value="{{.GroupQuery}}" placeholder="search groups…">
             <button class="button button--outlined button--sm" type="submit">Search</button>
         </form>
     </div>
@@ -302,7 +302,7 @@
                                 style="width:7rem">
                             {{$t := .Tier}}{{range $.Tiers}}<option value="{{.}}" {{if eq (printf "%s" .) $t}}selected{{end}}>{{.Label}}</option>{{end}}
                         </select></td>
-                    <td style="white-space:nowrap">
+                    <td class="text-nowrap">
                         <form class="d-inline" method="post" action="/admin/p/usenet/group-move">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
                             <input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="dir" value="up">
@@ -352,7 +352,7 @@
                         <span class="text-muted" style="opacity:.35" title="history re-walk unavailable: every article below the forward mark is already recorded as fetched, so the backfill would find no gaps">&#8681;</span>
                         {{end}}
                     </td>
-                    <td style="white-space:nowrap">
+                    <td class="text-nowrap">
                         <input form="tune-{{.Name}}" type="hidden" name="name" value="{{.Name}}">
                         <button form="tune-{{.Name}}" class="button button--sm button--outlined" type="submit">Save</button>
                         <form method="post" action="/admin/p/usenet/group" class="js-group-toggle d-inline">

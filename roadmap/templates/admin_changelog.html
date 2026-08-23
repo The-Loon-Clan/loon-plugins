@@ -1,7 +1,7 @@
 {{define "admin_changelog.html"}}
     <div class="container mt-4 page">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-            <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Admin · Changelog</h1>
+            <h1 class="fs-2xl fw-bold m-0">Admin · Changelog</h1>
             <a class="fs-sm text-primary" href="/help/roadmap?tab=changelog">Public view &rarr;</a>
         </div>
 
@@ -34,7 +34,7 @@
                                 <div class="fw-semibold">{{.Title}}</div>
                                 <div class="fs-2xs text-muted">{{.Description}}</div>
                             </td>
-                            <td style="text-align:right;white-space:nowrap;">
+                            <td class="text-end text-nowrap">
                                 {{/* The Edit control is the <summary> in the row
                                      below: a data-bs-toggle button here did nothing,
                                      because this host ships no Bootstrap JS. */}}
@@ -46,7 +46,7 @@
                             </td>
                         </tr>
                         <tr id="cl-edit-{{.ID}}">
-                            <td colspan="4" style="background:var(--bg-elevated);">
+                            <td class="bg-elevated" colspan="4">
                                 {{/* <details>, the shape rewards_admin.html uses: a <tr> cannot be
                                      wrapped in one, but the cell can hold it. */}}
                                 <details>

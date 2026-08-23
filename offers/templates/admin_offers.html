@@ -3,7 +3,7 @@
     <div class="container mt-4 page-wide">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <div>
-                <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Admin · Offers</h1>
+                <h1 class="fs-2xl fw-bold m-0">Admin · Offers</h1>
                 <div class="text-muted fs-sm">
                     Read-only view of the fulfillment queue. Stuck claims highlighted red;
                     sweeper auto-reopens them on its next tick.
@@ -101,7 +101,7 @@
                                 <a class="text-light fw-semibold text-decoration-none" href="/u/{{.Username}}">{{.Username}}</a>
                                 <div class="text-muted fs-3xs">{{.OfferCount}} offer{{if ne .OfferCount 1}}s{{end}}</div>
                             </div>
-                            <div style="text-align:right;">
+                            <div class="text-end">
                                 <strong class="text-light">{{.FulfilledCount}}</strong>
                                 {{if gt .FailedCount 0}}<span class="text-muted fs-3xs">/ {{.FailedCount}} fail</span>{{end}}
                             </div>
@@ -126,7 +126,7 @@
                                     {{.UserCount}} user{{if ne .UserCount 1}}s{{end}} · {{.OfferCount}} offer{{if ne .OfferCount 1}}s{{end}}
                                 </div>
                             </div>
-                            <div style="text-align:right;">
+                            <div class="text-end">
                                 <strong class="text-light">{{.DeliveriesWeek}}</strong>
                                 <div class="text-muted fs-3xs">7d</div>
                             </div>

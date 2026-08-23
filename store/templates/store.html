@@ -54,7 +54,7 @@
                             {{/* A type that prices itself has no figure to show
                                  until the member picks one — printing the def's
                                  cost there would name a price nobody pays. */}}
-                            <span style="color:var(--warning);font-weight:600;white-space:nowrap;">
+                            <span class="text-warning fw-semibold text-nowrap">
                                 {{if and $w $w.CostFrom}}you choose{{else}}{{.PointsCost}} pts{{end}}
                             </span>
                         </div>

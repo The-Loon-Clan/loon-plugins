@@ -31,7 +31,7 @@ var cardTmpl = template.Must(template.New("discord-card").Parse(`
             <div class="fs-md">
                 <span class="text-success fw-semibold">&#10003; Linked</span>
                 &mdash; <strong>{{.Link.DiscordName}}</strong>
-                <span style="color:var(--text-muted);font-size:0.78rem;margin-left:0.5rem;">since {{.Link.VerifiedAt.Format "Jan 02, 2006"}}</span>
+                <span class="text-muted fs-xs ms-2">since {{.Link.VerifiedAt.Format "Jan 02, 2006"}}</span>
             </div>
             <form method="POST" action="/profile/discord-unlink" class="d-inline"
                   onsubmit="return confirm('Unlink your Discord account?')">
@@ -47,7 +47,7 @@ var cardTmpl = template.Must(template.New("discord-card").Parse(`
             <span class="fs-xs text-muted">Verification Key:</span>
             <code style="background:var(--bg-elevated);padding:0.3rem 0.6rem;border-radius:4px;font-size:0.9rem;user-select:all;">{{.Token}}</code>
         </div>
-        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">
+        <div class="fs-2xs text-muted mt-2">
             In Discord, click the <strong>Verify</strong> button in the verification channel and paste this code.
         </div>
         {{end}}

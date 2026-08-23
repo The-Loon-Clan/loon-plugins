@@ -131,7 +131,7 @@
                             <strong>{{.ActiveCpName}}</strong>
                             <div class="ib-pane-sub">{{len .ActiveMessages}} message{{if ne (len .ActiveMessages) 1}}s{{end}}</div>
                         </div>
-                        <div style="display:flex;gap:0.5rem;align-items:center;">
+                        <div class="d-flex gap-2 align-items-center">
                             {{if .ActiveBlocked}}
                             <form method="POST" action="/inbox/dm/unblock" class="d-inline">
                                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
@@ -170,13 +170,13 @@
                         <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                         <input type="hidden" name="thread_id" value="{{.ActiveThreadID}}">
                         {{.EditorHTML}}
-                        <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.74rem;color:var(--text-muted);">
+                        <div class="d-flex justify-content-between align-items-center fs-2xs text-muted">
                             <span>Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to send</span>
                             <button type="submit" class="button button--primary button--sm">Send</button>
                         </div>
                     </form>
                     {{else if .ActiveBlocked}}
-                    <div class="ib-pane-foot" style="color:var(--text-muted);font-size:0.85rem;justify-content:center;">
+                    <div class="ib-pane-foot text-muted fs-sm justify-content-center">
                         Conversation is blocked. Unblock to resume.
                     </div>
                     {{end}}

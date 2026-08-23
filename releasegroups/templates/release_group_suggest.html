@@ -5,7 +5,7 @@
         <h1>{{if .IsNew}}Suggest a Group{{else}}Suggest Edit · {{.Group.Name}}{{end}}</h1>
 
         <div class="suggest-card">
-            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1.5rem;">
+            <p class="fs-sm text-muted mb-4">
                 {{if .IsNew}}
                     Propose a new release group. A moderator will review and approve before it appears on the public list.
                 {{else}}

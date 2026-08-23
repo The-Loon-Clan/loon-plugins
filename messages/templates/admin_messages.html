@@ -51,7 +51,7 @@
                         <td>{{.FromName}}</td>
                         <td>{{.Title}}</td>
                         <td>{{.Target}}</td>
-                        <td style="white-space:nowrap;">{{.CreatedAt.Format "Jan 02 15:04"}}</td>
+                        <td class="text-nowrap">{{.CreatedAt.Format "Jan 02 15:04"}}</td>
                         <td>
                             <form class="d-inline" method="POST" action="/admin/messages/{{.ID}}/delete">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">

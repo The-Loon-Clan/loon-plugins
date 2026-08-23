@@ -67,7 +67,7 @@
                             {{else if eq .Status "in_progress"}}<span class="tag tag--info">In Progress</span>
                             {{else}}<span class="tag tag--success">Closed</span>{{end}}
                         </td>
-                        <td style="color:var(--text-muted);font-size:0.85rem;white-space:nowrap;">{{.CreatedAt.Format "2006-01-02"}}</td>
+                        <td class="text-muted fs-sm text-nowrap">{{.CreatedAt.Format "2006-01-02"}}</td>
                     </tr>
                     {{end}}
                 </tbody>
