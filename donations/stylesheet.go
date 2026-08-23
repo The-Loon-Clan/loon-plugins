@@ -293,7 +293,12 @@ const donationsCSS = `/* from admin_donate.html */
         }
         .top-row.rank-1 .top-rank { background: linear-gradient(135deg, #f59e0b, #fbbf24); color: #1f1500; }
         .top-row.rank-2 .top-rank { background: linear-gradient(135deg, #94a3b8, #cbd5e1); color: #1a1f2b; }
-        .top-row.rank-3 .top-rank { background: linear-gradient(135deg, #b45309, #d97706); color: #ffffff; }
+        /* Bronze took dark ink and a lighter ramp on 22 Aug 2026. It was the
+           only medal of the three wearing WHITE, and white on #d97706 is
+           3.19:1 -- gold and silver above both use dark ink and clear 8.39 and
+           6.42. The dark stop moved #b45309 -> #c6651b so the dark ink clears
+           there too (4.53); it is still browner than the gold above it. */
+        .top-row.rank-3 .top-rank { background: linear-gradient(135deg, #c6651b, #d97706); color: #1f1500; }
         .top-avatar {
             width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
             background: var(--bg-elevated); object-fit: cover;

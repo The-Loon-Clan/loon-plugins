@@ -95,7 +95,12 @@ const forumCSS = `/* from community_new_thread.html */
     align-items: center;
     justify-content: center;
     background: var(--avatar-fallback-bg, var(--surface-2, #2a2c36));
-    color: var(--text-muted, #8b90a0);
+    /* --ink-on-image, as the host's own .avatar__fallback has it. This said
+       --text-muted, a colour chosen to sit on a PANEL -- and
+       --avatar-fallback-bg is a hue-rotating gradient, so the initial read
+       3.46:1 in nord and 3.58:1 in midnight against its darker stop, on a hue
+       that changes per member. A muted grey has no business on artwork. */
+    color: var(--ink-on-image, #fff);
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -576,7 +581,12 @@ const forumCSS = `/* from community_new_thread.html */
     border-radius: 50%;
     object-fit: cover;
     background: var(--avatar-fallback-bg, var(--surface-2, #2a2c36));
-    color: var(--text-muted, #8b90a0);
+    /* --ink-on-image, as the host's own .avatar__fallback has it. This said
+       --text-muted, a colour chosen to sit on a PANEL -- and
+       --avatar-fallback-bg is a hue-rotating gradient, so the initial read
+       3.46:1 in nord and 3.58:1 in midnight against its darker stop, on a hue
+       that changes per member. A muted grey has no business on artwork. */
+    color: var(--ink-on-image, #fff);
     font-size: 1.15rem;
     font-weight: 700;
     text-transform: uppercase;
