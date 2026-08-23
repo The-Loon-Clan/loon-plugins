@@ -348,6 +348,12 @@ const donationsCSS = `/* from admin_donate.html */
             border-bottom: 1px solid rgba(255,255,255,0.04);
         }
         .referral-rewards .reward-row:last-child { border-bottom: 0; }
+        /* The two perk names carried their colour in a style attribute, which
+           put them beyond every check the site has: a literal in an attribute
+           is invisible to the token audit and to the class audit both, and the
+           painted audit only reached them once these cards had a ground. */
+        .referral-rewards .perk-badge  { color: #85b4ff; }
+        .referral-rewards .perk-border { color: #c0a4ff; }
         .referral-rewards .reward-amount { color: #fbbf24; font-weight: 600; }
         .referral-cta {
             display: block; text-align: center; padding: 0.55rem 0; margin-top: 0.9rem;
