@@ -41,6 +41,10 @@ type ReleaseReader interface {
 	stats(ctx context.Context) (pluginapi.IndexStats, error)
 	// statsTotals is the poll-safe scalar subset of stats — see store.go.
 	statsTotals(ctx context.Context) (indexTotals, error)
+	// statsTotalsExact is the same three scalars with the row counts
+	// COUNTED rather than estimated. For the hourly snapshot, not for the
+	// 5-second poll -- see both implementations.
+	statsTotalsExact(ctx context.Context) (indexTotals, error)
 	// forwardBacklog is the total articles the servers hold past our forward
 	// watermarks across active groups — the crawl catch-up loop's signal.
 	forwardBacklog(ctx context.Context, holdLow bool) (int64, error)

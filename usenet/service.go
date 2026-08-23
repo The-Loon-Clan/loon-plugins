@@ -48,13 +48,20 @@ type statHook struct{ store Store }
 func (h statHook) StatsName() string { return "usenet" }
 
 func (h statHook) Stats(ctx context.Context) ([]pluginapi.Stat, error) {
-	// statsTotals, not stats(): the full stats() scans nzbs and articles four
-	// ways for what this hook reduces to three scalars, and sourcing from the
-	// same place as status.json keeps the surfaces agreeing on what "Active
-	// newsgroups" means — active newsgroups, not per-(backbone, group) state
-	// rows, which was the old len(st.Groups) and differed on multi-backbone
-	// installs.
-	st, err := h.store.statsTotals(ctx)
+	// statsTotalsEXACT, not statsTotals and not stats().
+	//
+	// Not stats(): that scans nzbs and articles four ways for what this hook
+	// reduces to three scalars, and sourcing from the same place as status.json
+	// keeps the surfaces agreeing on what "Active newsgroups" means — active
+	// newsgroups, not per-(backbone, group) state rows, which was the old
+	// len(st.Groups) and differed on multi-backbone installs.
+	//
+	// Not statsTotals: its row counts are the PLANNER's estimate, which is
+	// right for the 5-second poll it was written for and wrong here. This hook
+	// runs once an hour from a background job, and its number is published on a
+	// page beside the host's own COUNT(*). They disagreed by 288 and both read
+	// as facts. A scan an hour is affordable; a scan every five seconds is not.
+	st, err := h.store.statsTotalsExact(ctx)
 	if err != nil {
 		return nil, err
 	}

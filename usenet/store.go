@@ -130,6 +130,35 @@ func (s *PGStore) statsTotals(ctx context.Context) (indexTotals, error) {
 	return t, err
 }
 
+// statsTotalsExact is statsTotals with the two row counts COUNTED.
+//
+// Same three scalars, and the difference is who asks. statsTotals answers a
+// 5-second liveness poll, where an exact count is a table scan on every tick
+// and rough is the right answer -- see its comment, and the 2026-07-24 prod
+// timeout it records.
+//
+// The stats SNAPSHOT is a different question asked once an hour by a
+// background job (stats/plugin.go: RunLoop with a one-hour interval, and the
+// page says so). A scan an hour is affordable where a scan every five seconds
+// is not, and the snapshot is published beside the host's own /stats, which
+// runs COUNT(*). Two pages headed "Site stats" printing 160,692 and 160,980
+// with nothing to say which is which is the report being wrong about itself --
+// both plausible, which is worse than one being obviously broken. See
+// docs/BACKLOG.md #12 in loon-demo-site.
+func (s *PGStore) statsTotalsExact(ctx context.Context) (indexTotals, error) {
+	t, err := s.statsTotals(ctx)
+	if err != nil {
+		return t, err
+	}
+	err = s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		if err := tx.GetContext(ctx, &t.TotalNZBs, `SELECT COUNT(*) FROM nzbs`); err != nil {
+			return err
+		}
+		return tx.GetContext(ctx, &t.TotalStaged, `SELECT COUNT(*) FROM articles`)
+	})
+	return t, err
+}
+
 func (s *PGStore) stats(ctx context.Context) (pluginapi.IndexStats, error) {
 	var st pluginapi.IndexStats
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
