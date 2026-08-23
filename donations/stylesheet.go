@@ -393,7 +393,13 @@ const donationsCSS = `/* from admin_donate.html */
         }
         .recent-donor .rd-name { font-size: 0.78rem; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .recent-donor .rd-amt { font-size: 0.72rem; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: 1px; }
-        .recent-donor .rd-when { font-size: 0.65rem; color: var(--text-muted); opacity: 0.7; margin-top: 1px; }
+        /* No opacity, and on the type scale. --text-muted is ALREADY the
+           muted tier; multiplying it by 0.7 took it to an effective #838383
+           on cosmic-void's panel -- 3.88:1, under AA -- which is the classic
+           way to lose contrast invisibly, because the colour in the source
+           still reads as the approved token. 0.65rem was 10.4px, under the
+           0.70rem floor tokens.css records the a11y sweep setting. */
+        .recent-donor .rd-when { font-size: var(--fs-3xs, 0.7rem); color: var(--text-muted); margin-top: 1px; }
 
         /* ─────────── Outro banner ─────────── */
         .outro-banner {
