@@ -1,11 +1,4 @@
 {{define "community_request_detail.html"}}
-    <style>
-        .datagrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:0.75rem 1.25rem; }
-        .datagrid-title { font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:3px; font-weight:500; }
-        .datagrid-content { font-size:0.875rem; color:var(--text-primary); }
-        .scrape-file { padding:3px 0; border-bottom:1px solid var(--border); font-size:0.82rem; }
-        .scrape-file:last-child { border-bottom:none; }
-    </style>
     <div class="container mt-4 site-container">
 
         {{if .Duplicate}}
@@ -257,7 +250,7 @@
                 <div class="datagrid-title mb-1">Scraped Files</div>
                 <div style="max-height:200px;overflow-y:auto;">
                     {{range splitComma .Request.ScrapedFiles}}
-                    <div class="scrape-file" style="color:var(--text-muted);">{{.}}</div>
+                    <div class="scrape-file scrape-file--detail" style="color:var(--text-muted);">{{.}}</div>
                     {{end}}
                 </div>
                 {{end}}

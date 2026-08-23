@@ -74,9 +74,9 @@ type Request struct {
 	UpscaleOption string
 	// Origin is which path filed this row — see Scope. Read-only here:
 	// the host stamps it at creation and the board never edits it.
-	Origin        string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	Origin    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Automated reports whether nobody typed this request in.

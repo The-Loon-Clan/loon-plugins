@@ -1,63 +1,18 @@
 {{define "community_requests.html"}}
     {{.NzbCardCSS}}
-    <style>
-        .vote-btn { cursor:pointer; border:none; background:none; padding:2px 6px; font-size:0.82rem; }
-        .vote-btn:hover { opacity:0.8; }
-        .scrape-result { font-size:0.78rem; color:var(--text-muted); margin-top:0.5rem; }
-        .scrape-file { padding:2px 0; border-bottom:1px solid var(--border); }
-        .scrape-file:last-child { border-bottom:none; }
-        .anime-preview { font-size:0.78rem; color:var(--text-muted); margin-top:0.5rem; padding:0.5rem; background:var(--bg-elevated); border-radius:4px; }
-        /* "Already on the site?" rows — same muted compact lines as the
-           release page's similar-releases list. */
-        .existing-release-row { font-size:0.78rem; padding:3px 0; border-bottom:1px solid var(--border); }
-        .existing-release-row:last-child { border-bottom:none; }
-        .existing-release-row .badge { font-size:0.65rem; font-weight:500; }
-        .existing-release-meta { color:var(--text-muted); }
-
-        /* Cover-card overrides for the request/feed grids:
-           - drop-shadow on every card so blank-cover ones still read
-             as cards (the default nzb-card relies on the artwork
-             itself to pop; without art the card disappeared into the
-             page bg).
-           - placeholder gets a subtle stripe pattern so it looks
-             intentional rather than broken. */
-        .cover-card {
-            box-shadow: 0 2px 6px rgba(0,0,0,0.45);
-        }
-        .cover-card:hover {
-            box-shadow: 0 4px 10px rgba(0,0,0,0.55);
-        }
-        .cover-card .cover-img-placeholder {
-            background:
-                repeating-linear-gradient(
-                    45deg,
-                    var(--bg-elevated) 0 12px,
-                    rgba(255,255,255,0.025) 12px 14px
-                );
-            border-bottom:1px solid var(--border);
-        }
-        /* Footer-button uniformity: bootstrap's per-color-variant
-           rendering (and its line-height handling around `Q`-tail
-           glyphs) was making NZB / Queued / Request / Parked render at
-           subtly different heights despite identical classes. Lock the
-           geometry explicitly so visual consistency doesn't depend on
-           glyph metrics. */
-        .cover-card .card-footer .btn {
-            min-height: 30px;
-            padding: 4px 10px;
-            line-height: 1.2;
-            font-size: 0.82rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-    </style>
     <script>
-    // Pre-set the inactive view's display:none before the body paints so
-    // there's no flash of the wrong layout. Mirrors new_releases.html.
+    // Pre-set the inactive view before the body paints so there is no flash of
+    // the wrong layout.
+    //
+    // A CLASS on <html>, not a <style> element written into the document. The
+    // old form was document.write('<style>...') which creates an inline style
+    // element at RUNTIME -- the one thing a tightened style-src-elem forbids,
+    // and the last dependency on 'unsafe-inline' left in this tree after the
+    // stylesheets moved out. The rules live in the plugin stylesheet now; this
+    // only says which mode is on, and it still runs before paint.
     (function(){
         var m = localStorage.getItem('community_view_mode') || 'list';
-        document.write('<style>' + (m === 'grid' ? '#view-table' : '#view-grid') + '{display:none}</style>');
+        document.documentElement.classList.add(m === 'grid' ? 'rq-view-grid' : 'rq-view-list');
     })();
     </script>
     <div class="container mt-4 site-container">

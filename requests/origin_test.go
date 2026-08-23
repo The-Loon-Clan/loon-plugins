@@ -234,11 +234,11 @@ func TestNeedsSourcingRendersWhatMakesARequestFindable(t *testing.T) {
 	getRequestsPage(t, h, "?tab=sourcing")
 
 	for _, want := range []string{
-		"Oishinbo BD-BOX",  // the title
-		"S01",              // season, and
-		"E1-23",            // episode range — what makes it findable
-		"AniDB:4242",       // the catalog link
-		"asked by hopeful", // who is waiting
+		"Oishinbo BD-BOX",                   // the title
+		"S01",                               // season, and
+		"E1-23",                             // episode range — what makes it findable
+		"AniDB:4242",                        // the catalog link
+		"asked by hopeful",                  // who is waiting
 		row.CreatedAt.Format("Jan 02 2006"), // since when
 		"shelved",                           // and that it is off the board
 		"only ever released on a private tracker", // the member's own note

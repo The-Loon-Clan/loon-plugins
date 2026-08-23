@@ -63,7 +63,7 @@ func sampleRequest(id int64) *Request {
 		VoteCount: 3, BoostCount: 1, PriorityScore: 9,
 		// A person filed this one. Fixtures default to the members' side so
 		// a test that cares about automation has to say so.
-		Origin: string(ScopeMember),
+		Origin:      string(ScopeMember),
 		Priorities:  []RequestPriority{{TypeSlug: "boost", Count: 1, Label: "Boost", IconHTML: "<b>+</b>", ShowCount: true}},
 		RemuxOption: "none", CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
@@ -87,11 +87,11 @@ func listPageData(tab string) gin.H {
 		"AllowedHosts":   allowedRequestHosts,
 		"ViewerID":       7,
 		// Every tab renders every badge — see the tab strip's comment.
-		"TabCounts":      map[string]int{"open": 7, "automated": 6413, "sourcing": 9},
-		"AnimeID":        0,
-		"FeedSource":     "",
-		"FeedStatus":     "",
-		"Query":          "",
+		"TabCounts":  map[string]int{"open": 7, "automated": 6413, "sourcing": 9},
+		"AnimeID":    0,
+		"FeedSource": "",
+		"FeedStatus": "",
+		"Query":      "",
 	}
 }
 
