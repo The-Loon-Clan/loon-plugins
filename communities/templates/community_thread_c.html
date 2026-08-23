@@ -5,53 +5,6 @@
      pre-rendered .Pagination HTML. Data is communityThreadVM; .Posts rows
      are threadPostVM (post + pre-rendered BodyHTML). */}}
 {{define "community_thread_c.html"}}
-    <style>
-        .ct-page { padding: 1.4rem 1rem 3rem; }
-        .ct-shell { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1.1rem; align-items: start; }
-        @media (max-width: 1000px) { .ct-shell { grid-template-columns: 1fr; } }
-
-        .ct-header { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
-        .ct-header h1 { font-size: 1.45rem; font-weight: 800; margin: 0 0 0.4rem; color: var(--text-primary); }
-        .ct-meta { font-size: 0.78rem; color: var(--text-muted); display: flex; gap: 0.7rem; flex-wrap: wrap; }
-        .ct-meta a { color: var(--blue); text-decoration: none; }
-        .ct-body { font-size: 0.95rem; color: var(--text-primary); margin-top: 0.85rem; line-height: 1.55; }
-        .ct-body p { margin: 0 0 0.7rem; }
-
-        .ct-mod-bar { display: flex; gap: 0.4rem; margin-top: 0.6rem; flex-wrap: wrap; }
-        .ct-mod-bar form { display: inline-block; }
-
-        .ct-post { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.05rem; margin-bottom: 0.6rem; }
-        .ct-post-head { display: flex; align-items: center; gap: 0.55rem; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.45rem; }
-        .ct-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--bg-elevated); overflow: hidden; flex-shrink: 0; display:inline-flex; align-items:center; justify-content:center; font-weight:700; color:var(--blue); font-size: 0.78rem; }
-        .ct-avatar img { width:100%; height:100%; object-fit:cover; }
-        .ct-post-user { color: var(--text-primary); font-weight: 600; text-decoration: none; }
-        .ct-post-body { font-size: 0.92rem; color: var(--text-primary); line-height: 1.5; }
-        .ct-post-body p { margin: 0 0 0.55rem; }
-
-        .ct-reply-form { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1rem; margin-top: 1rem; }
-        .ct-reply-form textarea { width: 100%; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); padding: 0.6rem 0.75rem; font-size: 0.9rem; min-height: 96px; resize: vertical; }
-
-        /* Sidebar reused from community_view */
-        .c-side { display: flex; flex-direction: column; gap: 0.9rem; }
-        .c-side-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.95rem 1rem; }
-        .c-side-card h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--text-muted); margin: 0 0 0.6rem; }
-        .c-rule { border-bottom: 1px solid var(--border); font-size: 0.85rem; }
-        .c-rule:last-child { border-bottom: none; }
-        .c-rule > summary { display: flex; align-items: flex-start; gap: 0.4rem; padding: 0.5rem 0; cursor: pointer; list-style: none; }
-        .c-rule > summary::-webkit-details-marker { display: none; }
-        .c-rule > summary::marker { content: ""; }
-        .c-rule-n { color: var(--text-muted); font-weight: 700; flex-shrink: 0; min-width: 1.1em; }
-        .c-rule-title { font-weight: 600; color: var(--text-primary); flex: 1; min-width: 0; }
-        .c-rule-chev { color: var(--text-muted); flex-shrink: 0; transition: transform 0.15s ease; }
-        .c-rule[open] > summary .c-rule-chev { transform: rotate(180deg); }
-        .c-rule-static { display: flex; align-items: flex-start; gap: 0.4rem; padding: 0.5rem 0; }
-        .c-rule-body { font-size: 0.78rem; color: var(--text-muted); padding: 0 0 0.55rem 1.5rem; white-space: pre-wrap; }
-        .c-mod-list { display: flex; flex-direction: column; gap: 0.4rem; }
-        .c-mod { display: flex; align-items: center; gap: 0.55rem; text-decoration: none; color: var(--text-primary); font-size: 0.82rem; }
-        .c-mod .m-avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--bg-elevated); overflow: hidden; flex-shrink: 0; }
-        .c-mod .m-avatar img { width:100%; height:100%; object-fit:cover; }
-        .c-mod .m-role { font-size: 0.66rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-    </style>
     <div class="container page ct-page">
         <nav aria-label="breadcrumb" style="font-size:0.8rem;margin-bottom:0.6rem;">
             <a href="/c" style="color:var(--text-muted);text-decoration:none;">Communities</a>

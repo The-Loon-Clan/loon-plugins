@@ -1,41 +1,4 @@
 {{define "admin_wiki_post_form.html"}}
-    <style>
-        .editor-wrap { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; min-height: 520px; }
-        .editor-wrap textarea {
-            flex: 1; border: none; border-right: 1px solid var(--border); border-radius: 0;
-            resize: none; font-family: monospace; font-size: 0.82rem;
-            background: var(--bg-elevated); color: var(--text-primary); padding: 0.75rem;
-            outline: none; line-height: 1.6;
-        }
-        .editor-wrap textarea:focus { box-shadow: none; }
-        .preview-pane {
-            flex: 1; overflow-y: auto; padding: 1rem;
-            background: var(--bg-surface); font-size: 0.875rem;
-            color: var(--text-primary); line-height: 1.7;
-        }
-        .toolbar { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
-        .toolbar button, .toolbar label {
-            font-size: 0.78rem; padding: 2px 9px; line-height: 1.6;
-            background: var(--bg-elevated); border: 1px solid var(--border);
-            color: var(--text-primary); border-radius: 4px; cursor: pointer;
-        }
-        .toolbar button:hover, .toolbar label:hover { background: var(--border); }
-        /* Preview styles */
-        .preview-pane h1,.preview-pane h2,.preview-pane h3,
-        .preview-pane h4,.preview-pane h5,.preview-pane h6 { margin-top:1.25rem;margin-bottom:0.4rem;color:var(--text-primary);font-weight:600; }
-        .preview-pane p { margin-bottom:0.75rem; }
-        .preview-pane code { background:var(--bg-elevated);padding:0.15em 0.4em;border-radius:3px;font-size:0.875em;color:var(--blue); }
-        .preview-pane pre { background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:0.75rem;overflow-x:auto;margin-bottom:0.75rem; }
-        .preview-pane pre code { background:none;padding:0;color:var(--text-primary); }
-        .preview-pane blockquote { border-left:3px solid var(--border);padding-left:1rem;margin-left:0;color:var(--text-muted);margin-bottom:0.75rem; }
-        .preview-pane img { max-width:100%;border-radius:4px; }
-        .preview-pane table { width:100%;border-collapse:collapse;margin-bottom:0.75rem; }
-        .preview-pane th,.preview-pane td { border:1px solid var(--border);padding:0.4rem 0.6rem; }
-        .preview-pane th { background:var(--bg-elevated); }
-        .preview-pane a { color:var(--blue); }
-        .preview-pane ul,.preview-pane ol { padding-left:1.5rem;margin-bottom:0.75rem; }
-        .preview-pane hr { border-color:var(--border);margin:1rem 0; }
-    </style>
 
     <div class="container mt-4 page-wide">
 

@@ -110,6 +110,8 @@ func (p *Plugin) Metadata() core.Metadata {
 // domain-specific paths via Engine(), and moving them would break
 // bookmarks, templates, and sitemap URLs for zero gain.
 func (p *Plugin) Provision(c *core.Core) error {
+	// The stylesheet these pages used to carry inline. See stylesheet.go.
+	pluginapi.RegisterStylesheet(c, "wiki", wikiCSS)
 	if (deps.RenderPage == nil && deps.BaseData == nil) || deps.Markdown == nil || deps.Files == nil || deps.CSRFToken == nil {
 		return fmt.Errorf("wiki: SetDeps not called (RenderPage or BaseData, plus Markdown/Files/CSRFToken — wire it in main() before core.Boot)")
 	}

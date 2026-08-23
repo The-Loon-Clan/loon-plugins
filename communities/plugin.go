@@ -18,6 +18,7 @@ package communities
 import (
 	"context"
 	"fmt"
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 
 	"github.com/the-loon-clan/loon/core"
 )
@@ -51,6 +52,8 @@ func (p *Plugin) Metadata() core.Metadata {
 // (owner, community mod, login) live in the handlers, matching
 // the pre-extraction behaviour.
 func (p *Plugin) Provision(c *core.Core) error {
+	// The stylesheet these pages used to carry inline. See stylesheet.go.
+	pluginapi.RegisterStylesheet(c, "communities", communitiesCSS)
 	// One check for every render seam, because a missing one is not a
 	// degraded page — it is a nil call on the first request. Uploads are
 	// deliberately excluded: a host with no blob store loses banner images

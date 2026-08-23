@@ -5,58 +5,6 @@
      partial became the pre-rendered .Pagination HTML, everything else is
      byte-for-byte the page prod served. Data is communitiesIndexVM. */}}
 {{define "communities_index.html"}}
-    <style>
-        .c-page { padding: 1.4rem 1rem 3rem; }
-        /* One card per row: the banner IS the card. The card is a thin frame
-           of surface around the image; every word sits ON the banner over a
-           left-weighted scrim, so any artwork stays legible without asking
-           uploaders to leave dead space for text. */
-        .c-list { display:flex; flex-direction:column; gap:1rem; max-width: 1100px; margin: 0 auto; }
-        .c-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 0.6rem;
-            display: block;
-            text-decoration: none;
-            color: inherit;
-            transition: border-color 0.15s ease, transform 0.15s ease;
-        }
-        .c-card:hover { border-color: var(--blue); transform: translateY(-2px); }
-        .c-banner {
-            position: relative;
-            border-radius: 10px;
-            overflow: hidden;
-            min-height: 190px;
-            padding: 1.1rem 1.4rem;
-            display: flex; flex-direction: column; justify-content: space-between; gap: 1.4rem;
-            background: linear-gradient(135deg, rgba(91,138,245,0.35), rgba(168,85,247,0.25));
-            background-size: cover; background-position: center;
-        }
-        /* The scrim: strongest where the text lives, gone by mid-image. A
-           separate layer rather than a text-shadow alone, because a shadow
-           cannot rescue white text over a white sky. */
-        .c-banner::before {
-            content: ""; position: absolute; inset: 0;
-            background: linear-gradient(90deg, rgba(8,10,16,0.72), rgba(8,10,16,0.35) 45%, rgba(8,10,16,0.05) 75%);
-        }
-        .c-banner > * { position: relative; }
-        .c-name {
-            margin: 0; font-size: 1.55rem; font-weight: 800; line-height: 1.15;
-            color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.75);
-            max-width: 32ch;
-        }
-        .c-info { color: #fff; text-shadow: 0 1px 5px rgba(0,0,0,0.8); max-width: 60ch; }
-        .c-meta { font-size: 0.78rem; opacity: 0.92; }
-        .c-meta strong { font-variant-numeric: tabular-nums; }
-        .c-desc { font-size: 0.86rem; line-height: 1.45; margin-top: 0.3rem; opacity: 0.95; }
-        .c-slug { font-size: 0.72rem; opacity: 0.75; }
-        .c-empty { text-align:center; padding: 3rem 1rem; color: var(--text-muted); font-size: 0.9rem; }
-        @media (max-width: 640px) {
-            .c-banner { min-height: 150px; padding: 0.9rem 1rem; }
-            .c-name { font-size: 1.2rem; }
-        }
-    </style>
     <div class="container page c-page">
         <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
             <div>

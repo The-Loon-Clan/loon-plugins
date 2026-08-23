@@ -3,6 +3,7 @@ package releasegroups
 import (
 	"context"
 	"fmt"
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 
 	"github.com/the-loon-clan/loon/core"
 	"github.com/the-loon-clan/loon/schedule"
@@ -31,6 +32,8 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
+	// The stylesheet these pages used to carry inline. See stylesheet.go.
+	pluginapi.RegisterStylesheet(c, "releasegroups", releasegroupsCSS)
 	p.process = c.Process
 
 	// Worker leg: the weekly nekoBT scraper + the daily archive sweep

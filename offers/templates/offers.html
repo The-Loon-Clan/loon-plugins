@@ -1,24 +1,4 @@
 {{define "offers.html"}}
-    <style>
-        .of-page { margin: 0 auto; padding: 1.5rem 1rem 4rem; }
-        .of-hint  { color: var(--text-muted); font-size: 0.72rem; margin-top: 0.1rem; }
-        .of-pill {
-            display: inline-block;
-            font-size: 0.66rem;
-            padding: 2px 7px;
-            border-radius: 999px;
-            margin-right: 0.25rem;
-        }
-        .of-pill-priv { background: rgba(96,165,250,0.15); color:#60a5fa; }
-        .of-pill-pub  { background: rgba(74,222,128,0.15); color:#4ade80; }
-        .of-pill-per  { background: rgba(168,85,247,0.15); color:#c084fc; }
-        /* The disclosure chevron on collapsed show-cards. The native marker
-           is hidden (list-style:none on the summary + the webkit rule here)
-           so the header reads as a card, not a bullet list. */
-        .of-group summary::-webkit-details-marker { display: none; }
-        .of-chevron { color: var(--text-muted); font-size: 0.9rem; transition: transform 0.15s ease; }
-        .of-group[open] .of-chevron { transform: rotate(90deg); }
-    </style>
 
     <div class="container page of-page">
         <div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
