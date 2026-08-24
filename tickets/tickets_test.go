@@ -73,3 +73,32 @@ func TestTicketVisibleTo(t *testing.T) {
 		})
 	}
 }
+
+// Reply reachability is WIDER than read visibility, and that is the
+// contract, not an accident: "Staff may reply on any ticket ... Admin may
+// read a ticket they do not own" (Viewer's own doc). Until 2026-08-24 the
+// reply gate checked Admin, which made a mod-staffed support queue 404 on
+// every ticket in it. This pins the corrected shape — and the asymmetry:
+// a mod can ANSWER a ticket the detail view still refuses to SHOW them.
+func TestReplyReachableIsStaffNotAdmin(t *testing.T) {
+	const owner = 42
+	tests := []struct {
+		name   string
+		viewer Viewer
+		want   bool
+	}{
+		{"owner replies on own ticket", Viewer{ID: owner}, true},
+		{"staff (mod) replies on a member's ticket", Viewer{ID: 5, Staff: true}, true},
+		{"admin replies on a member's ticket", Viewer{ID: 7, Admin: true, Staff: true}, true},
+		{"member cannot reply on another's ticket", Viewer{ID: 7}, false},
+		{"anonymous (id 0) never reaches a ticket", Viewer{ID: 0, Staff: false}, false},
+	}
+	tk := &SupportTicket{UserID: owner}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := replyReachable(tk, &tc.viewer); got != tc.want {
+				t.Errorf("replyReachable(owner=%d, viewer=%+v) = %v, want %v", owner, tc.viewer, got, tc.want)
+			}
+		})
+	}
+}

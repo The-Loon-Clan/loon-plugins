@@ -144,7 +144,7 @@ func (h *Handlers) ReplyTicket(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	ticket, err := h.store.GetTicketByID(ctx, id)
-	if err != nil || !pluginapi.VisibleTo(ticket.UserID, user.ID, user.Admin) {
+	if err != nil || !replyReachable(ticket, user) {
 		h.fail(c, http.StatusNotFound, "noticket")
 		return
 	}
@@ -271,6 +271,18 @@ func clampSubject(s string) string {
 		return s[:200]
 	}
 	return s
+}
+
+// replyReachable — the owner, or STAFF. The Viewer contract has always said
+// "Staff may reply on any ticket" while the reply path checked Admin — so a
+// mod handed the support queue 404'd on every ticket in it, and the host's
+// staff-reply capability documented its ticket surface as inert for exactly
+// this reason. Aligned with the stated contract 2026-08-24, operator-
+// approved. READING someone else's ticket (ticketVisibleTo below) stays
+// Admin-only; Staff and Admin are split in Viewer precisely so each gate
+// can say which one it means.
+func replyReachable(t *SupportTicket, v *Viewer) bool {
+	return pluginapi.VisibleTo(t.UserID, v.ID, v.Admin || v.Staff)
 }
 
 // ticketVisibleTo — owner and admin only. The opt-in public-visibility
