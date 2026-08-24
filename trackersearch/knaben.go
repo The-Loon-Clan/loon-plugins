@@ -36,17 +36,27 @@ func (k *knaben) Slug() string { return "knaben" }
 // knabenHit is one result, fields as documented. virusDetection is kept so
 // flagged uploads can be dropped rather than recommended.
 type knabenHit struct {
-	Title          string   `json:"title"`
-	Bytes          int64    `json:"bytes"`
-	Seeders        int      `json:"seeders"`
-	Peers          int      `json:"peers"`
-	Hash           string   `json:"hash"`
-	MagnetURL      string   `json:"magnetUrl"`
-	Details        string   `json:"details"`
-	Date           string   `json:"date"`
-	Tracker        string   `json:"tracker"`
-	VirusDetection []string `json:"virusDetection"`
+	Title     string `json:"title"`
+	Bytes     int64  `json:"bytes"`
+	Seeders   int    `json:"seeders"`
+	Peers     int    `json:"peers"`
+	Hash      string `json:"hash"`
+	MagnetURL string `json:"magnetUrl"`
+	Details   string `json:"details"`
+	Date      string `json:"date"`
+	Tracker   string `json:"tracker"`
+	// virusDetection is a SCORE, 0..1, not a list -- the probability upstream
+	// assigns the upload being malware. The name reads like a flag and the
+	// first sample happened to be an empty array; a live search proved it a
+	// float and the strict typing rejected the whole response. Above the
+	// threshold the candidate is dropped.
+	VirusDetection float64 `json:"virusDetection"`
 }
+
+// virusThreshold is where a knaben malware score stops being noise. Their own
+// hide_unsafe filter is the first line; this is a conservative second one, set
+// well clear of the ~0.2 scores ordinary releases carry.
+const virusThreshold = 0.8
 
 func (k *knaben) Search(ctx context.Context, q pluginapi.EpisodeSearch) ([]pluginapi.TrackerCandidate, error) {
 	if q.ShowTitle == "" {
@@ -85,7 +95,7 @@ func (k *knaben) Search(ctx context.Context, q pluginapi.EpisodeSearch) ([]plugi
 	}
 	out := make([]pluginapi.TrackerCandidate, 0, len(payload.Hits))
 	for _, h := range payload.Hits {
-		if len(h.VirusDetection) > 0 {
+		if h.VirusDetection >= virusThreshold {
 			continue
 		}
 		c := pluginapi.TrackerCandidate{

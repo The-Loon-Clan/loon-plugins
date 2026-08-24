@@ -25,10 +25,10 @@ const knabenFixture = `{"total":{"value":12},"hits":[
   "hash":"2F0A92A8FB973932C18977C6E003C0FD41FFC985",
   "magnetUrl":"magnet:?xt=urn:btih:2F0A92A8FB973932C18977C6E003C0FD41FFC985",
   "details":"https://knaben.xyz/thepiratebay/description.php?id=84198292",
-  "date":"2026-08-22T18:55:00+00:00","tracker":"The Pirate Bay","virusDetection":[]},
+  "date":"2026-08-22T18:55:00+00:00","tracker":"The Pirate Bay","virusDetection":0.18},
  {"title":"The.Ark.S03E04.TOTALLY.A.VIRUS.exe","bytes":1024,"seeders":999,"peers":0,
   "hash":"AAAA","magnetUrl":"magnet:?xt=urn:btih:AAAA","details":"",
-  "date":"2026-08-22T00:00:00+00:00","tracker":"Shady","virusDetection":["win32.evil"]}
+  "date":"2026-08-22T00:00:00+00:00","tracker":"Shady","virusDetection":0.97}
 ]}`
 
 const torrentsCSVFixture = `{"torrents":[
@@ -182,8 +182,8 @@ func TestOneFailingSourceDoesNotFailTheSearch(t *testing.T) {
 // Best-first means the healthiest swarm leads.
 func TestCandidatesAreSortedBySwarmHealth(t *testing.T) {
 	multi := serve(t, `{"hits":[
-	 {"title":"weak","bytes":10,"seeders":1,"peers":0,"hash":"01","magnetUrl":"m","details":"","date":"2026-08-22T00:00:00+00:00","tracker":"x","virusDetection":[]},
-	 {"title":"strong","bytes":10,"seeders":50,"peers":9,"hash":"02","magnetUrl":"m","details":"","date":"2026-08-22T00:00:00+00:00","tracker":"x","virusDetection":[]}
+	 {"title":"weak","bytes":10,"seeders":1,"peers":0,"hash":"01","magnetUrl":"m","details":"","date":"2026-08-22T00:00:00+00:00","tracker":"x","virusDetection":0.1},
+	 {"title":"strong","bytes":10,"seeders":50,"peers":9,"hash":"02","magnetUrl":"m","details":"","date":"2026-08-22T00:00:00+00:00","tracker":"x","virusDetection":0.1}
 	]}`)
 	c := &Client{
 		lastErr: map[string]string{}, nextAt: map[string]time.Time{},
