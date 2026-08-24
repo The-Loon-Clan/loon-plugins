@@ -1460,7 +1460,19 @@
         // the board keeps its empty box.
         var arrive = new URLSearchParams(window.location.search);
         var arriveTitle = (arrive.get('title') || '').trim();
-        if (arriveTitle) {
+        // An arrival can also carry the torrent ITSELF (the anime page's
+        // Torrents tab picked one): fill the link and hash fields the way
+        // selecting a search result would, and skip the auto-search — the
+        // choosing already happened.
+        var arriveUrl = (arrive.get('nyaa_url') || '').trim();
+        var arriveHash = (arrive.get('info_hash') || '').trim();
+        if (arriveUrl || arriveHash) {
+            var uf = document.getElementById('field-nyaa-url');
+            var hf = document.getElementById('field-info-hash');
+            if (uf && arriveUrl && /^(https?:|magnet:)/i.test(arriveUrl)) uf.value = arriveUrl;
+            else if (uf && arriveHash) uf.value = 'magnet:?xt=urn:btih:' + arriveHash;
+            if (hf && arriveHash) hf.value = arriveHash;
+        } else if (arriveTitle) {
             var arriveQ = arriveTitle;
             var arriveEp = (arrive.get('episodes') || '').trim();
             if (arriveEp) arriveQ += ' ' + arriveEp;
