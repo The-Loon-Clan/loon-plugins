@@ -219,3 +219,21 @@ func TestPagesRenderEmpty(t *testing.T) {
 		t.Error("a badge rendered from an absent TabCounts")
 	}
 }
+
+// A prefilled arrival (a missing-episode tile's Request button) auto-runs
+// the torrent search with "<title> <episode>" instead of leaving the member
+// to retype what the link already said. Rendered markers, because the whole
+// behaviour is client-side: the composed query and the self-firing call
+// must both survive template edits.
+func TestRequestBoardAutoSearchesOnPrefilledArrival(t *testing.T) {
+	out := testRender(t, "community_requests.html", listPageData("open"))
+	for _, want := range []string{
+		"var arrive = new URLSearchParams(window.location.search)",
+		"if (arriveEp) arriveQ += ' ' + arriveEp;",
+		"input.value = arriveQ;",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the prefilled-arrival auto-search lost %q", want)
+		}
+	}
+}

@@ -1450,6 +1450,23 @@
 
         btn.addEventListener('click', doSearch);
         input.addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+
+        // Arriving from a missing-episode tile carries the show and episode
+        // in the query string, and the reader's next act there is always the
+        // same one: search for that episode. So the search runs itself —
+        // query composed as "<title> <episode>", the shape torrent titles
+        // actually carry — instead of asking the member to retype what the
+        // link already said. Only on prefilled arrivals; a plain visit to
+        // the board keeps its empty box.
+        var arrive = new URLSearchParams(window.location.search);
+        var arriveTitle = (arrive.get('title') || '').trim();
+        if (arriveTitle) {
+            var arriveQ = arriveTitle;
+            var arriveEp = (arrive.get('episodes') || '').trim();
+            if (arriveEp) arriveQ += ' ' + arriveEp;
+            input.value = arriveQ;
+            doSearch();
+        }
     })();
 
     // When a search result is selected, fill in the URL + info_hash fields.
