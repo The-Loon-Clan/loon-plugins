@@ -36,7 +36,14 @@ func (p *Plugin) Metadata() core.Metadata {
 	}
 }
 
+// fxCore is the Core, kept for the username chip in views.go. Package level
+// because the FuncMap is bound once and the closure it binds needs a handle
+// that outlives that call; it reads fxCore at RENDER, so a nil at bind time is
+// fine and a Provision that never ran degrades to a plain profile link.
+var fxCore *core.Core
+
 func (p *Plugin) Provision(c *core.Core) error {
+	fxCore = c
 	// The stylesheet these pages used to carry inline. See stylesheet.go.
 	pluginapi.RegisterStylesheet(c, "offers", offersCSS)
 	p.process = c.Process

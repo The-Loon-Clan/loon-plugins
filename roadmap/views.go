@@ -1,6 +1,7 @@
 package roadmap
 
 import (
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 	"embed"
 	"fmt"
 	"html/template"
@@ -20,6 +21,13 @@ var pageTmpl *template.Template
 
 func parseTemplates() error {
 	t, err := template.New("roadmap").Funcs(template.FuncMap{
+		// The site's username chip, drawn by the HOST: role colour, any
+		// equipped name effect, the profile link. Asking rather than drawing
+		// our own anchor is what keeps a member's cosmetics from stopping at
+		// this plugin's pages.
+		"userTag": func(name string) template.HTML {
+			return pluginapi.RenderUserTag(fxCore, name)
+		},
 		"relativeTime": func(v any) string { return deps.RelativeTime(v) },
 		// Exact copies of the host FuncMap entries these pages rendered
 		// with — parity is the lift's contract.

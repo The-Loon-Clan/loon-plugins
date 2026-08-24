@@ -1,6 +1,7 @@
 package offers
 
 import (
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 	"embed"
 	"fmt"
 	"html/template"
@@ -26,6 +27,13 @@ var pageFS embed.FS
 //
 // `slice` is not here: it has been a template builtin since Go 1.13.
 var pageTmpl = template.Must(template.New("offers").Funcs(template.FuncMap{
+		// The site's username chip, drawn by the HOST: role colour, any
+		// equipped name effect, the profile link. Asking rather than drawing
+		// our own anchor is what keeps a member's cosmetics from stopping at
+		// this plugin's pages.
+		"userTag": func(name string) template.HTML {
+			return pluginapi.RenderUserTag(fxCore, name)
+		},
 	"add": func(a, b int) int { return a + b },
 	// Byte formatting, same reasoning as the others: pure, trivial, and it
 	// cannot drift into a different ANSWER the way a shared hash could. The

@@ -62,7 +62,7 @@
                 {{end}}
                 {{if .Owners}}
                 <div class="rg-sub">
-                    Owners: {{range $i, $o := .Owners}}{{if $i}}, {{end}}<a class="text-light text-decoration-none" href="/u/{{$o.Username}}">@{{$o.Username}}</a>{{if ne $o.Role "owner"}} <span class="text-subtle">({{$o.Role}})</span>{{end}}{{end}}
+                    Owners: {{range $i, $o := .Owners}}{{if $i}}, {{end}}{{userTag $o.Username}}{{if ne $o.Role "owner"}} <span class="text-subtle">({{$o.Role}})</span>{{end}}{{end}}
                 </div>
                 {{end}}
                 <div class="rg-header-stats">
@@ -330,7 +330,7 @@
                         <div class="rg-min0">
                             <h6 class="m-0 fs-base fw-semibold">{{.Title}}</h6>
                             <div class="rg-item-sub">
-                                by <a class="text-light text-decoration-none" href="/u/{{.AuthorName}}">@{{.AuthorName}}</a> &middot; {{.CreatedAt.Format "Jan 2, 2006 15:04"}}
+                                by {{userTag .AuthorName}} &middot; {{.CreatedAt.Format "Jan 2, 2006 15:04"}}
                             </div>
                         </div>
                         {{if or $.IsAdmin (and $.User (eq .AuthorUserID $.User.ID)) $.ViewerIsOwner}}

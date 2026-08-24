@@ -70,11 +70,11 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <a class="text-primary text-decoration-none" href="/u/{{.RequesterUsername}}">{{.RequesterUsername}}</a>
+                                    {{userTag .RequesterUsername}}
                                 </td>
                                 <td>
                                     {{if .ClaimerUsername}}
-                                        <a class="text-primary text-decoration-none" href="/u/{{.ClaimerUsername}}">{{.ClaimerUsername}}</a>
+                                        {{userTag .ClaimerUsername}}
                                         {{if .TrackerName}}<div class="text-muted fs-3xs">via {{.TrackerName}}</div>{{end}}
                                     {{else}}
                                         <span class="text-muted">—</span>
@@ -98,7 +98,7 @@
                         {{range .Leaders}}
                         <div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
                             <div style="flex:1;min-width:0;">
-                                <a class="text-light fw-semibold text-decoration-none" href="/u/{{.Username}}">{{.Username}}</a>
+                                {{userTag .Username}}
                                 <div class="text-muted fs-3xs">{{.OfferCount}} offer{{if ne .OfferCount 1}}s{{end}}</div>
                             </div>
                             <div class="text-end">

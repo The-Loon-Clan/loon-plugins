@@ -146,7 +146,7 @@
                                 <span class="prop-status prop-status-{{.Status}} ms-1">{{statusLabel .Status}}</span>
                             </div>
                             <div class="prop-meta">
-                                <a class="text-muted text-decoration-none" href="/u/{{.Username}}" onclick="event.stopPropagation();">{{.Username}}</a>
+                                {{userTag .Username}}
                                 {{if eq .UserRole "admin"}}<span class="role-badge role-admin ms-1">Admin</span>
                                 {{else if eq .UserRole "mod"}}<span class="role-badge role-mod ms-1">Mod</span>
                                 {{else if eq .UserRole "contributor"}}<span class="role-badge role-contributor ms-1">Contributor</span>{{end}}
