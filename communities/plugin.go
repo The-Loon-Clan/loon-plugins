@@ -51,6 +51,11 @@ func (p *Plugin) Metadata() core.Metadata {
 // site's default access policy (Authenticate); per-action gates
 // (owner, community mod, login) live in the handlers, matching
 // the pre-extraction behaviour.
+// fxCore is the Core, kept for the username chip in views.go. Package level
+// because the FuncMap is bound once at Provision and the func it binds needs a
+// handle that outlives that call.
+var fxCore *core.Core
+
 func (p *Plugin) Provision(c *core.Core) error {
 	// The stylesheet these pages used to carry inline. See stylesheet.go.
 	pluginapi.RegisterStylesheet(c, "communities", communitiesCSS)
@@ -68,6 +73,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// than the first page view. Skipped on the legacy contract, where the
 	// host renders its own copies of these templates by name.
 	if deps.RenderPage != nil {
+		// Kept for the userTag template func in views.go — the host draws the
+		// username chip and this is the handle to ask it.
+		fxCore = c
 		if err := parseTemplates(); err != nil {
 			return err
 		}

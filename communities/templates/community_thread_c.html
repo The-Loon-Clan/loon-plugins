@@ -21,7 +21,7 @@
                         {{.Thread.Title}}
                     </h1>
                     <div class="ct-meta">
-                        <span>Posted by <a href="/u/{{.Thread.Username}}">{{.Thread.Username}}</a></span>
+                        <span>Posted by {{userTag .Thread.Username}}</span>
                         <span>{{.Thread.CreatedAt.Format "Jan 2 2006 15:04"}}</span>
                         <span>{{.Thread.ReplyCount}} repl{{if eq .Thread.ReplyCount 1}}y{{else}}ies{{end}}</span>
                     </div>
@@ -57,7 +57,7 @@
                         <span class="ct-avatar">
                             {{if .AvatarPath}}<img src="{{.AvatarPath}}" alt="">{{else}}{{initial .Username}}{{end}}
                         </span>
-                        <a class="ct-post-user" href="/u/{{.Username}}">{{.Username}}</a>
+                        {{userTag .Username}}
                         <span>· {{.CreatedAt.Format "Jan 2 15:04"}}</span>
                         {{if .EditedAt}}<span>· edited</span>{{end}}
                         {{if $.Role.CanModerate}}

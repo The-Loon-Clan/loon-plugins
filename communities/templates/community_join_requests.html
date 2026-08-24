@@ -20,7 +20,7 @@
             <div class="rq-head">
                 <span class="rq-avatar">{{if .AvatarPath}}<img src="{{.AvatarPath}}" alt="">{{else}}{{initial .Username}}{{end}}</span>
                 <div>
-                    <a class="text-light fw-semibold text-decoration-none" href="/u/{{.Username}}">{{.Username}}</a>
+                    {{userTag .Username}}
                     <div class="rq-stats">
                         <span>{{.Role}}</span>
                         <span>{{.UserPoints}} pts</span>

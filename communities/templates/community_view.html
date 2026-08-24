@@ -97,7 +97,7 @@
                         </span>
                         <div class="t-body">
                             <div class="t-byline">
-                                by <a href="/u/{{.Username}}">{{.Username}}</a> · {{relativeTime .CreatedAt}}
+                                by {{userTag .Username}} · {{relativeTime .CreatedAt}}
                             </div>
                             <a class="t-title stretched-link" href="/c/{{.CommunitySlug}}/thread/{{.ID}}">
                                 {{if .Pinned}}<span class="badge-pinned">Pinned</span>{{end}}

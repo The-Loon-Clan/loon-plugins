@@ -1,6 +1,7 @@
 package communities
 
 import (
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 	"embed"
 	"fmt"
 	"html/template"
@@ -34,6 +35,13 @@ func parseTemplates() error {
 	t, err := template.New("communities").Funcs(template.FuncMap{
 		// The one seam-bound function: the site's time wording.
 		"relativeTime": func(v any) string { return deps.RelativeTime(v) },
+		// The site's username chip, drawn by the HOST: role colour, any
+		// equipped name effect, the profile link. Asking rather than
+		// reproducing is the whole point — a plugin that draws its own
+		// anchor is a plugin where a member's cosmetics stop.
+		"userTag": func(name string) template.HTML {
+			return pluginapi.RenderUserTag(fxCore, name)
+		},
 		// The rest are copies of the host FuncMap entries these pages
 		// rendered with — parity is the lift's contract. They are pure, so
 		// the two copies cannot drift toward a silently wrong answer the way
