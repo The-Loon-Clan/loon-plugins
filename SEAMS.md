@@ -17,7 +17,7 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **63** of them, counted from the EXPORTED `…Name` and
+importing the other. There are **64** of them, counted from the EXPORTED `…Name` and
 `…Prefix` constants in `pluginapi` whose value is a NAMESPACED key, on
 22 Aug 2026. They are discoverable: an
 author reading `pluginapi` sees what exists, the compiler catches interface
@@ -190,6 +190,7 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 | `tracker.mirrors` / `tracker.mirror.make` | `TorrentMirrors`, `TorrentMirrorMaker` | Which releases also exist as torrents, and making one on demand. On-demand because an index of 160,000 releases would otherwise pre-build gigabytes of info dictionaries nobody asked for. |
 | `collections.sink` | `CollectionSink` | Where a selection of releases can be filed. Deliberately narrow — name a member's own collections and take a batch. It cannot create one, read one, or touch anybody else's: a cart is a trolley, not an editor. |
 | `search.torznab` | `TorznabSearch` | Torrent search, answered by whoever has torrents. |
+| `trackers.search` | `TrackerSearcher` | Ask EXTERNAL trackers what they have — the plural is the distinction from every `tracker.*` key, which belongs to this site's own tracker. Third piece of the content pipeline: schedule knows it aired, gaps knows we lack it, this answers where a copy might come from. Adapters for clean interfaces only; politeness is structural (per-source spacing floored at 2s). |
 | `content.block.*` | — | **Prefix.** A block a page can render. |
 | `content.pipeline` | `ContentPipeline` | Delivered bytes become a published release: dedup, artifact, metadata, fulfil the request, award, announce. Delivery-agnostic on purpose — Usenet feeds it today, the tracker and direct-download paths feed the same one. (It was catalogued here as "the shared render pipeline", which is a different thing entirely and describes nothing this contract does.) |
 | `entity.editors` | — | Editors registered per entity kind. |
