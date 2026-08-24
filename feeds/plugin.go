@@ -73,6 +73,13 @@ type Config struct {
 	// an aggregator reproduces.
 	TorznabURL string `json:"torznab_url"`
 
+	// DisableNyaaSearch turns off the direct nyaa.si half of the SEARCH
+	// capability (nyaa_search.go). On by default because the importer
+	// already polls nyaa unconditionally — searching it is a second
+	// question asked of a site this plugin already talks to, and it needs
+	// no key. Off, searches ask only the Torznab endpoint.
+	DisableNyaaSearch bool `json:"disable_nyaa_search"`
+
 	// SourceProxies routes individual sources' fetches through an HTTP
 	// proxy, keyed by source name ("nyaa", "anirena", "tokyotosho",
 	// "nekobt"):
@@ -159,6 +166,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 		endpoint: p.cfg.TorznabURL,
 		key:      p.cfg.NekoBTAPIKey,
 		client:   p.sourceClient("nekobt"),
+	}
+	if !p.cfg.DisableNyaaSearch {
+		p.search.nyaa = p.sourceClient("nyaa")
 	}
 	if err := c.RegisterDef(core.ExtensionDef{
 		Name:    lpapi.TorznabSearchName,

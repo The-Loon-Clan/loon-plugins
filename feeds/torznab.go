@@ -29,6 +29,13 @@ type torznabSearch struct {
 	endpoint string
 	key      string
 	client   *http.Client
+	// nyaa is the client for direct nyaa.si RSS search (nyaa_search.go), nil
+	// when disabled. A separate client because it is a separate SOURCE: it
+	// honours its own source_proxies entry, exactly like the importer's
+	// fetches of the same site.
+	nyaa *http.Client
+	// nyaaURL overrides the nyaa search base in tests; empty means nyaa.si.
+	nyaaURL string
 }
 
 // defaultTorznabEndpoint is nekoBT, which is what every deployment used before
@@ -37,7 +44,7 @@ type torznabSearch struct {
 const defaultTorznabEndpoint = "https://nekobt.to/api/torznab/api"
 
 func (t *torznabSearch) Available() bool {
-	return t != nil && t.key != ""
+	return t != nil && (t.key != "" || t.nyaa != nil)
 }
 
 func (t *torznabSearch) url() string {
@@ -55,6 +62,55 @@ func (t *torznabSearch) url() string {
 // shape.
 func (t *torznabSearch) Search(ctx context.Context, query string, season, episode int) ([]lpapi.TorznabResult, error) {
 	if !t.Available() {
+		return nil, nil
+	}
+	out, err := t.searchTorznab(ctx, query, season, episode)
+	if err != nil && t.nyaa == nil {
+		// Torznab was the only backend; its failure is the search's failure.
+		return nil, err
+	}
+	// Nyaa answers beside the endpoint, not instead of it: the endpoint (or
+	// the aggregator behind it) may hold private-tracker results nyaa never
+	// will, and nyaa holds the public back-catalogue the importer's
+	// newest-items firehose scrolled past months ago. Results merge with the
+	// endpoint's first, deduplicated by info hash; a nyaa failure with
+	// endpoint results in hand degrades to those rather than failing a
+	// search that half-succeeded.
+	if t.nyaa != nil {
+		hits, nerr := t.searchNyaa(ctx, nyaaQuery(query, episode))
+		if nerr == nil && len(hits) == 0 {
+			if padded := nyaaPaddedQuery(query, episode); padded != "" {
+				hits, nerr = t.searchNyaa(ctx, padded)
+			}
+		}
+		if nerr != nil {
+			if err != nil || out == nil && t.key == "" {
+				// Nothing else answered either — surface the failure.
+				if err == nil {
+					err = nerr
+				}
+				return nil, err
+			}
+		} else {
+			seen := make(map[string]bool, len(out))
+			for _, r := range out {
+				seen[r.InfoHash] = true
+			}
+			for _, h := range hits {
+				if h.InfoHash != "" && seen[h.InfoHash] {
+					continue
+				}
+				out = append(out, h)
+			}
+		}
+	}
+	return out, nil
+}
+
+// searchTorznab is the endpoint half — nekoBT by default, a Prowlarr
+// aggregate wherever torznab_url points. (nil, nil) with no key configured.
+func (t *torznabSearch) searchTorznab(ctx context.Context, query string, season, episode int) ([]lpapi.TorznabResult, error) {
+	if t.key == "" {
 		return nil, nil
 	}
 	q := url.Values{}
