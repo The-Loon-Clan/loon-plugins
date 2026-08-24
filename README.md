@@ -38,6 +38,7 @@ of narrow ports the host injects.
 | **`dailyreward`** | A home-page daily-points card (points sink demo). |
 | **`pointstore`** | A points sink / profile-flair store. |
 | **`anidbscraper`** | Mechanics demo — AniDB as a standalone host-data worker plugin (injected ports + `SetDeps`). |
+| **`trackerdir`** | The external-tracker directory: facts (domains, categories, search precision, auth, politeness) for ~545 trackers, extracted from the Prowlarr community definitions by `scripts/gen_trackerdir.py`. A data library, not a plugin — see the package comment for what is deliberately NOT taken. |
 | **`pluginapi`** | Neutral capability contracts both sides import (never each other): `UsenetIndex`/`UsenetAdmin`, the `ReleaseSink`/`ReleaseHealthStore` seams, `CatalogSink`/`Fillable`, `Backupable`/`StatContributor`, host-data ports. |
 
 ## Plugin archetypes
