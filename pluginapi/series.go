@@ -12,10 +12,40 @@
 // normal state.
 package pluginapi
 
-import "context"
+import (
+	"context"
+	"strings"
+	"unicode"
+)
 
 // SeriesIndexName is where the indexer publishes it.
 const SeriesIndexName = "usenet.series"
+
+// SeriesKey folds a show name to what "the same show" means: lowercase letters
+// and digits only.
+//
+// HERE, and not in the indexer, because Key is part of the contract above and
+// every consumer needs to produce one. It was described in prose -- "the folded
+// identity, lowercase, no punctuation" -- and left each caller to implement
+// that sentence, which is a drift bug with a delay on it: two folds that agree
+// on every name anybody tested and disagree on the first one with an apostrophe
+// in it. The TV calendar asking "do we have this episode" is the second
+// consumer, and the first one that is not the indexer itself.
+//
+// Dropping punctuation is what makes "Marvels.Agents.of.S.H.I.E.L.D." and
+// "Marvel's Agents of SHIELD" one key. It also merges shows whose names differ
+// only by punctuation, which is a trade taken deliberately: the alternative
+// splits one show across two pages, and a reader notices that immediately while
+// a merge of two genuinely different shows is vanishingly rare.
+func SeriesKey(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(name) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
 
 // SeriesRow is one show in a list of shows.
 type SeriesRow struct {

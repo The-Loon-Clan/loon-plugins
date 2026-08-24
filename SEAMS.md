@@ -17,7 +17,7 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **61** of them, counted from the EXPORTED `…Name` and
+importing the other. There are **63** of them, counted from the EXPORTED `…Name` and
 `…Prefix` constants in `pluginapi` whose value is a NAMESPACED key, on
 22 Aug 2026. They are discoverable: an
 author reading `pluginapi` sees what exists, the compiler catches interface
@@ -182,6 +182,8 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 | `usenet.releasesink` / `.healthstore` / `.nfostore` / `.imagestore` / `.retitlestore` / `.activity` / `.catalog-stats` / `.junk-sweep` | various | The indexer's ports into a host's own domain. |
 | `usenet.index` / `.admin` / `.newznab` | `UsenetIndex`, various | The read surface, the operator surface, and the Newznab endpoint. What a host renders a release page from. |
 | `usenet.series` | `SeriesIndex` | Every copy of an episode, grouped. What the /series pages read. |
+| `tv.schedule` | `TVScheduleProvider` | What airs and when, for the shows this site carries. Filled by a six-hourly job because the upstream answers one day per call — a month view rendered live would be nineteen seconds of polite waiting per viewer. |
+| `tv.gaps` | `TVGapFinder` | Aired, and we do not have it. The join between the schedule and the index, published by the **host** because only the host holds both. The detection half of the auto-request. |
 | `newznab:v1:` | — | **Prefix.** Namespaces every cached Newznab response, so a worker can clear the whole search cache after an ingest (`cache.PrefixDeleter`, topic `EventIngested`). The one contract the 22 Aug recount found absent from this catalogue — which is the failure the warning at the top describes, happening again. |
 | `usenet.grabs` | `DownloadGrabLookup` | Which releases a member has taken — the check that stops a download report being writable by anyone who guesses an id. |
 | `usenet.recheck` | `ReleaseRecheckRequester` | Flag a release for the health sweep. A report is a signal; **the sweep decides from the articles themselves**. |
@@ -189,7 +191,7 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 | `collections.sink` | `CollectionSink` | Where a selection of releases can be filed. Deliberately narrow — name a member's own collections and take a batch. It cannot create one, read one, or touch anybody else's: a cart is a trolley, not an editor. |
 | `search.torznab` | `TorznabSearch` | Torrent search, answered by whoever has torrents. |
 | `content.block.*` | — | **Prefix.** A block a page can render. |
-| `content.pipeline` | — | The shared render pipeline. |
+| `content.pipeline` | `ContentPipeline` | Delivered bytes become a published release: dedup, artifact, metadata, fulfil the request, award, announce. Delivery-agnostic on purpose — Usenet feeds it today, the tracker and direct-download paths feed the same one. (It was catalogued here as "the shared render pipeline", which is a different thing entirely and describes nothing this contract does.) |
 | `entity.editors` | — | Editors registered per entity kind. |
 | `tracker.torrentinfo` | `TorrentInfoFunc` | Name and size for one info-hash. |
 | `magic.torrentpromotions` | `TorrentPromotionsFunc` | What is cast on one torrent — **data, not markup**. |

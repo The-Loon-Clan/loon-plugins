@@ -3,7 +3,8 @@ package usenet
 import (
 	"regexp"
 	"strings"
-	"unicode"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // Series, season and episode, parsed out of a release title.
@@ -115,23 +116,15 @@ func withSeries(prefix string, season, ep int, pack bool) Episode {
 	return Episode{Series: name, SeriesKey: key, Season: season, Episode: ep, Pack: pack}
 }
 
-// seriesKey folds a name to what "the same show" means: lowercase letters and
-// digits only.
+// seriesKey folds a name to what "the same show" means.
 //
-// Dropping punctuation is what makes "Marvels.Agents.of.S.H.I.E.L.D." and
-// "Marvel's Agents of SHIELD" one key. It also merges shows whose names differ
-// only by punctuation, which is a trade taken deliberately — the alternative
-// splits one show across two pages, and a reader notices that immediately
-// while a merge of two genuinely different shows is vanishingly rare.
-func seriesKey(name string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(name) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
+// A thin wrapper over the contract's fold rather than a copy of it. The rule
+// belongs to pluginapi.SeriesKey because Key is part of the SeriesIndex
+// contract and consumers outside this plugin -- the host's TV calendar, asking
+// whether an episode that aired is in the index -- have to produce the same
+// key. Two implementations of one sentence agree until the first name with an
+// apostrophe in it.
+func seriesKey(name string) string { return pluginapi.SeriesKey(name) }
 
 func atoiSafe(s string) int {
 	n := 0
