@@ -141,6 +141,43 @@ func TestEpisodeSearchableRanksUsefulnessFirst(t *testing.T) {
 	}
 }
 
+// The majors are the point: this dataset exists at all because the YAML
+// corpus lacks them. Anchored by name, against this file's own preference
+// for structural tests, because losing one of THESE is exactly the event a
+// human must look at rather than wave through a regeneration.
+func TestTheMajorsArePresent(t *testing.T) {
+	for _, slug := range []string{
+		"broadcasthenet", "animebytes", "hdbits", "iptorrents",
+		"myanonamouse", "passthepopcorn", "redacted", "orpheus",
+		"filelistio", "avistaz",
+	} {
+		tr, ok := BySlug(slug)
+		if !ok {
+			t.Errorf("major %q missing -- the reason trackerdir reads the native corpus", slug)
+			continue
+		}
+		if tr.Origin != "native" {
+			t.Errorf("%s: origin %q, want native", slug, tr.Origin)
+		}
+	}
+}
+
+func TestOriginIsWellFormedAndBothCorporaPresent(t *testing.T) {
+	counts := map[string]int{}
+	for _, tr := range All() {
+		if tr.Origin != "cardigann" && tr.Origin != "native" {
+			t.Fatalf("%s: unknown origin %q", tr.Slug, tr.Origin)
+		}
+		counts[tr.Origin]++
+	}
+	if counts["native"] < 40 {
+		t.Fatalf("only %d native rows; the C# extraction went wrong", counts["native"])
+	}
+	if counts["cardigann"] < 270 {
+		t.Fatalf("only %d cardigann rows; the YAML extraction went wrong", counts["cardigann"])
+	}
+}
+
 func TestUnattendedLoginBarriersAreCarried(t *testing.T) {
 	captcha, twofa := 0, 0
 	for _, tr := range All() {

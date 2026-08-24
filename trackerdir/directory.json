@@ -1,7 +1,9 @@
 {
  "source": {
   "commit": "a83e714e38ca1caa3bbc64d9455c772442822da2",
-  "note": "Facts extracted from the community definitions: identity, domains, categories, search capability, politeness. The scraping implementations are deliberately not taken. KNOWN OMISSION: Prowlarr implements its major trackers as native C# indexers with no YAML definition, so BTN, AnimeBytes, HDBits, IPTorrents, MyAnonamouse and their peers are absent here; they need hand-curated entries if the pipeline is to use them.",
+  "native_commit": "17e12c074efb6a00e4a85312b557a77ac692da4e",
+  "native_repo": "https://github.com/Prowlarr/Prowlarr",
+  "note": "Facts extracted from the community Cardigann definitions plus Prowlarr's native C# indexer definitions: identity, domains, categories, search capability, politeness. The scraping and API implementations are deliberately not taken. Where both corpora define a tracker, the community row wins.",
   "repo": "https://github.com/Prowlarr/Indexers",
   "schema": "v11"
  },
@@ -38,6 +40,7 @@
    "login_captcha": false,
    "name": "0day.kiev",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -74,6 +77,7 @@
    "login_captcha": false,
    "name": "0Magnet",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -171,6 +175,7 @@
    "login_captcha": false,
    "name": "1337x",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 3.0,
    "search": {
     "book": true,
@@ -213,6 +218,7 @@
    "login_captcha": false,
    "name": "13City",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -274,6 +280,7 @@
    "login_captcha": false,
    "name": "1ptbar",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -325,6 +332,7 @@
    "login_captcha": true,
    "name": "3D Torrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -374,6 +382,7 @@
    "login_captcha": false,
    "name": "4thD",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -434,6 +443,7 @@
    "login_captcha": false,
    "name": "52BT",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -478,6 +488,7 @@
    "login_captcha": true,
    "name": "52PT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -557,6 +568,7 @@
    "login_captcha": false,
    "name": "Bittorrentfiles",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -604,6 +616,7 @@
    "login_captcha": false,
    "name": "Abnormal (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.1,
    "search": {
     "book": true,
@@ -640,6 +653,7 @@
    "login_captcha": false,
    "name": "ABtorrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -671,6 +685,7 @@
    "login_captcha": false,
    "name": "ACG.RIP",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -702,6 +717,7 @@
    "login_captcha": false,
    "name": "Across The Tasman",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -761,6 +777,7 @@
    "login_captcha": false,
    "name": "Aftershock",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -813,6 +830,7 @@
    "login_captcha": false,
    "name": "AGSVPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -858,6 +876,7 @@
    "login_captcha": false,
    "name": "Aidoru!Online",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -892,6 +911,7 @@
    "login_captcha": false,
    "name": "Aither (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -935,6 +955,7 @@
    "login_captcha": false,
    "name": "alingPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -952,6 +973,65 @@
     ]
    },
    "slug": "alingpt",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    1030,
+    1040,
+    1180,
+    2030,
+    2040,
+    2045,
+    2050,
+    3030,
+    3050,
+    4010,
+    4030,
+    4040,
+    4050,
+    5030,
+    5040,
+    5045,
+    5070,
+    6000,
+    7000,
+    8000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv",
+    "xxx"
+   ],
+   "description": "AlphaRatio(AR) is a Private Torrent Tracker for 0DAY / GENERAL",
+   "domains": [
+    "https://alpharatio.cc/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "AlphaRatio",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 3.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "alpharatio",
    "type": "private"
   },
   {
@@ -1007,6 +1087,7 @@
    "login_captcha": false,
    "name": "Amigos Share Club",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -1044,6 +1125,7 @@
    "login_captcha": false,
    "name": "Anibt",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -1056,6 +1138,98 @@
    },
    "slug": "anibt",
    "type": "public"
+  },
+  {
+   "auth": "none",
+   "categories": [
+    3010,
+    3020,
+    3040,
+    4010,
+    4050,
+    5070,
+    6000,
+    6060,
+    7020,
+    7030,
+    8000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "other",
+    "pc",
+    "tv",
+    "xxx"
+   ],
+   "description": "Anidex is a Public torrent tracker and indexer, primarily for English fansub groups of anime",
+   "domains": [
+    "https://anidex.info/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "Anidex",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "anidex",
+   "type": "public"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    2000,
+    3000,
+    5000,
+    5070,
+    6000,
+    7030,
+    8000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "movies",
+    "other",
+    "tv",
+    "xxx"
+   ],
+   "description": "Anidub is RUSSIAN anime voiceover group and eponymous anime tracker.",
+   "domains": [
+    "https://tr.anidub.com/"
+   ],
+   "language": "ru-RU",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "Anidub",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "anidub",
+   "type": "semi-private"
   },
   {
    "auth": "cookie",
@@ -1084,6 +1258,7 @@
    "login_captcha": false,
    "name": "Anime by Belka",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -1096,6 +1271,49 @@
    },
    "slug": "animebybelka",
    "type": "semi-private"
+  },
+  {
+   "auth": "passkey",
+   "categories": [
+    1000,
+    2000,
+    3000,
+    4050,
+    5070,
+    7030
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "pc",
+    "tv"
+   ],
+   "description": "AnimeBytes (AB) is the largest private torrent tracker that specialises in anime and anime-related content.",
+   "domains": [
+    "https://animebytes.tv/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "AnimeBytes",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 4.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "album",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "animebytes",
+   "type": "private"
   },
   {
    "auth": "credentials",
@@ -1123,6 +1341,7 @@
    "login_captcha": false,
    "name": "AnimeLayer",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -1161,6 +1380,7 @@
    "login_captcha": false,
    "name": "AnimeTorrents.ro",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -1193,6 +1413,7 @@
    "login_captcha": false,
    "name": "Anime Tosho",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -1240,6 +1461,7 @@
    "login_captcha": false,
    "name": "AnimeWorld (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -1261,6 +1483,44 @@
    "type": "private"
   },
   {
+   "auth": "credentials",
+   "categories": [
+    2000,
+    5070,
+    7030,
+    7060
+   ],
+   "content": [
+    "anime",
+    "books",
+    "movies",
+    "tv"
+   ],
+   "description": "AnimeZ (ex-AnimeTorrents) is a Private Torrent Tracker for ANIME / MANGA",
+   "domains": [
+    "https://animez.to/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "AnimeZ",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 6.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "animez",
+   "type": "private"
+  },
+  {
    "auth": "none",
    "categories": [
     5070
@@ -1279,6 +1539,7 @@
    "login_captcha": false,
    "name": "AniSource",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 5.0,
    "search": {
     "book": false,
@@ -1317,6 +1578,7 @@
    "login_captcha": false,
    "name": "Anthelion (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -1385,6 +1647,7 @@
    "login_captcha": false,
    "name": "ArabaFenice",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -1427,6 +1690,7 @@
    "login_captcha": false,
    "name": "ArabicSource (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -1484,6 +1748,7 @@
    "login_captcha": false,
    "name": "ArabP2P",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -1534,6 +1799,7 @@
    "login_captcha": false,
    "name": "ArabScene",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -1588,6 +1854,7 @@
    "login_captcha": false,
    "name": "ArabTorrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -1625,6 +1892,7 @@
    "login_captcha": false,
    "name": "AsianCinema",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -1671,6 +1939,7 @@
    "login_captcha": false,
    "name": "AsianDVDClub",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -1716,6 +1985,7 @@
    "login_captcha": false,
    "name": "Audiences",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -1764,6 +2034,7 @@
    "login_captcha": false,
    "name": "AudioNews",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -1795,6 +2066,7 @@
    "login_captcha": false,
    "name": "Aussierul.es",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -1806,6 +2078,52 @@
     "tv_ids": []
    },
    "slug": "aussierules",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    2000,
+    2030,
+    2040,
+    2045,
+    5000,
+    5030,
+    5040,
+    5045
+   ],
+   "content": [
+    "movies",
+    "tv"
+   ],
+   "description": "Aka AsiaTorrents",
+   "domains": [
+    "https://avistaz.to/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "AvistaZ",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 6.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid",
+     "tmdbid"
+    ],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid",
+     "tvdbid"
+    ]
+   },
+   "slug": "avistaz",
    "type": "private"
   },
   {
@@ -1833,6 +2151,7 @@
    "login_captcha": false,
    "name": "Azusa (梓喵)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -1888,6 +2207,7 @@
    "login_captcha": false,
    "name": "Back-ups",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -1899,6 +2219,49 @@
     "tv_ids": []
    },
    "slug": "backups",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    2000,
+    3020,
+    3050,
+    5050,
+    5070,
+    7020,
+    7030,
+    7050
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "movies",
+    "tv"
+   ],
+   "description": "Anime Community",
+   "domains": [
+    "https://bakabt.me/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "BakaBT",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "bakabt",
    "type": "private"
   },
   {
@@ -1930,6 +2293,7 @@
    "login_captcha": false,
    "name": "Bangumi Moe",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 4.0,
    "search": {
     "book": true,
@@ -1972,6 +2336,7 @@
    "login_captcha": false,
    "name": "baoziPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2031,6 +2396,7 @@
    "login_captcha": false,
    "name": "Beload",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2090,6 +2456,7 @@
    "login_captcha": false,
    "name": "Best-Torrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2153,6 +2520,7 @@
    "login_captcha": false,
    "name": "Best-Core",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2168,6 +2536,45 @@
     ]
    },
    "slug": "bestcore",
+   "type": "private"
+  },
+  {
+   "auth": "apikey",
+   "categories": [
+    2000,
+    5000
+   ],
+   "content": [
+    "movies",
+    "tv"
+   ],
+   "description": "BeyondHD (BHD) is a Private Torrent Tracker for HD MOVIES / TV",
+   "domains": [
+    "https://beyond-hd.me/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "BeyondHD",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid",
+     "tmdbid"
+    ],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "beyondhd",
    "type": "private"
   },
   {
@@ -2194,6 +2601,7 @@
    "login_captcha": false,
    "name": "Bibliotik",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2262,6 +2670,7 @@
    "login_captcha": false,
    "name": "BigBBS",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2310,6 +2719,7 @@
    "login_captcha": false,
    "name": "BigCore",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2364,6 +2774,7 @@
    "login_captcha": false,
    "name": "BigFANGroup",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2417,6 +2828,7 @@
    "login_captcha": false,
    "name": "Bit-Bázis",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2475,6 +2887,7 @@
    "login_captcha": false,
    "name": "Bitded",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2531,6 +2944,7 @@
    "login_captcha": false,
    "name": "bitGAMER",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2542,6 +2956,56 @@
     "tv_ids": []
    },
    "slug": "bitgamer",
+   "type": "private"
+  },
+  {
+   "auth": "cookie",
+   "categories": [
+    2000,
+    2050,
+    3020,
+    3040,
+    5000,
+    5060,
+    5070,
+    5080,
+    6000,
+    8000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "movies",
+    "other",
+    "tv",
+    "xxx"
+   ],
+   "description": "BIT-HDTV - Home of High Definition",
+   "domains": [
+    "https://www.bit-hdtv.com/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "BitHDTV",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "bithdtv",
    "type": "private"
   },
   {
@@ -2585,6 +3049,7 @@
    "login_captcha": false,
    "name": "BitHUmen",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2645,6 +3110,7 @@
    "login_captcha": false,
    "name": "BitMagnet (Local DHT)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2710,6 +3176,7 @@
    "login_captcha": false,
    "name": "Bitpalace",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2741,6 +3208,7 @@
    "login_captcha": false,
    "name": "BitPorn (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -2787,6 +3255,7 @@
    "login_captcha": false,
    "name": "BiTTuRK",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2841,6 +3310,7 @@
    "login_captcha": false,
    "name": "BJ-Share",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -2888,6 +3358,7 @@
    "login_captcha": false,
    "name": "BlueBird",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -2932,6 +3403,7 @@
    "login_captcha": false,
    "name": "BlueRoms",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -2977,6 +3449,7 @@
    "login_captcha": false,
    "name": "BlueTorrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -3041,6 +3514,7 @@
    "login_captcha": false,
    "name": "BlurayTracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -3081,6 +3555,7 @@
    "login_captcha": false,
    "name": "Blutopia (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -3119,6 +3594,7 @@
    "login_captcha": false,
    "name": "BookTracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -3150,6 +3626,7 @@
    "login_captcha": false,
    "name": "BootyTape",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 3.0,
    "search": {
     "book": false,
@@ -3208,6 +3685,7 @@
    "login_captcha": false,
    "name": "Borgzelle",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -3240,6 +3718,7 @@
    "login_captcha": false,
    "name": "Boxing Torrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -3291,6 +3770,7 @@
    "login_captcha": false,
    "name": "BrasilTracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -3304,6 +3784,82 @@
     "tv_ids": []
    },
    "slug": "brasiltracker",
+   "type": "private"
+  },
+  {
+   "auth": "apikey",
+   "categories": [
+    5030,
+    5040,
+    5045
+   ],
+   "content": [
+    "tv"
+   ],
+   "description": "BroadcasTheNet (BTN) is an invite-only torrent tracker focused on TV shows",
+   "domains": [
+    "https://api.broadcasthe.net/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [
+    "http://api.broadcasthe.net/"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "BroadcasTheNet",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 5.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": [
+     "rid",
+     "tvdbid"
+    ]
+   },
+   "slug": "broadcasthenet",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    3000,
+    4030,
+    4060,
+    8000
+   ],
+   "content": [
+    "audio",
+    "other",
+    "pc"
+   ],
+   "description": "Broken Stones is a Private site for MacOS and iOS APPS / GAMES",
+   "domains": [
+    "https://brokenstones.is/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "BrokenStones",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "brokenstones",
    "type": "private"
   },
   {
@@ -3343,6 +3899,7 @@
    "login_captcha": false,
    "name": "BTArg",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -3388,6 +3945,7 @@
    "login_captcha": false,
    "name": "BTdirectory",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -3421,6 +3979,7 @@
    "login_captcha": false,
    "name": "BT.etree",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -3506,6 +4065,7 @@
    "login_captcha": false,
    "name": "BTNext",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -3554,6 +4114,7 @@
    "login_captcha": true,
    "name": "BTSCHOOL",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -3629,6 +4190,7 @@
    "login_captcha": false,
    "name": "BwTorrents",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -3675,6 +4237,7 @@
    "login_captcha": false,
    "name": "BYRBT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -3718,6 +4281,7 @@
    "login_captcha": false,
    "name": "Byrutor",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -3787,6 +4351,7 @@
    "login_captcha": false,
    "name": "C411",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 4.1,
    "search": {
     "book": true,
@@ -3834,6 +4399,7 @@
    "login_captcha": false,
    "name": "cangbaoge (CBG)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -3886,6 +4452,7 @@
    "login_captcha": false,
    "name": "CapybaraBR (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -3943,6 +4510,7 @@
    "login_captcha": false,
    "name": "Carpathians",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -3987,6 +4555,7 @@
    "login_captcha": true,
    "name": "CarPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -4030,6 +4599,7 @@
    "login_captcha": false,
    "name": "Cathode-Ray.Tube",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -4079,6 +4649,7 @@
    "login_captcha": false,
    "name": "Catorrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -4124,6 +4695,7 @@
    "login_captcha": false,
    "name": "CeskeForum",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -4165,6 +4737,7 @@
    "login_captcha": false,
    "name": "CGPeers",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -4208,6 +4781,7 @@
    "login_captcha": true,
    "name": "CHDBits",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -4245,6 +4819,7 @@
    "login_captcha": false,
    "name": "Cinemageddon",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -4303,6 +4878,7 @@
    "login_captcha": false,
    "name": "CinemaMovieS_ZT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -4347,6 +4923,7 @@
    "login_captcha": false,
    "name": "Cinematik (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -4368,6 +4945,50 @@
    "type": "private"
   },
   {
+   "auth": "credentials",
+   "categories": [
+    2000,
+    2030,
+    2040,
+    2045,
+    5000,
+    5030,
+    5040,
+    5045
+   ],
+   "content": [
+    "movies",
+    "tv"
+   ],
+   "description": "CinemaZ (EuTorrents) is a Private Torrent Tracker for FOREIGN NON-ASIAN MOVIES.",
+   "domains": [
+    "https://cinemaz.to/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "CinemaZ",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 6.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "cinemaz",
+   "type": "private"
+  },
+  {
    "auth": "apikey",
    "categories": [
     6000
@@ -4385,6 +5006,7 @@
    "login_captcha": false,
    "name": "ClearJAV (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -4463,6 +5085,7 @@
    "login_captcha": false,
    "name": "Coastal-Music-Crew",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -4501,6 +5124,7 @@
    "login_captcha": false,
    "name": "comicat",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -4532,6 +5156,7 @@
    "login_captcha": false,
    "name": "ConCen",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -4567,6 +5192,7 @@
    "login_captcha": false,
    "name": "Concertos (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -4620,6 +5246,7 @@
    "login_captcha": true,
    "name": "CrabPT (蟹黄堡)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -4662,6 +5289,7 @@
    "login_captcha": false,
    "name": "CrackingPatching",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -4716,6 +5344,7 @@
    "login_captcha": false,
    "name": "CrazySpirits (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 5.0,
    "search": {
     "book": false,
@@ -4780,6 +5409,7 @@
    "login_captcha": false,
    "name": "CrnaBerza",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -4842,6 +5472,7 @@
    "login_captcha": false,
    "name": "CrnaBerza2FA",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -4879,6 +5510,7 @@
    "login_captcha": false,
    "name": "CRT2FA",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -4925,6 +5557,7 @@
    "login_captcha": false,
    "name": "Caishen (财神)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -4973,6 +5606,7 @@
    "login_captcha": true,
    "name": "cyanbug (大青虫)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -5011,6 +5645,7 @@
    "login_captcha": false,
    "name": "CyclingArchiveClub",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -5071,6 +5706,7 @@
    "login_captcha": false,
    "name": "CZTeam (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5106,6 +5742,7 @@
    "login_captcha": false,
    "name": "DaMagNet",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5153,6 +5790,7 @@
    "login_captcha": false,
    "name": "Darkpeers (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5229,6 +5867,7 @@
    "login_captcha": false,
    "name": "Das Unerwartete",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5302,6 +5941,7 @@
    "login_captcha": false,
    "name": "Das Unerwartete (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5366,6 +6006,7 @@
    "login_captcha": false,
    "name": "DataScene (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5416,6 +6057,7 @@
    "login_captcha": false,
    "name": "DaXiangJiao (大香蕉)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5467,6 +6109,7 @@
    "login_captcha": false,
    "name": "Deildu",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -5513,6 +6156,7 @@
    "login_captcha": false,
    "name": "Depth Studio",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -5530,6 +6174,38 @@
     ]
    },
    "slug": "depthstudio",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    3000
+   ],
+   "content": [
+    "audio"
+   ],
+   "description": "DesiGaane is a Private Torrent Tracker for DESI MUSIC",
+   "domains": [
+    "https://desigaane.rocks/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "DesiGaane",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "desigaane",
    "type": "private"
   },
   {
@@ -5557,6 +6233,7 @@
    "login_captcha": false,
    "name": "DesiTorrents (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -5621,6 +6298,7 @@
    "login_captcha": true,
    "name": "Devil-Torrents",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5676,6 +6354,7 @@
    "login_captcha": false,
    "name": "Diablo Torrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -5691,6 +6370,42 @@
     ]
    },
    "slug": "diablotorrent",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    3000,
+    4000
+   ],
+   "content": [
+    "audio",
+    "pc"
+   ],
+   "description": "DICMusic is a CHINESE Private Torrent Tracker for MUSIC",
+   "domains": [
+    "https://dicmusic.com/"
+   ],
+   "language": "zh-CN",
+   "legacy_domains": [
+    "https://dicmusic.club/"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "DICMusic",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "album",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "dicmusic",
    "type": "private"
   },
   {
@@ -5745,6 +6460,7 @@
    "login_captcha": false,
    "name": "DigitalCore (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5780,6 +6496,7 @@
    "login_captcha": false,
    "name": "DimeADozen",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -5819,6 +6536,7 @@
    "login_captcha": true,
    "name": "DiscFan",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5869,6 +6587,7 @@
    "login_captcha": false,
    "name": "dmhy",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5914,6 +6633,7 @@
    "login_captcha": false,
    "name": "DocsPedia",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -5947,6 +6667,7 @@
    "login_captcha": false,
    "name": "DreadVault (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -5985,6 +6706,7 @@
    "login_captcha": false,
    "name": "DreamingTree",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -6044,6 +6766,7 @@
    "login_captcha": true,
    "name": "Drugari",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6117,6 +6840,7 @@
    "login_captcha": false,
    "name": "DS-Reloaded",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6162,6 +6886,7 @@
    "login_captcha": false,
    "name": "dubhe (天枢)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6213,6 +6938,7 @@
    "login_captcha": false,
    "name": "DXP",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6249,6 +6975,7 @@
    "login_captcha": false,
    "name": "EBookBay",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -6284,6 +7011,7 @@
    "login_captcha": false,
    "name": "Ebooks-Shares",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6316,6 +7044,7 @@
    "login_captcha": false,
    "name": "E-Hentai",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": false,
@@ -6374,6 +7103,7 @@
    "login_captcha": true,
    "name": "Electro-Torrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6409,6 +7139,7 @@
    "login_captcha": false,
    "name": "Empornium",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -6444,6 +7175,7 @@
    "login_captcha": false,
    "name": "Empornium2FA",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -6486,6 +7218,7 @@
    "login_captcha": false,
    "name": "eMuwarez (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -6545,6 +7278,7 @@
    "login_captcha": false,
    "name": "eStone",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6605,6 +7339,7 @@
    "login_captcha": false,
    "name": "Ex-torrenty",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6660,6 +7395,7 @@
    "login_captcha": false,
    "name": "exitorrent.org",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6719,6 +7455,7 @@
    "login_captcha": false,
    "name": "ExKinoRay",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6731,6 +7468,41 @@
    },
    "slug": "exkinoray",
    "type": "semi-private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    6010,
+    6040,
+    6050,
+    6060
+   ],
+   "content": [
+    "xxx"
+   ],
+   "description": "ExoticaZ (YourExotic) is a Private Torrent Tracker for 3X",
+   "domains": [
+    "https://exoticaz.to/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "ExoticaZ",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 6.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "exoticaz",
+   "type": "private"
   },
   {
    "auth": "credentials",
@@ -6787,6 +7559,7 @@
    "login_captcha": false,
    "name": "Explosiv-World",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6869,6 +7642,7 @@
    "login_captcha": false,
    "name": "ExtraTorrent.st",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -6906,6 +7680,7 @@
    "login_captcha": false,
    "name": "ExtremeBits",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -6955,6 +7730,7 @@
    "login_captcha": false,
    "name": "EZTV",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -7004,6 +7780,7 @@
    "login_captcha": false,
    "name": "EZTVL",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -7038,6 +7815,7 @@
    "login_captcha": false,
    "name": "F1Carreras (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -7073,6 +7851,7 @@
    "login_captcha": false,
    "name": "F1GP",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -7139,6 +7918,7 @@
    "login_captcha": false,
    "name": "FANO.IN",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7183,6 +7963,7 @@
    "login_captcha": false,
    "name": "Fappaizuri",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7223,6 +8004,7 @@
    "login_captcha": false,
    "name": "Fappaizuri2FA",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7255,6 +8037,7 @@
    "login_captcha": false,
    "name": "Femdomcult",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -7306,6 +8089,7 @@
    "login_captcha": false,
    "name": "Fenyarnyek-Tracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7367,6 +8151,7 @@
    "login_captcha": false,
    "name": "File-Tracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7379,6 +8164,80 @@
    },
    "slug": "file-tracker",
    "type": "semi-private"
+  },
+  {
+   "auth": "passkey",
+   "categories": [
+    1000,
+    2010,
+    2030,
+    2040,
+    2045,
+    2050,
+    2060,
+    2070,
+    3000,
+    3020,
+    3040,
+    4000,
+    4040,
+    4050,
+    5000,
+    5020,
+    5030,
+    5040,
+    5045,
+    5060,
+    5070,
+    6000,
+    7000,
+    8000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv",
+    "xxx"
+   ],
+   "description": "FileList (FL) is a ROMANIAN Private Torrent Tracker for 0DAY / GENERAL",
+   "domains": [
+    "https://filelist.io/",
+    "https://thefl.org/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [
+    "https://filelist.io",
+    "https://filelist.ro/",
+    "http://filelist.ro/",
+    "http://flro.org/",
+    "https://flro.org/"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "FileList.io",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "filelistio",
+   "type": "private"
   },
   {
    "auth": "none",
@@ -7398,6 +8257,7 @@
    "login_captcha": false,
    "name": "FileMood",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7454,6 +8314,7 @@
    "login_captcha": false,
    "name": "FinElite",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7491,6 +8352,7 @@
    "login_captcha": false,
    "name": "Flood",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -7545,6 +8407,7 @@
    "login_captcha": false,
    "name": "Free Farm (自由农场)",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -7583,6 +8446,7 @@
    "login_captcha": false,
    "name": "Free JAV Torrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -7633,6 +8497,7 @@
    "login_captcha": true,
    "name": "FunFile",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7693,6 +8558,7 @@
    "login_captcha": false,
    "name": "funZone (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7774,6 +8640,7 @@
    "login_captcha": false,
    "name": "FutureTorrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7844,6 +8711,7 @@
    "login_captcha": false,
    "name": "Fuzer",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7892,6 +8760,7 @@
    "login_captcha": false,
    "name": "G3MINI TR4CK3R (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -7944,6 +8813,7 @@
    "login_captcha": false,
    "name": "GamesTorrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -7992,6 +8862,7 @@
    "login_captcha": false,
    "name": "Gay-Torrents.net",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -8035,6 +8906,7 @@
    "login_captcha": false,
    "name": "GAYtorrent.ru",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -8046,6 +8918,56 @@
     "tv_ids": []
    },
    "slug": "gaytorrentru",
+   "type": "private"
+  },
+  {
+   "auth": "apikey",
+   "categories": [
+    1010,
+    1020,
+    1030,
+    1040,
+    1050,
+    1080,
+    1090,
+    1120,
+    1130,
+    1180,
+    3050,
+    4010,
+    4050,
+    4060,
+    4070,
+    7020
+   ],
+   "content": [
+    "audio",
+    "books",
+    "console",
+    "pc"
+   ],
+   "description": "GazelleGames (GGn) is a Private Torrent Tracker for GAMES",
+   "domains": [
+    "https://gazellegames.net/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "GazelleGames",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "gazellegames",
    "type": "private"
   },
   {
@@ -8079,6 +9001,7 @@
    "login_captcha": false,
    "name": "Generation-Free (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -8127,6 +9050,7 @@
    "login_captcha": false,
    "name": "GGPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -8181,6 +9105,7 @@
    "login_captcha": false,
    "name": "GigaTorrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -8251,6 +9176,7 @@
    "login_captcha": false,
    "name": "Girotorrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -8262,6 +9188,40 @@
     "tv_ids": []
    },
    "slug": "girotorrent",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    2000
+   ],
+   "content": [
+    "movies"
+   ],
+   "description": "GreatPosterWall (GPW) is a CHINESE Private site for MOVIES",
+   "domains": [
+    "https://greatposterwall.com/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "GreatPosterWall",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "none",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "greatposterwall",
    "type": "private"
   },
   {
@@ -8295,6 +9255,7 @@
    "login_captcha": true,
    "name": "HaiDan",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -8335,6 +9296,7 @@
    "login_captcha": false,
    "name": "Hǎitáng (海棠PT)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": false,
@@ -8368,6 +9330,7 @@
    "login_captcha": false,
    "name": "HappyFappy",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -8401,6 +9364,7 @@
    "login_captcha": false,
    "name": "HappyFappy2FA",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -8436,6 +9400,7 @@
    "login_captcha": false,
    "name": "hawke-uno",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -8500,6 +9465,7 @@
    "login_captcha": false,
    "name": "HD-CLUB",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -8535,6 +9501,7 @@
    "login_captcha": false,
    "name": "HD-UNiT3D (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -8593,6 +9560,7 @@
    "login_captcha": false,
    "name": "HDArea",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -8642,6 +9610,7 @@
    "login_captcha": false,
    "name": "HDBao",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -8653,6 +9622,54 @@
     "tv_ids": []
    },
    "slug": "hdbao",
+   "type": "private"
+  },
+  {
+   "auth": "apikey",
+   "categories": [
+    2000,
+    3000,
+    5000,
+    5060,
+    5080,
+    6000,
+    8000
+   ],
+   "content": [
+    "audio",
+    "movies",
+    "other",
+    "tv",
+    "xxx"
+   ],
+   "description": "Best HD Tracker",
+   "domains": [
+    "https://hdbits.org/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [
+    "https://hdbits.org"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "HDBits",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": [
+     "tvdbid"
+    ]
+   },
+   "slug": "hdbits",
    "type": "private"
   },
   {
@@ -8692,6 +9709,7 @@
    "login_captcha": false,
    "name": "HDCiTY",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -8741,6 +9759,7 @@
    "login_captcha": true,
    "name": "HDClone",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -8791,6 +9810,7 @@
    "login_captcha": false,
    "name": "HD Dolby",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -8846,6 +9866,7 @@
    "login_captcha": true,
    "name": "HDFans",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -8887,6 +9908,7 @@
    "login_captcha": false,
    "name": "HD-Forever",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -8928,6 +9950,7 @@
    "login_captcha": false,
    "name": "HD-Forever2FA",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -8986,6 +10009,7 @@
    "login_captcha": false,
    "name": "HDGalaKtik",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -9036,6 +10060,7 @@
    "login_captcha": false,
    "name": "HDHome",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -9089,6 +10114,7 @@
    "login_captcha": false,
    "name": "HDKylin (麒麟)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -9133,6 +10159,7 @@
    "login_captcha": false,
    "name": "HD-Olimpo (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -9181,6 +10208,7 @@
    "login_captcha": false,
    "name": "HD-Only (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": false,
@@ -9228,6 +10256,7 @@
    "login_captcha": false,
    "name": "HDRoute",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -9274,6 +10303,7 @@
    "login_captcha": false,
    "name": "HDSky",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -9327,6 +10357,7 @@
    "login_captcha": false,
    "name": "HD-Space",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -9380,6 +10411,7 @@
    "login_captcha": false,
    "name": "HD-SpaceCookie",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -9432,6 +10464,7 @@
    "login_captcha": false,
    "name": "HDtime",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -9482,6 +10515,7 @@
    "login_captcha": false,
    "name": "HD-Torrents",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -9525,6 +10559,7 @@
    "login_captcha": false,
    "name": "HDTorrents.it (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -9573,6 +10608,7 @@
    "login_captcha": false,
    "name": "HDTurk",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -9623,6 +10659,7 @@
    "login_captcha": true,
    "name": "HDU",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -9669,6 +10706,7 @@
    "login_captcha": true,
    "name": "HDVideo",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -9713,6 +10751,7 @@
    "login_captcha": false,
    "name": "HDZero (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -9766,6 +10805,7 @@
    "login_captcha": false,
    "name": "Hebits",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -9838,6 +10878,7 @@
    "login_captcha": true,
    "name": "HellasHut",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -9910,6 +10951,7 @@
    "login_captcha": false,
    "name": "HellasHut (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -9953,6 +10995,7 @@
    "login_captcha": false,
    "name": "HELLENIC-HD (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -10028,6 +11071,7 @@
    "login_captcha": false,
    "name": "HellTorrents",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -10086,6 +11130,7 @@
    "login_captcha": false,
    "name": "HeroBit",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -10134,6 +11179,7 @@
    "login_captcha": true,
    "name": "HHanClub",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -10188,6 +11234,7 @@
    "login_captcha": false,
    "name": "HHD (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -10259,6 +11306,7 @@
    "login_captcha": false,
    "name": "House of Devil",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -10290,6 +11338,7 @@
    "login_captcha": false,
    "name": "HQMusic",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -10343,6 +11392,7 @@
    "login_captcha": true,
    "name": "HUDBT (蝴蝶)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -10408,6 +11458,7 @@
    "login_captcha": false,
    "name": "HunTorrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -10443,6 +11494,7 @@
    "login_captcha": false,
    "name": "HxPT (好学)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -10514,6 +11566,7 @@
    "login_captcha": false,
    "name": "Il Corsaro Blu",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -10526,6 +11579,74 @@
    },
    "slug": "ilcorsaroblu",
    "type": "semi-private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    1010,
+    1040,
+    1180,
+    2000,
+    2010,
+    2030,
+    2040,
+    2045,
+    3010,
+    3020,
+    3030,
+    3040,
+    3050,
+    4000,
+    4010,
+    4040,
+    4050,
+    4060,
+    4070,
+    5000,
+    5030,
+    5040,
+    5045,
+    5060,
+    5070,
+    5080,
+    7010,
+    7020,
+    7030,
+    8000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv"
+   ],
+   "description": "ImmortalSeed (iS) is a Private Torrent Tracker for MOVIES / TV / GENERAL",
+   "domains": [
+    "https://immortalseed.me/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "ImmortalSeed",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 5.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "immortalseed",
+   "type": "private"
   },
   {
    "auth": "credentials",
@@ -10560,6 +11681,7 @@
    "login_captcha": false,
    "name": "Immortuos",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -10598,6 +11720,7 @@
    "login_captcha": false,
    "name": "Indietorrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -10634,6 +11757,7 @@
    "login_captcha": false,
    "name": "InfinityHD (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -10714,6 +11838,7 @@
    "login_captcha": false,
    "name": "Infire",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -10770,6 +11895,7 @@
    "login_captcha": false,
    "name": "Insane Tracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -10816,6 +11942,7 @@
    "login_captcha": false,
    "name": "Internet Archive",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -10828,6 +11955,102 @@
    },
    "slug": "internetarchive",
    "type": "public"
+  },
+  {
+   "auth": "cookie",
+   "categories": [
+    1000,
+    1010,
+    1030,
+    1050,
+    1080,
+    1090,
+    2000,
+    2010,
+    2030,
+    2040,
+    2045,
+    2050,
+    2060,
+    2070,
+    2080,
+    3000,
+    3010,
+    3020,
+    3030,
+    3040,
+    4010,
+    4020,
+    4030,
+    4040,
+    4050,
+    5000,
+    5010,
+    5020,
+    5030,
+    5040,
+    5060,
+    5070,
+    5080,
+    6000,
+    6050,
+    6060,
+    6070,
+    7000,
+    7010,
+    7030,
+    7050,
+    8000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv",
+    "xxx"
+   ],
+   "description": "IPTorrents (IPT) is a Private Torrent Tracker for 0DAY / GENERAL.",
+   "domains": [
+    "https://iptorrents.com/",
+    "https://iptorrents.me/",
+    "https://nemo.iptorrents.com/",
+    "https://ipt.getcrazy.me/",
+    "https://ipt.findnemo.net/",
+    "https://ipt.beelyrics.net/",
+    "https://ipt.venom.global/",
+    "https://ipt.workisboring.net/",
+    "https://ipt.lol/",
+    "https://ipt.cool/",
+    "https://ipt.world/",
+    "https://ipt.octopus.town/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "IPTorrents",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "iptorrents",
+   "type": "private"
   },
   {
    "auth": "apikey",
@@ -10863,6 +12086,7 @@
    "login_captcha": false,
    "name": "ItaTorrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -10918,6 +12142,7 @@
    "login_captcha": false,
    "name": "JME-REUNIT3D (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -10964,6 +12189,7 @@
    "login_captcha": false,
    "name": "JPopsuki",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 3.0,
    "search": {
     "book": false,
@@ -11006,6 +12232,7 @@
    "login_captcha": false,
    "name": "JPTV4us (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11046,6 +12273,7 @@
    "login_captcha": false,
    "name": "KamePT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -11081,6 +12309,7 @@
    "login_captcha": true,
    "name": "Karagarga",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11125,6 +12354,7 @@
    "login_captcha": false,
    "name": "Keep Friends",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -11166,6 +12396,7 @@
    "login_captcha": true,
    "name": "Kelu",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -11250,6 +12481,7 @@
    "login_captcha": false,
    "name": "kickasstorrents.to",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -11316,6 +12548,7 @@
    "login_captcha": false,
    "name": "kickasstorrents.ws",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11347,6 +12580,7 @@
    "login_captcha": false,
    "name": "Kinorun",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -11401,6 +12635,7 @@
    "login_captcha": false,
    "name": "Kinozal",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11454,6 +12689,7 @@
    "login_captcha": false,
    "name": "Kinozal (M)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11466,6 +12702,102 @@
    },
    "slug": "kinozal-magnet",
    "type": "semi-private"
+  },
+  {
+   "auth": "none",
+   "categories": [
+    1000,
+    1010,
+    1020,
+    1030,
+    1040,
+    1050,
+    1080,
+    1090,
+    1110,
+    1120,
+    1130,
+    1180,
+    2000,
+    2010,
+    2020,
+    2030,
+    2040,
+    2045,
+    2060,
+    2070,
+    3000,
+    3010,
+    3020,
+    3030,
+    3040,
+    3050,
+    4000,
+    4010,
+    4020,
+    4030,
+    4040,
+    4050,
+    4060,
+    4070,
+    5000,
+    5020,
+    5030,
+    5040,
+    5045,
+    5050,
+    5060,
+    5070,
+    5080,
+    6000,
+    6040,
+    6060,
+    6070,
+    7000,
+    7010,
+    7020,
+    7030,
+    7040,
+    7050,
+    8000,
+    8010
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv",
+    "xxx"
+   ],
+   "description": "Knaben is a Public torrent meta-search engine",
+   "domains": [
+    "https://knaben.org/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [
+    "https://knaben.eu/"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "Knaben",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "knaben",
+   "type": "public"
   },
   {
    "auth": "cookie",
@@ -11516,6 +12848,7 @@
    "login_captcha": false,
    "name": "Korsar",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11572,6 +12905,7 @@
    "login_captcha": false,
    "name": "KrazyZone",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11621,6 +12955,7 @@
    "login_captcha": false,
    "name": "Kufei (库非)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11665,6 +13000,7 @@
    "login_captcha": false,
    "name": "Kufirc",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11703,6 +13039,7 @@
    "login_captcha": false,
    "name": "Kufirc2FA",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11752,6 +13089,7 @@
    "login_captcha": false,
    "name": "lajidui",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11820,6 +13158,7 @@
    "login_captcha": false,
    "name": "Last Digital Underground",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11890,6 +13229,7 @@
    "login_captcha": false,
    "name": "LastFiles",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -11944,6 +13284,7 @@
    "login_captcha": false,
    "name": "Lat-Team (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -11985,6 +13326,7 @@
    "login_captcha": false,
    "name": "LearnFlakes",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -12055,6 +13397,7 @@
    "login_captcha": false,
    "name": "leech24",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -12097,6 +13440,7 @@
    "login_captcha": true,
    "name": "LemonHD.net",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -12172,6 +13516,7 @@
    "login_captcha": false,
    "name": "LeSaloon",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -12230,6 +13575,7 @@
    "login_captcha": true,
    "name": "LetSeed",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -12245,6 +13591,39 @@
     ]
    },
    "slug": "letseed",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    3000,
+    3020
+   ],
+   "content": [
+    "audio"
+   ],
+   "description": "Libble is a Private Torrent Tracker for MUSIC",
+   "domains": [
+    "https://libble.me/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "Libble",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "album",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "libble",
    "type": "private"
   },
   {
@@ -12271,6 +13650,7 @@
    "login_captcha": false,
    "name": "LibraNet",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -12328,6 +13708,7 @@
    "login_captcha": false,
    "name": "LimeTorrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -12385,6 +13766,7 @@
    "login_captcha": false,
    "name": "LinkoManija",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -12422,6 +13804,7 @@
    "login_captcha": false,
    "name": "LinuxTracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": false,
@@ -12461,6 +13844,7 @@
    "login_captcha": false,
    "name": "Locadora (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -12511,6 +13895,7 @@
    "login_captcha": true,
    "name": "LongPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -12548,6 +13933,7 @@
    "login_captcha": false,
    "name": "LosslessClub",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -12580,6 +13966,7 @@
    "login_captcha": false,
    "name": "LP-Bits 2.0",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -12628,6 +14015,7 @@
    "login_captcha": false,
    "name": "LST",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -12678,6 +14066,7 @@
    "login_captcha": false,
    "name": "LuckPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -12717,6 +14106,7 @@
    "login_captcha": false,
    "name": "Luminarr (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -12758,6 +14148,7 @@
    "login_captcha": false,
    "name": "Mac Torrents Download",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -12821,6 +14212,7 @@
    "login_captcha": false,
    "name": "MaDs Revolution",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -12881,6 +14273,7 @@
    "login_captcha": false,
    "name": "Magico",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -12944,6 +14337,7 @@
    "login_captcha": false,
    "name": "Magnet Cat",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -12975,6 +14369,7 @@
    "login_captcha": false,
    "name": "MagnetDownload",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13031,6 +14426,7 @@
    "login_captcha": false,
    "name": "Majomparádé",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -13070,6 +14466,7 @@
    "login_captcha": false,
    "name": "Making Off",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 5.0,
    "search": {
     "book": false,
@@ -13111,6 +14508,7 @@
    "login_captcha": false,
    "name": "Malayabits (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13160,6 +14558,7 @@
    "login_captcha": false,
    "name": "March",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -13208,6 +14607,7 @@
    "login_captcha": false,
    "name": "Marine Tracker",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13261,6 +14661,7 @@
    "login_captcha": false,
    "name": "Matrix",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13319,6 +14720,7 @@
    "login_captcha": false,
    "name": "Mazepa",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13358,6 +14760,7 @@
    "login_captcha": false,
    "name": "MDAN",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13414,6 +14817,7 @@
    "login_captcha": false,
    "name": "MegaPeer",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13455,6 +14859,7 @@
    "login_captcha": false,
    "name": "Memphis",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13500,6 +14905,7 @@
    "login_captcha": false,
    "name": "MeseVilág",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13551,6 +14957,7 @@
    "login_captcha": false,
    "name": "MetalGuru",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13590,6 +14997,7 @@
    "login_captcha": false,
    "name": "Metal Tracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13627,6 +15035,7 @@
    "login_captcha": false,
    "name": "MidnightScene",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -13666,6 +15075,7 @@
    "login_captcha": false,
    "name": "Mikan",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -13708,6 +15118,7 @@
    "login_captcha": false,
    "name": "Milkie",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13751,6 +15162,7 @@
    "login_captcha": false,
    "name": "Milnueve (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13796,6 +15208,7 @@
    "login_captcha": false,
    "name": "MioBT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13827,6 +15240,7 @@
    "login_captcha": false,
    "name": "MixtapeTorrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -13870,6 +15284,7 @@
    "login_captcha": false,
    "name": "MMA-torrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13920,6 +15335,7 @@
    "login_captcha": false,
    "name": "MNV",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -13997,6 +15413,7 @@
    "login_captcha": false,
    "name": "MOJBLiNK",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -14032,6 +15449,7 @@
    "login_captcha": false,
    "name": "MomentPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14072,6 +15490,7 @@
    "login_captcha": false,
    "name": "MonikaDesign (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14116,6 +15535,7 @@
    "login_captcha": false,
    "name": "MouseBits",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14127,6 +15547,73 @@
     "tv_ids": []
    },
    "slug": "mousebits",
+   "type": "private"
+  },
+  {
+   "auth": "apikey",
+   "categories": [
+    1090,
+    2020,
+    2030,
+    2040,
+    2050,
+    2070,
+    3000,
+    3020,
+    3030,
+    4010,
+    4050,
+    5030,
+    5040,
+    5060,
+    5070,
+    5080,
+    6000,
+    6010,
+    6060,
+    6080,
+    7020,
+    8000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv",
+    "xxx"
+   ],
+   "description": "M-Team TP (MTTP) is a CHINESE Private Torrent Tracker for HD MOVIES / TV / 3X",
+   "domains": [
+    "https://kp.m-team.cc/",
+    "https://tp.m-team.cc/",
+    "https://pt.m-team.cc/"
+   ],
+   "language": "zh-CN",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "M-Team - TP",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 5.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "mteamtp",
    "type": "private"
   },
   {
@@ -14152,6 +15639,7 @@
    "login_captcha": false,
    "name": "MuseBootlegs",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14185,6 +15673,7 @@
    "login_captcha": false,
    "name": "Musopia (音乐乌托邦)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14235,6 +15724,7 @@
    "login_captcha": false,
    "name": "Muxuege",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -14274,6 +15764,7 @@
    "login_captcha": false,
    "name": "MVGroup Forum",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14307,6 +15798,7 @@
    "login_captcha": false,
    "name": "MVGroup Main",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14319,6 +15811,43 @@
    },
    "slug": "mvgroupmain",
    "type": "semi-private"
+  },
+  {
+   "auth": "cookie",
+   "categories": [
+    3030,
+    7010,
+    7020,
+    7030,
+    7040
+   ],
+   "content": [
+    "audio",
+    "books"
+   ],
+   "description": "MyAnonaMouse (MAM) is a large ebook and audiobook tracker.",
+   "domains": [
+    "https://www.myanonamouse.net/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "MyAnonamouse",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "myanonamouse",
+   "type": "private"
   },
   {
    "auth": "none",
@@ -14338,6 +15867,7 @@
    "login_captcha": false,
    "name": "MyPornClub",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14371,6 +15901,7 @@
    "login_captcha": false,
    "name": "MySpleen",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14418,6 +15949,7 @@
    "login_captcha": false,
    "name": "NanyangPT (南洋)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14480,6 +16012,7 @@
    "login_captcha": false,
    "name": "nCore",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -14495,6 +16028,44 @@
     ]
    },
    "slug": "ncore",
+   "type": "private"
+  },
+  {
+   "auth": "apikey",
+   "categories": [
+    5000,
+    5030,
+    5040,
+    5045
+   ],
+   "content": [
+    "tv"
+   ],
+   "description": "Nebulance (NBL) is a ratioless Private Torrent Tracker for TV",
+   "domains": [
+    "https://nebulance.io/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "Nebulance",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid",
+     "tvmazeid"
+    ]
+   },
+   "slug": "nebulance",
    "type": "private"
   },
   {
@@ -14518,6 +16089,7 @@
    "login_captcha": false,
    "name": "nekoBT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14564,6 +16136,7 @@
    "login_captcha": false,
    "name": "NetHD",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -14624,6 +16197,7 @@
    "login_captcha": false,
    "name": "New-Team",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -14695,6 +16269,7 @@
    "login_captcha": false,
    "name": "New Heaven",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -14765,6 +16340,7 @@
    "login_captcha": false,
    "name": "The New Retro",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -14798,6 +16374,7 @@
    "login_captcha": false,
    "name": "NewStudio",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": false,
@@ -14831,6 +16408,7 @@
    "login_captcha": false,
    "name": "NewStudioL",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": false,
@@ -14864,6 +16442,7 @@
    "login_captcha": false,
    "name": "NicePT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14895,6 +16474,7 @@
    "login_captcha": false,
    "name": "Nipponsei",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14933,6 +16513,7 @@
    "login_captcha": false,
    "name": "Nirvana (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -14985,6 +16566,7 @@
    "login_captcha": true,
    "name": "njtupt (浦园)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -15033,6 +16615,7 @@
    "login_captcha": false,
    "name": "NOBS",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -15087,6 +16670,7 @@
    "login_captcha": false,
    "name": "NoNaMe Club",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -15134,6 +16718,7 @@
    "login_captcha": false,
    "name": "NoNaMe ClubL",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -15146,6 +16731,53 @@
    },
    "slug": "noname-clubl",
    "type": "semi-private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    1000,
+    2000,
+    3000,
+    3020,
+    3030,
+    3050,
+    4000,
+    5000,
+    7000
+   ],
+   "content": [
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "pc",
+    "tv"
+   ],
+   "description": "NorBits is a Norwegian Private site for MOVIES / TV / GENERAL",
+   "domains": [
+    "https://norbits.net/"
+   ],
+   "language": "nb-NO",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "NorBits",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "norbits",
+   "type": "private"
   },
   {
    "auth": "apikey",
@@ -15184,6 +16816,7 @@
    "login_captcha": false,
    "name": "NordicBytes",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -15239,6 +16872,7 @@
    "login_captcha": false,
    "name": "NordicQuality (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -15303,6 +16937,7 @@
    "login_captcha": false,
    "name": "Nostradamus",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -15350,6 +16985,7 @@
    "login_captcha": false,
    "name": "NovaHD",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -15419,6 +17055,7 @@
    "login_captcha": false,
    "name": "Nyaa.si",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -15472,6 +17109,7 @@
    "login_captcha": false,
    "name": "OKPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -15540,6 +17178,7 @@
    "login_captcha": false,
    "name": "Old Greek Tracker (OGT)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -15579,6 +17218,7 @@
    "login_captcha": false,
    "name": "OldToonsWorld (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -15617,6 +17257,7 @@
    "login_captcha": false,
    "name": "OneJAV",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": false,
@@ -15650,6 +17291,7 @@
    "login_captcha": false,
    "name": "OnlyEncodes+ (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -15688,6 +17330,7 @@
    "login_captcha": false,
    "name": "OpenCD",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -15719,6 +17362,7 @@
    "login_captcha": false,
    "name": "OpenSharing",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -15769,6 +17413,7 @@
    "login_captcha": false,
    "name": "Order66",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -15780,6 +17425,46 @@
     "tv_ids": []
    },
    "slug": "order66",
+   "type": "private"
+  },
+  {
+   "auth": "apikey",
+   "categories": [
+    3000,
+    3030,
+    4000,
+    7020,
+    7030,
+    8000
+   ],
+   "content": [
+    "audio",
+    "books",
+    "other",
+    "pc"
+   ],
+   "description": "Orpheus (APOLLO) is a Private Torrent Tracker for MUSIC",
+   "domains": [
+    "https://orpheus.network/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "Orpheus",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 3.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "album",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "orpheus",
    "type": "private"
   },
   {
@@ -15815,6 +17500,7 @@
    "login_captcha": true,
    "name": "OshenPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -15862,6 +17548,7 @@
    "login_captcha": false,
    "name": "OurBits",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -15939,6 +17626,7 @@
    "login_captcha": false,
    "name": "P2PBG",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -15988,6 +17676,7 @@
    "login_captcha": false,
    "name": "Panda",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -16027,6 +17716,7 @@
    "login_captcha": false,
    "name": "PandaCD",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -16074,6 +17764,7 @@
    "login_captcha": false,
    "name": "ParabellumHD (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -16136,6 +17827,7 @@
    "login_captcha": false,
    "name": "Party-Tracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -16147,6 +17839,40 @@
     "tv_ids": []
    },
    "slug": "party-tracker",
+   "type": "private"
+  },
+  {
+   "auth": "apikey",
+   "categories": [
+    2000
+   ],
+   "content": [
+    "movies"
+   ],
+   "description": "PassThePopcorn (PTP) is a Private site for MOVIES / TV",
+   "domains": [
+    "https://passthepopcorn.me"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "PassThePopcorn",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 4.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "none",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "passthepopcorn",
    "type": "private"
   },
   {
@@ -16170,6 +17896,7 @@
    "login_captcha": false,
    "name": "PC-torrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -16237,6 +17964,7 @@
    "login_captcha": false,
    "name": "Peeratiko",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -16282,6 +18010,7 @@
    "login_captcha": false,
    "name": "PeerGarden",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -16342,6 +18071,7 @@
    "login_captcha": false,
    "name": "Peers.FM",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -16379,6 +18109,7 @@
    "login_captcha": false,
    "name": "Phoenix Project",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -16412,6 +18143,7 @@
    "login_captcha": false,
    "name": "720pier",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -16456,6 +18188,7 @@
    "login_captcha": false,
    "name": "PigNetwork (猪猪网)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -16517,6 +18250,7 @@
    "login_captcha": false,
    "name": "PixelCove",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -16572,6 +18306,7 @@
    "login_captcha": false,
    "name": "PixelCove2FA",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -16583,6 +18318,40 @@
     "tv_ids": []
    },
    "slug": "pixelcove2fa",
+   "type": "private"
+  },
+  {
+   "auth": "cookie",
+   "categories": [
+    2040
+   ],
+   "content": [
+    "movies"
+   ],
+   "description": "PixelHD (PxHD) is a ratioless Private Torrent Tracker for HD .MP4 MOVIES / TV",
+   "domains": [
+    "https://pixelhd.me/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "PiXELHD",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "none",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "pixelhd",
    "type": "private"
   },
   {
@@ -16605,6 +18374,7 @@
    "login_captcha": false,
    "name": "PlayletPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -16638,6 +18408,7 @@
    "login_captcha": false,
    "name": "plugintorrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -16678,6 +18449,7 @@
    "login_captcha": false,
    "name": "Podzemlje",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -16731,6 +18503,7 @@
    "login_captcha": false,
    "name": "Polish Torrent (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -16790,6 +18563,7 @@
    "login_captcha": false,
    "name": "PolishTracker (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -16863,6 +18637,7 @@
    "login_captcha": false,
    "name": "Polskie-Torrenty",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -16899,6 +18674,7 @@
    "login_captcha": true,
    "name": "PornoLab",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -16935,6 +18711,7 @@
    "login_captcha": false,
    "name": "PornoTorrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -16966,6 +18743,7 @@
    "login_captcha": false,
    "name": "PornRips",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -16999,6 +18777,7 @@
    "login_captcha": false,
    "name": "PornXLab",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -17043,6 +18822,7 @@
    "login_captcha": false,
    "name": "Portugas (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -17103,6 +18883,7 @@
    "login_captcha": false,
    "name": "Postman",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 4.0,
    "search": {
     "book": true,
@@ -17156,6 +18937,7 @@
    "login_captcha": false,
    "name": "Postman (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 6.0,
    "search": {
     "book": true,
@@ -17168,6 +18950,127 @@
    },
    "slug": "postman-api",
    "type": "semi-private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    1000,
+    1010,
+    1020,
+    1030,
+    1040,
+    1050,
+    1080,
+    1090,
+    2000,
+    2030,
+    2040,
+    2045,
+    3000,
+    3010,
+    3040,
+    4000,
+    4010,
+    4030,
+    4050,
+    5000,
+    5030,
+    5040,
+    5045,
+    5060,
+    5080,
+    6000,
+    6010,
+    6030,
+    6040,
+    6045,
+    6070,
+    7020,
+    8000
+   ],
+   "content": [
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv",
+    "xxx"
+   ],
+   "description": "PreToMe is a ratioless 0Day/General tracker.",
+   "domains": [
+    "https://pretome.info/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "PreToMe",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "pretome",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    2000,
+    2030,
+    2040,
+    2045,
+    5000,
+    5030,
+    5040,
+    5045
+   ],
+   "content": [
+    "movies",
+    "tv"
+   ],
+   "description": "PrivateHD (PHD) is a Private Torrent Tracker for HD MOVIES / TV and the sister-site of AvistaZ, CinemaZ, ExoticaZ, and AnimeZ",
+   "domains": [
+    "https://privatehd.to/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "PrivateHD",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 6.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid",
+     "tmdbid"
+    ],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid",
+     "tvdbid"
+    ]
+   },
+   "slug": "privatehd",
+   "type": "private"
   },
   {
    "auth": "cookie",
@@ -17200,6 +19103,7 @@
    "login_captcha": false,
    "name": "ProAudioTorrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -17231,6 +19135,7 @@
    "login_captcha": false,
    "name": "ProPorno",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -17273,6 +19178,7 @@
    "login_captcha": true,
    "name": "PTCafe (咖啡)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -17320,6 +19226,7 @@
    "login_captcha": false,
    "name": "PTCC (我的PT)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -17374,6 +19281,7 @@
    "login_captcha": false,
    "name": "PTerClub (PT之友俱乐部)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -17430,6 +19338,7 @@
    "login_captcha": false,
    "name": "PTFans",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -17492,6 +19401,7 @@
    "login_captcha": false,
    "name": "PTFiles",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -17542,6 +19452,7 @@
    "login_captcha": true,
    "name": "PT GTK",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -17597,6 +19508,7 @@
    "login_captcha": false,
    "name": "PThome",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -17645,6 +19557,7 @@
    "login_captcha": true,
    "name": "PT分享站 (itzmx)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -17693,6 +19606,7 @@
    "login_captcha": false,
    "name": "PTLAO",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -17741,6 +19655,7 @@
    "login_captcha": true,
    "name": "PTLGS",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -17788,6 +19703,7 @@
    "login_captcha": false,
    "name": "PTSBAO (烧包)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -17835,6 +19751,7 @@
    "login_captcha": false,
    "name": "PTSKIT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -17884,6 +19801,7 @@
    "login_captcha": false,
    "name": "PTTey",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -17935,6 +19853,7 @@
    "login_captcha": false,
    "name": "PTTime",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 5.0,
    "search": {
     "book": false,
@@ -17983,6 +19902,7 @@
    "login_captcha": true,
    "name": "PTYING (樱花)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18033,6 +19953,7 @@
    "login_captcha": false,
    "name": "PTzone",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18079,6 +20000,7 @@
    "login_captcha": false,
    "name": "Punk's Horror Tracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -18155,6 +20077,7 @@
    "login_captcha": false,
    "name": "PuntoTorrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -18186,6 +20109,7 @@
    "login_captcha": false,
    "name": "PussyTorrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18235,6 +20159,7 @@
    "login_captcha": false,
    "name": "PuTao (葡萄)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18274,6 +20199,7 @@
    "login_captcha": false,
    "name": "PWTorrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18307,6 +20233,7 @@
    "login_captcha": false,
    "name": "PWTorrents2FA",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18352,6 +20279,7 @@
    "login_captcha": false,
    "name": "Qingwa (青蛙)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18411,6 +20339,7 @@
    "login_captcha": false,
    "name": "R3V WTF!",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -18444,6 +20373,7 @@
    "login_captcha": false,
    "name": "Racing4Everyone (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18475,6 +20405,7 @@
    "login_captcha": false,
    "name": "RacingForMe",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": false,
@@ -18524,6 +20455,7 @@
    "login_captcha": true,
    "name": "RailgunPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -18575,6 +20507,7 @@
    "login_captcha": true,
    "name": "Rainbow Tracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18623,6 +20556,7 @@
    "login_captcha": false,
    "name": "Rastastugan (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -18641,6 +20575,48 @@
     ]
    },
    "slug": "rastastugan-api",
+   "type": "private"
+  },
+  {
+   "auth": "apikey",
+   "categories": [
+    3000,
+    3030,
+    4000,
+    7020,
+    7030,
+    8000
+   ],
+   "content": [
+    "audio",
+    "books",
+    "other",
+    "pc"
+   ],
+   "description": "REDActed (Aka.PassTheHeadPhones) is one of the most well-known music trackers.",
+   "domains": [
+    "https://redacted.sh/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [
+    "https://redacted.ch/"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "Redacted",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 3.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "album",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "redacted",
    "type": "private"
   },
   {
@@ -18684,6 +20660,7 @@
    "login_captcha": false,
    "name": "Red Star Torrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -18718,6 +20695,7 @@
    "login_captcha": false,
    "name": "ReelFLiX (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18732,6 +20710,52 @@
     "tv_ids": []
    },
    "slug": "reelflix-api",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    2000,
+    3000,
+    3020,
+    5000,
+    5060,
+    7000
+   ],
+   "content": [
+    "audio",
+    "books",
+    "movies",
+    "tv"
+   ],
+   "description": "RetroFlix (RFX) is a Private Torrent Tracker for Classic Movies / TV / General Releases",
+   "domains": [
+    "https://retroflix.club/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [
+    "https://retroflix.net/"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "RetroFlix",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 2.1,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "retroflix",
    "type": "private"
   },
   {
@@ -18752,6 +20776,7 @@
    "login_captcha": false,
    "name": "RetroMoviesClub (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18796,6 +20821,7 @@
    "login_captcha": false,
    "name": "RetroToon",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -18807,6 +20833,74 @@
     "tv_ids": []
    },
    "slug": "retrotoon",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    1010,
+    1020,
+    1030,
+    1050,
+    1080,
+    2020,
+    2030,
+    2040,
+    2050,
+    2070,
+    3000,
+    3020,
+    3040,
+    3050,
+    4010,
+    4020,
+    4030,
+    4050,
+    5030,
+    5040,
+    5050,
+    5070,
+    6000,
+    6010,
+    7000,
+    7020
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "pc",
+    "tv",
+    "xxx"
+   ],
+   "description": "The Revolution has begun",
+   "domains": [
+    "https://revott.me/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [
+    "https://revolutiontt.me/"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "RevolutionTT",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "revolutiontt",
    "type": "private"
   },
   {
@@ -18829,6 +20923,7 @@
    "login_captcha": false,
    "name": "RGFootball",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -18860,6 +20955,7 @@
    "login_captcha": false,
    "name": "RinTor",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18891,6 +20987,7 @@
    "login_captcha": false,
    "name": "RinTor.NeT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -18948,6 +21045,7 @@
    "login_captcha": false,
    "name": "RiperAM",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -18983,6 +21081,7 @@
    "login_captcha": false,
    "name": "RocketHD (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -19024,6 +21123,7 @@
    "login_captcha": true,
    "name": "Romanian Metal Torrents",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -19071,6 +21171,7 @@
    "login_captcha": false,
    "name": "Rousi.pro",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -19132,6 +21233,7 @@
    "login_captcha": false,
    "name": "RUDUB",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -19183,6 +21285,7 @@
    "login_captcha": false,
    "name": "Rustorka",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -19234,6 +21337,7 @@
    "login_captcha": false,
    "name": "RuTor",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -19250,6 +21354,91 @@
    },
    "slug": "rutor",
    "type": "public"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    1000,
+    1010,
+    1020,
+    1030,
+    1040,
+    1050,
+    1080,
+    1090,
+    1120,
+    1180,
+    2000,
+    2010,
+    2020,
+    2040,
+    2045,
+    2060,
+    2070,
+    3000,
+    3010,
+    3020,
+    3030,
+    3040,
+    4000,
+    4030,
+    4040,
+    4050,
+    4060,
+    4070,
+    5000,
+    5020,
+    5030,
+    5040,
+    5045,
+    5050,
+    5060,
+    5070,
+    5080,
+    7000,
+    7010,
+    7020,
+    7030,
+    7040,
+    7050,
+    8000,
+    8010
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv"
+   ],
+   "description": "RuTracker.org is a RUSSIAN Semi-Private site with a thriving file-sharing community",
+   "domains": [
+    "https://rutracker.org/",
+    "https://rutracker.net/",
+    "https://rutracker.nl/"
+   ],
+   "language": "ru-RU",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "RuTracker.org",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "rutrackerorg",
+   "type": "semi-private"
   },
   {
    "auth": "apikey",
@@ -19285,6 +21474,7 @@
    "login_captcha": false,
    "name": "SAMARITANO (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -19334,6 +21524,7 @@
    "login_captcha": true,
    "name": "SBPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -19351,6 +21542,52 @@
     ]
    },
    "slug": "sbpt",
+   "type": "private"
+  },
+  {
+   "auth": "passkey",
+   "categories": [
+    2020,
+    2040,
+    2045,
+    2050,
+    3020,
+    5040,
+    5045,
+    6000,
+    8000
+   ],
+   "content": [
+    "audio",
+    "movies",
+    "other",
+    "tv",
+    "xxx"
+   ],
+   "description": "SceneHD is Private site for HD TV / MOVIES",
+   "domains": [
+    "https://scenehd.org/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "SceneHD",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "scenehd",
    "type": "private"
   },
   {
@@ -19409,6 +21646,7 @@
    "login_captcha": false,
    "name": "SceneRush",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -19474,6 +21712,7 @@
    "login_captcha": false,
    "name": "SceneTime (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 3.0,
    "search": {
     "book": true,
@@ -19489,6 +21728,42 @@
     ]
    },
    "slug": "scenetime-api",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    2000,
+    3000
+   ],
+   "content": [
+    "audio",
+    "movies"
+   ],
+   "description": "Secret Cinema is a Private ratioless site for rare MOVIES.",
+   "domains": [
+    "https://secret-cinema.pw/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "Secret Cinema",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "album",
+    "tv": "none",
+    "tv_ids": []
+   },
+   "slug": "secretcinema",
    "type": "private"
   },
   {
@@ -19521,6 +21796,7 @@
    "login_captcha": false,
    "name": "SeedCore (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -19587,6 +21863,7 @@
    "login_captcha": false,
    "name": "SeedFile",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -19642,6 +21919,7 @@
    "login_captcha": false,
    "name": "seedpool (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -19696,6 +21974,7 @@
    "login_captcha": false,
    "name": "seleZen",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -19738,6 +22017,7 @@
    "login_captcha": false,
    "name": "SewerPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -19792,6 +22072,7 @@
    "login_captcha": false,
    "name": "SexTorrent (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -19830,6 +22111,7 @@
    "login_captcha": false,
    "name": "Sexy-Pics",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": false,
@@ -19893,6 +22175,7 @@
    "login_captcha": false,
    "name": "Shadowbit",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -19930,6 +22213,7 @@
    "login_captcha": true,
    "name": "ShaKaw",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -19962,6 +22246,7 @@
    "login_captcha": false,
    "name": "Shana Project",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20010,6 +22295,7 @@
    "login_captcha": false,
    "name": "Shareisland (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -20031,6 +22317,43 @@
    "type": "private"
   },
   {
+   "auth": "credentials",
+   "categories": [
+    5000,
+    5030,
+    5040,
+    5045
+   ],
+   "content": [
+    "tv"
+   ],
+   "description": "Shazbat is a PRIVATE Torrent Tracker with highly curated TV content",
+   "domains": [
+    "https://www.shazbat.tube/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [
+    "https://www.shazbat.tv/"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "Shazbat",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 5.1,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": false,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "shazbat",
+   "type": "private"
+  },
+  {
    "auth": "none",
    "categories": [
     5030,
@@ -20049,6 +22372,7 @@
    "login_captcha": false,
    "name": "showRSS",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20113,6 +22437,7 @@
    "login_captcha": false,
    "name": "SiamBIT",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -20150,6 +22475,7 @@
    "login_captcha": false,
    "name": "Siqi",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -20181,6 +22507,7 @@
    "login_captcha": false,
    "name": "SkidrowRepack",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20216,6 +22543,7 @@
    "login_captcha": false,
    "name": "SkipTheCommercials (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20280,6 +22608,7 @@
    "login_captcha": false,
    "name": "Sk-CzTorrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -20349,6 +22678,7 @@
    "login_captcha": false,
    "name": "SkTorrent.org",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -20392,6 +22722,7 @@
    "login_captcha": false,
    "name": "Slobit Games",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20424,6 +22755,7 @@
    "login_captcha": false,
    "name": "SnowPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20460,6 +22792,7 @@
    "login_captcha": false,
    "name": "sosulki",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20501,6 +22834,7 @@
    "login_captcha": true,
    "name": "SoulVoice (聆音Club)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20518,6 +22852,141 @@
     ]
    },
    "slug": "soulvoice",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    1000,
+    2000,
+    2030,
+    2040,
+    2045,
+    2050,
+    2070,
+    3000,
+    3020,
+    4000,
+    4010,
+    4030,
+    4040,
+    4050,
+    5000,
+    5030,
+    5040,
+    5060,
+    5070,
+    5080,
+    6000,
+    6060,
+    7020,
+    8000,
+    8010
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv",
+    "xxx"
+   ],
+   "description": "SpeedApp is a ROMANIAN Private Torrent Tracker for MOVIES / TV / GENERAL",
+   "domains": [
+    "https://speedapp.io/"
+   ],
+   "language": "ro-RO",
+   "legacy_domains": [
+    "https://speedapp.io"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "SpeedApp.io",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "speedappio",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    1000,
+    1030,
+    1050,
+    1080,
+    2000,
+    2020,
+    2040,
+    2050,
+    2060,
+    2070,
+    3000,
+    3020,
+    4010,
+    4020,
+    4030,
+    4040,
+    5000,
+    5030,
+    5040,
+    5060,
+    5070,
+    7000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "pc",
+    "tv"
+   ],
+   "description": "Your home now!",
+   "domains": [
+    "https://speed.cd/",
+    "https://speed.click/",
+    "https://speeders.me/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "SpeedCD",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "speedcd",
    "type": "private"
   },
   {
@@ -20558,6 +23027,7 @@
    "login_captcha": false,
    "name": "Speedmaster HD",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -20627,6 +23097,7 @@
    "login_captcha": false,
    "name": "Spirit of Revolution",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -20670,6 +23141,7 @@
    "login_captcha": false,
    "name": "SportsCora (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20708,6 +23180,7 @@
    "login_captcha": false,
    "name": "SportsCult",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20749,6 +23222,7 @@
    "login_captcha": false,
    "name": "SpringSunday",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20771,6 +23245,45 @@
   {
    "auth": "none",
    "categories": [
+    2020,
+    5070
+   ],
+   "content": [
+    "anime",
+    "movies",
+    "tv"
+   ],
+   "description": "SubsPlease - A better HorribleSubs/Erai replacement",
+   "domains": [
+    "https://subsplease.org/",
+    "https://subsplease.mrunblock.bond/",
+    "https://subsplease.nocensor.click/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [
+    "https://subsplease.nocensor.space/"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "SubsPlease",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "subsplease",
+   "type": "public"
+  },
+  {
+   "auth": "none",
+   "categories": [
     6000
    ],
    "content": [
@@ -20789,6 +23302,7 @@
    "login_captcha": false,
    "name": "sukebei.nyaa.si",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20831,6 +23345,7 @@
    "login_captcha": false,
    "name": "SunnyPT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -20890,6 +23405,7 @@
    "login_captcha": false,
    "name": "Superbits",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -20940,6 +23456,7 @@
    "login_captcha": false,
    "name": "Swarmazon (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -20986,6 +23503,7 @@
    "login_captcha": false,
    "name": "TangPT (躺平)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -21062,6 +23580,7 @@
    "login_captcha": true,
    "name": "Tapochek",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -21099,6 +23618,7 @@
    "login_captcha": false,
    "name": "Tasmanit",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -21165,6 +23685,7 @@
    "login_captcha": true,
    "name": "Team CT Game",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -21219,6 +23740,7 @@
    "login_captcha": false,
    "name": "TeamFlix",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -21269,6 +23791,7 @@
    "login_captcha": false,
    "name": "TeamHD",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -21313,6 +23836,7 @@
    "login_captcha": false,
    "name": "TeamOS",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -21391,6 +23915,7 @@
    "login_captcha": false,
    "name": "The Brothers",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -21462,6 +23987,7 @@
    "login_captcha": false,
    "name": "The Crazy Ones",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -21495,6 +24021,7 @@
    "login_captcha": false,
    "name": "The Empire",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -21570,6 +24097,7 @@
    "login_captcha": false,
    "name": "The Falling Angels",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -21601,6 +24129,7 @@
    "login_captcha": false,
    "name": "The Geeks",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -21634,6 +24163,7 @@
    "login_captcha": false,
    "name": "The Kitchen",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -21679,6 +24209,7 @@
    "login_captcha": false,
    "name": "TheLeachZone (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -21718,6 +24249,7 @@
    "login_captcha": false,
    "name": "themixingbowl",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -21786,6 +24318,7 @@
    "login_captcha": false,
    "name": "The-New-Fun",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -21819,6 +24352,7 @@
    "login_captcha": false,
    "name": "The Occult",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -21859,6 +24393,7 @@
    "login_captcha": false,
    "name": "The Old School (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -21932,6 +24467,7 @@
    "login_captcha": false,
    "name": "The Paradiese",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22065,6 +24601,7 @@
    "login_captcha": false,
    "name": "The Pirate Bay",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22098,6 +24635,7 @@
    "login_captcha": false,
    "name": "The Place",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -22131,6 +24669,7 @@
    "login_captcha": false,
    "name": "The Show",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -22164,6 +24703,7 @@
    "login_captcha": false,
    "name": "The Vault",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -22212,6 +24752,7 @@
    "login_captcha": false,
    "name": "TJUPT (北洋园PT)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22264,6 +24805,7 @@
    "login_captcha": true,
    "name": "TLFBits",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -22319,6 +24861,7 @@
    "login_captcha": false,
    "name": "TmGHuB",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22370,6 +24913,7 @@
    "login_captcha": false,
    "name": "Toca Share (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22423,6 +24967,7 @@
    "login_captcha": false,
    "name": "Tokyo Toshokan",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22435,6 +24980,67 @@
    },
    "slug": "tokyotosho",
    "type": "public"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    2000,
+    2020,
+    2040,
+    2070,
+    3000,
+    3020,
+    3030,
+    3040,
+    4000,
+    4030,
+    4040,
+    4050,
+    4060,
+    4070,
+    5000,
+    5040,
+    5050,
+    5060,
+    5070,
+    5080,
+    7000,
+    7010,
+    7030,
+    8000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "movies",
+    "other",
+    "pc",
+    "tv"
+   ],
+   "description": "Toloka.to is a Semi-Private Ukrainian torrent site with a thriving file-sharing community",
+   "domains": [
+    "https://toloka.to/"
+   ],
+   "language": "uk-UA",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "Toloka.to",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "tolokato",
+   "type": "semi-private"
   },
   {
    "auth": "cookie",
@@ -22476,6 +25082,7 @@
    "login_captcha": false,
    "name": "Tormac",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22535,6 +25142,7 @@
    "login_captcha": false,
    "name": "Tornado",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22589,6 +25197,7 @@
    "login_captcha": false,
    "name": "Torrent Heaven",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22620,6 +25229,7 @@
    "login_captcha": false,
    "name": "torrent-pirat",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 5.1,
    "search": {
     "book": false,
@@ -22676,6 +25286,7 @@
    "login_captcha": false,
    "name": "TOrrent-tuRK",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22743,6 +25354,7 @@
    "login_captcha": false,
    "name": "Torrent9",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22813,6 +25425,7 @@
    "login_captcha": false,
    "name": "TorrentBD",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22846,6 +25459,7 @@
    "login_captcha": false,
    "name": "torrent.by",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 5.0,
    "search": {
     "book": true,
@@ -22890,6 +25504,7 @@
    "login_captcha": false,
    "name": "TorrentByte",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -22902,6 +25517,74 @@
    },
    "slug": "torrentbyte",
    "type": "public"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    1000,
+    2000,
+    2030,
+    2040,
+    2045,
+    2050,
+    2070,
+    3000,
+    3010,
+    3020,
+    3040,
+    4000,
+    4030,
+    4050,
+    5000,
+    5020,
+    5030,
+    5040,
+    5045,
+    5070,
+    6000,
+    6030,
+    6040,
+    6050,
+    6060,
+    8010
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv",
+    "xxx"
+   ],
+   "description": "A decade of TorrentBytes",
+   "domains": [
+    "https://www.torrentbytes.net/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "Torrent Bytes",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "torrentbytes",
+   "type": "private"
   },
   {
    "auth": "cookie",
@@ -22939,6 +25622,7 @@
    "login_captcha": false,
    "name": "TorrentCCF",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -22987,6 +25671,7 @@
    "login_captcha": false,
    "name": "TorrentClaw",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -23046,6 +25731,7 @@
    "login_captcha": false,
    "name": "Torrent[CORE]",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 10.1,
    "search": {
     "book": true,
@@ -23058,6 +25744,95 @@
    },
    "slug": "torrentcore",
    "type": "public"
+  },
+  {
+   "auth": "cookie",
+   "categories": [
+    1010,
+    1020,
+    1040,
+    1080,
+    2000,
+    2010,
+    2030,
+    2045,
+    2050,
+    2070,
+    3000,
+    3010,
+    3020,
+    3030,
+    3050,
+    3060,
+    4000,
+    4030,
+    4050,
+    5000,
+    5020,
+    5030,
+    5040,
+    5045,
+    5070,
+    5080,
+    5090,
+    6000,
+    6050,
+    7000,
+    7060,
+    8000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv",
+    "xxx"
+   ],
+   "description": "TorrentDay (TD) is a Private site for TV / MOVIES / GENERAL",
+   "domains": [
+    "https://tday.love/",
+    "https://torrentday.cool/",
+    "https://secure.torrentday.com/",
+    "https://classic.torrentday.com/",
+    "https://www.torrentday.com/",
+    "https://www.torrentday.me/",
+    "https://torrentday.it/",
+    "https://td.findnemo.net/",
+    "https://td.getcrazy.me/",
+    "https://td.venom.global/",
+    "https://td.workisboring.net/",
+    "https://tday.findnemo.net/",
+    "https://tday.getcrazy.me/",
+    "https://tday.venom.global/",
+    "https://tday.workisboring.net/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "TorrentDay",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": [
+     "imdbid"
+    ]
+   },
+   "slug": "torrentday",
+   "type": "private"
   },
   {
    "auth": "credentials",
@@ -23105,6 +25880,7 @@
    "login_captcha": false,
    "name": "TorrentDD",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -23168,6 +25944,7 @@
    "login_captcha": false,
    "name": "TorrentDownload",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -23222,6 +25999,7 @@
    "login_captcha": false,
    "name": "Torrent Downloads",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -23255,6 +26033,7 @@
    "login_captcha": false,
    "name": "Torrenteros (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -23312,6 +26091,7 @@
    "login_captcha": false,
    "name": "TorrentHaven (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -23381,6 +26161,7 @@
    "login_captcha": false,
    "name": "TorrentHR (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -23459,6 +26240,7 @@
    "login_captcha": false,
    "name": "Torrenting",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -23507,6 +26289,7 @@
    "login_captcha": false,
    "name": "TorrentKitty",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -23584,6 +26367,7 @@
    "login_captcha": false,
    "name": "TorrentLeech",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 4.1,
    "search": {
     "book": true,
@@ -23654,6 +26438,7 @@
    "login_captcha": false,
    "name": "Torrent.LT",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -23711,6 +26496,7 @@
    "login_captcha": false,
    "name": "TorrentMasters",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -23745,6 +26531,7 @@
    "login_captcha": false,
    "name": "Torrent Oyun indir",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -23785,6 +26572,7 @@
    "login_captcha": false,
    "name": "TorrentProject2",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -23796,6 +26584,40 @@
     "tv_ids": []
    },
    "slug": "torrentproject2",
+   "type": "public"
+  },
+  {
+   "auth": "none",
+   "categories": [
+    8000
+   ],
+   "content": [
+    "other"
+   ],
+   "description": "Torrents.csv is a self-hostable open source torrent search engine and database",
+   "domains": [
+    "https://torrents-csv.com/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [
+    "https://torrents-csv.ml/"
+   ],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "TorrentsCSV",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": false,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "none",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "torrentscsv",
    "type": "public"
   },
   {
@@ -23843,6 +26665,7 @@
    "login_captcha": false,
    "name": "Torrentsome",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -23855,6 +26678,66 @@
    },
    "slug": "torrentsome",
    "type": "public"
+  },
+  {
+   "auth": "apikey",
+   "categories": [
+    1090,
+    2010,
+    2030,
+    2040,
+    2045,
+    3010,
+    3020,
+    3030,
+    3040,
+    3050,
+    4000,
+    4030,
+    4040,
+    4050,
+    5020,
+    5030,
+    5040,
+    5045,
+    5060,
+    7000,
+    8000
+   ],
+   "content": [
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv"
+   ],
+   "description": "A German general tracker",
+   "domains": [
+    "https://torrent-syndikat.org/"
+   ],
+   "language": "de-DE",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "TorrentSyndikat",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [
+     "imdbid"
+    ],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "torrentsyndikat",
+   "type": "private"
   },
   {
    "auth": "none",
@@ -23908,6 +26791,7 @@
    "login_captcha": false,
    "name": "Torrenttip",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -23969,6 +26853,7 @@
    "login_captcha": false,
    "name": "Torrent Trader",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -24034,6 +26919,7 @@
    "login_captcha": false,
    "name": "ToTheGlory",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -24103,6 +26989,7 @@
    "login_captcha": false,
    "name": "ToTheGlory2FA",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -24170,6 +27057,7 @@
    "login_captcha": false,
    "name": "TR4KER",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 1.0,
    "search": {
     "book": true,
@@ -24237,6 +27125,7 @@
    "login_captcha": false,
    "name": "TrackerMK",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -24297,6 +27186,7 @@
    "login_captcha": false,
    "name": "TrackerZero",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -24330,6 +27220,7 @@
    "login_captcha": false,
    "name": "TrahT",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -24361,6 +27252,7 @@
    "login_captcha": false,
    "name": "TranceTraffic",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -24414,6 +27306,7 @@
    "login_captcha": false,
    "name": "TreZzoR",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -24467,6 +27360,7 @@
    "login_captcha": false,
    "name": "TreZzoRCookie",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -24498,6 +27392,7 @@
    "login_captcha": false,
    "name": "TribalMixes",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -24544,6 +27439,7 @@
    "login_captcha": false,
    "name": "TurkSeed (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -24602,6 +27498,7 @@
    "login_captcha": false,
    "name": "TurkTorrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -24644,6 +27541,7 @@
    "login_captcha": false,
    "name": "U2",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -24692,6 +27590,7 @@
    "login_captcha": false,
    "name": "U3C3",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -24735,6 +27634,7 @@
    "login_captcha": false,
    "name": "UBits",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -24786,6 +27686,7 @@
    "login_captcha": false,
    "name": "Uindex",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -24848,6 +27749,7 @@
    "login_captcha": false,
    "name": "Ultrabits (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -24894,6 +27796,7 @@
    "login_captcha": false,
    "name": "UltraHD",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -24961,6 +27864,7 @@
    "login_captcha": false,
    "name": "Unbreakable",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -25004,6 +27908,7 @@
    "login_captcha": false,
    "name": "Union Fansub",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -25015,6 +27920,49 @@
     "tv_ids": []
    },
    "slug": "unionfansub",
+   "type": "semi-private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    2020,
+    3000,
+    5050,
+    5070,
+    6000,
+    6070,
+    7030
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "movies",
+    "tv",
+    "xxx"
+   ],
+   "description": "UniOtaku is a BRAZILIAN Semi-Private Torrent Tracker for ANIME",
+   "domains": [
+    "https://tracker.uniotaku.com/"
+   ],
+   "language": "pt-BR",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "UniOtaku",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "uniotaku",
    "type": "semi-private"
   },
   {
@@ -25061,6 +28009,7 @@
    "login_captcha": true,
    "name": "Unlimitz",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -25094,6 +28043,7 @@
    "login_captcha": false,
    "name": "upload.cx (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -25136,6 +28086,7 @@
    "login_captcha": false,
    "name": "Upscale Vault (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -25176,6 +28127,7 @@
    "login_captcha": false,
    "name": "UTOPIA (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -25249,6 +28201,7 @@
    "login_captcha": false,
    "name": "UzTracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -25293,6 +28246,7 @@
    "login_captcha": false,
    "name": "V3X",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -25354,6 +28308,7 @@
    "login_captcha": false,
    "name": "Vault network",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -25391,6 +28346,7 @@
    "login_captcha": false,
    "name": "VC-Lib",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -25430,6 +28386,7 @@
    "login_captcha": false,
    "name": "VietMediaF",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -25470,6 +28427,7 @@
    "login_captcha": false,
    "name": "VSTHouse",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -25501,6 +28459,7 @@
    "login_captcha": false,
    "name": "VSTorrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -25535,6 +28494,7 @@
    "login_captcha": false,
    "name": "VST Torrentz",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -25592,6 +28552,7 @@
    "login_captcha": false,
    "name": "White Angel",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -25640,6 +28601,7 @@
    "login_captcha": false,
    "name": "World-In-HD",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -25687,6 +28649,7 @@
    "login_captcha": true,
    "name": "WinterSakura",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": true,
@@ -25763,6 +28726,7 @@
    "login_captcha": false,
    "name": "World-of-Tomorrow",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -25860,6 +28824,7 @@
    "login_captcha": false,
    "name": "World-torrent",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -25891,6 +28856,7 @@
    "login_captcha": true,
    "name": "Xingtan (杏坛)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -25940,6 +28906,7 @@
    "login_captcha": false,
    "name": "Xingwan (星湾)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -25988,6 +28955,7 @@
    "login_captcha": false,
    "name": "Xingyung (星陨阁)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -26045,6 +29013,7 @@
    "login_captcha": false,
    "name": "xloli",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.0,
    "search": {
     "book": false,
@@ -26062,6 +29031,73 @@
     ]
    },
    "slug": "xloli",
+   "type": "private"
+  },
+  {
+   "auth": "credentials",
+   "categories": [
+    1040,
+    1090,
+    1180,
+    2000,
+    2010,
+    2020,
+    2030,
+    2040,
+    2045,
+    2050,
+    2070,
+    3000,
+    3020,
+    3030,
+    3040,
+    4000,
+    4030,
+    4050,
+    5000,
+    5020,
+    5030,
+    5040,
+    5045,
+    5050,
+    5060,
+    5070,
+    5080,
+    7000,
+    8000
+   ],
+   "content": [
+    "anime",
+    "audio",
+    "books",
+    "console",
+    "movies",
+    "other",
+    "pc",
+    "tv"
+   ],
+   "description": "XSpeeds (XS) is a Private Torrent Tracker for MOVIES / TV / GENERAL",
+   "domains": [
+    "https://www.xspeeds.eu/"
+   ],
+   "language": "en-US",
+   "legacy_domains": [],
+   "login_2fa": false,
+   "login_captcha": false,
+   "name": "XSpeeds",
+   "needs_flaresolverr": false,
+   "origin": "native",
+   "request_delay_seconds": 0.0,
+   "search": {
+    "book": true,
+    "free_text": true,
+    "movie": true,
+    "movie_ids": [],
+    "music": "title",
+    "tv": "episode",
+    "tv_ids": []
+   },
+   "slug": "xspeeds",
    "type": "private"
   },
   {
@@ -26110,6 +29146,7 @@
    "login_captcha": false,
    "name": "xTorrenty",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -26168,6 +29205,7 @@
    "login_captcha": false,
    "name": "Xtreme Bytes",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -26201,6 +29239,7 @@
    "login_captcha": false,
    "name": "XWT-Classics",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -26234,6 +29273,7 @@
    "login_captcha": false,
    "name": "XWT-Classics2FA",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -26271,6 +29311,7 @@
    "login_captcha": false,
    "name": "XWtorrents",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -26308,6 +29349,7 @@
    "login_captcha": false,
    "name": "XWtorrents2FA",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -26347,6 +29389,7 @@
    "login_captcha": false,
    "name": "XXXClub",
    "needs_flaresolverr": true,
+   "origin": "cardigann",
    "request_delay_seconds": 3.0,
    "search": {
     "book": false,
@@ -26381,6 +29424,7 @@
    "login_captcha": false,
    "name": "xxxtor",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -26427,6 +29471,7 @@
    "login_captcha": false,
    "name": "YggReborn (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.1,
    "search": {
     "book": true,
@@ -26475,6 +29520,7 @@
    "login_captcha": false,
    "name": "YTS",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 2.5,
    "search": {
     "book": false,
@@ -26521,6 +29567,7 @@
    "login_captcha": false,
    "name": "YUSCENE (API)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -26591,6 +29638,7 @@
    "login_captcha": false,
    "name": "Zamunda RIP",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -26625,6 +29673,7 @@
    "login_captcha": false,
    "name": "Zappateers",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -26669,6 +29718,7 @@
    "login_captcha": false,
    "name": "Zenith",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,
@@ -26722,6 +29772,7 @@
    "login_captcha": false,
    "name": "ZmPT (织梦)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -26759,6 +29810,7 @@
    "login_captcha": false,
    "name": "ZRPT (自然)",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": false,
@@ -26816,6 +29868,7 @@
    "login_captcha": false,
    "name": "Ztracker",
    "needs_flaresolverr": false,
+   "origin": "cardigann",
    "request_delay_seconds": 0.0,
    "search": {
     "book": true,

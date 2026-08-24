@@ -21,11 +21,11 @@
 // credentials, is site configuration and belongs to whatever wires search up
 // later. A static dataset with accessors does not need a Provision.
 //
-// WHAT IS NOT IN HERE. Prowlarr implements its biggest trackers natively in
-// C#, so they have no YAML definition and no row: BTN, AnimeBytes, HDBits,
-// IPTorrents, MyAnonamouse and their peers. For a pipeline that wants those
-// -- and an anime-heavy one wants AnimeBytes -- the entries must be
-// hand-curated, which is future work the dataset's source note also records.
+// TWO CORPORA. The community YAML covers the long tail; Prowlarr's native
+// C# definitions cover the majors that have no YAML at all -- BTN,
+// AnimeBytes, HDBits, IPTorrents, MyAnonamouse and their peers, exactly the
+// trackers an anime-heavy pipeline wants most. Both are read by the same
+// generator; rows carry Origin so a refresh diff can be read per corpus.
 //
 // Refreshing: clone github.com/Prowlarr/Indexers, run the generator, review
 // the diff. The JSON carries the source commit so a diff names exactly what
@@ -53,6 +53,11 @@ type Tracker struct {
 	// preserved because the pipeline's "best public or private tracker"
 	// decision is exactly this axis.
 	Type string `json:"type"`
+	// Origin is cardigann (the community YAML corpus) or native (Prowlarr's
+	// C# majors). Recorded because the two are maintained differently
+	// upstream and a refresh diff reads differently for each; it says
+	// nothing about the tracker itself.
+	Origin string `json:"origin"`
 	// Domains are the tracker's current addresses, first one primary.
 	Domains []string `json:"domains"`
 	// LegacyDomains are dead or deprecated addresses. Kept for recognition --
