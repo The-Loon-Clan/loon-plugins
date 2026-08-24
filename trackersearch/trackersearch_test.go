@@ -226,8 +226,8 @@ func TestPolitenessSpacesRequestsToOneSource(t *testing.T) {
 // The wired set is primed from the directory, delays floored at two seconds.
 func TestNewPrimesPolitenessFromTheDirectory(t *testing.T) {
 	c := New()
-	if len(c.adapters) != 3 {
-		t.Fatalf("want the 3 public adapters, got %d", len(c.adapters))
+	if len(c.adapters) != 4 {
+		t.Fatalf("want the 4 public adapters, got %d", len(c.adapters))
 	}
 	for slug, d := range c.delay {
 		if d < politeFloor {
@@ -248,5 +248,53 @@ func TestAnEmptyQueryIsRefused(t *testing.T) {
 	c := New()
 	if _, err := c.SearchEpisode(context.Background(), pluginapi.EpisodeSearch{Season: 1, Episode: 1}); err == nil {
 		t.Fatal("an empty query must not fan out to real trackers")
+	}
+}
+
+// apibay's empty result is a one-element array with a zeroed hit, not [].
+// category 208 (a real TV category) so ONLY the sentinel check can drop it --
+// otherwise the category filter would mask a broken sentinel check.
+const piratebayNoResults = `[{"id":"0","name":"No results returned","info_hash":"0000000000000000000000000000000000000000","leechers":"0","seeders":"0","size":"0","added":"0","category":"208","imdb":""}]`
+
+const piratebayFixture = `[
+ {"id":"84174226","name":"The Ark S03E04 1080p AMZN WEB-DL-RAWR","info_hash":"F1F66F859CCAC506FC23A4E18C838705ED38C38E","leechers":"102","seeders":"577","size":"2769078438","added":"1787222102","category":"208","imdb":"tt17371078"},
+ {"id":"84174900","name":"The Ark S03E04 720p HDTV x264","info_hash":"AA11BB22CC33DD44EE55FF66AA77BB88CC99DD00","leechers":"5","seeders":"40","size":"514986736","added":"1787222999","category":"205","imdb":"tt17371078"},
+ {"id":"84175999","name":"The Ark 2023 S03 Complete Boxset [not this episode, wrong category]","info_hash":"1111111111111111111111111111111111111111","leechers":"1","seeders":"9","size":"12345","added":"1787220000","category":"605","imdb":""}
+]`
+
+// The sentinel empty result must not become a candidate.
+func TestPirateBayIgnoresTheNoResultsSentinel(t *testing.T) {
+	srv := serve(t, piratebayNoResults)
+	p := &piratebay{http: srv.Client(), url: srv.URL}
+	got, err := p.Search(context.Background(), q())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf(`the "No results returned" row is not a candidate; got %d`, len(got))
+	}
+}
+
+// Only TV categories come through; a boxset in a non-TV category is dropped.
+func TestPirateBayKeepsOnlyTVCategories(t *testing.T) {
+	srv := serve(t, piratebayFixture)
+	p := &piratebay{http: srv.Client(), url: srv.URL}
+	got, err := p.Search(context.Background(), q())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want the two TV-category hits (205, 208); got %d", len(got))
+	}
+	if got[0].InfoHash == "" || got[0].SizeBytes != 2769078438 || got[0].Seeders != 577 {
+		t.Fatalf("first hit misparsed: %+v", got[0])
+	}
+	if got[0].PostedAt.IsZero() {
+		t.Fatal("the unix added time must be carried")
+	}
+	for _, c := range got {
+		if c.Title == "" || c.Magnet == "" {
+			t.Fatalf("a TV hit lost its title or magnet: %+v", c)
+		}
 	}
 }

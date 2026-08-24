@@ -82,6 +82,7 @@ func New() *Client {
 		newKnaben(httpc),
 		newTorrentsCSV(httpc),
 		newEZTV(httpc),
+		newPirateBay(httpc),
 	} {
 		c.adapters = append(c.adapters, a)
 		d := politeFloor
