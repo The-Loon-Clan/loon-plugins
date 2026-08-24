@@ -9,7 +9,12 @@
      are most of how an effect reads: "Sparkle" set in sparkles tells you
      nothing about what a nine-character username looks like in a table row. */}}
 
-<section class="panelV2">
+{{/* The fragment owns its page layout (the host shell deliberately adds no
+     container so full-bleed pages like chat stay possible), so open one —
+     same tier as the store, which this page is the other half of. Both
+     hosts define the .container/.page-narrow pair. */}}
+<div class="container mt-4 page-narrow">
+<section class="panelV2 mb-4">
     <header class="panel__header">
         <h2 class="panel__heading">
             <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#star"></use></svg>
@@ -43,7 +48,7 @@
 </section>
 
 {{/* ------------------------------------------------------------------ title */}}
-<section class="panelV2">
+<section class="panelV2 mb-4">
     <header class="panel__header">
         <h2 class="panel__heading">
             <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#tag"></use></svg>
@@ -107,7 +112,7 @@
 {{/* ------------------------------------------------------------------ slots */}}
 {{$csrf := .CSRF}}{{$name := .Name}}
 {{range .Slots}}
-<section class="panelV2">
+<section class="panelV2 mb-4">
     <header class="panel__header">
         <h2 class="panel__heading">
             <svg class="icon panel__heading-icon" aria-hidden="true"><use href="#store"></use></svg>
@@ -185,3 +190,4 @@
     </div>
 </section>
 {{end}}
+</div>
