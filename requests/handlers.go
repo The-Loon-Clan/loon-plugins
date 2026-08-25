@@ -17,9 +17,12 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -35,6 +38,63 @@ type Handlers struct {
 	deps   Deps
 	points core.PointsService
 	errs   core.ErrorReporter
+
+	// torCache holds SearchTorrents answers for a day (operator's call,
+	// 2026-08-25). The same missing episode gets clicked by every member
+	// who wants it, and each click was one more identical question to the
+	// upstream tracker; a swarm does not change fast enough to re-ask for
+	// 24 hours. Errors are never cached (an upstream flake must not stick
+	// for a day) and refresh=1 — the manual search button — bypasses and
+	// rewrites the entry.
+	torCacheMu sync.Mutex
+	torCache   map[string]torCacheEntry
+}
+
+type torCacheEntry struct {
+	at   time.Time
+	body []byte
+}
+
+const torCacheTTL = 24 * time.Hour
+const torCacheMax = 512
+
+// torCacheGet returns the still-fresh cached body for key, if any.
+func (h *Handlers) torCacheGet(key string) []byte {
+	h.torCacheMu.Lock()
+	defer h.torCacheMu.Unlock()
+	e, ok := h.torCache[key]
+	if !ok || time.Since(e.at) > torCacheTTL {
+		return nil
+	}
+	return e.body
+}
+
+// torCachePut stores body under key, evicting expired entries — and, past
+// the cap, the oldest — so an abusive query stream cannot grow the map
+// without bound.
+func (h *Handlers) torCachePut(key string, body []byte) {
+	h.torCacheMu.Lock()
+	defer h.torCacheMu.Unlock()
+	if h.torCache == nil {
+		h.torCache = map[string]torCacheEntry{}
+	}
+	if len(h.torCache) >= torCacheMax {
+		var oldestKey string
+		var oldestAt time.Time
+		for k, e := range h.torCache {
+			if time.Since(e.at) > torCacheTTL {
+				delete(h.torCache, k)
+				continue
+			}
+			if oldestKey == "" || e.at.Before(oldestAt) {
+				oldestKey, oldestAt = k, e.at
+			}
+		}
+		if len(h.torCache) >= torCacheMax && oldestKey != "" {
+			delete(h.torCache, oldestKey)
+		}
+	}
+	h.torCache[key] = torCacheEntry{at: time.Now(), body: body}
 }
 
 // viewerID returns the session user's id, 0 for anonymous.
@@ -1703,6 +1763,27 @@ func (h *Handlers) SearchTorrents(c *gin.Context) {
 		return
 	}
 
+	// One upstream question per query per day: the anime page's missing-
+	// episode click and the request form both land here, and every member
+	// wanting the same episode asked the same tracker the same thing.
+	// refresh=1 (the manual search button) bypasses and rewrites.
+	cacheKey := strings.ToLower(query) + "|" + c.DefaultQuery("cat", "5070")
+	if c.Query("refresh") == "" {
+		if body := h.torCacheGet(cacheKey); body != nil {
+			c.Data(http.StatusOK, "application/json; charset=utf-8", body)
+			return
+		}
+	}
+	serve := func(payload gin.H) {
+		body, err := json.Marshal(payload)
+		if err != nil {
+			jsonError(c, http.StatusInternalServerError, "internal error")
+			return
+		}
+		h.torCachePut(cacheKey, body)
+		c.Data(http.StatusOK, "application/json; charset=utf-8", body)
+	}
+
 	if h.deps.Torznab != nil && h.deps.Torznab.Available() {
 		raw, err := h.deps.Torznab.Search(c.Request.Context(), query, 0, 0)
 		if err != nil {
@@ -1721,7 +1802,7 @@ func (h *Handlers) SearchTorrents(c *gin.Context) {
 				Source:   "nekobt",
 			})
 		}
-		c.JSON(http.StatusOK, gin.H{"source": "nekobt", "results": out, "count": len(out)})
+		serve(gin.H{"source": "nekobt", "results": out, "count": len(out)})
 		return
 	}
 
@@ -1749,7 +1830,7 @@ func (h *Handlers) SearchTorrents(c *gin.Context) {
 				Source:   "prowlarr",
 			})
 		}
-		c.JSON(http.StatusOK, gin.H{"source": "prowlarr", "results": out, "count": len(out)})
+		serve(gin.H{"source": "prowlarr", "results": out, "count": len(out)})
 		return
 	}
 
