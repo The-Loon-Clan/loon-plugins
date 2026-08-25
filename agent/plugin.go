@@ -14,6 +14,8 @@ import (
 	"fmt"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 func init() {
@@ -71,6 +73,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if err := p.registerMemberPage(c); err != nil {
 		return fmt.Errorf("agent: register member page: %w", err)
 	}
+	// Once, at Provision — the host serves it hashed and cached. No-ops on a
+	// host with no stylesheet sink, where the page draws unstyled: visible
+	// rather than silent, the right failure for a missing seam.
+	pluginapi.RegisterStylesheet(c, "agent", agentCSS)
 	return nil
 }
 

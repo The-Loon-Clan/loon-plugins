@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"errors"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -31,8 +32,10 @@ import (
 
 var agentsPageTmpl = template.Must(template.New("agents-page").Parse(`
 <div class="page-narrow">
-  <h1 style="font-size:1.3rem;">My Agents</h1>
-  <p style="color:var(--text-muted);max-width:62ch;">Agents run on your own
+  {{/* No h1: the host's site-page wrapper renders <h1>{{.Title}}</h1>
+       above every fragment — a second one here read the page twice to a
+       screen reader (demo a11y audit, 2026-08-25). */}}
+  <p class="ag-intro">Agents run on your own
   machine and fulfil requests you accept. Each one authenticates with its own
   token; the token is shown once, when it is created or rotated.</p>
 
@@ -40,7 +43,7 @@ var agentsPageTmpl = template.Must(template.New("agents-page").Parse(`
   {{if .Err}}<div class="alert alert-danger py-2">{{.ErrText}}</div>{{end}}
 
   {{if not .Agents}}
-  <div class="card mb-4"><div class="card-body" style="color:var(--text-muted);">
+  <div class="card mb-4"><div class="card-body ag-empty">
     No agents yet.{{if .CanManage}} Create one below to get its token.{{end}}
   </div></div>
   {{end}}
@@ -49,9 +52,9 @@ var agentsPageTmpl = template.Must(template.New("agents-page").Parse(`
   <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
       <span>
-        {{if .Online}}<span style="color:var(--green);" title="online">&#9679;</span>{{else}}<span style="color:var(--text-muted);" title="offline">&#9679;</span>{{end}}
+        {{if .Online}}<span class="ag-dot--on" title="online">&#9679;</span>{{else}}<span class="ag-dot--off" title="offline">&#9679;</span>{{end}}
         <strong>{{.Name}}</strong>
-        <span style="color:var(--text-muted);font-size:0.78rem;margin-left:0.4rem;">
+        <span class="ag-seen">
           {{if .LastSeen}}seen {{.LastSeenAgo}}{{else}}never seen{{end}}
         </span>
       </span>
@@ -73,9 +76,9 @@ var agentsPageTmpl = template.Must(template.New("agents-page").Parse(`
       {{end}}
     </div>
     {{if .Status}}
-    <div class="card-body" style="font-size:0.85rem;">
-      <div style="display:flex;gap:1.2rem;flex-wrap:wrap;color:var(--text-muted);margin-bottom:0.4rem;">
-        <span>phase <strong style="color:var(--text-primary);">{{.Status.Phase}}</strong></span>
+    <div class="card-body ag-status">
+      <div class="ag-status__meta">
+        <span>phase <strong>{{.Status.Phase}}</strong></span>
         {{if .Status.VPNStatus}}<span>VPN {{.Status.VPNStatus}}</span>{{end}}
         {{if .Status.PublicIP}}<span>IP {{.Status.PublicIP}}</span>{{end}}
         {{if .Status.DownloadSpeed}}<span>&#8595; {{.Status.DownloadSpeed}}</span>{{end}}
@@ -83,19 +86,19 @@ var agentsPageTmpl = template.Must(template.New("agents-page").Parse(`
         {{if .Status.DiskFreeGB}}<span>{{printf "%.0f" .Status.DiskFreeGB}} GB free</span>{{end}}
       </div>
       {{if .Status.TaskTitle}}
-      <div style="margin-bottom:0.3rem;">working: <strong>{{.Status.TaskTitle}}</strong>{{if .Status.RequestID}} <span style="color:var(--text-muted);">(request #{{.Status.RequestID}})</span>{{end}}</div>
+      <div class="ag-status__task">working: <strong>{{.Status.TaskTitle}}</strong>{{if .Status.RequestID}} <span class="ag-status__req">(request #{{.Status.RequestID}})</span>{{end}}</div>
       {{end}}
       {{range .Status.Files}}
-      <div style="display:flex;gap:0.6rem;align-items:baseline;font-size:0.8rem;color:var(--text-muted);">
-        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.Name}}</span>
+      <div class="ag-file">
+        <span class="ag-file__name">{{.Name}}</span>
         <span>{{.Phase}}</span>
         {{if .Speed}}<span>{{.Speed}}</span>{{end}}
-        <span style="font-variant-numeric:tabular-nums;">{{printf "%.0f" .Percent}}%</span>
+        <span class="ag-file__pct">{{printf "%.0f" .Percent}}%</span>
       </div>
       {{end}}
     </div>
     {{else if .Task}}
-    <div class="card-body" style="font-size:0.85rem;color:var(--text-muted);">
+    <div class="card-body ag-task">
       working request #{{.Task.RequestID}}{{if .Task.Progress}} &mdash; {{.Task.Progress}}{{end}}
     </div>
     {{end}}
@@ -108,8 +111,9 @@ var agentsPageTmpl = template.Must(template.New("agents-page").Parse(`
     <div class="card-body">
       <form method="POST" action="/p/agents/create" class="d-flex gap-2 align-items-center">
         <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-        <input type="text" name="name" class="form__input" maxlength="60" required
-               placeholder="agent name (e.g. home-server)" style="max-width:260px;">
+        <label class="visually-hidden" for="ag-new-name">Agent name</label>
+        <input type="text" name="name" id="ag-new-name" class="form__input ag-name-input" maxlength="60" required
+               placeholder="agent name (e.g. home-server)">
         <button type="submit" class="button button--primary button--sm">Create &amp; get token</button>
       </form>
     </div>
@@ -128,7 +132,7 @@ var agentsPageTmpl = template.Must(template.New("agents-page").Parse(`
             <span class="option-list__note">Off by default. When on, other members see your agents&rsquo; names and online dots on /u/&lt;you&gt; &mdash; never their tasks, addresses, or activity times.</span>
           </li>
         </ul>
-        <button type="submit" class="button button--outlined button--sm" style="margin-top:0.5rem;">Save</button>
+        <button type="submit" class="button button--outlined button--sm ag-save">Save</button>
       </form>
     </div>
   </div>
@@ -140,14 +144,15 @@ var agentsPageTmpl = template.Must(template.New("agents-page").Parse(`
 // stores only the hash, so this render is the only time it exists in HTML.
 var tokenPageTmpl = template.Must(template.New("agent-token").Parse(`
 <div class="page-narrow">
-  <h1 style="font-size:1.3rem;">Agent token</h1>
+  {{/* No h1 — the host wrapper carries the page title (see the page
+       template above). The card header names the agent. */}}
   <div class="card mb-3">
-    <div class="card-header">{{.Name}}</div>
+    <div class="card-header">Token for {{.Name}}</div>
     <div class="card-body">
-      <p style="color:var(--text-muted);max-width:62ch;">Copy this token into
+      <p class="ag-intro">Copy this token into
       your agent's configuration now. It is shown ONCE — the site keeps only a
       hash, and losing it means rotating for a new one.</p>
-      <code style="display:block;padding:0.6rem;background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;font-size:0.85rem;word-break:break-all;user-select:all;">{{.Token}}</code>
+      <code class="ag-token">{{.Token}}</code>
     </div>
   </div>
   <a href="/p/agents" class="button button--outlined button--sm">Back to My Agents</a>
@@ -180,6 +185,8 @@ func (vm agentsPageVM) ErrText() string {
 		return "Give the agent a name."
 	case "notfound":
 		return "That agent no longer exists."
+	case "taken":
+		return "You already have an agent with that name."
 	default:
 		if vm.Err != "" {
 			return "Something went wrong — the change was not saved."
@@ -315,6 +322,13 @@ func (p *Plugin) actionCreateAgent(gc *gin.Context) (template.HTML, error) {
 		return "", nil
 	}
 	token, err := deps.CreateAgentFor(gc.Request.Context(), userID, name)
+	if errors.Is(err, ErrNameTaken) {
+		// The one refusal a member can fix themselves gets its own words;
+		// hosts signal it with the sentinel, everything else stays the
+		// generic banner via the returned error.
+		gc.Redirect(http.StatusSeeOther, "/p/agents?err=taken")
+		return "", nil
+	}
 	if err != nil {
 		// Returned, not swallowed: the host logs it and redirects with its
 		// error marker.

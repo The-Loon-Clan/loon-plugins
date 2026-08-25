@@ -2,10 +2,19 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// ErrNameTaken is the sentinel a host's CreateAgentFor returns (wrapped or
+// bare) when the member already has an agent by that name. It is the one
+// refusal the member can fix themselves, so the page names it instead of
+// showing the generic something-went-wrong banner. Any other error stays
+// generic on purpose — a create failure's details are the host's logs'
+// business, not the form's.
+var ErrNameTaken = errors.New("agent name taken")
 
 // Agent is one row of the fleet card. It is deliberately NOT the host's agent
 // token record: the card renders three fields, and the token carries the

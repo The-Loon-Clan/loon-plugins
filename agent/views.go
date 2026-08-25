@@ -20,21 +20,21 @@ var fleetCardTmpl = template.Must(template.New("agent-fleet-card").Parse(`
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span>My Agents</span>
-        {{if .Owner}}<a href="/p/agents" style="font-size:0.78rem;">Manage</a>{{end}}
+        {{if .Owner}}<a href="/p/agents" class="ag-card__manage">Manage</a>{{end}}
     </div>
     <div class="card-body">
         {{range .Agents}}
         <div class="d-flex align-items-center justify-content-between mb-2">
-            <div style="font-size:0.88rem;min-width:0;">
-                {{if .Online}}<span style="color:var(--green);" title="online">&#9679;</span>{{else}}<span style="color:var(--text-muted);" title="offline">&#9679;</span>{{end}}
+            <div class="ag-card__row">
+                {{if .Online}}<span class="ag-dot--on" title="online">&#9679;</span>{{else}}<span class="ag-dot--off" title="offline">&#9679;</span>{{end}}
                 <strong>{{.Name}}</strong>
                 {{if .Task}}
-                    <span style="color:var(--text-muted);font-size:0.78rem;margin-left:0.4rem;">working request #{{.Task.RequestID}}{{if .Task.Progress}} &mdash; {{.Task.Progress}}{{end}}</span>
+                    <span class="ag-seen">working request #{{.Task.RequestID}}{{if .Task.Progress}} &mdash; {{.Task.Progress}}{{end}}</span>
                 {{else if .Owner}}
-                    <span style="color:var(--text-muted);font-size:0.78rem;margin-left:0.4rem;">idle</span>
+                    <span class="ag-seen">idle</span>
                 {{end}}
             </div>
-            <div style="color:var(--text-muted);font-size:0.75rem;white-space:nowrap;">
+            <div class="ag-card__when">
                 {{if .Owner}}{{if .LastSeen}}seen {{.LastSeenAgo}}{{else}}never seen{{end}}{{end}}
             </div>
         </div>
