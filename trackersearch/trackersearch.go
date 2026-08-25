@@ -55,7 +55,13 @@ const politeFloor = 2 * time.Second
 
 // Client implements pluginapi.TrackerSearcher over the wired adapters.
 type Client struct {
-	adapters []adapter
+	httpc *http.Client
+	// public are the no-credential sources, fixed at construction. private
+	// are the key-based ones (UNIT3D today), rebuilt by SetUnit3d when an
+	// operator stores or removes a key -- so a saved key takes effect without
+	// a restart. Both are read only under mu.
+	public  []adapter
+	private []adapter
 
 	mu      sync.Mutex
 	lastErr map[string]string
@@ -79,27 +85,64 @@ func New(unit3d ...Unit3dConfig) *Client {
 		nextAt:  map[string]time.Time{},
 		delay:   map[string]time.Duration{},
 	}
-	httpc := &http.Client{Timeout: perSearchTimeout}
-	adapters := []adapter{
-		newKnaben(httpc),
-		newTorrentsCSV(httpc),
-		newEZTV(httpc),
-		newPirateBay(httpc),
+	c.httpc = &http.Client{Timeout: perSearchTimeout}
+	c.public = []adapter{
+		newKnaben(c.httpc),
+		newTorrentsCSV(c.httpc),
+		newEZTV(c.httpc),
+		newPirateBay(c.httpc),
+	}
+	for _, a := range c.public {
+		c.primeDelay(a.Slug())
 	}
 	// One UNIT3D client per configured tracker -- the 75-strong family behind
-	// a single implementation.
-	adapters = append(adapters, Unit3dAdapters(httpc, unit3d)...)
-	for _, a := range adapters {
-		c.adapters = append(c.adapters, a)
-		d := politeFloor
-		if t, ok := trackerdir.BySlug(a.Slug()); ok {
-			if want := time.Duration(t.RequestDelaySeconds * float64(time.Second)); want > d {
-				d = want
-			}
-		}
-		c.delay[a.Slug()] = d
-	}
+	// a single implementation. Empty in the demo until keys are stored.
+	c.SetUnit3d(unit3d)
 	return c
+}
+
+// SetUnit3d rebuilds the private (UNIT3D) adapter set from the current configs,
+// so an operator storing or removing a key changes what is searched without a
+// restart. Safe to call concurrently with SearchEpisode.
+func (c *Client) SetUnit3d(configs []Unit3dConfig) {
+	built := Unit3dAdapters(c.httpc, configs)
+	c.mu.Lock()
+	c.private = built
+	for _, a := range built {
+		c.primeDelayLocked(a.Slug())
+	}
+	c.mu.Unlock()
+}
+
+// primeDelay sets a source's politeness from the directory, floored, once.
+func (c *Client) primeDelay(slug string) {
+	c.mu.Lock()
+	c.primeDelayLocked(slug)
+	c.mu.Unlock()
+}
+
+func (c *Client) primeDelayLocked(slug string) {
+	if _, ok := c.delay[slug]; ok {
+		return
+	}
+	d := politeFloor
+	if t, ok := trackerdir.BySlug(slug); ok {
+		if want := time.Duration(t.RequestDelaySeconds * float64(time.Second)); want > d {
+			d = want
+		}
+	}
+	c.delay[slug] = d
+}
+
+// adapters snapshots the current public+private set under the lock, so a
+// concurrent SetUnit3d cannot race the fan-out.
+func (c *Client) adapters() []adapter {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]adapter, 0, len(c.public)+len(c.private))
+	out = append(out, c.public...)
+	out = append(out, c.private...)
+	return out
 }
 
 // SearchEpisode fans out to every source and merges what came back.
@@ -112,7 +155,7 @@ func (c *Client) SearchEpisode(ctx context.Context, q pluginapi.EpisodeSearch) (
 		mu  sync.Mutex
 		out []pluginapi.TrackerCandidate
 	)
-	for _, a := range c.adapters {
+	for _, a := range c.adapters() {
 		a := a
 		wg.Add(1)
 		go func() {
@@ -174,8 +217,9 @@ func (c *Client) waitTurn(ctx context.Context, slug string) {
 func (c *Client) Sources() []pluginapi.TrackerSource {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]pluginapi.TrackerSource, 0, len(c.adapters))
-	for _, a := range c.adapters {
+	all := append(append([]adapter{}, c.public...), c.private...)
+	out := make([]pluginapi.TrackerSource, 0, len(all))
+	for _, a := range all {
 		out = append(out, pluginapi.TrackerSource{
 			Slug: a.Slug(), LastErr: c.lastErr[a.Slug()],
 		})

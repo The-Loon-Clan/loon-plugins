@@ -189,8 +189,25 @@ def id_params(params):
     return sorted(p for p in (params or []) if p in ID_PARAMS)
 
 
+def yaml_engine(raw):
+    """The tracker software a definition drives, when it is one we can serve.
+
+    Recorded because a private tracker is only searchable through an adapter
+    that speaks its software, and the admin page that stores a key must know
+    which trackers a given adapter covers. UNIT3D is the one with a family
+    adapter today; gazelle is marked for the record though only its API-key
+    members are reachable.
+    """
+    if "api/torrents/filter" in raw:
+        return "unit3d"
+    if "ajax.php" in raw:
+        return "gazelle"
+    return ""
+
+
 def extract_yaml(path, path_to_id):
-    d = yaml.safe_load(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    d = yaml.safe_load(text)
     caps = d.get("caps") or {}
     modes = caps.get("modes") or {}
     settings = d.get("settings") or []
@@ -222,6 +239,7 @@ def extract_yaml(path, path_to_id):
         "language": d.get("language", ""),
         "type": d["type"],
         "origin": "cardigann",
+        "engine": yaml_engine(text),
         "domains": [str(u) for u in d.get("links") or []],
         "legacy_domains": [str(u) for u in d.get("legacylinks") or []],
         "request_delay_seconds": float(d.get("requestDelay") or 0),
@@ -384,6 +402,7 @@ def extract_native(body, enum_to_id):
         "language": prop("Language") or "en-US",
         "type": privacy,
         "origin": "native",
+        "engine": "",  # set by the caller, which knows the base class
         "domains": urls("IndexerUrls"),
         "legacy_domains": urls("LegacyUrls"),
         "request_delay_seconds": delay,
@@ -504,6 +523,19 @@ def native_rows(prowlarr_src, enum_to_id):
                     break
                 anc, hops = anext, hops + 1
         row["auth"] = cs_settings_auth(generic or settings_type_of(cls) or "", cs_files)
+        # Engine from the base-class family: a child of Unit3dBase speaks
+        # UNIT3D, a child of GazelleBase speaks Gazelle. Walk the same chain
+        # the settings walk uses.
+        anc, hops = cls, 0
+        while anc and hops < 8:
+            b = decls.get(anc, (None,))[0]
+            if b in ("Unit3dBase",):
+                row["engine"] = "unit3d"
+                break
+            if b in ("GazelleBase",):
+                row["engine"] = "gazelle"
+                break
+            anc, hops = b, hops + 1
         # Same rule as the YAML side: a public tracker whose settings name no
         # credential genuinely needs nothing, and "unknown" would keep five
         # public search engines out of the wireable list for no reason.

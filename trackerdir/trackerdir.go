@@ -58,6 +58,11 @@ type Tracker struct {
 	// upstream and a refresh diff reads differently for each; it says
 	// nothing about the tracker itself.
 	Origin string `json:"origin"`
+	// Engine is the tracker software, when it is one a search adapter can
+	// speak: "unit3d" (75 trackers, one API), "gazelle", or "" for the rest.
+	// A private tracker is only reachable through an adapter for its engine,
+	// so the admin that stores a key filters by this.
+	Engine string `json:"engine"`
 	// Domains are the tracker's current addresses, first one primary.
 	Domains []string `json:"domains"`
 	// LegacyDomains are dead or deprecated addresses. Kept for recognition --
@@ -188,6 +193,19 @@ func Carrying(kind string) []Tracker {
 				out = append(out, t)
 				break
 			}
+		}
+	}
+	return out
+}
+
+// WithEngine returns the trackers running one software, sorted by slug --
+// the set a family adapter can serve once a key is stored.
+func WithEngine(engine string) []Tracker {
+	load()
+	var out []Tracker
+	for _, t := range dir.Trackers {
+		if t.Engine == engine {
+			out = append(out, t)
 		}
 	}
 	return out

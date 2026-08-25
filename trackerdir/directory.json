@@ -32,6 +32,7 @@
    "domains": [
     "https://tracker.0day.community/"
    ],
+   "engine": "",
    "language": "uk-UA",
    "legacy_domains": [
     "https://tracker.0day.kiev.ua/"
@@ -67,6 +68,7 @@
     "https://13mag.net/",
     "https://16mag.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://0magnet.com/",
@@ -155,6 +157,7 @@
     "https://x1337x.eu/",
     "https://x1337x.cc/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://1337x.is/",
@@ -212,6 +215,7 @@
    "domains": [
     "https://13city.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -274,6 +278,7 @@
    "domains": [
     "https://1ptba.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -326,6 +331,7 @@
    "domains": [
     "http://www.3dtorrents.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -376,6 +382,7 @@
    "domains": [
     "https://4thd.xyz/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -419,6 +426,7 @@
     "https://l3qi32fp.529075.xyz/",
     "https://290e01vd.529076.xyz/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.52btbt.icu/",
@@ -482,6 +490,7 @@
    "domains": [
     "https://52pt.site/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -560,6 +569,7 @@
    "domains": [
     "https://bittorrentfiles.me/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [
     "https://www.Bittorrentfiles.me/"
@@ -608,6 +618,7 @@
    "domains": [
     "https://abn.lol/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [
     "https://abnormal.ws"
@@ -644,6 +655,7 @@
    "domains": [
     "https://usefultrash.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://abtorrents.me/",
@@ -679,6 +691,7 @@
    "domains": [
     "https://acg.rip/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -711,6 +724,7 @@
    "domains": [
     "https://acrossthetasman.com/"
    ],
+   "engine": "",
    "language": "en-AU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -769,6 +783,7 @@
    "domains": [
     "https://aftershock-tracker.net/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [
     "https://aftershock-tracker.eu/"
@@ -821,6 +836,7 @@
    "domains": [
     "https://www.agsvpt.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://abroad.agsvpt.com/",
@@ -868,6 +884,7 @@
    "domains": [
     "https://aidoru-online.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://aidoru-online.org/"
@@ -905,6 +922,7 @@
    "domains": [
     "https://aither.cc/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -949,6 +967,7 @@
    "domains": [
     "https://pt.aling.de/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1014,6 +1033,7 @@
    "domains": [
     "https://alpharatio.cc/"
    ],
+   "engine": "gazelle",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1078,6 +1098,7 @@
    "domains": [
     "https://cliente.amigos-share.club/"
    ],
+   "engine": "",
    "language": "pt-BR",
    "legacy_domains": [
     "http://amigos-share.club/",
@@ -1119,6 +1140,7 @@
    "domains": [
     "https://anibt.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1167,6 +1189,7 @@
    "domains": [
     "https://anidex.info/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1211,6 +1234,7 @@
    "domains": [
     "https://tr.anidub.com/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1252,6 +1276,7 @@
    "domains": [
     "https://anibelka.com/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1295,6 +1320,7 @@
    "domains": [
     "https://animebytes.tv/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1333,6 +1359,7 @@
    "domains": [
     "https://animelayer.ru/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://www.animelayer.ru/"
@@ -1372,6 +1399,7 @@
    "domains": [
     "https://animetorrents.io/"
    ],
+   "engine": "",
    "language": "ro-RO",
    "legacy_domains": [
     "https://animetorrents.ro/"
@@ -1407,6 +1435,7 @@
    "domains": [
     "https://animetosho.xyz/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1455,6 +1484,7 @@
    "domains": [
     "https://animeworld.cx/"
    ],
+   "engine": "unit3d",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1500,6 +1530,7 @@
    "domains": [
     "https://animez.to/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1533,6 +1564,7 @@
    "domains": [
     "https://asnet.pw/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1572,6 +1604,7 @@
    "domains": [
     "https://anthelion.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1639,6 +1672,7 @@
    "domains": [
     "https://www.arabafenice.me/"
    ],
+   "engine": "",
    "language": "it-IT",
    "legacy_domains": [
     "http://www.arabafenice.me/"
@@ -1684,6 +1718,7 @@
    "domains": [
     "https://arabicsource.net/"
    ],
+   "engine": "unit3d",
    "language": "ar-SA",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1739,6 +1774,7 @@
    "domains": [
     "https://www.arabp2p.net/"
    ],
+   "engine": "",
    "language": "ar-AE",
    "legacy_domains": [
     "http://www.arabp2p.com/",
@@ -1793,6 +1829,7 @@
    "domains": [
     "https://arabscene.me/"
    ],
+   "engine": "",
    "language": "ar-AE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1848,6 +1885,7 @@
    "domains": [
     "https://arab-torrents.net/"
    ],
+   "engine": "",
    "language": "ar-AE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1884,6 +1922,7 @@
    "domains": [
     "https://eiga.moi/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://asiancinema.me/"
@@ -1933,6 +1972,7 @@
    "domains": [
     "https://asiandvdclub.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -1979,6 +2019,7 @@
    "domains": [
     "https://audiences.me/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2028,6 +2069,7 @@
    "domains": [
     "https://audionews.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2060,6 +2102,7 @@
    "domains": [
     "https://aussierul.es/"
    ],
+   "engine": "",
    "language": "en-AU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2100,6 +2143,7 @@
    "domains": [
     "https://avistaz.to/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2145,6 +2189,7 @@
    "domains": [
     "https://azusa.wiki/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2201,6 +2246,7 @@
    "domains": [
     "https://back-ups.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2244,6 +2290,7 @@
    "domains": [
     "https://bakabt.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2287,6 +2334,7 @@
    "domains": [
     "https://bangumi.moe/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2330,6 +2378,7 @@
    "domains": [
     "https://p.t-baozi.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2390,6 +2439,7 @@
    "domains": [
     "https://beload.org/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2450,6 +2500,7 @@
    "domains": [
     "https://best-torrents.com/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2514,6 +2565,7 @@
    "domains": [
     "https://best-core.info/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2552,6 +2604,7 @@
    "domains": [
     "https://beyond-hd.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2595,6 +2648,7 @@
    "domains": [
     "https://bibliotik.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2664,6 +2718,7 @@
    "domains": [
     "https://bigbbs.eu/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2713,6 +2768,7 @@
    "domains": [
     "https://bigcore.eu/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2768,6 +2824,7 @@
     "https://bigfangroup.org/",
     "https://www.freebfg.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2822,6 +2879,7 @@
    "domains": [
     "https://bitbazis.net/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2879,6 +2937,7 @@
    "domains": [
     "http://dedbit-new.dedbit.com/"
    ],
+   "engine": "",
    "language": "th-TH",
    "legacy_domains": [
     "https://www.dedbit.com/"
@@ -2938,6 +2997,7 @@
    "domains": [
     "https://bitgamer.ch/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -2984,6 +3044,7 @@
    "domains": [
     "https://www.bit-hdtv.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3043,6 +3104,7 @@
    "domains": [
     "https://bithumen.be/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3104,6 +3166,7 @@
     "http://127.0.0.1:3333/",
     "http://bitmagnet:3333/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3168,6 +3231,7 @@
    "domains": [
     "https://bitpalace.cc/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [
     "https://bitpalace.hu/"
@@ -3202,6 +3266,7 @@
    "domains": [
     "https://bitporn.eu/"
    ],
+   "engine": "unit3d",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3246,6 +3311,7 @@
    "domains": [
     "https://bitturk.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://www.bitturk.net/",
@@ -3302,6 +3368,7 @@
    "domains": [
     "https://bj-share.info/"
    ],
+   "engine": "",
    "language": "pt-BR",
    "legacy_domains": [
     "https://bj-share.me/"
@@ -3352,6 +3419,7 @@
    "domains": [
     "https://bluebird-hd.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3397,6 +3465,7 @@
    "domains": [
     "https://www.blueroms.ws/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3443,6 +3512,7 @@
    "domains": [
     "https://bluetorrents.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3508,6 +3578,7 @@
    "domains": [
     "https://bluraytracker.cz/"
    ],
+   "engine": "",
    "language": "cs-CZ",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3547,6 +3618,7 @@
    "domains": [
     "https://blutopia.cc/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://blutopia.xyz/"
@@ -3588,6 +3660,7 @@
    "domains": [
     "https://booktracker.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3620,6 +3693,7 @@
    "domains": [
     "https://ssl.bootytape.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3679,6 +3753,7 @@
    "domains": [
     "https://borgzelle.borg/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3712,6 +3787,7 @@
    "domains": [
     "https://tc-boxing.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3764,6 +3840,7 @@
    "domains": [
     "https://brasiltracker.org/"
    ],
+   "engine": "",
    "language": "pt-BR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3800,6 +3877,7 @@
    "domains": [
     "https://api.broadcasthe.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://api.broadcasthe.net/"
@@ -3842,6 +3920,7 @@
    "domains": [
     "https://brokenstones.is/"
    ],
+   "engine": "gazelle",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3893,6 +3972,7 @@
    "domains": [
     "https://www.btarg.com.ar/"
    ],
+   "engine": "",
    "language": "es-AR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -3932,6 +4012,7 @@
     "https://www.btmulu.cfd/",
     "https://www.btmulu.help/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.btmulu.asia/",
@@ -3971,6 +4052,7 @@
    "domains": [
     "https://bt.etree.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://bt.etree.org/"
@@ -4057,6 +4139,7 @@
    "domains": [
     "https://tracker.btnext.com/"
    ],
+   "engine": "",
    "language": "pt-PT",
    "legacy_domains": [
     "http://tracker.btnext.com/"
@@ -4108,6 +4191,7 @@
    "domains": [
     "https://pt.btschool.club/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -4178,6 +4262,7 @@
     "https://bwtorrents.cc/",
     "https://bwtorrents.live/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://bwtorrents.fun/",
@@ -4231,6 +4316,7 @@
    "domains": [
     "https://byr.pt/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -4269,6 +4355,7 @@
    "domains": [
     "https://byrutgame.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://byrutor.org/",
@@ -4343,6 +4430,7 @@
    "domains": [
     "https://c411.org/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [
     "https://staging-68d548c5bd4.c411.org/"
@@ -4393,6 +4481,7 @@
    "domains": [
     "https://cangbao.ge/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -4446,6 +4535,7 @@
    "domains": [
     "https://capybarabr.com/"
    ],
+   "engine": "unit3d",
    "language": "pt-BR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -4504,6 +4594,7 @@
    "domains": [
     "https://mycarpathians.net/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -4549,6 +4640,7 @@
    "domains": [
     "https://carpt.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -4593,6 +4685,7 @@
    "domains": [
     "https://www.cathode-ray.tube/"
    ],
+   "engine": "",
    "language": "en-GB",
    "legacy_domains": [],
    "login_2fa": false,
@@ -4641,6 +4734,7 @@
    "domains": [
     "https://catorrent.net/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://catorrent.org/"
@@ -4689,6 +4783,7 @@
    "domains": [
     "https://t.ceskeforum.com/"
    ],
+   "engine": "",
    "language": "cs-CZ",
    "legacy_domains": [],
    "login_2fa": false,
@@ -4729,6 +4824,7 @@
    "domains": [
     "https://cgpeers.to/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.cgpeers.com/"
@@ -4775,6 +4871,7 @@
     "https://ptchdbits.co/",
     "https://chdbits.co/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -4811,6 +4908,7 @@
    "domains": [
     "https://cinemageddon.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://cinemageddon.net/"
@@ -4872,6 +4970,7 @@
    "domains": [
     "https://cinemamovies.pl/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -4915,6 +5014,7 @@
    "domains": [
     "https://cinematik.net/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://www.cinematik.net/"
@@ -4964,6 +5064,7 @@
    "domains": [
     "https://cinemaz.to/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5000,6 +5101,7 @@
    "domains": [
     "https://clearjav.com/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5079,6 +5181,7 @@
    "domains": [
     "https://coastal-crew.bounceme.net/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5118,6 +5221,7 @@
    "domains": [
     "https://www.comicat.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5150,6 +5254,7 @@
    "domains": [
     "https://concen.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5186,6 +5291,7 @@
    "domains": [
     "https://concertos.live/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5240,6 +5346,7 @@
    "domains": [
     "https://crabpt.vip/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -5283,6 +5390,7 @@
    "domains": [
     "https://crackingpatching.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5335,6 +5443,7 @@
    "domains": [
     "https://crazyspirits.com/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [
     "https://www.crazyspirits.ca/",
@@ -5401,6 +5510,7 @@
    "domains": [
     "https://www.crnaberza.com/"
    ],
+   "engine": "",
    "language": "sr-SP",
    "legacy_domains": [
     "http://www.crnaberza.com/"
@@ -5464,6 +5574,7 @@
    "domains": [
     "https://www.crnaberza.com/"
    ],
+   "engine": "",
    "language": "sr-SP",
    "legacy_domains": [
     "http://www.crnaberza.com/"
@@ -5504,6 +5615,7 @@
    "domains": [
     "https://www.cathode-ray.tube/"
    ],
+   "engine": "",
    "language": "en-GB",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5551,6 +5663,7 @@
    "domains": [
     "https://cspt.top/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5600,6 +5713,7 @@
    "domains": [
     "https://cyanbug.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -5639,6 +5753,7 @@
    "domains": [
     "https://cyclingarchive.club/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5700,6 +5815,7 @@
    "domains": [
     "https://czteam.me/"
    ],
+   "engine": "",
    "language": "ro-RO",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5736,6 +5852,7 @@
    "domains": [
     "https://damag.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5784,6 +5901,7 @@
    "domains": [
     "https://darkpeers.org/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5861,6 +5979,7 @@
    "domains": [
     "https://dasunerwartete.biz/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5935,6 +6054,7 @@
    "domains": [
     "https://dasunerwartete.biz/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -5997,6 +6117,7 @@
    "domains": [
     "https://datascene.xyz/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "http://datascene.net/",
@@ -6051,6 +6172,7 @@
    "domains": [
     "https://pt.daxiangjiao.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6103,6 +6225,7 @@
     "https://deildu.net/",
     "https://icetracker.org/"
    ],
+   "engine": "",
    "language": "is-IS",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6150,6 +6273,7 @@
    "domains": [
     "https://dstudio.me/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6188,6 +6312,7 @@
    "domains": [
     "https://desigaane.rocks/"
    ],
+   "engine": "gazelle",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6224,6 +6349,7 @@
    "domains": [
     "https://torrent.desi/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://desitorrents.tv/",
@@ -6292,6 +6418,7 @@
    "domains": [
     "https://devil-torrents.pl/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6348,6 +6475,7 @@
    "domains": [
     "https://diablotorrent.net/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6386,6 +6514,7 @@
    "domains": [
     "https://dicmusic.com/"
    ],
+   "engine": "gazelle",
    "language": "zh-CN",
    "legacy_domains": [
     "https://dicmusic.club/"
@@ -6454,6 +6583,7 @@
     "https://digitalcore.club/",
     "https://prxy.digitalcore.club/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6490,6 +6620,7 @@
    "domains": [
     "http://www.dimeadozen.org/"
    ],
+   "engine": "",
    "language": "en-GB",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6530,6 +6661,7 @@
    "domains": [
     "https://discfan.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6581,6 +6713,7 @@
    "domains": [
     "https://share.dmhy.org/"
    ],
+   "engine": "",
    "language": "zh-TW",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6627,6 +6760,7 @@
    "domains": [
     "https://www.docspedia.world/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6661,6 +6795,7 @@
    "domains": [
     "https://dreadvault.org/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6700,6 +6835,7 @@
    "domains": [
     "https://dreamingtree.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6760,6 +6896,7 @@
    "domains": [
     "http://drugari.org/"
    ],
+   "engine": "",
    "language": "hr-HR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6830,6 +6967,7 @@
    "domains": [
     "https://ds-reloaded.com/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [
     "https://dark-shadow.ml/",
@@ -6880,6 +7018,7 @@
    "domains": [
     "https://dubhe.site/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6932,6 +7071,7 @@
    "domains": [
     "https://dxp.ru/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -6967,6 +7107,7 @@
    "domains": [
     "https://ebb.la/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://ebb.la/"
@@ -7005,6 +7146,7 @@
    "domains": [
     "https://ebooks-shares.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -7038,6 +7180,7 @@
    "domains": [
     "https://e-hentai.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -7095,6 +7238,7 @@
    "domains": [
     "https://electro-torrent.pl/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [
     "http://electro-torrent.pl/"
@@ -7129,6 +7273,7 @@
    "domains": [
     "https://www.empornium.sx/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.empornium.me/",
@@ -7165,6 +7310,7 @@
    "domains": [
     "https://www.empornium.sx/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.empornium.me/",
@@ -7210,6 +7356,7 @@
    "domains": [
     "https://emuwarez.com/"
    ],
+   "engine": "unit3d",
    "language": "es-ES",
    "legacy_domains": [
     "https://emuwarez.it/"
@@ -7270,6 +7417,7 @@
    "domains": [
     "https://estone.cc/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [
     "http://estone.cc/"
@@ -7333,6 +7481,7 @@
    "domains": [
     "https://ex-torrenty.org/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -7389,6 +7538,7 @@
    "domains": [
     "https://exitorrent.org/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -7446,6 +7596,7 @@
    "domains": [
     "https://exkinoray.ru/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://exkinoray.tv/",
@@ -7484,6 +7635,7 @@
    "domains": [
     "https://exoticaz.to/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -7549,6 +7701,7 @@
    "domains": [
     "https://explosiv-world.biz/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [
     "https://torrent-explosiv.eu/",
@@ -7632,6 +7785,7 @@
     "https://extratorrent.proxyninja.org/",
     "https://extratorrent.proxyninja.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://extratorrent.mrunblock.bond/",
@@ -7674,6 +7828,7 @@
    "domains": [
     "https://extremebits.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -7710,6 +7865,7 @@
     "https://eztv.yt/",
     "https://eztv1.xyz/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://eztv.ag/",
@@ -7760,6 +7916,7 @@
     "https://eztv.yt/",
     "https://eztv1.xyz/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://eztv.ag/",
@@ -7809,6 +7966,7 @@
    "domains": [
     "https://f1carreras.xyz/"
    ],
+   "engine": "unit3d",
    "language": "es-MX",
    "legacy_domains": [],
    "login_2fa": false,
@@ -7843,6 +8001,7 @@
    "domains": [
     "https://f1gp.xyz/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://f1gp.site/"
@@ -7912,6 +8071,7 @@
    "domains": [
     "https://www.fano.in/"
    ],
+   "engine": "",
    "language": "lv-LV",
    "legacy_domains": [],
    "login_2fa": false,
@@ -7955,6 +8115,7 @@
    "domains": [
     "https://www.fappaizuri.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://fappaizuri.me/"
@@ -7996,6 +8157,7 @@
    "domains": [
     "https://www.fappaizuri.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://fappaizuri.me/"
@@ -8031,6 +8193,7 @@
    "domains": [
     "https://femdomcult.org/"
    ],
+   "engine": "gazelle",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8081,6 +8244,7 @@
    "domains": [
     "http://tracker.fenyarnyek.com/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [
     "https://tracker.fenyarnyek.com/"
@@ -8145,6 +8309,7 @@
    "domains": [
     "https://file-tracker.net/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8209,6 +8374,7 @@
     "https://filelist.io/",
     "https://thefl.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://filelist.io",
@@ -8251,6 +8417,7 @@
    "domains": [
     "https://filemood.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8308,6 +8475,7 @@
    "domains": [
     "https://finelite.org/"
    ],
+   "engine": "",
    "language": "fi-FI",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8346,6 +8514,7 @@
    "domains": [
     "https://flood.st/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8401,6 +8570,7 @@
    "domains": [
     "https://pt.0ff.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8440,6 +8610,7 @@
    "domains": [
     "https://www.freejavtorrent.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8491,6 +8662,7 @@
    "domains": [
     "https://www.funfile.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8552,6 +8724,7 @@
    "domains": [
     "https://myfunzone.org/"
    ],
+   "engine": "unit3d",
    "language": "ro-RO",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8634,6 +8807,7 @@
    "domains": [
     "https://futuretorrent.org/"
    ],
+   "engine": "",
    "language": "it-IT",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8702,6 +8876,7 @@
    "domains": [
     "https://www.fuzer.xyz/"
    ],
+   "engine": "",
    "language": "he-IL",
    "legacy_domains": [
     "https://fuzer.me/",
@@ -8754,6 +8929,7 @@
    "domains": [
     "https://gemini-tracker.org/"
    ],
+   "engine": "unit3d",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8802,6 +8978,7 @@
    "domains": [
     "https://www.gamestorrents.app/"
    ],
+   "engine": "",
    "language": "es-ES",
    "legacy_domains": [
     "https://www.gamestorrents.com/",
@@ -8856,6 +9033,7 @@
    "domains": [
     "https://www.gay-torrents.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8898,6 +9076,7 @@
    "domains": [
     "https://www.gaytor.rent/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.gaytorrent.ru/"
@@ -8950,6 +9129,7 @@
    "domains": [
     "https://gazellegames.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -8993,6 +9173,7 @@
    "domains": [
     "https://generation-free.org/"
    ],
+   "engine": "unit3d",
    "language": "fr-FR",
    "legacy_domains": [
     "https://generation-free.biz/"
@@ -9044,6 +9225,7 @@
    "domains": [
     "https://www.gamegamept.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -9099,6 +9281,7 @@
    "domains": [
     "https://gigatorrents.ws/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -9168,6 +9351,7 @@
    "domains": [
     "https://girotorrent.org/"
    ],
+   "engine": "",
    "language": "it-IT",
    "legacy_domains": [
     "http://girotorrent.org/"
@@ -9202,6 +9386,7 @@
    "domains": [
     "https://greatposterwall.com/"
    ],
+   "engine": "gazelle",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -9247,6 +9432,7 @@
    "domains": [
     "https://www.haidan.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://www.haidan.video/"
@@ -9290,6 +9476,7 @@
    "domains": [
     "https://www.htpt.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -9322,6 +9509,7 @@
    "domains": [
     "https://www.happyfappy.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.happyfappy.org/"
@@ -9356,6 +9544,7 @@
    "domains": [
     "https://www.happyfappy.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.happyfappy.org/"
@@ -9392,6 +9581,7 @@
    "domains": [
     "https://hawke.uno/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://www.hawke.uno/"
@@ -9457,6 +9647,7 @@
    "domains": [
     "https://hd-czech.eu/"
    ],
+   "engine": "",
    "language": "cs-CZ",
    "legacy_domains": [
     "https://freecztorrent.eu/"
@@ -9495,6 +9686,7 @@
    "domains": [
     "https://hd-united.vn/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -9551,6 +9743,7 @@
    "domains": [
     "https://hdarea.club/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://www.hdarea.co/",
@@ -9604,6 +9797,7 @@
    "domains": [
     "https://hdbao.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -9646,6 +9840,7 @@
    "domains": [
     "https://hdbits.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://hdbits.org"
@@ -9701,6 +9896,7 @@
     "https://hdcity.work/",
     "https://hdcity.leniter.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://hdcity4.leniter.org/"
@@ -9751,6 +9947,7 @@
    "domains": [
     "https://pt.hdclone.top/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://pt.hdclone.org/"
@@ -9804,6 +10001,7 @@
    "domains": [
     "https://www.hddolby.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -9860,6 +10058,7 @@
    "domains": [
     "https://hdfans.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -9902,6 +10101,7 @@
    "domains": [
     "https://hdf.world/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -9944,6 +10144,7 @@
    "domains": [
     "https://hdf.world/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10001,6 +10202,7 @@
     "https://freetmd.com/",
     "https://kinoradiomagia.tv/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://hdgalaktik.com/"
@@ -10052,6 +10254,7 @@
    "domains": [
     "https://hdhome.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "http://hdhome.org/"
@@ -10108,6 +10311,7 @@
     "https://na.hdkylin.com/",
     "https://www.hdkyl.in/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10151,6 +10355,7 @@
    "domains": [
     "https://hd-olimpo.club/"
    ],
+   "engine": "unit3d",
    "language": "es-ES",
    "legacy_domains": [
     "https://hdolimpo.co/"
@@ -10202,6 +10407,7 @@
    "domains": [
     "https://hd-only.org/"
    ],
+   "engine": "gazelle",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10250,6 +10456,7 @@
    "domains": [
     "http://hdroute.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10297,6 +10504,7 @@
    "domains": [
     "https://hdsky.me/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10351,6 +10559,7 @@
    "domains": [
     "https://hd-space.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10405,6 +10614,7 @@
    "domains": [
     "https://hd-space.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10458,6 +10668,7 @@
    "domains": [
     "https://hdtime.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10509,6 +10720,7 @@
     "https://hd-torrents.net/",
     "https://hd-torrents.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10553,6 +10765,7 @@
    "domains": [
     "https://hdtorrents.eu/"
    ],
+   "engine": "unit3d",
    "language": "it-IT",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10599,6 +10812,7 @@
    "domains": [
     "https://hdturk.club/"
    ],
+   "engine": "",
    "language": "tr-TR",
    "legacy_domains": [
     "http://hdturk.de/",
@@ -10651,6 +10865,7 @@
    "domains": [
     "https://pt.upxin.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "http://pt.upxin.net/"
@@ -10700,6 +10915,7 @@
    "domains": [
     "https://hdvideo.top/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -10745,6 +10961,7 @@
    "domains": [
     "https://hdzero.org/"
    ],
+   "engine": "unit3d",
    "language": "es-ES",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10799,6 +11016,7 @@
    "domains": [
     "https://hebits.net/"
    ],
+   "engine": "gazelle",
    "language": "he-IL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -10870,6 +11088,7 @@
    "domains": [
     "https://hellashut.net/"
    ],
+   "engine": "",
    "language": "el-GR",
    "legacy_domains": [
     "https://hellashut.de/"
@@ -10943,6 +11162,7 @@
    "domains": [
     "https://hellashut.net/"
    ],
+   "engine": "",
    "language": "el-GR",
    "legacy_domains": [
     "https://hellashut.de/"
@@ -10989,6 +11209,7 @@
    "domains": [
     "https://hellenic-hd.cc/"
    ],
+   "engine": "unit3d",
    "language": "el-GR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11065,6 +11286,7 @@
    "domains": [
     "https://helltorrents.com/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11122,6 +11344,7 @@
    "domains": [
     "https://herobit.info/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [
     "https://carp-hunter.hu/"
@@ -11171,6 +11394,7 @@
     "https://hhanclub.net/",
     "https://hhan.club/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://hhanclub.top/"
@@ -11228,6 +11452,7 @@
    "domains": [
     "https://homiehelpdesk.net/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11300,6 +11525,7 @@
    "domains": [
     "https://h-o-d.org/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11332,6 +11558,7 @@
    "domains": [
     "https://tracker.hqmusic.info/"
    ],
+   "engine": "",
    "language": "vi-VN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11386,6 +11613,7 @@
    "domains": [
     "https://hudbt.hust.edu.cn/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11449,6 +11677,7 @@
    "domains": [
     "https://huntorrent.org/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [
     "https://huntorrent.net/",
@@ -11488,6 +11717,7 @@
    "domains": [
     "https://www.hxpt.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11555,6 +11785,7 @@
    "domains": [
     "https://ilcorsaroblu.org/"
    ],
+   "engine": "",
    "language": "it-IT",
    "legacy_domains": [
     "http://ilcorsaroblu.org/",
@@ -11628,6 +11859,7 @@
    "domains": [
     "https://immortalseed.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11673,6 +11905,7 @@
    "domains": [
     "https://immortuos.life/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [
     "https://www.immortuos.life/"
@@ -11714,6 +11947,7 @@
    "domains": [
     "https://www.indietorrents.com/"
    ],
+   "engine": "",
    "language": "en-GB",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11751,6 +11985,7 @@
    "domains": [
     "https://infinityhd.net/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11832,6 +12067,7 @@
    "domains": [
     "https://infire.si/"
    ],
+   "engine": "",
    "language": "sl-SI",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11889,6 +12125,7 @@
    "domains": [
     "https://newinsane.info/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -11936,6 +12173,7 @@
    "domains": [
     "https://archive.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -12028,6 +12266,7 @@
     "https://ipt.world/",
     "https://ipt.octopus.town/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -12080,6 +12319,7 @@
    "domains": [
     "https://itatorrents.xyz/"
    ],
+   "engine": "unit3d",
    "language": "it-IT",
    "legacy_domains": [],
    "login_2fa": false,
@@ -12134,6 +12374,7 @@
    "domains": [
     "https://jme-reunit3d.de/"
    ],
+   "engine": "unit3d",
    "language": "de-DE",
    "legacy_domains": [
     "https://jme-reunit3d.eu/"
@@ -12183,6 +12424,7 @@
    "domains": [
     "https://jpopsuki.eu/"
    ],
+   "engine": "gazelle",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -12226,6 +12468,7 @@
    "domains": [
     "https://jptv4.us/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -12267,6 +12510,7 @@
    "domains": [
     "https://kamept.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -12303,6 +12547,7 @@
    "domains": [
     "https://karagarga.in/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -12348,6 +12593,7 @@
    "domains": [
     "https://pt.keepfrds.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -12390,6 +12636,7 @@
    "domains": [
     "https://our.kelu.one/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -12468,6 +12715,7 @@
     "https://kickasstorrents.proxyninja.org/",
     "https://kickasstorrents.proxyninja.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://kat.root.yt/",
@@ -12529,6 +12777,7 @@
     "https://thekat.cc/",
     "https://kattracker.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://kickass.gg/",
@@ -12574,6 +12823,7 @@
    "domains": [
     "http://kinorun.top/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -12624,6 +12874,7 @@
     "https://kinozal.me/",
     "https://kinozal.guru/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://kinozal-tv.appspot.com/",
@@ -12679,6 +12930,7 @@
     "https://kinozal.tv/",
     "https://kinozal.guru/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://kinozal-tv.appspot.com/",
@@ -12777,6 +13029,7 @@
    "domains": [
     "https://knaben.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://knaben.eu/"
@@ -12836,6 +13089,7 @@
    "domains": [
     "http://filbi1976.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://korsar.tv/",
@@ -12897,6 +13151,7 @@
    "domains": [
     "https://krazyzone.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://krazyzone.net/"
@@ -12949,6 +13204,7 @@
    "domains": [
     "https://kufei.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -12994,6 +13250,7 @@
    "domains": [
     "https://kufirc.com/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13033,6 +13290,7 @@
    "domains": [
     "https://kufirc.com/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13083,6 +13341,7 @@
    "domains": [
     "https://pt.lajidui.top/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13150,6 +13409,7 @@
    "domains": [
     "https://theldu.to/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://theldu.net/"
@@ -13217,6 +13477,7 @@
     "https://lastfiles.ro/",
     "https://www.last-torrents.org/"
    ],
+   "engine": "",
    "language": "ro-RO",
    "legacy_domains": [
     "http://last-torrents.org/",
@@ -13278,6 +13539,7 @@
    "domains": [
     "https://lat-team.com/"
    ],
+   "engine": "unit3d",
    "language": "es-MX",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13320,6 +13582,7 @@
    "domains": [
     "https://learnflakes.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13391,6 +13654,7 @@
    "domains": [
     "https://leech24.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13434,6 +13698,7 @@
    "domains": [
     "https://lemonhd.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13507,6 +13772,7 @@
     "https://lesaloonv2-0.lol/",
     "https://lesaloonv2-0.net/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [
     "http://lesaloonv2-0.net/",
@@ -13569,6 +13835,7 @@
    "domains": [
     "https://letseed.org/"
    ],
+   "engine": "",
    "language": "tr-TR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13606,6 +13873,7 @@
    "domains": [
     "https://libble.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13644,6 +13912,7 @@
    "domains": [
     "https://libranet.org/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13696,6 +13965,7 @@
     "https://limetorrents.torrentbay.st/",
     "https://limetorrents.torrentsbay.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://limetorrents.mrunblock.bond/",
@@ -13760,6 +14030,7 @@
    "domains": [
     "https://www.linkomanija.net/"
    ],
+   "engine": "",
    "language": "lt-LT",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13798,6 +14069,7 @@
    "domains": [
     "https://linuxtracker.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13836,6 +14108,7 @@
    "domains": [
     "https://locadora.cc/"
    ],
+   "engine": "unit3d",
    "language": "pt-BR",
    "legacy_domains": [
     "https://locadora.xyz/"
@@ -13889,6 +14162,7 @@
    "domains": [
     "https://longpt.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -13927,6 +14201,7 @@
    "domains": [
     "https://losslessclub.com/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -13960,6 +14235,7 @@
    "domains": [
     "https://lp-bits.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14009,6 +14285,7 @@
    "domains": [
     "https://lst.gg/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14060,6 +14337,7 @@
    "domains": [
     "https://pt.luckpt.de/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14100,6 +14378,7 @@
    "domains": [
     "https://luminarr.me/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14142,6 +14421,7 @@
    "domains": [
     "https://www.torrentmac.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14206,6 +14486,7 @@
    "domains": [
     "https://madsrevolution.net/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14257,6 +14538,7 @@
    "domains": [
     "https://mpellas.me/"
    ],
+   "engine": "",
    "language": "el-GR",
    "legacy_domains": [
     "https://magico.to/",
@@ -14314,6 +14596,7 @@
     "https://taz20hww.8800593.xyz/",
     "https://yhz95dan.8800594.xyz/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://qypps6pv.8800591.xyz/",
@@ -14363,6 +14646,7 @@
    "domains": [
     "https://www.magnetdownload.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14420,6 +14704,7 @@
     "https://majomparade.eu/",
     "https://majomparade.net/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14460,6 +14745,7 @@
    "domains": [
     "https://makingoff.org/"
    ],
+   "engine": "",
    "language": "pt-BR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14502,6 +14788,7 @@
    "domains": [
     "https://malayabits.cc/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14552,6 +14839,7 @@
    "domains": [
     "https://duckboobee.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14599,6 +14887,7 @@
    "domains": [
     "https://seatracker.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://seatracker.ru/"
@@ -14655,6 +14944,7 @@
    "domains": [
     "https://matrixworld.info/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14714,6 +15004,7 @@
    "domains": [
     "https://mazepa.to/"
    ],
+   "engine": "",
    "language": "uk-UA",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14754,6 +15045,7 @@
    "domains": [
     "https://bt.mdan.org/"
    ],
+   "engine": "",
    "language": "pt-BR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14808,6 +15100,7 @@
    "domains": [
     "https://megapeer.vip/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://megapeer.ru/",
@@ -14853,6 +15146,7 @@
    "domains": [
     "https://memphis.fit/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14899,6 +15193,7 @@
    "domains": [
     "https://mese-vilag.net/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14951,6 +15246,7 @@
    "domains": [
     "https://metalguru.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -14989,6 +15285,7 @@
    "domains": [
     "https://en.metal-tracker.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://en.metal-tracker.com/"
@@ -15029,6 +15326,7 @@
    "domains": [
     "https://midnightscene.cc/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15069,6 +15367,7 @@
    "domains": [
     "https://mikanani.me/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15112,6 +15411,7 @@
    "domains": [
     "https://milkie.cc/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15156,6 +15456,7 @@
    "domains": [
     "https://tracker.milnueve.cc/"
    ],
+   "engine": "unit3d",
    "language": "es-ES",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15202,6 +15503,7 @@
     "https://miobt.com/",
     "https://kisssub.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15234,6 +15536,7 @@
    "domains": [
     "http://www.mixtapetorrent.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15278,6 +15581,7 @@
    "domains": [
     "https://mma-torrents.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15329,6 +15633,7 @@
    "domains": [
     "https://mnvv2.info/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15407,6 +15712,7 @@
    "domains": [
     "https://www.mojblink.si/"
    ],
+   "engine": "",
    "language": "sl-SI",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15443,6 +15749,7 @@
    "domains": [
     "https://www.momentpt.top/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15484,6 +15791,7 @@
    "domains": [
     "https://monikadesign.uk/"
    ],
+   "engine": "unit3d",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15529,6 +15837,7 @@
    "domains": [
     "https://mousebits.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15592,6 +15901,7 @@
     "https://tp.m-team.cc/",
     "https://pt.m-team.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15631,6 +15941,7 @@
    "domains": [
     "https://musebootlegs.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.musebootlegs.com/"
@@ -15667,6 +15978,7 @@
    "domains": [
     "https://www.musopia.vip/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15718,6 +16030,7 @@
    "domains": [
     "https://pt.muxuege.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15756,6 +16069,7 @@
    "domains": [
     "https://forums.mvgroup.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://forums.mvgroup.org/"
@@ -15790,6 +16104,7 @@
    "domains": [
     "https://forums.mvgroup.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://forums.mvgroup.org/"
@@ -15829,6 +16144,7 @@
    "domains": [
     "https://www.myanonamouse.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15861,6 +16177,7 @@
    "domains": [
     "https://myporn.club/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15895,6 +16212,7 @@
    "domains": [
     "https://www.myspleen.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -15941,6 +16259,7 @@
    "domains": [
     "https://nanyangpt.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://52pt.site/"
@@ -16004,6 +16323,7 @@
    "domains": [
     "https://ncore.pro/"
    ],
+   "engine": "gazelle",
    "language": "hu-HU",
    "legacy_domains": [
     "https://ncore.cc/"
@@ -16045,6 +16365,7 @@
    "domains": [
     "https://nebulance.io/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -16083,6 +16404,7 @@
    "domains": [
     "https://nekobt.to/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -16128,6 +16450,7 @@
    "domains": [
     "https://nethd.org/"
    ],
+   "engine": "",
    "language": "vi-VN",
    "legacy_domains": [
     "http://nethd.org/"
@@ -16191,6 +16514,7 @@
    "domains": [
     "https://new-team.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -16261,6 +16585,7 @@
    "domains": [
     "https://newheaven.nl/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [
     "https://torrentheaven.myfqdn.info/"
@@ -16334,6 +16659,7 @@
    "domains": [
     "https://new-retro.eu/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -16366,6 +16692,7 @@
    "domains": [
     "https://newstudio.tv/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://newstudio.tv/"
@@ -16400,6 +16727,7 @@
    "domains": [
     "https://newstudio.tv/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://newstudio.tv/"
@@ -16436,6 +16764,7 @@
    "domains": [
     "https://www.nicept.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -16468,6 +16797,7 @@
    "domains": [
     "https://nipponsei.minglong.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -16507,6 +16837,7 @@
    "domains": [
     "https://nirvana.li/"
    ],
+   "engine": "unit3d",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -16560,6 +16891,7 @@
    "domains": [
     "https://njtupt.top/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -16609,6 +16941,7 @@
    "domains": [
     "https://nobs.rawsmoke.net/"
    ],
+   "engine": "unit3d",
    "language": "es-ES",
    "legacy_domains": [],
    "login_2fa": false,
@@ -16660,6 +16993,7 @@
    "domains": [
     "https://nnmclub.to/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://nnm-club.name/",
@@ -16708,6 +17042,7 @@
    "domains": [
     "https://nnmclub.to/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://nnm-club.name/",
@@ -16757,6 +17092,7 @@
    "domains": [
     "https://norbits.net/"
    ],
+   "engine": "",
    "language": "nb-NO",
    "legacy_domains": [],
    "login_2fa": false,
@@ -16804,6 +17140,7 @@
    "domains": [
     "https://nordicbytes.org/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://danishbytes.org/",
@@ -16863,6 +17200,7 @@
    "domains": [
     "https://nordicq.org/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://nordicq.info/",
@@ -16931,6 +17269,7 @@
    "domains": [
     "https://nostradamus.foo/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -16979,6 +17318,7 @@
     "https://pt.novahd.top/",
     "https://tracker.novahd.top/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17035,6 +17375,7 @@
     "https://nyaa.mom/",
     "https://nyaa.media/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://nyaa.black-mirror.xyz/",
@@ -17103,6 +17444,7 @@
    "domains": [
     "https://www.okpt.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17170,6 +17512,7 @@
    "domains": [
     "https://oldgreektracker.xyz/"
    ],
+   "engine": "",
    "language": "el-GR",
    "legacy_domains": [
     "http://oldgreektracker.xyz/"
@@ -17212,6 +17555,7 @@
    "domains": [
     "https://oldtoons.world/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17251,6 +17595,7 @@
    "domains": [
     "https://onejav.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17285,6 +17630,7 @@
    "domains": [
     "https://onlyencodes.cc/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17324,6 +17670,7 @@
    "domains": [
     "https://open.cd/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17356,6 +17703,7 @@
    "domains": [
     "https://opensharing.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17407,6 +17755,7 @@
    "domains": [
     "https://executeorder66.info/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17447,6 +17796,7 @@
    "domains": [
     "https://orpheus.network/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17492,6 +17842,7 @@
    "domains": [
     "https://www.oshen.win/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "http://www.oshen.win/"
@@ -17542,6 +17893,7 @@
    "domains": [
     "https://ourbits.club/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17617,6 +17969,7 @@
    "domains": [
     "https://www.p2pbg.com/"
    ],
+   "engine": "",
    "language": "bg-BG",
    "legacy_domains": [
     "http://www.p2pbg.com/",
@@ -17670,6 +18023,7 @@
    "domains": [
     "https://pandapt.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17710,6 +18064,7 @@
    "domains": [
     "https://pandacd.io/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17758,6 +18113,7 @@
    "domains": [
     "https://parabellumhd.cx/"
    ],
+   "engine": "unit3d",
    "language": "es-ES",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17821,6 +18177,7 @@
    "domains": [
     "https://party-tracker.info/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17853,6 +18210,7 @@
    "domains": [
     "https://passthepopcorn.me"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -17887,6 +18245,7 @@
    "domains": [
     "https://pc-torrents.games/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://pc-torrent.org/",
@@ -17958,6 +18317,7 @@
    "domains": [
     "https://peeratiko.org/"
    ],
+   "engine": "",
    "language": "el-GR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18004,6 +18364,7 @@
    "domains": [
     "https://peergarden.org/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18065,6 +18426,7 @@
    "domains": [
     "https://peers.fm/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18103,6 +18465,7 @@
    "domains": [
     "https://phoenixproject.app/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": true,
@@ -18135,6 +18498,7 @@
    "domains": [
     "https://720pier.ru/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://720pier.ru/"
@@ -18182,6 +18546,7 @@
    "domains": [
     "https://piggo.me/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18244,6 +18609,7 @@
    "domains": [
     "https://www.pixelcove.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18300,6 +18666,7 @@
    "domains": [
     "https://www.pixelcove.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18332,6 +18699,7 @@
    "domains": [
     "https://pixelhd.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18366,6 +18734,7 @@
    "domains": [
     "https://playlet.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://playletpt.xyz/"
@@ -18402,6 +18771,7 @@
    "domains": [
     "https://plugintorrent.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18443,6 +18813,7 @@
    "domains": [
     "https://podzemlje.net/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18497,6 +18868,7 @@
    "domains": [
     "https://polishtorrent.top/"
    ],
+   "engine": "unit3d",
    "language": "pl-PL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18555,6 +18927,7 @@
    "domains": [
     "https://pte.nu/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [
     "https://polishtracker.net/"
@@ -18631,6 +19004,7 @@
    "domains": [
     "https://polskie-torrenty.eu/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18668,6 +19042,7 @@
     "https://pornolab.cc/",
     "https://pornolab.biz/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18702,6 +19077,7 @@
    "domains": [
     "https://pornotorrent.com.br/"
    ],
+   "engine": "",
    "language": "pt-BR",
    "legacy_domains": [
     "https://www.pornotorrent.eu/",
@@ -18737,6 +19113,7 @@
    "domains": [
     "https://pornrips.to/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18769,6 +19146,7 @@
    "domains": [
     "https://www.pornxlab.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.ptorrents.com/"
@@ -18816,6 +19194,7 @@
    "domains": [
     "https://portugas.org/"
    ],
+   "engine": "unit3d",
    "language": "pt-PT",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18877,6 +19256,7 @@
    "domains": [
     "http://tracker2.postman.i2p/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -18931,6 +19311,7 @@
    "domains": [
     "http://tracker2.postman.i2p/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19002,6 +19383,7 @@
    "domains": [
     "https://pretome.info/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19046,6 +19428,7 @@
    "domains": [
     "https://privatehd.to/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19095,6 +19478,7 @@
    "domains": [
     "https://proaudiotorrents.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://proaudiotorrents.org/"
@@ -19129,6 +19513,7 @@
    "domains": [
     "https://proporno.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19172,6 +19557,7 @@
    "domains": [
     "https://ptcafe.club/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -19220,6 +19606,7 @@
    "domains": [
     "https://cc.mypt.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19273,6 +19660,7 @@
    "domains": [
     "https://pterclub.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://pterclub.com/"
@@ -19330,6 +19718,7 @@
    "domains": [
     "https://ptfans.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://cusat.win/"
@@ -19395,6 +19784,7 @@
    "domains": [
     "https://ptfiles.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19444,6 +19834,7 @@
    "domains": [
     "https://pt.gtkpw.xyz/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://pt.gtk.pw/"
@@ -19502,6 +19893,7 @@
    "domains": [
     "https://www.pthome.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19551,6 +19943,7 @@
    "domains": [
     "https://pt.itzmx.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19600,6 +19993,7 @@
    "domains": [
     "https://ptlao.top/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19649,6 +20043,7 @@
    "domains": [
     "https://ptlgs.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -19697,6 +20092,7 @@
    "domains": [
     "https://ptsbao.club/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19745,6 +20141,7 @@
    "domains": [
     "https://www.ptskit.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19795,6 +20192,7 @@
    "domains": [
     "https://pt.tey.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19847,6 +20245,7 @@
    "domains": [
     "https://www.pttime.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19896,6 +20295,7 @@
    "domains": [
     "https://pt.ying.us.kg/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -19947,6 +20347,7 @@
    "domains": [
     "https://ptzone.xyz/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -19994,6 +20395,7 @@
    "domains": [
     "https://punck-tracker.net/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -20069,6 +20471,7 @@
    "domains": [
     "https://xbt.puntotorrent.com/"
    ],
+   "engine": "",
    "language": "es-ES",
    "legacy_domains": [
     "https://xbt.puntotorrent.ch/"
@@ -20103,6 +20506,7 @@
    "domains": [
     "https://pussytorrents.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -20153,6 +20557,7 @@
    "domains": [
     "https://pt.sjtu.edu.cn/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -20191,6 +20596,7 @@
    "domains": [
     "https://pwtorrents.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://pwtorrents.net/"
@@ -20225,6 +20631,7 @@
    "domains": [
     "https://pwtorrents.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://pwtorrents.net/"
@@ -20270,6 +20677,7 @@
    "domains": [
     "https://www.qingwapt.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://qingwapt.com/",
@@ -20333,6 +20741,7 @@
    "domains": [
     "https://r3vuk.wtf/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -20365,6 +20774,7 @@
    "domains": [
     "https://racing4everyone.eu/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://racing4everyone.jp/"
@@ -20399,6 +20809,7 @@
    "domains": [
     "https://www.racingfor.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -20449,6 +20860,7 @@
    "domains": [
     "https://bilibili.download/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -20501,6 +20913,7 @@
    "domains": [
     "https://gaytracker.ru/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -20550,6 +20963,7 @@
    "domains": [
     "https://rastastugan.org/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -20597,6 +21011,7 @@
    "domains": [
     "https://redacted.sh/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://redacted.ch/"
@@ -20654,6 +21069,7 @@
    "domains": [
     "http://rstorrent.org.pl/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -20686,6 +21102,7 @@
    "domains": [
     "https://reelflix.cc/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://legacyhd.org/",
@@ -20732,6 +21149,7 @@
    "domains": [
     "https://retroflix.club/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://retroflix.net/"
@@ -20770,6 +21188,7 @@
    "domains": [
     "https://retro-movies.club/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -20815,6 +21234,7 @@
    "domains": [
     "https://www.retrotoon.world/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -20879,6 +21299,7 @@
    "domains": [
     "https://revott.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://revolutiontt.me/"
@@ -20915,6 +21336,7 @@
    "domains": [
     "https://rgfootball.net/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://rgfootball.net/"
@@ -20949,6 +21371,7 @@
    "domains": [
     "https://rintor.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -20981,6 +21404,7 @@
    "domains": [
     "https://www.rintor.net/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -21036,6 +21460,7 @@
    "domains": [
     "https://riperam.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://riperam.org/",
@@ -21073,6 +21498,7 @@
    "domains": [
     "https://rocket-hd.cc/"
    ],
+   "engine": "unit3d",
    "language": "de-DE",
    "legacy_domains": [
     "https://r0k3t.li/"
@@ -21115,6 +21541,7 @@
    "domains": [
     "https://metal.iplay.ro/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://metal.stream.bike/"
@@ -21165,6 +21592,7 @@
    "domains": [
     "https://rousi.pro/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -21197,6 +21625,7 @@
    "domains": [
     "https://r4.rudub.world/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://dec13.rudub.bet/",
@@ -21277,6 +21706,7 @@
    "domains": [
     "https://rustorka.com/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://rustorka.com/"
@@ -21317,6 +21747,7 @@
     "https://rutor.is/",
     "http://6tor.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://rutor.uk-unblock.xyz/",
@@ -21420,6 +21851,7 @@
     "https://rutracker.net/",
     "https://rutracker.nl/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -21468,6 +21900,7 @@
    "domains": [
     "https://samaritano.cc/"
    ],
+   "engine": "unit3d",
    "language": "pt-BR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -21518,6 +21951,7 @@
    "domains": [
     "https://sbpt.link/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -21568,6 +22002,7 @@
    "domains": [
     "https://scenehd.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -21638,6 +22073,7 @@
     "https://www.scene-rush.pt/",
     "https://www.scene-rush.com/"
    ],
+   "engine": "",
    "language": "pt-PT",
    "legacy_domains": [
     "http://www.scene-rush.pt/"
@@ -21706,6 +22142,7 @@
    "domains": [
     "https://www.scenetime.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -21744,6 +22181,7 @@
    "domains": [
     "https://secret-cinema.pw/"
    ],
+   "engine": "gazelle",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -21788,6 +22226,7 @@
    "domains": [
     "https://seedcore.net/"
    ],
+   "engine": "unit3d",
    "language": "ro-RO",
    "legacy_domains": [
     "https://rotorrent.info/"
@@ -21854,6 +22293,7 @@
    "domains": [
     "https://seedfile.io/"
    ],
+   "engine": "",
    "language": "ro-RO",
    "legacy_domains": [
     "https://www.seedfile.io/",
@@ -21913,6 +22353,7 @@
    "domains": [
     "https://seedpool.org/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -21962,6 +22403,7 @@
     "https://www.selezen.top/",
     "https://open.selezen.top/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://www.selezen.site/",
@@ -22011,6 +22453,7 @@
    "domains": [
     "https://sewerpt.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -22066,6 +22509,7 @@
    "domains": [
     "https://sextorrent.myds.me/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -22105,6 +22549,7 @@
    "domains": [
     "https://www.sexy-pics.us/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -22169,6 +22614,7 @@
    "domains": [
     "https://shadowbit.cc/"
    ],
+   "engine": "",
    "language": "ro-RO",
    "legacy_domains": [],
    "login_2fa": false,
@@ -22207,6 +22653,7 @@
    "domains": [
     "https://tracker.shakaw.com.br/"
    ],
+   "engine": "",
    "language": "pt-BR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -22240,6 +22687,7 @@
    "domains": [
     "https://www.shanaproject.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -22286,6 +22734,7 @@
    "domains": [
     "https://shareisland.org/"
    ],
+   "engine": "unit3d",
    "language": "it-IT",
    "legacy_domains": [
     "http://shareisland.org/",
@@ -22331,6 +22780,7 @@
    "domains": [
     "https://www.shazbat.tube/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.shazbat.tv/"
@@ -22366,6 +22816,7 @@
    "domains": [
     "https://showrss.info/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -22425,6 +22876,7 @@
    "domains": [
     "https://bearbit.org/"
    ],
+   "engine": "gazelle",
    "language": "th-TH",
    "legacy_domains": [
     "https://www.siambit.me/",
@@ -22469,6 +22921,7 @@
    "domains": [
     "https://si-qi.xyz/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -22501,6 +22954,7 @@
    "domains": [
     "https://skidrowrepack.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -22535,6 +22989,7 @@
    "domains": [
     "https://skipthecommercials.xyz/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://skipthecommericals.xyz/"
@@ -22599,6 +23054,7 @@
    "domains": [
     "https://sktorrent.eu/"
    ],
+   "engine": "",
    "language": "cs-CZ",
    "legacy_domains": [
     "http://sktorrent.eu/torrent/",
@@ -22672,6 +23128,7 @@
    "domains": [
     "https://sktorrent.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -22716,6 +23173,7 @@
    "domains": [
     "https://games.slo-bitcloud.eu/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -22749,6 +23207,7 @@
    "domains": [
     "https://skyeysnow.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -22781,6 +23240,7 @@
    "domains": [
     "https://sosulki.bosk.cc/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://sosulki.net/",
@@ -22828,6 +23288,7 @@
    "domains": [
     "https://pt.soulvoice.club/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -22898,6 +23359,7 @@
    "domains": [
     "https://speedapp.io/"
    ],
+   "engine": "",
    "language": "ro-RO",
    "legacy_domains": [
     "https://speedapp.io"
@@ -22965,6 +23427,7 @@
     "https://speed.click/",
     "https://speeders.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -23021,6 +23484,7 @@
    "domains": [
     "https://speedmaster-hd.net/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -23088,6 +23552,7 @@
    "domains": [
     "https://sor-next.org/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [
     "https://sor-next.tk/",
@@ -23135,6 +23600,7 @@
    "domains": [
     "https://sportscora.com/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -23174,6 +23640,7 @@
    "domains": [
     "https://sportscult.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -23216,6 +23683,7 @@
    "domains": [
     "https://springsunday.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -23259,6 +23727,7 @@
     "https://subsplease.mrunblock.bond/",
     "https://subsplease.nocensor.click/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://subsplease.nocensor.space/"
@@ -23294,6 +23763,7 @@
     "https://sukebei.nyaa.si/",
     "https://sukebei.nyaa.mom/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://sukebei.nyaa.lol/"
@@ -23339,6 +23809,7 @@
    "domains": [
     "https://sunnypt.top/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -23399,6 +23870,7 @@
     "https://superbits.org/",
     "https://superbits.cc/"
    ],
+   "engine": "",
    "language": "sv-SE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -23450,6 +23922,7 @@
    "domains": [
     "https://swarmazon.club/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -23497,6 +23970,7 @@
    "domains": [
     "https://www.tangpt.top/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -23572,6 +24046,7 @@
    "domains": [
     "https://tapochek.net/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://tapochek.net/"
@@ -23612,6 +24087,7 @@
    "domains": [
     "https://tasmanit.es/"
    ],
+   "engine": "",
    "language": "en-AU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -23674,6 +24150,7 @@
    "domains": [
     "https://tctg.pm/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [
     "https://teamctgame.co/",
@@ -23734,6 +24211,7 @@
    "domains": [
     "https://tracker.teamflix.cc/"
    ],
+   "engine": "unit3d",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -23785,6 +24263,7 @@
    "domains": [
     "https://teamhd.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -23826,6 +24305,7 @@
    "domains": [
     "https://www.teamos.xyz/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.teamos-hkrg.com/",
@@ -23907,6 +24387,7 @@
    "domains": [
     "https://leo-test.store/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [
     "https://the-brothers.bounceme.net/"
@@ -23981,6 +24462,7 @@
    "domains": [
     "https://thecrazyones.hopto.org/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -24013,6 +24495,7 @@
    "domains": [
     "https://theempire.click/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://theempire.click/"
@@ -24091,6 +24574,7 @@
    "domains": [
     "https://tfa.tf/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -24123,6 +24607,7 @@
    "domains": [
     "https://thegeeks.click/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -24157,6 +24642,7 @@
    "domains": [
     "https://thekitchen.click/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -24201,6 +24687,7 @@
    "domains": [
     "https://tlzdigital.com/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://tlz.digital/"
@@ -24243,6 +24730,7 @@
     "https://tmb.dj/",
     "https://themixingbowl.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -24310,6 +24798,7 @@
    "domains": [
     "https://the-new-fun.com/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [
     "https://the-new-fun.spdns.eu/"
@@ -24344,6 +24833,7 @@
    "domains": [
     "https://theoccult.click/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://theoccult.click/"
@@ -24387,6 +24877,7 @@
    "domains": [
     "https://theoldschool.cc/"
    ],
+   "engine": "unit3d",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -24459,6 +24950,7 @@
    "domains": [
     "https://theparadiese.hopto.org/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [
     "https://theparadiese.org/"
@@ -24561,6 +25053,7 @@
     "https://tpirbay.top/",
     "https://tpirbay.xyz/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://pirate-proxy.page/",
@@ -24627,6 +25120,7 @@
    "domains": [
     "https://theplace.click/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://theplace.click/"
@@ -24661,6 +25155,7 @@
    "domains": [
     "https://theshow.click/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://theshow.click/"
@@ -24695,6 +25190,7 @@
    "domains": [
     "https://thevault.click/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://thevault.click/"
@@ -24746,6 +25242,7 @@
    "domains": [
     "https://tjupt.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -24799,6 +25296,7 @@
    "domains": [
     "https://pt.eastgame.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -24855,6 +25353,7 @@
    "domains": [
     "https://tmghub.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -24905,6 +25404,7 @@
    "domains": [
     "https://tocashare.biz/"
    ],
+   "engine": "unit3d",
    "language": "pt-PT",
    "legacy_domains": [
     "https://tocashare.com/"
@@ -24950,6 +25450,7 @@
     "https://www.tokyotosho.se/",
     "https://tokyo-tosho.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://tokyotosho.proxyportal.fun/",
@@ -25022,6 +25523,7 @@
    "domains": [
     "https://toloka.to/"
    ],
+   "engine": "",
    "language": "uk-UA",
    "legacy_domains": [],
    "login_2fa": false,
@@ -25076,6 +25578,7 @@
    "domains": [
     "https://tormac.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -25136,6 +25639,7 @@
    "domains": [
     "https://www.tornado.si/"
    ],
+   "engine": "",
    "language": "sl-SI",
    "legacy_domains": [],
    "login_2fa": false,
@@ -25191,6 +25695,7 @@
    "domains": [
     "https://www.torrentheaven.org/"
    ],
+   "engine": "",
    "language": "nl-NL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -25223,6 +25728,7 @@
    "domains": [
     "http://www.torrent-pirat.com/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -25277,6 +25783,7 @@
    "domains": [
     "https://torrent-turk.de/"
    ],
+   "engine": "",
    "language": "tr-TR",
    "legacy_domains": [
     "https://torrent-turk.org/",
@@ -25323,6 +25830,7 @@
    "domains": [
     "https://www6.torrent9.to/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [
     "https://www.torrent9.pl/",
@@ -25415,6 +25923,7 @@
     "https://www.torrentbd.net/",
     "https://www.torrentbd.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://www.torrentbd.com/torrent",
@@ -25451,6 +25960,7 @@
    "domains": [
     "https://torrent.by/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://torrent.by/"
@@ -25498,6 +26008,7 @@
    "domains": [
     "https://torrentbyte.cc/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -25562,6 +26073,7 @@
    "domains": [
     "https://www.torrentbytes.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -25614,6 +26126,7 @@
    "domains": [
     "https://et8.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "http://et8.org/"
@@ -25665,6 +26178,7 @@
     "https://torrentclaw.com/",
     "https://torrentclaw.to/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -25725,6 +26239,7 @@
    "domains": [
     "https://torrentcore.xyz/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -25810,6 +26325,7 @@
     "https://tday.venom.global/",
     "https://tday.workisboring.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -25874,6 +26390,7 @@
    "domains": [
     "https://www.torrentdd.com/"
    ],
+   "engine": "",
    "language": "th-TH",
    "legacy_domains": [],
    "login_2fa": false,
@@ -25934,6 +26451,7 @@
    "domains": [
     "https://www.torrentdownload.info/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://torrentdownload.mrunblock.bond/",
@@ -25985,6 +26503,7 @@
     "https://torrentdownloads.ninjaproxy1.com/",
     "https://torrentdownloads.proxyninja.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.torrentdownloads.me/",
@@ -26027,6 +26546,7 @@
    "domains": [
     "https://torrenteros.org/"
    ],
+   "engine": "unit3d",
    "language": "es-ES",
    "legacy_domains": [],
    "login_2fa": false,
@@ -26083,6 +26603,7 @@
    "domains": [
     "https://torrenthaven.org/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [
     "https://torrentavenue.online/"
@@ -26155,6 +26676,7 @@
    "domains": [
     "https://www.torrenthr.org/"
    ],
+   "engine": "unit3d",
    "language": "hr-HR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -26234,6 +26756,7 @@
    "domains": [
     "https://torrenting.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -26281,6 +26804,7 @@
     "https://www.torrentkitty.tv/",
     "https://torkitty.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://www.torrentkitty.se/"
@@ -26359,6 +26883,7 @@
     "https://www.tlgetin.cc/",
     "https://rss.torrentleech.cc/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://v4.torrentleech.org/"
@@ -26429,6 +26954,7 @@
    "domains": [
     "https://torrent.lt/"
    ],
+   "engine": "",
    "language": "lt-LT",
    "legacy_domains": [
     "http://www.torrent.ai/",
@@ -26488,6 +27014,7 @@
    "domains": [
     "https://torrentmasters.org/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [
     "https://torrentmasters.info/"
@@ -26522,6 +27049,7 @@
    "domains": [
     "https://0.torrentoyunindir.com/"
    ],
+   "engine": "",
    "language": "tr-TR",
    "legacy_domains": [
     "https://www.torrentoyunindir.com/",
@@ -26562,6 +27090,7 @@
     "https://torrentproject.xyz/",
     "https://torrentproject.cc/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://torrentproject2.se/",
@@ -26598,6 +27127,7 @@
    "domains": [
     "https://torrents-csv.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://torrents-csv.ml/"
@@ -26643,6 +27173,7 @@
    "domains": [
     "https://torrentsome259.com/"
    ],
+   "engine": "",
    "language": "ko-KR",
    "legacy_domains": [
     "https://torrentsome244.com/",
@@ -26717,6 +27248,7 @@
    "domains": [
     "https://torrent-syndikat.org/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -26769,6 +27301,7 @@
    "domains": [
     "https://torrenttip240.top/"
    ],
+   "engine": "",
    "language": "ko-KR",
    "legacy_domains": [
     "https://torrenttip225.top/",
@@ -26847,6 +27380,7 @@
    "domains": [
     "https://the-torrent-trader.com/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -26913,6 +27447,7 @@
    "domains": [
     "https://totheglory.im/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -26983,6 +27518,7 @@
    "domains": [
     "https://totheglory.im/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27051,6 +27587,7 @@
    "domains": [
     "https://tr4ker.net/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27117,6 +27654,7 @@
    "domains": [
     "https://trackermk.com/"
    ],
+   "engine": "",
    "language": "mk-MK",
    "legacy_domains": [
     "http://trackermk.com/"
@@ -27180,6 +27718,7 @@
    "domains": [
     "https://trackerzero.it/"
    ],
+   "engine": "",
    "language": "it-IT",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27212,6 +27751,7 @@
    "domains": [
     "https://traht.org/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://traht.org/"
@@ -27246,6 +27786,7 @@
    "domains": [
     "https://www.trancetraffic.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27300,6 +27841,7 @@
    "domains": [
     "https://tracker.czech-server.com/"
    ],
+   "engine": "",
    "language": "cs-CZ",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27354,6 +27896,7 @@
    "domains": [
     "https://tracker.czech-server.com/"
    ],
+   "engine": "",
    "language": "cs-CZ",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27386,6 +27929,7 @@
    "domains": [
     "https://www.tribalmixes.com/"
    ],
+   "engine": "",
    "language": "en-GB",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27431,6 +27975,7 @@
    "domains": [
     "https://turkseed.com/"
    ],
+   "engine": "unit3d",
    "language": "tr-TR",
    "legacy_domains": [
     "https://turkseed.net/"
@@ -27489,6 +28034,7 @@
    "domains": [
     "https://turktorrent.us/"
    ],
+   "engine": "",
    "language": "tr-TR",
    "legacy_domains": [
     "http://turktorrent1.in/",
@@ -27535,6 +28081,7 @@
    "domains": [
     "https://u2.dmhy.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27580,6 +28127,7 @@
     "https://u003.25img.com/",
     "https://m0m0m1m.mnmnmnmnmn.com/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://u3c3.in/",
@@ -27628,6 +28176,7 @@
    "domains": [
     "https://ubits.club/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27680,6 +28229,7 @@
    "domains": [
     "https://uindex.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27743,6 +28293,7 @@
    "domains": [
     "https://ultrabits.org/"
    ],
+   "engine": "",
    "language": "sv-SE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27790,6 +28341,7 @@
    "domains": [
     "https://ultrahd.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27858,6 +28410,7 @@
    "domains": [
     "https://unbreakable5.eu/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [],
    "login_2fa": false,
@@ -27900,6 +28453,7 @@
    "domains": [
     "https://torrent.unionfansub.com/"
    ],
+   "engine": "",
    "language": "es-ES",
    "legacy_domains": [
     "http://torrent.unionfansub.com/"
@@ -27945,6 +28499,7 @@
    "domains": [
     "https://tracker.uniotaku.com/"
    ],
+   "engine": "",
    "language": "pt-BR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28003,6 +28558,7 @@
    "domains": [
     "https://www.unlimitz.biz/"
    ],
+   "engine": "",
    "language": "th-TH",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28037,6 +28593,7 @@
    "domains": [
     "https://upload.cx/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28080,6 +28637,7 @@
    "domains": [
     "https://upscalevault.com/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28121,6 +28679,7 @@
    "domains": [
     "https://utp.to/"
    ],
+   "engine": "unit3d",
    "language": "uk-UA",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28193,6 +28752,7 @@
    "domains": [
     "https://uztracker.me/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://uztracker.net/"
@@ -28240,6 +28800,7 @@
     "https://v3x.club/",
     "https://v3x.tw/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28302,6 +28863,7 @@
    "domains": [
     "https://vault-network.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28340,6 +28902,7 @@
    "domains": [
     "https://pt.vclib.online/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28380,6 +28943,7 @@
    "domains": [
     "https://tracker.vietmediaf.store/"
    ],
+   "engine": "unit3d",
    "language": "vi-VN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28419,6 +28983,7 @@
    "domains": [
     "https://vsthouse.ru/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "http://vsthouse.ru/"
@@ -28453,6 +29018,7 @@
    "domains": [
     "https://vstorrent.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28485,6 +29051,7 @@
    "domains": [
     "https://vsttorrentz.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://vsttorrents.net/",
@@ -28546,6 +29113,7 @@
    "domains": [
     "https://white-angel.hu/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28595,6 +29163,7 @@
    "domains": [
     "https://world-in-hd.net/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28643,6 +29212,7 @@
    "domains": [
     "https://wintersakura.net/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -28717,6 +29287,7 @@
    "domains": [
     "https://w-o-t.pro/"
    ],
+   "engine": "",
    "language": "de-DE",
    "legacy_domains": [
     "https://world-of-tomorrow.eu/",
@@ -28781,6 +29352,7 @@
     "https://www.oxtorrent5.ws/",
     "https://www.torrent911.wiki/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [
     "https://www.rantop.xyz/",
@@ -28850,6 +29422,7 @@
    "domains": [
     "https://xingtan.one/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": true,
@@ -28900,6 +29473,7 @@
    "domains": [
     "https://xingwan.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -28949,6 +29523,7 @@
    "domains": [
     "https://pt.xingyungept.org/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29005,6 +29580,7 @@
    "domains": [
     "https://mua.xloli.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [
     "https://share.ilolicon.com/"
@@ -29080,6 +29656,7 @@
    "domains": [
     "https://www.xspeeds.eu/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29140,6 +29717,7 @@
    "domains": [
     "https://xtorrenty.org/"
    ],
+   "engine": "",
    "language": "pl-PL",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29199,6 +29777,7 @@
    "domains": [
     "https://xtremebytes.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29231,6 +29810,7 @@
    "domains": [
     "https://xwt-classics.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://xwt-classics.net/"
@@ -29265,6 +29845,7 @@
    "domains": [
     "https://xwt-classics.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://xwt-classics.net/"
@@ -29303,6 +29884,7 @@
    "domains": [
     "https://xtremewrestlingtorrents.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://xtremewrestlingtorrents.net/"
@@ -29341,6 +29923,7 @@
    "domains": [
     "https://xtremewrestlingtorrents.net/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "http://xtremewrestlingtorrents.net/"
@@ -29383,6 +29966,7 @@
     "https://xxxclub.cc/",
     "https://xxxclub.me/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29415,6 +29999,7 @@
    "domains": [
     "https://xxxtor.com/"
    ],
+   "engine": "",
    "language": "ru-RU",
    "legacy_domains": [
     "https://xxxtor.org/",
@@ -29465,6 +30050,7 @@
    "domains": [
     "https://www.yggreborn.org/"
    ],
+   "engine": "",
    "language": "fr-FR",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29504,6 +30090,7 @@
     "https://yts.torrentbay.st/",
     "https://yts.torrentsbay.org/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [
     "https://yts.bz/",
@@ -29561,6 +30148,7 @@
    "domains": [
     "https://yu-scene.net/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29632,6 +30220,7 @@
    "domains": [
     "https://zamunda.rip/"
    ],
+   "engine": "",
    "language": "bg-BG",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29667,6 +30256,7 @@
    "domains": [
     "https://zappateers.com/"
    ],
+   "engine": "",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29712,6 +30302,7 @@
    "domains": [
     "https://znth.cx/"
    ],
+   "engine": "unit3d",
    "language": "en-US",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29766,6 +30357,7 @@
    "domains": [
     "https://zmpt.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29804,6 +30396,7 @@
    "domains": [
     "https://zrpt.cc/"
    ],
+   "engine": "",
    "language": "zh-CN",
    "legacy_domains": [],
    "login_2fa": false,
@@ -29859,6 +30452,7 @@
    "domains": [
     "https://ztracker.cc/"
    ],
+   "engine": "",
    "language": "hu-HU",
    "legacy_domains": [
     "http://ztracker.org/",

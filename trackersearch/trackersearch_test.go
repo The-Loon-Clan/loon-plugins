@@ -157,7 +157,7 @@ func TestOneFailingSourceDoesNotFailTheSearch(t *testing.T) {
 		lastErr: map[string]string{}, nextAt: map[string]time.Time{},
 		delay: map[string]time.Duration{"knaben": 0, "torrentscsv": 0},
 	}
-	c.adapters = []adapter{
+	c.public = []adapter{
 		&knaben{http: good.Client(), url: good.URL},
 		&torrentsCSV{http: &http.Client{Timeout: 200 * time.Millisecond}, url: "http://127.0.0.1:1"},
 	}
@@ -189,7 +189,7 @@ func TestCandidatesAreSortedBySwarmHealth(t *testing.T) {
 		lastErr: map[string]string{}, nextAt: map[string]time.Time{},
 		delay: map[string]time.Duration{"knaben": 0},
 	}
-	c.adapters = []adapter{&knaben{http: multi.Client(), url: multi.URL}}
+	c.public = []adapter{&knaben{http: multi.Client(), url: multi.URL}}
 	got, err := c.SearchEpisode(context.Background(), q())
 	if err != nil || len(got) != 2 {
 		t.Fatalf("got %d, %v", len(got), err)
@@ -211,7 +211,7 @@ func TestPolitenessSpacesRequestsToOneSource(t *testing.T) {
 		lastErr: map[string]string{}, nextAt: map[string]time.Time{},
 		delay: map[string]time.Duration{"knaben": 150 * time.Millisecond},
 	}
-	c.adapters = []adapter{&knaben{http: srv.Client(), url: srv.URL}}
+	c.public = []adapter{&knaben{http: srv.Client(), url: srv.URL}}
 	ctx := context.Background()
 	c.SearchEpisode(ctx, q())
 	c.SearchEpisode(ctx, q())
@@ -226,8 +226,8 @@ func TestPolitenessSpacesRequestsToOneSource(t *testing.T) {
 // The wired set is primed from the directory, delays floored at two seconds.
 func TestNewPrimesPolitenessFromTheDirectory(t *testing.T) {
 	c := New()
-	if len(c.adapters) != 4 {
-		t.Fatalf("want the 4 public adapters, got %d", len(c.adapters))
+	if len(c.public) != 4 {
+		t.Fatalf("want the 4 public adapters, got %d", len(c.public))
 	}
 	for slug, d := range c.delay {
 		if d < politeFloor {
@@ -236,7 +236,7 @@ func TestNewPrimesPolitenessFromTheDirectory(t *testing.T) {
 	}
 	// nyaa-style declared delays must survive the floor, not be replaced by
 	// it -- checked indirectly: every wired slug exists in the directory.
-	for _, a := range c.adapters {
+	for _, a := range c.public {
 		if _, ok := trackerdir.BySlug(a.Slug()); !ok {
 			t.Fatalf("%s is wired but not in the directory", a.Slug())
 		}
@@ -369,5 +369,31 @@ func TestUnit3dSkipsKeylessConfigs(t *testing.T) {
 	})
 	if len(as) != 0 {
 		t.Fatalf("a keyless config and an unknown slug are not adapters; got %d", len(as))
+	}
+}
+
+// A stored key takes effect without a restart: SetUnit3d adds the private
+// adapter, and it shows up in the searched set and in Sources.
+func TestSetUnit3dActivatesPrivateAdaptersLive(t *testing.T) {
+	c := New() // no keys: public only
+	before := len(c.Sources())
+	c.SetUnit3d([]Unit3dConfig{{Slug: "aither-api", APIKey: "K", BaseURL: "https://x.example"}})
+	after := c.Sources()
+	if len(after) != before+1 {
+		t.Fatalf("SetUnit3d should add one source live: %d -> %d", before, len(after))
+	}
+	var found bool
+	for _, s := range after {
+		if s.Slug == "aither-api" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("the newly-keyed tracker must appear in the searched set")
+	}
+	// Removing the key drops it again.
+	c.SetUnit3d(nil)
+	if len(c.Sources()) != before {
+		t.Fatal("clearing configs must remove the private adapters")
 	}
 }
