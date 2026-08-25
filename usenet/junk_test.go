@@ -15,6 +15,12 @@ func TestIsJunkTitle(t *testing.T) {
 		"OF6OfeYgrXyHQjpiLstb",                                             // 20-char bare token w/ digit
 		"sigma-sun.vol024+02",                                              // orphan PAR2 recovery volume, no .par2 tail
 		"",                                                                 // empty
+		// Desktop-app releases: a 3-4 component version string running into
+		// Multilingual/Portable, or the pair without a version. Reported
+		// 2026-08-24 (release 176408827) after slipping the name list.
+		"4K.Video.Downloader.v4.23.1.5220.Multilingual.Portable",
+		"Wondershare Filmora 13.5.2.4444 Multilingual",
+		"SomeApp Multilingual Portable x86",
 	}
 	for _, s := range junk {
 		if !isJunkTitle(s) {
@@ -30,6 +36,9 @@ func TestIsJunkTitle(t *testing.T) {
 		"My Hero Academia - 138 VOSTFR",
 		"Macross Frontier Vol.02 1080p BluRay", // Vol.NN disc numbering is not a .volNNN+NN recovery marker
 		"Neon Genesis Evangelion vol1",         // bare volN without +blocks
+		"Persona 3 Portable [PSP]",             // Portable in a game NAME: no version adjacency, no Multilingual pairing
+		"[Judas] Frieren - 01v2 (1080p)",       // anime vN markers never grow three dots
+		"Initial D 5.1.2ch DTS BluRay",         // two-dot audio layout is not a version string
 	}
 	for _, s := range legit {
 		if isJunkTitle(s) {
