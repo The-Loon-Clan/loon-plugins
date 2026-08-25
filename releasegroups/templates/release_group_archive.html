@@ -122,19 +122,10 @@
                     </tbody>
                 </table>
             </div>
-            {{if gt .TotalPages 1}}
-            <div class="card-footer d-flex justify-content-between align-items-center py-2">
-                <span class="fs-2xs text-muted">Page {{.Page}} of {{.TotalPages}}</span>
-                <div>
-                    {{if gt .Page 1}}
-                    <a href="?page={{sub (int64 .Page) 1}}" class="button button--sm button--outlined fs-2xs">&laquo; Prev</a>
-                    {{end}}
-                    {{if lt .Page .TotalPages}}
-                    <a href="?page={{inc .Page}}" class="button button--sm button--outlined fs-2xs">Next &raquo;</a>
-                    {{end}}
-                </div>
-            </div>
-            {{end}}
+            {{/* The shared pager, same as every other page here — the
+                 hand-rolled Prev/Next this footer carried was the plugin's
+                 one holdout. */}}
+            {{.Pagination}}
         </div>
         {{else}}
         <div class="panelV2">

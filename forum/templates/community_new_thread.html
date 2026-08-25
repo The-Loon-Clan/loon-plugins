@@ -7,17 +7,17 @@
             <span>New Thread</span>
         </nav>
 
-        <div class="card">
+        <section class="panelV2">
             {{/* An <h1>, not a styled <div>. The page had no heading element at
                  all, so its outline began at the chrome's and it announced no
                  name of its own. */}}
-            <h1 class="card-header" style="font-weight:500;font-size:1.05rem;margin:0;">New Thread</h1>
-            <div class="card-body">
-                <form method="POST" action="/community/forums/threads">
+            <header class="panel__header"><h1 class="panel__heading">New Thread</h1></header>
+            <div class="panel__body">
+                <form class="form" method="POST" action="/community/forums/threads">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-3">
-                        <label class="form-label fs-sm">Category</label>
-                        <select aria-label="Category" name="category_id" class="form-select" required>
+                        <label class="form__label">Category</label>
+                        <select aria-label="Category" name="category_id" class="form__select" required>
                             <option value="">Select a category…</option>
                             {{range .Categories}}
                             <option value="{{.ID}}" {{if eq .ID $.SelectedCategory}}selected{{end}}>{{.Name}}</option>
@@ -25,8 +25,8 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fs-sm">Title</label>
-                        <input aria-label="Title" type="text" name="title" class="form-control" required maxlength="200" placeholder="Thread title">
+                        <label class="form__label">Title</label>
+                        <input aria-label="Title" type="text" name="title" class="form__input" required maxlength="200" placeholder="Thread title">
                     </div>
                     {{/* Thread type selector. Discussion = default
                          forum behaviour (every reply visible to
@@ -35,7 +35,7 @@
                          the thread author + admins see them. Backed
                          by mig 251's thread_type column. */}}
                     <div class="mb-3">
-                        <label class="form-label fs-sm">Thread type</label>
+                        <label class="form__label">Thread type</label>
                         <div class="form-check fs-sm">
                             <input class="form-check-input" type="radio" name="thread_type" id="tt-discussion" value="discussion" checked>
                             <label class="form-check-label" for="tt-discussion">
@@ -50,15 +50,15 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fs-sm">Message</label>
+                        <label class="form__label">Message</label>
                         {{.EditorHTML}}
                     </div>
                     <div class="d-flex justify-content-between">
-                        <a href="/community/forums" class="btn btn-sm btn-outline-secondary">Cancel</a>
-                        <button type="submit" class="btn btn-sm btn-primary">Post Thread</button>
+                        <a href="/community/forums" class="button button--outlined button--sm">Cancel</a>
+                        <button type="submit" class="button button--primary button--sm">Post Thread</button>
                     </div>
                 </form>
             </div>
-        </div>
+        </section>
     </div>
 {{end}}

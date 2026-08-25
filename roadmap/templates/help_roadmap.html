@@ -101,15 +101,9 @@
         <div class="changelog-desc">{{if eq .ActiveTab "agent"}}No agent release notes yet.{{else}}No changelog entries yet.{{end}}</div>
         {{end}}
 
-        {{if gt .TotalPages 1}}
-        <div class="d-flex justify-content-between align-items-center mt-3 fs-sm">
-            <span class="text-muted">Page {{.Page}} of {{.TotalPages}}</span>
-            <div>
-                {{if gt .Page 1}}<a href="?tab={{.ActiveTab}}&amp;page={{sub (int64 .Page) 1}}" class="button button--sm button--outlined">&laquo; Prev</a>{{end}}
-                {{if lt .Page .TotalPages}}<a href="?tab={{.ActiveTab}}&amp;page={{inc .Page}}" class="button button--sm button--outlined">Next &raquo;</a>{{end}}
-            </div>
-        </div>
-        {{end}}
+        {{/* The shared pager, as flow_proposals renders — the tab rides
+             the base URL so paging keeps the shelf. */}}
+        {{.Pagination}}
 
         {{end}}
     </div>

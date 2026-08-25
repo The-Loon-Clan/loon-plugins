@@ -667,11 +667,15 @@ func (h *Handlers) ReleaseGroupArchive(c *gin.Context) {
 	}
 
 	h.render(c, http.StatusOK, group.Name+" — Archive", "release_group_archive.html", gin.H{
-		"Group":         group,
-		"Torrents":      torrents,
-		"Total":         total,
-		"Page":          page,
-		"TotalPages":    totalPages,
+		"Group":      group,
+		"Torrents":   torrents,
+		"Total":      total,
+		"Page":       page,
+		"TotalPages": totalPages,
+		// The shared pager, like every other page of this plugin — the
+		// template hand-rolled Prev/Next here until the 2026-08-25
+		// standardization audit flagged it as the plugin's one holdout.
+		"Pagination":    h.deps.RenderPagination(page, totalPages, "/release-groups/"+group.Slug+"/archive"),
 		"ViewerIsOwner": viewerIsOwner,
 		"RefreshFlash":  c.Query("refresh"),
 		// Bulk-request flash + per-category counts (filed/dup/already/skipped).

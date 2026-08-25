@@ -117,6 +117,11 @@ func (h *Handlers) RoadmapPage(c *gin.Context) {
 		"AgentTotal": agentTotal,
 		"Page":       page,
 		"TotalPages": totalPages,
+		// The shared pager, as flow_proposals already renders — the tab
+		// rides the base URL so paging keeps the shelf. The template
+		// hand-rolled Prev/Next until the 2026-08-25 standardization
+		// audit flagged it.
+		"Pagination": h.deps.RenderPagination(page, pageSize, total, "/help/roadmap?tab="+activeTab),
 	})
 }
 
