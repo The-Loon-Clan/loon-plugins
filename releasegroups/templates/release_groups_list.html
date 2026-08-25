@@ -60,7 +60,7 @@
 
         <form class="rg-search" method="GET" action="/release-groups">
             <input type="hidden" name="tab" value="{{.Tab}}">
-            <div class="input-group input-group-sm">
+            <div class="input-group">
                 <input type="text" class="form__input" name="q" placeholder="Search groups…" value="{{.Query}}">
                 <button class="button button--outlined" type="submit">Search</button>
                 {{if .Query}}<a href="/release-groups?tab={{.Tab}}" class="button button--outlined">Clear</a>{{end}}

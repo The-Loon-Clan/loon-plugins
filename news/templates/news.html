@@ -57,7 +57,10 @@
         </article>
         {{end}}
         {{else}}
-        <div class="empty">No news yet.</div>
+        <p class="notice">
+            <svg class="icon notice__icon" aria-hidden="true"><use href="#info"></use></svg>
+            <span>No news yet.</span>
+        </p>
         {{end}}
 
     </div>
