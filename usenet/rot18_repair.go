@@ -68,25 +68,41 @@ func repairRot18Batch(rows []pluginapi.ReleaseTitle, retitle func(id int64, titl
 	var out rot18Outcome
 	out.Scanned = len(rows)
 	for _, r := range rows {
-		if r.ID > out.Cursor {
-			out.Cursor = r.ID
-		}
 		if r.Obfuscated {
 			// Already decoded on a previous pass or at ingest. Rotating again
 			// would turn a correct title back into the poster's gibberish.
 			out.AlreadyFlagged++
+			if r.ID > out.Cursor {
+				out.Cursor = r.ID
+			}
 			continue
 		}
 		decoded, was := deobfuscateSubject(r.Title)
 		if !was || decoded == r.Title {
+			if r.ID > out.Cursor {
+				out.Cursor = r.ID
+			}
 			continue
 		}
 		if err := retitle(r.ID, decoded); err != nil {
+			// The cursor stops SHORT of a failed write. ReleaseTitlesAfter is
+			// strictly greater-than, so a cursor that has crossed a row is a
+			// promise never to look at it again — and a row whose retitle
+			// failed is not a row this job is done with. Persisting the
+			// failed row's own ID is how a transient host error used to turn
+			// into a title that stayed gibberish forever: every later pass
+			// fetched ID > N and reported a clean walk. A PERMANENTLY failing
+			// row now wedges the walk loudly (one failed write and one
+			// reportErr per pass) instead of vanishing silently — that shape
+			// of failure is a host-store defect worth surfacing.
 			return out, err
 		}
 		out.Repaired++
 		if r.TotalSegments == 0 {
 			out.Broken++
+		}
+		if r.ID > out.Cursor {
+			out.Cursor = r.ID
 		}
 	}
 	return out, nil

@@ -33,6 +33,10 @@ func TestParseEpisode(t *testing.T) {
 		// from "episode zero" and has to stay tellable apart.
 		{"The.Simpsons.S32.COMPLETE.1080p.WEB.x265", "thesimpsons", 32, 0, true},
 		{"Pokemon Season 18 COMPLETE DVDRip", "pokemon", 18, 0, true},
+		// An SxxE00 special files at episode 0, NON-pack — deliberately (only
+		// S00E00 is refused as a marker). The series queries treat episode 0
+		// as "not an episode number" on the strength of this vector.
+		{"The.Show.S14E00.Special.1080p", "theshow", 14, 0, false},
 
 		// Punctuation folds away, so one show is one key.
 		{"Marvels.Agents.of.S.H.I.E.L.D..S07E13.1080p", "marvelsagentsofshield", 7, 13, false},

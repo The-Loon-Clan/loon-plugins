@@ -1436,11 +1436,14 @@ func contentSketchDoc(doc nzbDoc) string {
 //
 // COLLISIONS. Two releases collide only by listing an identical set of
 // filenames. For anything with real names that means identical content. The
-// exposure is degenerate cases — a lone file called "1.rar" — so a single-file
-// release must have a name long enough to be meaningful, and a file with no
-// quoted name at all voids the key rather than guessing. An empty key never
-// matches anything, which is the safe direction: it costs a duplicate row, not
-// a wrongly merged release.
+// exposure is degenerate cases — a lone file called "1.rar", or a MULTI-file
+// set of nothing but numbered members: two different picture sets each posted
+// as "001.jpg".."050.jpg" list identical names, and the single-file-only
+// guard let the second be swallowed as a repost of the first — so the set
+// must carry at least one name long enough to be meaningful, and a file with
+// no quoted name at all voids the key rather than guessing. An empty key
+// never matches anything, which is the safe direction: it costs a duplicate
+// row, not a wrongly merged release.
 func contentFileKeyDoc(doc nzbDoc) string {
 	names := make([]string, 0, len(doc.Files))
 	seen := make(map[string]struct{}, len(doc.Files))
@@ -1461,7 +1464,18 @@ func contentFileKeyDoc(doc nzbDoc) string {
 	if len(names) == 0 {
 		return ""
 	}
-	if len(names) == 1 && len(names[0]) < 20 {
+	// Any real release carries its title in at least one filename — the
+	// .nfo/.par2/.part001.rar family are all named after it — so a set whose
+	// LONGEST name is still short is a numbered dump with no identity of its
+	// own. Subsumes the old lone-short-name rule; MUST stay byte-identical
+	// with fileKeyFromNames in the host's crosspost backfill.
+	longest := 0
+	for _, n := range names {
+		if len(n) > longest {
+			longest = len(n)
+		}
+	}
+	if longest < 20 {
 		return ""
 	}
 	sort.Strings(names)
@@ -1946,8 +1960,15 @@ func (s internalSink) store(ctx context.Context, rel pluginapi.AssembledRelease)
 	return s.p.st.insertNzb(ctx, nzbRow{
 		Title: rel.Title, Filename: safeFilename(rel.Title) + ".nzb",
 		Size: rel.SizeBytes, Group: rel.Group, ContentHash: rel.ContentHash,
-		ContentSketch: rel.ContentSketch,
-		Posted:        rel.PostedAt, Data: rel.NZBGz, Tags: parseTags(rel.Title),
+		// Both content identities, not just the sketch. Dropping the file key
+		// here left migration 035's column NULL on every internal-mode row,
+		// so insertNzb's repost lookup matched nothing — the five-uploads/
+		// 731-shared-filenames case the key was measured for deduped only in
+		// host mode. (The rest of this literal is deliberately lossy; do not
+		// "sync" it wholesale.)
+		ContentSketch:  rel.ContentSketch,
+		ContentFileKey: rel.ContentFileKey,
+		Posted:         rel.PostedAt, Data: rel.NZBGz, Tags: parseTags(rel.Title),
 		CategoryID: s.p.categoryFor(rel.Group, rel.Title),
 	})
 }

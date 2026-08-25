@@ -1,6 +1,12 @@
 package usenet
 
-import "testing"
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
+)
 
 // THE PLUGIN HALF OF A CROSS-REPO GOLDEN VECTOR.
 //
@@ -141,4 +147,62 @@ func TestQuotedFilename(t *testing.T) {
 			t.Errorf("quotedFilename(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
+}
+
+// The multi-file twin of the lone-generic-name rule: two different picture
+// sets each posted as fifty numbered members list IDENTICAL names, and the
+// old single-file-only guard let the second be swallowed as a repost of the
+// first — the sink resolved the first set's row, and its upgrade path could
+// even overwrite that row's blob with the second set's document.
+func TestFileKeyRefusesGenericMultiFileSets(t *testing.T) {
+	var files []nzbFile
+	for i := 1; i <= 50; i++ {
+		files = append(files, nzbFile{
+			Subject: fmt.Sprintf(`[%03d/050] - "%03d.jpg" yEnc (1/1) 100`, i, i),
+		})
+	}
+	if got := contentFileKeyDoc(nzbDoc{Files: files}); got != "" {
+		t.Errorf("a numbered dump keyed to %q, want empty", got)
+	}
+	// One distinctive name is identity enough — the guard must not void real
+	// releases that carry numbered members.
+	withName := append(files[:len(files):len(files)], nzbFile{
+		Subject: `[051/051] - "Family.Album.Kyoto.2024.par2" yEnc (1/1) 100`,
+	})
+	if contentFileKeyDoc(nzbDoc{Files: withName}) == "" {
+		t.Error("a numbered set carrying one distinctive name should still key")
+	}
+}
+
+// internalSink must hand BOTH content identities to insertNzb. The struct
+// literal is deliberately lossy, and dropping ContentFileKey left migration
+// 035's column NULL on every internal-mode row — the repost lookup matched
+// nothing, silently, while host mode deduped fine.
+func TestInternalSinkCarriesBothContentIdentities(t *testing.T) {
+	fake := &captureInsertStore{}
+	p := &Plugin{st: fake}
+	_, _, err := internalSink{p: p}.store(context.Background(), pluginapi.AssembledRelease{
+		Title: "Some Release", ContentHash: "h1", ContentSketch: "s1", ContentFileKey: "k1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.rows) != 1 {
+		t.Fatalf("insertNzb called %d times, want 1", len(fake.rows))
+	}
+	got := fake.rows[0]
+	if got.ContentSketch != "s1" || got.ContentFileKey != "k1" || got.ContentHash != "h1" {
+		t.Errorf("identities dropped on the way to insertNzb: hash=%q sketch=%q fileKey=%q",
+			got.ContentHash, got.ContentSketch, got.ContentFileKey)
+	}
+}
+
+type captureInsertStore struct {
+	Store
+	rows []nzbRow
+}
+
+func (c *captureInsertStore) insertNzb(_ context.Context, n nzbRow) (int64, bool, error) {
+	c.rows = append(c.rows, n)
+	return int64(len(c.rows)), true, nil
 }

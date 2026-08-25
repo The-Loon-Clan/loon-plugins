@@ -116,13 +116,17 @@ func (s *PGStore) seriesSeasons(ctx context.Context, key string) ([]pluginapi.Se
 		Episodes int `db:"episodes"`
 	}
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		// Episodes counts DISTINCT episode and excludes the packs, whose
-		// episode is 0: "8 episodes" must not become 9 because somebody posted
-		// the season boxed.
+		// Episodes counts DISTINCT episode and excludes the packs AND the
+		// SxxE00 specials, both filed at episode 0: "8 episodes" must not
+		// become 9 because somebody posted the season boxed — or a special.
+		// A special is a real release (it stays in the releases count and
+		// renders as its own S14E00 group) but not an episode NUMBER, and
+		// seasonPresence already treats episode 0 that way; the two reads
+		// must give one answer about one row.
 		return tx.SelectContext(ctx, &rows, `
 			SELECT season,
 			       count(*) AS releases,
-			       count(DISTINCT episode) FILTER (WHERE NOT is_pack) AS episodes
+			       count(DISTINCT episode) FILTER (WHERE NOT is_pack AND episode > 0) AS episodes
 			  FROM nzbs
 			 WHERE series_key = $1 AND status = 'completed'
 			 GROUP BY season
@@ -174,9 +178,11 @@ func (s *PGStore) seasonPresence(ctx context.Context, key string, season int) (m
 	eps := make(map[int]bool, len(rows))
 	pack := false
 	for _, r := range rows {
-		// A pack is stored as episode 0 with is_pack set; a non-pack episode 0
-		// does not exist, so episode 0 in the presence set only ever means the
-		// pack, which pack already carries.
+		// Episode 0 holds both whole-season packs and SxxE00 specials (the
+		// parser deliberately files "The.Show.S14E00.Special" there — only
+		// S00E00 is refused). Neither is an episode NUMBER, so 0 never
+		// enters the presence set, and only is_pack rows raise the pack
+		// flag: a special must not claim season coverage.
 		if r.IsPack {
 			pack = true
 		}

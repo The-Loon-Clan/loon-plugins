@@ -155,14 +155,18 @@ func TestRot18RepairCursorAdvancesPastEveryRowSeen(t *testing.T) {
 }
 
 // A failed write stops the batch rather than counting a repair that did not
-// happen. The cursor still carries what was walked, so the retry resumes
-// instead of restarting.
+// happen. The cursor carries what was COMPLETED, stopping short of the failed
+// row: ReleaseTitlesAfter is strictly greater-than, so a cursor that crossed
+// the row is a promise never to look at it again — persisting the failed
+// row's own ID turned a transient host error into a title that stayed
+// gibberish forever while every later pass reported a clean walk.
 func TestRot18RepairStopsOnAWriteFailure(t *testing.T) {
 	boom := errors.New("host said no")
 	var seen int
 	out, err := repairRot18Batch([]pluginapi.ReleaseTitle{
-		{ID: 1, Title: rot18Posted},
-		{ID: 2, Title: rot18Posted},
+		{ID: 10, Title: "A Real Title - 01"},
+		{ID: 20, Title: rot18Posted},
+		{ID: 30, Title: rot18Posted},
 	}, func(id int64, title string) error {
 		seen++
 		return boom
@@ -175,5 +179,56 @@ func TestRot18RepairStopsOnAWriteFailure(t *testing.T) {
 	}
 	if out.Repaired != 0 {
 		t.Errorf("Repaired = %d after a failed write, want 0", out.Repaired)
+	}
+	if out.Cursor != 10 {
+		t.Errorf("Cursor = %d, want 10 — past the walked real row, SHORT of the failed one", out.Cursor)
+	}
+}
+
+// A failure on the very first row leaves the cursor at zero, which is what
+// lets the caller's `batch.Cursor > cursor` guard keep the previously
+// persisted position — the retry resumes AT the failed row.
+func TestRot18RepairFirstRowFailureHoldsTheCursor(t *testing.T) {
+	out, err := repairRot18Batch([]pluginapi.ReleaseTitle{
+		{ID: 20, Title: rot18Posted},
+	}, func(int64, string) error { return errors.New("boom") })
+	if err == nil {
+		t.Fatal("want the write error")
+	}
+	if out.Cursor != 0 {
+		t.Errorf("Cursor = %d, want 0", out.Cursor)
+	}
+}
+
+// The retry a failed pass sets up actually converges: the re-fetched batch
+// (ID > the held cursor) repairs the row that failed and moves on.
+func TestRot18RepairRetryConverges(t *testing.T) {
+	out, err := repairRot18Batch([]pluginapi.ReleaseTitle{
+		{ID: 20, Title: rot18Posted},
+		{ID: 30, Title: rot18Posted},
+	}, func(int64, string) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Repaired != 2 || out.Cursor != 30 {
+		t.Errorf("Repaired = %d, Cursor = %d, want 2 and 30", out.Repaired, out.Cursor)
+	}
+}
+
+// Skipped rows (already flagged) still advance the cursor even when a later
+// row fails — the skip IS that row's completion.
+func TestRot18RepairSkipAdvancesBeforeAFailure(t *testing.T) {
+	out, err := repairRot18Batch([]pluginapi.ReleaseTitle{
+		{ID: 10, Title: rot18Posted, Obfuscated: true},
+		{ID: 20, Title: rot18Posted},
+	}, func(int64, string) error { return errors.New("boom") })
+	if err == nil {
+		t.Fatal("want the write error")
+	}
+	if out.Cursor != 10 {
+		t.Errorf("Cursor = %d, want 10", out.Cursor)
+	}
+	if out.AlreadyFlagged != 1 {
+		t.Errorf("AlreadyFlagged = %d, want 1", out.AlreadyFlagged)
 	}
 }

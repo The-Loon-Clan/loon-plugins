@@ -136,6 +136,65 @@ func fileNameFromSubject(subject string) string {
 // This is the multi-file-aware version: the base for an [i/j] release is the
 // release name, not the per-file name, so completeness + assembly work at the
 // release level (per-file segment counts, one <file> per file).
+// looksLikeYear reports whether n sits in the year window a chart or season
+// title carries. Shared by the two counter guards below so the season rule
+// and the chart rule cannot drift apart.
+func looksLikeYear(n int) bool { return n >= 1900 && n <= 2099 }
+
+// bareCounterLoc returns the first reFileOfBare match that can actually
+// COUNT something, or nil.
+//
+// " 2024/25 " matches the bare slash shape — two-to-four digits each side —
+// and read as a counter it staged a whole sports season under the league's
+// name: every fixture folded onto one base with file number 2024 against
+// total 25, which isComplete's 1..totalFiles range can never satisfy, so the
+// merged set cross-contaminated its segments and expired unlogged. A file
+// number never exceeds its own total, which refuses seasons and dates
+// ("2024/08") in one rule; the long spelling "2024/2025" keeps first<second
+// and needs the year window. The two-digit season spelling ("EPL 24/25") is
+// byte-identical to file 24 of 25 and stays misread — the same
+// accepted-overlap trade as ".Part12" above.
+func bareCounterLoc(s string) []int {
+	for _, loc := range reFileOfBare.FindAllStringSubmatchIndex(s, -1) {
+		first := atoi(s[loc[2]:loc[3]])
+		second := atoi(s[loc[4]:loc[5]])
+		if first > second {
+			continue
+		}
+		if looksLikeYear(first) && second == first+1 {
+			continue
+		}
+		return loc
+	}
+	return nil
+}
+
+// proseFileCounterLoc returns the first reFileOfWords match trusted as a
+// counter, or nil.
+//
+// "VA - Top 100 of 2024" is a chart title byte-identical to the prose
+// counter shape; read as a counter it staged every track under the base
+// "VA - Top" with one constant file number against total_files 2024, so
+// completeness could never be met — and the 2023/2024 editions folded onto
+// one base via the upward total merge. The measured 1,453-title prose
+// population tops out in the hundreds of files while year-titled chart posts
+// are a whole genre, so an unbracketed total in the year window is a title,
+// not a count. The poster's own counter punctuation is trusted as-is: a
+// fully bracketed "[684 of 842]" — or "[100 of 2024]" — is a counter
+// whatever its numbers. A bracket-wrapped TITLE like "[Top 100 of 2024]" is
+// still refused, because its match starts at the digits, not at '['.
+func proseFileCounterLoc(s string) []int {
+	for _, loc := range reFileOfWords.FindAllStringSubmatchIndex(s, -1) {
+		if s[loc[0]] == '[' && s[loc[1]-1] == ']' {
+			return loc
+		}
+		if !looksLikeYear(atoi(s[loc[4]:loc[5]])) {
+			return loc
+		}
+	}
+	return nil
+}
+
 func parseSubject(subject string) (base string, partNum, totalParts, segTotal, fileNum, totalFiles int, fileParts bool) {
 	partNum, totalParts = 1, 1
 
@@ -143,10 +202,10 @@ func parseSubject(subject string) (base string, partNum, totalParts, segTotal, f
 	// look when it is absent, so a subject carrying both cannot be misread.
 	fileLoc := reFileOf.FindStringSubmatchIndex(subject)
 	if fileLoc == nil {
-		fileLoc = reFileOfWords.FindStringSubmatchIndex(subject)
+		fileLoc = proseFileCounterLoc(subject)
 	}
 	if fileLoc == nil {
-		fileLoc = reFileOfBare.FindStringSubmatchIndex(subject)
+		fileLoc = bareCounterLoc(subject)
 	}
 	if fileLoc != nil {
 		fileNum = atoi(subject[fileLoc[2]:fileLoc[3]])
@@ -267,8 +326,19 @@ func parseSubject(subject string) (base string, partNum, totalParts, segTotal, f
 // trailing extension — used to derive a single-file base from the whole subject.
 func stripAllMarkers(s string) string {
 	s = reFileOf.ReplaceAllString(s, " ")
-	s = reFileOfWords.ReplaceAllString(s, " ")
-	s = reFileOfBare.ReplaceAllString(s, " ")
+	// The prose and bare forms strip through the SAME guards that accept
+	// them as counters: a refused season fraction or chart phrase is
+	// identity, not a marker, and stripping it anyway folded two seasons of
+	// one fixture — and two year-editions of one chart — onto a single base.
+	for loc := proseFileCounterLoc(s); loc != nil; loc = proseFileCounterLoc(s) {
+		s = s[:loc[0]] + " " + s[loc[1]:]
+	}
+	s = reFileOfBare.ReplaceAllStringFunc(s, func(m string) string {
+		if bareCounterLoc(m) == nil {
+			return m
+		}
+		return " "
+	})
 	s = rePartOf.ReplaceAllString(s, " ")
 	s = reArchivePart.ReplaceAllString(s, " ") // before reExt eats the .rar/.7z anchor
 	s = rePartPar.ReplaceAllString(s, " ")     // likewise: it needs the .par2 anchor

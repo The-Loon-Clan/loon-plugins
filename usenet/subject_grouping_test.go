@@ -383,3 +383,89 @@ func TestRanmaIsNotAFileCounter(t *testing.T) {
 		t.Errorf("base = %q, want the 2/5 kept", b)
 	}
 }
+
+// A season fraction is not a file counter. " 2024/25 " matches the bare
+// slash shape, and read as a counter it staged a whole season under the
+// league's name — file 2024 of 25, which the 1..totalFiles completeness
+// range can never satisfy, so the merged set cross-contaminated and expired
+// unlogged. A file number never exceeds its own total.
+func TestSeasonFractionIsNotAFileCounter(t *testing.T) {
+	base, part, total, _, _, _, fp := parseSubject(
+		`Premier.League 2024/25 Matchday 05 1080p x264 yEnc (1/50)`)
+	if fp {
+		t.Fatal("a season fraction was read as a file counter")
+	}
+	if part != 1 || total != 50 {
+		t.Errorf("segment counter = %d/%d, want 1/50", part, total)
+	}
+	if !strings.Contains(base, "2024/25") {
+		t.Errorf("base = %q — the season identity was stripped, so two seasons fold together", base)
+	}
+
+	// The long year-over-year spelling keeps first<second and needs the
+	// year-window refusal.
+	if _, _, _, _, _, _, fp := parseSubject(
+		`Bundesliga 2024/2025 Spieltag 3 720p yEnc (2/30)`); fp {
+		t.Error("the 2024/2025 long form was read as a file counter")
+	}
+	// A date fraction: first > second refuses it.
+	if _, _, _, _, _, _, fp := parseSubject(
+		`Some.Show 2024/08 Special yEnc (1/12)`); fp {
+		t.Error("a date fraction was read as a file counter")
+	}
+	// Two seasons of one fixture keep DISTINCT bases.
+	b24, _, _, _, _, _, _ := parseSubject(`EPL 2024/25 Matchday 05 yEnc (1/50)`)
+	b23, _, _, _, _, _, _ := parseSubject(`EPL 2023/24 Matchday 05 yEnc (1/50)`)
+	if b24 == b23 || b24 == "" {
+		t.Errorf("seasons folded onto one base: %q vs %q", b24, b23)
+	}
+
+	// The genuine bare counter keeps working, boundary included.
+	_, _, _, _, fn, tf, fp2 := parseSubject(`"release.name" - 127/214 - yEnc (3/40)`)
+	if !fp2 || fn != 127 || tf != 214 {
+		t.Errorf("real bare counter broken: fp=%v fn=%d tf=%d", fp2, fn, tf)
+	}
+	if _, _, _, _, _, tf, fp := parseSubject(`"x.rar" - 25/25 - yEnc (1/2)`); !fp || tf != 25 {
+		t.Error("the N/N boundary counter was refused")
+	}
+	// The accepted overlap, pinned deliberately: the two-digit season
+	// spelling is byte-identical to file 24 of 25 and stays misread.
+	if _, _, _, _, fn, tf, fp := parseSubject(`EPL 24/25 Matchday 5 yEnc (1/20)`); !fp || fn != 24 || tf != 25 {
+		t.Error("the known two-digit overlap changed shape — update the trade note if deliberate")
+	}
+}
+
+// A year chart title is not a prose file counter. "VA - Top 100 of 2024"
+// staged every track under base "VA - Top" with one constant file number
+// against total_files 2024 — completeness could never be met, and the 2023
+// and 2024 editions folded onto one base.
+func TestYearChartTitleIsNotAFileCounter(t *testing.T) {
+	base, _, _, _, _, _, fp := parseSubject(
+		`VA - Top 100 of 2024 - "01-Artist-Song.mp3" yEnc (1/12)`)
+	if fp {
+		t.Fatal("a chart title was read as a prose counter")
+	}
+	if !strings.Contains(base, "100 of 2024") {
+		t.Errorf("base = %q — the chart phrase was stripped, so editions fold together", base)
+	}
+	b23, _, _, _, _, _, _ := parseSubject(`VA - Top 100 of 2023 - "01-Artist-Song.mp3" yEnc (1/12)`)
+	if base == b23 {
+		t.Errorf("editions folded onto one base: %q", base)
+	}
+	// A bracket-wrapped TITLE is still refused — its match starts at the
+	// digits, not at '['.
+	if _, _, _, _, _, _, fp := parseSubject(`[Top 100 of 2024] - "01.mp3" yEnc (1/10)`); fp {
+		t.Error("a bracket-wrapped chart title was read as a counter")
+	}
+	// The escape hatch: the poster's own counter punctuation is trusted
+	// whatever its numbers.
+	_, _, _, _, fn, tf, fp2 := parseSubject(`[abpea] Long Set - [100 of 2024] - "x.jpg" yEnc (1/1)`)
+	if !fp2 || fn != 100 || tf != 2024 {
+		t.Errorf("fully bracketed year-sized counter refused: fp=%v fn=%d tf=%d", fp2, fn, tf)
+	}
+	// And the single-file base keeps the phrase.
+	sfBase, _, _, _, _, _, _ := parseSubject(`VA - Top 100 of 2024.rar yEnc (1/30)`)
+	if !strings.Contains(sfBase, "100 of 2024") {
+		t.Errorf("single-file base = %q — stripAllMarkers still deletes the chart phrase", sfBase)
+	}
+}
