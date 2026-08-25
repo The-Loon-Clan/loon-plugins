@@ -139,13 +139,27 @@ func (s *PGStore) activeGroupsForBackbone(ctx context.Context, backbone string, 
 
 // updateGroupStateForBackbone records this backbone's view of a group: its
 // server bounds, and (when watermark > 0) an advance. GREATEST keeps the
-// watermark monotonic; back_watermark is seeded once, on the first crawl, so
-// backfill knows where this provider's history begins.
+// watermark monotonic; back_watermark is seeded once, by the first crawl
+// that actually ADVANCES — a failed first pass must not pin it. The column's
+// invariant is "forward coverage begins here; everything below is
+// backfill's", and a pass that covered nothing has no such line: seeding
+// from an aborted start left every article between that start and the
+// retry's re-capped start fetched by nobody — above backfill's ceiling,
+// below forward's floor — permanently, at exactly the moment (first pass of
+// a new group) failures are most likely.
 func (s *PGStore) updateGroupStateForBackbone(ctx context.Context, backbone, name string, serverLow, serverHigh, watermark, backSeed int64, hwDate time.Time) error {
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		var hw sql.NullTime
 		if !hwDate.IsZero() {
 			hw = sql.NullTime{Time: hwDate, Valid: true}
+		}
+		// NULL, not 0, on a no-advance pass: the COALESCE below then keeps
+		// whatever exists (or leaves NULL for the advancing retry to seed).
+		// The condition lives in Go rather than a CASE WHEN $3 > 0 in SQL
+		// because a parameter compared to a literal infers int4.
+		var back sql.NullInt64
+		if watermark > 0 {
+			back = sql.NullInt64{Int64: backSeed, Valid: true}
 		}
 		_, err := tx.ExecContext(ctx,
 			`INSERT INTO newsgroup_state
@@ -159,7 +173,7 @@ func (s *PGStore) updateGroupStateForBackbone(ctx context.Context, backbone, nam
 			   server_low          = EXCLUDED.server_low,
 			   server_high         = EXCLUDED.server_high,
 			   last_crawl          = now()`,
-			backbone, name, watermark, hw, backSeed, serverLow, serverHigh)
+			backbone, name, watermark, hw, back, serverLow, serverHigh)
 		return err
 	})
 }

@@ -383,3 +383,67 @@ func TestLowPriorityTierRule(t *testing.T) {
 		t.Fatalf("uncapped: want l.big last and flagged low-pri, got %+v", got[2])
 	}
 }
+
+// A FAILED first crawl pass must not seed back_watermark. The column's
+// invariant is "forward coverage begins here; everything below is backfill's"
+// — and a pass that covered nothing has no such line. Seeding from the
+// aborted start pinned it (the upsert's COALESCE makes the first write
+// permanent), so the retry's re-capped start orphaned every article between
+// the two starts: above backfill's ceiling, below forward's floor, fetched by
+// nobody, at exactly the moment (first pass of a new group) failures are most
+// likely.
+func TestFailedFirstPassDoesNotPinBackWatermark(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	mustGroups(t, s, "alt.binaries.anime")
+
+	// The failed first pass, verbatim: server bounds learned, watermark 0
+	// (nothing advanced), backSeed = the aborted start.
+	if err := s.updateGroupStateForBackbone(ctx, "omicron", "alt.binaries.anime",
+		1000, 100000, 0, 80001, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.groupsNeedingBackfillForBackbone(ctx, "omicron", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("a failed first pass enrolled backfill at the aborted start (back=%d)",
+			rows[0].BackWatermark)
+	}
+	// The row exists (server bounds landed) and stats still renders it — the
+	// NULL back_watermark must be tolerated everywhere.
+	if _, err := s.stats(ctx); err != nil {
+		t.Fatalf("stats() choked on a NULL back_watermark: %v", err)
+	}
+
+	// The re-capped successful retry seeds from ITS start, which places the
+	// aborted-start slice (80001, 100001) inside the backfill window rather
+	// than orphaned above it.
+	if err := s.updateGroupStateForBackbone(ctx, "omicron", "alt.binaries.anime",
+		1000, 120000, 119000, 100001, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = s.groupsNeedingBackfillForBackbone(ctx, "omicron", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].BackWatermark != 100001 {
+		t.Fatalf("advancing retry did not seed back_watermark=100001: %+v", rows)
+	}
+
+	// Seed-once survives: a later advance with a different backSeed must not
+	// move it.
+	if err := s.updateGroupStateForBackbone(ctx, "omicron", "alt.binaries.anime",
+		1000, 125000, 124000, 121000, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = s.groupsNeedingBackfillForBackbone(ctx, "omicron", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].BackWatermark != 100001 {
+		t.Fatalf("a later pass moved the seeded back_watermark: %+v", rows)
+	}
+}

@@ -1,8 +1,10 @@
 package usenet
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -34,40 +36,157 @@ func TestRenewalLostPolicy(t *testing.T) {
 	}
 }
 
+// stubLeaseStore implements just the two lease methods over a map, in the
+// fakeHealthStore mold: the embedded nil Store panics loudly if anything else
+// is touched. releaseHook (optional) runs at the top of releaseLease so the
+// race test below can hold a DELETE in flight.
+type stubLeaseStore struct {
+	Store
+	mu          sync.Mutex
+	rows        map[string]string // scope|key -> worker
+	releaseHook func()
+}
+
+func newStubLeaseStore() *stubLeaseStore {
+	return &stubLeaseStore{rows: map[string]string{}}
+}
+
+func (s *stubLeaseStore) claimLease(_ context.Context, scope, key, worker string, _ time.Duration) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := scope + "|" + key
+	if owner, held := s.rows[k]; held && owner != worker {
+		return false, nil
+	}
+	s.rows[k] = worker // reentrant for our own worker, like the real upsert
+	return true, nil
+}
+
+func (s *stubLeaseStore) releaseLease(_ context.Context, scope, key, worker string) error {
+	if s.releaseHook != nil {
+		s.releaseHook()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := scope + "|" + key
+	if s.rows[k] == worker {
+		delete(s.rows, k)
+	}
+	return nil
+}
+
+func (s *stubLeaseStore) owner(scope, key string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w, ok := s.rows[scope+"|"+key]
+	return w, ok
+}
+
 // The in-process refcount that makes lease RELEASE job-aware. Claim is
 // deliberately reentrant per worker id (crawl and backfill overlap on group
 // keys by design), but release deleted the DB row job-blind: the backfill's
 // per-round release deleted rows the crawl still worked under, and in
 // multi-worker mode a sibling claimed the vacated key instantly — chronic
-// mid-pass cancellations. Only the LAST in-process holder may delete.
+// mid-pass cancellations. Only the LAST in-process holder may delete, and
+// since the fence the claim/increment and check/DELETE pairs are single
+// steps under leaseHeldMu.
 func TestLeaseRefcountReleasesOnlyOnLastHolder(t *testing.T) {
-	p := &Plugin{}
+	st := newStubLeaseStore()
+	p := &Plugin{st: st}
+	ctx := context.Background()
+	me := workerID()
+	ttl := time.Minute
 
-	p.leaseAcquireLocal(leaseScopeGroup, "bb|g1") // the crawl's claim
-	p.leaseAcquireLocal(leaseScopeGroup, "bb|g1") // the backfill's reentrant claim
-
-	if p.leaseReleaseLocal(leaseScopeGroup, "bb|g1") {
-		t.Fatal("the first release reported last-holder — the DB row would be deleted " +
-			"under the job still working the group")
+	for i := 0; i < 2; i++ { // the crawl's claim, then the backfill's reentrant one
+		got, err := p.claimLeaseHeld(ctx, leaseScopeGroup, "bb|g1", me, ttl)
+		if err != nil || !got {
+			t.Fatalf("claim %d: got=%v err=%v", i, got, err)
+		}
 	}
-	if !p.leaseReleaseLocal(leaseScopeGroup, "bb|g1") {
-		t.Fatal("the second release did not report last-holder — the row would leak until TTL")
+	if err := p.releaseLeaseHeld(ctx, leaseScopeGroup, "bb|g1", me); err != nil {
+		t.Fatal(err)
 	}
-
-	// Distinct keys never interfere.
-	p.leaseAcquireLocal(leaseScopeGroup, "bb|g2")
-	p.leaseAcquireLocal(leaseScopeJob, "bb|g2") // same key text, different scope
-	if !p.leaseReleaseLocal(leaseScopeGroup, "bb|g2") {
-		t.Error("a different scope's hold blocked this scope's release")
+	if _, held := st.owner(leaseScopeGroup, "bb|g1"); !held {
+		t.Fatal("the first release deleted the DB row under the job still working the group")
 	}
-	if !p.leaseReleaseLocal(leaseScopeJob, "bb|g2") {
-		t.Error("job-scope release after group-scope release did not report last-holder")
+	if err := p.releaseLeaseHeld(ctx, leaseScopeGroup, "bb|g1", me); err != nil {
+		t.Fatal(err)
+	}
+	if _, held := st.owner(leaseScopeGroup, "bb|g1"); held {
+		t.Fatal("the last release did not delete the row — it would leak until TTL")
 	}
 
-	// An unpaired release (early-return paths) is a safe last-holder answer:
-	// deleting a row we do not hold is a no-op DELETE.
-	if !p.leaseReleaseLocal(leaseScopeGroup, "bb|never-acquired") {
-		t.Error("an untracked key blocked its own release")
+	// Distinct scopes never interfere, even on the same key text.
+	if _, err := p.claimLeaseHeld(ctx, leaseScopeGroup, "bb|g2", me, ttl); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.claimLeaseHeld(ctx, leaseScopeJob, "bb|g2", me, ttl); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.releaseLeaseHeld(ctx, leaseScopeGroup, "bb|g2", me); err != nil {
+		t.Fatal(err)
+	}
+	if _, held := st.owner(leaseScopeJob, "bb|g2"); !held {
+		t.Error("group-scope release took the job-scope row with it")
+	}
+	if err := p.releaseLeaseHeld(ctx, leaseScopeJob, "bb|g2", me); err != nil {
+		t.Fatal(err)
+	}
+
+	// An unpaired release (early-return paths) is a safe no-op DELETE.
+	if err := p.releaseLeaseHeld(ctx, leaseScopeGroup, "bb|never-acquired", me); err != nil {
+		t.Error(err)
+	}
+}
+
+// The two-step window the fence closes: a starting pass's claim landing
+// between a peer's refcount-drop and its DELETE used to leave the row deleted
+// under the new pass. With the DELETE inside the mutex, the re-claim
+// serializes behind it and re-inserts afterwards — whatever the goroutine
+// interleaving, the reclaimer ends up holding a live row. Run with -race.
+func TestReleaseDeleteCannotRaceAReclaim(t *testing.T) {
+	st := newStubLeaseStore()
+	p := &Plugin{st: st}
+	ctx := context.Background()
+	me := workerID()
+	ttl := time.Minute
+	const key = "bb|contested"
+
+	if got, err := p.claimLeaseHeld(ctx, leaseScopeGroup, key, me, ttl); err != nil || !got {
+		t.Fatalf("initial claim: got=%v err=%v", got, err)
+	}
+
+	deleteEntered := make(chan struct{}, 1)
+	deleteBlock := make(chan struct{})
+	st.releaseHook = func() {
+		deleteEntered <- struct{}{}
+		<-deleteBlock
+	}
+
+	relDone := make(chan error, 1)
+	go func() { relDone <- p.releaseLeaseHeld(ctx, leaseScopeGroup, key, me) }()
+	<-deleteEntered // the DELETE is in flight (and, post-fix, holds the mutex)
+	st.releaseHook = nil
+
+	claimDone := make(chan bool, 1)
+	go func() {
+		got, err := p.claimLeaseHeld(ctx, leaseScopeGroup, key, me, ttl)
+		claimDone <- got && err == nil
+	}()
+
+	close(deleteBlock)
+	if err := <-relDone; err != nil {
+		t.Fatal(err)
+	}
+	if !<-claimDone {
+		t.Fatal("re-claim failed outright")
+	}
+	if w, held := st.owner(leaseScopeGroup, key); !held || w != me {
+		t.Fatalf("the release's DELETE removed the row under the live re-claim (held=%v owner=%q)", held, w)
+	}
+	// Leave the refcount clean for -count=2 runs.
+	if err := p.releaseLeaseHeld(ctx, leaseScopeGroup, key, me); err != nil {
+		t.Fatal(err)
 	}
 }
 

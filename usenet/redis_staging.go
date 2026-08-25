@@ -41,6 +41,11 @@ type redisStaging struct {
 	// ttlHours is read per stage call so the admin knob applies live (same
 	// convention as pgStaging.limits). Values <= 0 fall back to 2h.
 	ttlHours func(context.Context) int
+	// evictStaleSecs is the inline hopeless-eviction staleness window, read
+	// per call like ttlHours. Nil or <= 0 falls back to 300s. Admin-tunable
+	// because it races the operator's staging-pressure pauses: a pause longer
+	// than this window makes every resuming set look abandoned.
+	evictStaleSecs func(context.Context) int
 	// onEvict reports hopeless-set evictions to the caller (telemetry) — the
 	// eviction is silent by design, and "is it failing or filtering?" is a
 	// question the dashboard must be able to answer.
@@ -632,6 +637,9 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 		// the one this same pipeline just wrote, and judging staleness from
 		// it made age always zero and the whole eviction block dead code.
 		prevTouch *redis.StringCmd
+		// prevStrike is the set's eviction strike from BEFORE this batch —
+		// same pre-batch-read pattern as prevTouch, same reason.
+		prevStrike *redis.StringCmd
 		metaCmd   *redis.MapStringStringCmd
 		lenCmd    *redis.IntCmd
 	}
@@ -640,7 +648,11 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 	for _, gu := range groups {
 		gk := grpKey(gu.groupName, gu.hash)
 		ak := artKey(gu.groupName, gu.hash)
-		ci := checkItem{gu: gu, prevTouch: pipe.HGet(ctx, gk, "touched_at")}
+		ci := checkItem{
+			gu:         gu,
+			prevTouch:  pipe.HGet(ctx, gk, "touched_at"),
+			prevStrike: pipe.HGet(ctx, gk, "evict_strike"),
+		}
 		maxTP, maxTF, maxST := 0, 0, 0
 		anyFP := false
 		var newestDate int64
@@ -770,8 +782,26 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 		checks = append(checks, ci)
 	}
 
-	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+	// Exec reports only the FIRST failed command, and a batch touching any
+	// brand-new set queues a guaranteed-benign redis.Nil (its prevTouch HGet
+	// above) ahead of every write behind it — so one miss masked every later
+	// per-command failure. The live case is Redis crossing maxmemory
+	// mid-pipeline: reads keep answering while the denyoom writes start
+	// refusing, the batch reported success, and the watermark advanced over a
+	// half-applied stage; completeness fires only on a batch that ADDS, so a
+	// set completed by the masked batch was lost for good. Sweep every
+	// command: the HGets are the only queued commands that can answer Nil,
+	// so Nil is benign and anything else fails the whole batch — the
+	// pipeline is idempotent (see stageArticles), the watermark holds, and
+	// the re-crawled batch re-stages and re-detects completeness.
+	cmds, err := pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
 		return 0, fmt.Errorf("redis insert pipeline: %w", err)
+	}
+	for _, cmd := range cmds {
+		if cerr := cmd.Err(); cerr != nil && cerr != redis.Nil {
+			return 0, fmt.Errorf("redis insert pipeline: %w", cerr)
+		}
 	}
 	// After the metadata exists, so a fold can never create a half-formed set.
 	r.foldSpans(ctx, spans)
@@ -780,7 +810,15 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 	var evictKeys []string
 	type evictEntry struct{ group, hash string }
 	var evictMembers []evictEntry
+	var strikeKeys, clearKeys []string
 	var checkErr error
+
+	staleSecs := int64(300)
+	if r.evictStaleSecs != nil {
+		if s := r.evictStaleSecs(ctx); s > 0 {
+			staleSecs = int64(s)
+		}
+	}
 
 	for _, ci := range checks {
 		meta := ci.metaCmd.Val()
@@ -834,12 +872,32 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 		//
 		// created_at is the fallback for sets staged before touched_at existed;
 		// they age out within the staging TTL.
-		if age, ok := evictionStaleness(meta, now); ok && age > 300 {
-			if needed > 0 && length > 0 && float64(length)/float64(needed) < 0.30 {
-				evictKeys = append(evictKeys,
-					artKey(ci.gu.groupName, ci.gu.hash), grpKey(ci.gu.groupName, ci.gu.hash))
-				evictMembers = append(evictMembers, evictEntry{ci.gu.groupName, ci.gu.hash})
-			}
+		//
+		// Two strikes, not one. This check only ever runs on a batch that just
+		// ADDED to the set, so a single stale gap condemns exactly the batch
+		// that ends the silence — a staging-pressure pause routinely exceeds
+		// the window, and the resuming flood's first batch was evicted WITH
+		// the articles it had accumulated while the batch reported ok and the
+		// watermark advanced past them; every later re-read rebuilt to ~20-30%
+		// and died at the next pause boundary. One stale gap is an accusation
+		// (a strike), two is a verdict: the flood's next batches arrive in
+		// seconds, are not stale, and CLEAR the strike, so every pause gets a
+		// fresh pass — while sparse base-collision garbage (touch, silence,
+		// touch, whose every touch refreshes the TTL) is struck on the first
+		// stale touch and evicted on the second, one window later than before.
+		age, known := evictionStaleness(meta, now)
+		stale := known && age > staleSecs
+		short := needed > 0 && length > 0 && float64(length)/float64(needed) < 0.30
+		evict, strike, clear := evictDecision(stale, short, ci.prevStrike.Val() != "")
+		switch {
+		case evict:
+			evictKeys = append(evictKeys,
+				artKey(ci.gu.groupName, ci.gu.hash), grpKey(ci.gu.groupName, ci.gu.hash))
+			evictMembers = append(evictMembers, evictEntry{ci.gu.groupName, ci.gu.hash})
+		case strike:
+			strikeKeys = append(strikeKeys, grpKey(ci.gu.groupName, ci.gu.hash))
+		case clear:
+			clearKeys = append(clearKeys, grpKey(ci.gu.groupName, ci.gu.hash))
 		}
 	}
 
@@ -856,16 +914,26 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 			return len(arts), fmt.Errorf("queue ready sets: %w", err)
 		}
 	}
-	if len(evictKeys) > 0 {
+	if len(evictKeys) > 0 || len(strikeKeys) > 0 || len(clearKeys) > 0 {
 		evPipe := r.rdb.Pipeline()
-		evPipe.Del(ctx, evictKeys...)
+		if len(evictKeys) > 0 {
+			evPipe.Del(ctx, evictKeys...)
+		}
 		for _, em := range evictMembers {
 			evPipe.SRem(ctx, activeKey(em.group), em.hash)
+		}
+		// Strike writes are best-effort: failing toward "another free pass"
+		// is failing safe, and the key dies with the set either way.
+		for _, gk := range strikeKeys {
+			evPipe.HSet(ctx, gk, "evict_strike", "1")
+		}
+		for _, gk := range clearKeys {
+			evPipe.HDel(ctx, gk, "evict_strike")
 		}
 		// Count evictions only when the pipeline actually ran: this counter
 		// exists to prove eviction is WORKING, so over-reporting on the exact
 		// failure it should reveal would defeat it.
-		if _, err := evPipe.Exec(ctx); err == nil && r.onEvict != nil {
+		if _, err := evPipe.Exec(ctx); err == nil && r.onEvict != nil && len(evictMembers) > 0 {
 			r.onEvict(len(evictMembers))
 		}
 	}
@@ -907,6 +975,23 @@ func perFileSegTotals(meta map[string]string) map[int]int {
 // nothing. A set still receiving articles is not hopeless, however incomplete.
 //
 // created_at is the fallback for sets staged before touched_at existed.
+// evictDecision is the strike rule for the inline hopeless-eviction: one
+// stale-and-short observation records a strike, a second evicts, and any
+// in-window or no-longer-short observation clears the slate. The rule exists
+// because the check only runs on batches that GROW the set — see the war
+// story at the call site.
+func evictDecision(stale, short, struck bool) (evict, strike, clear bool) {
+	switch {
+	case stale && short && struck:
+		return true, false, false
+	case stale && short:
+		return false, true, false
+	case struck:
+		return false, false, true
+	}
+	return false, false, false
+}
+
 func evictionStaleness(meta map[string]string, now int64) (age int64, ok bool) {
 	from, _ := strconv.ParseInt(meta["touched_at"], 10, 64)
 	if from == 0 {

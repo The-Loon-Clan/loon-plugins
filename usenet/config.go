@@ -162,6 +162,7 @@ type Config struct {
 	StagingMaxRows    int      `json:"staging_max_rows"`    // pg back-pressure denominator: staged rows / this (default 2_000_000)
 	StagingPruneHours int      `json:"staging_prune_hours"` // pg stale-staging horizon in hours (default 6)
 	StagingTTLHours   int      `json:"staging_ttl_hours"`   // redis staged-key TTL in hours (default 2) — must exceed the gap between passes that stage parts of one release
+	EvictStaleSecs    int      `json:"evict_staleness_secs"` // redis inline hopeless-eviction staleness window in seconds (default 300) — must exceed routine staging-pressure pauses or resumed sets are judged abandoned
 
 	// Splitting groups between crawlers (assign.go). Membership is fixed for a
 	// TERM, so a crawler that joins mid-term waits for the next boundary rather
@@ -402,6 +403,9 @@ func (c *Config) applyDefaults() {
 	if c.StagingTTLHours <= 0 {
 		c.StagingTTLHours = 2
 	}
+	if c.EvictStaleSecs <= 0 {
+		c.EvictStaleSecs = 300
+	}
 	if c.AssignTermMin <= 0 {
 		c.AssignTermMin = 15
 	}
@@ -582,6 +586,7 @@ func (c *Config) knobFields() map[string]*int {
 		"staging_max_rows":              &c.StagingMaxRows,
 		"staging_prune_hours":           &c.StagingPruneHours,
 		"staging_ttl_hours":             &c.StagingTTLHours,
+		"evict_staleness_secs":          &c.EvictStaleSecs,
 		"assign_term_min":               &c.AssignTermMin,
 		"worker_stale_sec":              &c.WorkerStaleSec,
 		"lease_ttl_min":                 &c.LeaseTTLMin,

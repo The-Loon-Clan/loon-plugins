@@ -717,13 +717,18 @@ func TestReapReadyQueueResumesAcrossCalls(t *testing.T) {
 }
 
 // Hopeless-set eviction, end to end through stageArticles: a set that stopped
-// growing while far short of its need is deleted when the next straggler
-// touches it. This is the check that was dead in production — the staleness
-// judgment read the touched_at the same pipeline had just written, so age was
-// always zero, no set was ever evicted, and the "evicted" telemetry counter
-// (documented as proof the machinery works) read 0 because the machinery was
-// broken. Continuously-touched base-collision garbage therefore never left,
-// and its TTL refreshed on every touch.
+// growing while far short of its need is deleted on its SECOND stale touch.
+// Two war stories shaped this. First the check was dead in production — the
+// staleness judgment read the touched_at the same pipeline had just written,
+// so age was always zero, no set was ever evicted, and the "evicted"
+// telemetry counter (documented as proof the machinery works) read 0 because
+// the machinery was broken; continuously-touched base-collision garbage
+// therefore never left, its TTL refreshing on every touch. The fix
+// (pre-batch touched_at) then over-corrected: the check only runs on batches
+// that ADD to a set, so one stale gap condemned exactly the batch that ended
+// the silence, and a staging-pressure pause routinely evicted a resuming
+// release WITH the articles it had already accumulated. Hence the strike:
+// first stale touch accuses, second convicts, and any in-window touch clears.
 func TestHopelessEvictionFiresOnStragglerTouch(t *testing.T) {
 	rdb := testRedis(t)
 	ctx := context.Background()
@@ -759,24 +764,173 @@ func TestHopelessEvictionFiresOnStragglerTouch(t *testing.T) {
 	}
 
 	// Backdate the last touch past the staleness bar: the set has now "stopped
-	// growing". The next straggler both re-touches it and must evict it — 3 of
-	// 100 parts is far under the completeness bar.
+	// growing". The next straggler re-touches it — 3 of 100 parts is far under
+	// the completeness bar — but the FIRST stale touch only records a strike:
+	// evicting here is the resume-destruction bug (the batch that ends a
+	// pause was condemned with the articles it carried).
 	if err := rdb.HSet(ctx, gk, "touched_at", time.Now().Unix()-400).Err(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.stageArticles(ctx, []stagedArticle{art(3)}); err != nil {
 		t.Fatal(err)
 	}
+	if n, _ := rdb.Exists(ctx, gk, ak).Result(); n != 2 {
+		t.Fatalf("first stale touch evicted the set (%d of 2 keys left) — the resuming batch died with its articles", n)
+	}
+	if strike, _ := rdb.HGet(ctx, gk, "evict_strike").Result(); strike == "" {
+		t.Error("first stale touch recorded no strike")
+	}
+	if evicted != 0 {
+		t.Fatalf("onEvict fired %d times on the first stale touch", evicted)
+	}
 
+	// A second stale gap is the verdict: garbage that touches, goes silent,
+	// and touches again is still shed — one staleness window later than
+	// before, which is the price of not destroying resuming releases.
+	if err := rdb.HSet(ctx, gk, "touched_at", time.Now().Unix()-400).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.stageArticles(ctx, []stagedArticle{art(4)}); err != nil {
+		t.Fatal(err)
+	}
 	if n, _ := rdb.Exists(ctx, gk, ak).Result(); n != 0 {
-		t.Errorf("hopeless set still staged (%d of its keys exist) — the eviction "+
-			"judged staleness from the touch this batch just wrote", n)
+		t.Errorf("twice-struck hopeless set still staged (%d of its keys exist)", n)
 	}
 	if member, _ := rdb.SIsMember(ctx, activeKey("a.b.group"), hash).Result(); member {
 		t.Error("evicted set still referenced from active_groups")
 	}
 	if evicted != 1 {
 		t.Errorf("onEvict reported %d, want 1", evicted)
+	}
+}
+
+// The other half of the strike design: a resuming backfill flood takes its
+// strike, keeps its articles, and the flood's next in-window batch CLEARS the
+// strike — so every pause gets a fresh pass and a slowly-accumulating release
+// can never be worn down two strikes at a time across pauses.
+func TestEvictionSparesTheResumingFlood(t *testing.T) {
+	rdb := testRedis(t)
+	ctx := context.Background()
+	evicted := 0
+	r := newRedisStaging(rdb, func(context.Context) int { return 2 },
+		func(n int) { evicted += n }, nil)
+
+	art := func(part int) stagedArticle {
+		return stagedArticle{
+			Group: "a.b.flood", BaseSubject: "Big.Release", Subject: "Big.Release",
+			MessageID: fmt.Sprintf("<f%d@x>", part), Poster: "p", Bytes: 1000,
+			Posted: time.Now(), PartNum: part, TotalParts: 100, SegTotal: 100,
+		}
+	}
+	batch := func(lo, hi int) []stagedArticle {
+		var out []stagedArticle
+		for i := lo; i <= hi; i++ {
+			out = append(out, art(i))
+		}
+		return out
+	}
+	if _, err := r.stageArticles(ctx, batch(1, 20)); err != nil {
+		t.Fatal(err)
+	}
+	hash := groupHashKey("a.b.flood", "Big.Release")
+	gk, ak := grpKey("a.b.flood", hash), artKey("a.b.flood", hash)
+
+	stale := func() {
+		if err := rdb.HSet(ctx, gk, "touched_at", time.Now().Unix()-400).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Pause, then the resume batch: strike, but every article survives.
+	stale()
+	if _, err := r.stageArticles(ctx, batch(21, 25)); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := rdb.HLen(ctx, ak).Result(); n != 25 {
+		t.Fatalf("resume batch destroyed articles: %d staged, want 25", n)
+	}
+	// The flood continues in-window: the strike clears.
+	if _, err := r.stageArticles(ctx, batch(26, 28)); err != nil {
+		t.Fatal(err)
+	}
+	if strike, _ := rdb.HGet(ctx, gk, "evict_strike").Result(); strike != "" {
+		t.Error("an in-window batch did not clear the strike")
+	}
+	// A second pause gets the same fresh pass — proof the clear was real.
+	stale()
+	if _, err := r.stageArticles(ctx, batch(29, 30)); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := rdb.HLen(ctx, ak).Result(); n != 30 {
+		t.Fatalf("second pause's resume batch destroyed articles: %d staged, want 30", n)
+	}
+	if evicted != 0 {
+		t.Fatalf("onEvict fired %d times against a live release", evicted)
+	}
+}
+
+// One failed write inside the stage pipeline must fail the batch. Exec
+// reports only the FIRST failed command, and a batch touching any brand-new
+// set queues a guaranteed-benign redis.Nil (its prevTouch HGet) ahead of
+// every write behind it — so a server-side write failure (the live case is
+// crossing maxmemory: reads answer, denyoom writes refuse) hid behind the
+// Nil, the batch reported ok, the watermark advanced over a half-applied
+// stage, and a set completed by that batch was lost for good (completeness
+// fires only on a batch that ADDS).
+func TestStagePipelineErrorNotMaskedByNewSetNil(t *testing.T) {
+	rdb := testRedis(t)
+	ctx := context.Background()
+	r := newRedisStaging(rdb, func(context.Context) int { return 2 }, nil, nil)
+
+	// Corrupt the active set so the pipelined SAdd fails WRONGTYPE server-side
+	// while the transport stays clean.
+	if err := rdb.Set(ctx, activeKey("a.b.mask"), "junk", 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+	arts := []stagedArticle{
+		{Group: "a.b.mask", BaseSubject: "Two.Parter", Subject: "Two.Parter",
+			MessageID: "<m1@x>", Poster: "p", Bytes: 100, Posted: time.Now(),
+			PartNum: 1, TotalParts: 2, SegTotal: 2},
+		{Group: "a.b.mask", BaseSubject: "Two.Parter", Subject: "Two.Parter",
+			MessageID: "<m2@x>", Poster: "p", Bytes: 100, Posted: time.Now(),
+			PartNum: 2, TotalParts: 2, SegTotal: 2},
+	}
+	if _, err := r.stageArticles(ctx, arts); err == nil {
+		t.Fatal("a batch with a failed pipelined write reported success — the watermark would advance over it")
+	}
+
+	// The whole-batch retry recovers the release once the failure clears.
+	if err := rdb.Del(ctx, activeKey("a.b.mask")).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.stageArticles(ctx, arts); err != nil {
+		t.Fatalf("clean retry failed: %v", err)
+	}
+	hash := groupHashKey("a.b.mask", "Two.Parter")
+	if member, _ := rdb.SIsMember(ctx, readyKey, "a.b.mask:"+hash).Result(); !member {
+		t.Error("re-staged complete set never reached nzb:ready")
+	}
+}
+
+// The tolerance the sweep must keep: a brand-new set's prevTouch HGet answers
+// redis.Nil on a healthy server, and that must stay benign — tightening the
+// sweep to reject Nil would fail every batch that discovers a set.
+func TestStageNewSetPrevTouchNilIsBenign(t *testing.T) {
+	rdb := testRedis(t)
+	ctx := context.Background()
+	r := newRedisStaging(rdb, func(context.Context) int { return 2 }, nil, nil)
+
+	arts := []stagedArticle{{
+		Group: "a.b.fresh", BaseSubject: "New.Set", Subject: "New.Set",
+		MessageID: "<n1@x>", Poster: "p", Bytes: 100, Posted: time.Now(),
+		PartNum: 1, TotalParts: 5, SegTotal: 5,
+	}}
+	if _, err := r.stageArticles(ctx, arts); err != nil {
+		t.Fatalf("staging a brand-new set failed: %v", err)
+	}
+	hash := groupHashKey("a.b.fresh", "New.Set")
+	if n, _ := rdb.HLen(ctx, artKey("a.b.fresh", hash)).Result(); n != 1 {
+		t.Errorf("new set's article did not land (HLen=%d)", n)
 	}
 }
 

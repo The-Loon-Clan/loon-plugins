@@ -179,7 +179,7 @@ func renewalLost(ok bool, err error, sinceLastOK, ttl time.Duration) bool {
 // cancellation like any other and stop promptly.
 func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Duration, fn func(context.Context)) bool {
 	me := workerID()
-	got, err := p.st.claimLease(ctx, scope, key, me, ttl)
+	got, err := p.claimLeaseHeld(ctx, scope, key, me, ttl)
 	if err != nil {
 		p.core.Errors.Report(ctx, "usenet/lease-claim", fmt.Errorf("%s/%s: %w", scope, key, err))
 		return false
@@ -187,7 +187,6 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 	if !got {
 		return false
 	}
-	p.leaseAcquireLocal(scope, key)
 
 	workCtx, cancelWork := context.WithCancel(ctx)
 	defer cancelWork()
@@ -228,14 +227,13 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 	defer func() {
 		stop()
 		wg.Wait()
-		if !p.leaseReleaseLocal(scope, key) {
-			return // another in-process holder still works under this row
-		}
 		// Release on a fresh context: ctx may already be cancelled by shutdown,
-		// and a lease left behind would idle that work until it expires.
+		// and a lease left behind would idle that work until it expires. The
+		// refcount check and the DELETE happen as one step inside
+		// releaseLeaseHeld; a non-last holder simply decrements.
 		relCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := p.st.releaseLease(relCtx, scope, key, me); err != nil {
+		if err := p.releaseLeaseHeld(relCtx, scope, key, me); err != nil {
 			p.core.Errors.Report(ctx, "usenet/lease-release", err)
 		}
 	}()
@@ -261,27 +259,51 @@ func (p *Plugin) withLease(ctx context.Context, scope, key string, ttl time.Dura
 // The refcount makes release job-aware without changing claim semantics: the
 // DB row is deleted only when the LAST in-process holder releases. Renewal
 // needs no accounting — both holders renewing one row just extends its TTL.
-func (p *Plugin) leaseAcquireLocal(scope, key string) {
+//
+// The refcount closed the steady-state hole but left a two-step window: the
+// count-drop and the DELETE were separate steps, and a starting pass could
+// land its claim upsert between a peer's drop-to-zero and its DELETE — the
+// row then vanished under the new pass, unclaimed cluster-wide until its
+// next renew tick, and a sibling winning it in that window cancelled the new
+// pass wholesale. Delete-by-owner cannot close this (both jobs share
+// workerID() by design), so leaseHeldMu now covers upsert-with-increment and
+// check-with-DELETE as single steps. Renewals stay OUTSIDE the mutex on
+// purpose: release stops its renewer (stop(); wg.Wait()) BEFORE dropping the
+// count, so a live renewer implies a live local hold and can never race a
+// last-holder DELETE — a constraint any future reordering of release must
+// preserve — and fencing renewals would let one DB stall serialize every
+// renewer in the process.
+
+// claimLeaseHeld claims the DB lease and increments the in-process refcount
+// as one step under leaseHeldMu.
+func (p *Plugin) claimLeaseHeld(ctx context.Context, scope, key, worker string, ttl time.Duration) (bool, error) {
 	p.leaseHeldMu.Lock()
 	defer p.leaseHeldMu.Unlock()
+	got, err := p.st.claimLease(ctx, scope, key, worker, ttl)
+	if err != nil || !got {
+		return got, err
+	}
 	if p.leaseHeld == nil {
 		p.leaseHeld = map[string]int{}
 	}
 	p.leaseHeld[scope+"|"+key]++
+	return true, nil
 }
 
-// leaseReleaseLocal reports whether the caller was the last in-process holder
-// — only then may the DB row be deleted.
-func (p *Plugin) leaseReleaseLocal(scope, key string) bool {
+// releaseLeaseHeld drops the refcount and — still under the lock, as the same
+// step — deletes the DB row when the caller was the last in-process holder.
+// An unpaired release (count already zero) still issues the DELETE: a safe
+// no-op that keeps the old primitive's forgiveness.
+func (p *Plugin) releaseLeaseHeld(ctx context.Context, scope, key, worker string) error {
 	p.leaseHeldMu.Lock()
 	defer p.leaseHeldMu.Unlock()
 	k := scope + "|" + key
 	if n := p.leaseHeld[k]; n > 1 {
 		p.leaseHeld[k] = n - 1
-		return false
+		return nil
 	}
 	delete(p.leaseHeld, k)
-	return true
+	return p.st.releaseLease(ctx, scope, key, worker)
 }
 
 // groupLeaseKey is the unit of crawl parallelism: one BACKBONE'S view of one
@@ -306,7 +328,7 @@ func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups [
 	var keys []string
 	for _, g := range groups {
 		k := groupLeaseKey(backbone, g.Name)
-		got, err := p.st.claimLease(ctx, leaseScopeGroup, k, me, ttl)
+		got, err := p.claimLeaseHeld(ctx, leaseScopeGroup, k, me, ttl)
 		if err != nil {
 			p.core.Errors.Report(ctx, "usenet/lease-claim", fmt.Errorf("%s: %w", k, err))
 			continue
@@ -314,7 +336,6 @@ func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups [
 		if got {
 			held = append(held, g)
 			keys = append(keys, k)
-			p.leaseAcquireLocal(leaseScopeGroup, k)
 		}
 	}
 	if len(held) == 0 {
@@ -377,10 +398,7 @@ func (p *Plugin) claimGroupLeases(ctx context.Context, backbone string, groups [
 		relCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		for _, k := range keys {
-			if !p.leaseReleaseLocal(leaseScopeGroup, k) {
-				continue // the other job in this process still holds the group
-			}
-			if err := p.st.releaseLease(relCtx, leaseScopeGroup, k, me); err != nil {
+			if err := p.releaseLeaseHeld(relCtx, leaseScopeGroup, k, me); err != nil {
 				p.core.Errors.Report(ctx, "usenet/lease-release", err)
 			}
 		}

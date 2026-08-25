@@ -227,6 +227,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return e.StagingMaxRows, e.StagingPruneHours
 	}, func(ctx context.Context) int {
 		return p.effective(ctx).StagingTTLHours
+	}, func(ctx context.Context) int {
+		return p.effective(ctx).EvictStaleSecs
 	}, p.tel.noteEvicted, p.reportErr, func(base string) {
 		// A staged set whose article span is far too wide to be one release —
 		// two postings that collided on the same base subject. Counted on the
