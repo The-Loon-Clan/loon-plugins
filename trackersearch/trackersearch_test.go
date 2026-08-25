@@ -298,3 +298,76 @@ func TestPirateBayKeepsOnlyTVCategories(t *testing.T) {
 		}
 	}
 }
+
+// A UNIT3D response, JSON:API-shaped as the real /api/torrents/filter returns.
+const unit3dFixture = `{"data":[
+ {"type":"torrent","attributes":{"name":"The Ark S03E04 1080p BluRay-GROUP","size":2769078438,"seeders":42,"leechers":3,"info_hash":"ABC123","download_link":"https://tracker.example/torrent/download/99.KEY","details_link":"https://tracker.example/torrents/99","created_at":"2026-08-22T18:55:00.000000Z"}},
+ {"type":"torrent","attributes":{"name":"The Ark S03E04 720p WEB","size":"514986736","seeders":8,"leechers":1,"info_hash":"DEF456","download_link":"https://tracker.example/torrent/download/100.KEY","details_link":"","created_at":""}}
+]}`
+
+// The whole family behind one adapter: it authenticates, maps the envelope,
+// and carries the private tracker's download URL.
+func TestUnit3dParsesTheEnvelopeAndAuthenticates(t *testing.T) {
+	var gotAuth, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotQuery = r.URL.RawQuery
+		fmt.Fprint(w, unit3dFixture)
+	}))
+	defer srv.Close()
+	as := Unit3dAdapters(srv.Client(), []Unit3dConfig{{Slug: "aither-api", APIKey: "SECRET", BaseURL: srv.URL}})
+	if len(as) != 1 {
+		t.Fatalf("want one configured adapter, got %d", len(as))
+	}
+	got, err := as[0].Search(context.Background(), pluginapi.EpisodeSearch{
+		ShowTitle: "The Ark", Season: 3, Episode: 4, IMDbID: "tt17371078", TVDBID: "424505",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotAuth != "Bearer SECRET" {
+		t.Fatalf("auth header = %q, want the bearer token", gotAuth)
+	}
+	// The id and the S/E must reach the API as its own parameters.
+	for _, want := range []string{"imdbId=17371078", "tvdbId=424505", "seasonNumber=3", "episodeNumber=4"} {
+		if !strings.Contains(gotQuery, want) {
+			t.Fatalf("query %q missing %q", gotQuery, want)
+		}
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 candidates, got %d", len(got))
+	}
+	if got[0].SizeBytes != 2769078438 || got[1].SizeBytes != 514986736 {
+		t.Fatalf("size parse failed (bare vs quoted): %d, %d", got[0].SizeBytes, got[1].SizeBytes)
+	}
+	if got[0].DownloadURL == "" {
+		t.Fatal("the authenticated .torrent URL must be carried -- a private tracker gives no magnet")
+	}
+	if got[0].Seeders != 42 {
+		t.Fatalf("seeders misparsed: %d", got[0].Seeders)
+	}
+}
+
+// A rejected key is an error, not an empty result -- "key rejected" and
+// "nothing found" must not read the same.
+func TestUnit3dTreatsARejectedKeyAsAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	as := Unit3dAdapters(srv.Client(), []Unit3dConfig{{Slug: "aither-api", APIKey: "BAD", BaseURL: srv.URL}})
+	if _, err := as[0].Search(context.Background(), q()); err == nil {
+		t.Fatal("a 401 must be an error, not a silent empty result")
+	}
+}
+
+// A config with no key is not a source.
+func TestUnit3dSkipsKeylessConfigs(t *testing.T) {
+	as := Unit3dAdapters(http.DefaultClient, []Unit3dConfig{
+		{Slug: "aither-api", APIKey: ""},
+		{Slug: "not-a-real-unit3d-slug", APIKey: "x"}, // unknown slug, no domain
+	})
+	if len(as) != 0 {
+		t.Fatalf("a keyless config and an unknown slug are not adapters; got %d", len(as))
+	}
+}

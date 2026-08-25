@@ -48,6 +48,11 @@ type TrackerCandidate struct {
 	Leechers  int
 	InfoHash  string
 	Magnet    string
+	// DownloadURL is an authenticated .torrent URL, the way a PRIVATE tracker
+	// hands over a file: public sources give a magnet, a UNIT3D tracker gives
+	// a link that carries the member's key. Empty for magnet sources; a
+	// consumer prefers Magnet when set and falls back to this.
+	DownloadURL string
 	// PageURL is the release's page on the source, or "".
 	PageURL string
 	// PostedAt is zero when the source does not say.

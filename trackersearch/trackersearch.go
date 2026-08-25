@@ -69,21 +69,27 @@ type Client struct {
 
 var _ pluginapi.TrackerSearcher = (*Client)(nil)
 
-// New builds the client over every adapter this package can wire without
-// credentials. The directory supplies each source's domains and politeness.
-func New() *Client {
+// New builds the client over the public no-credential adapters, plus one
+// UNIT3D adapter per configured private tracker. The directory supplies each
+// source's domains and politeness; the demo passes no UNIT3D configs, so those
+// stay dormant until a host stores keys -- see unit3d.go.
+func New(unit3d ...Unit3dConfig) *Client {
 	c := &Client{
 		lastErr: map[string]string{},
 		nextAt:  map[string]time.Time{},
 		delay:   map[string]time.Duration{},
 	}
 	httpc := &http.Client{Timeout: perSearchTimeout}
-	for _, a := range []adapter{
+	adapters := []adapter{
 		newKnaben(httpc),
 		newTorrentsCSV(httpc),
 		newEZTV(httpc),
 		newPirateBay(httpc),
-	} {
+	}
+	// One UNIT3D client per configured tracker -- the 75-strong family behind
+	// a single implementation.
+	adapters = append(adapters, Unit3dAdapters(httpc, unit3d)...)
+	for _, a := range adapters {
 		c.adapters = append(c.adapters, a)
 		d := politeFloor
 		if t, ok := trackerdir.BySlug(a.Slug()); ok {
