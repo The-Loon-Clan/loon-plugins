@@ -34,20 +34,21 @@
                          replies hidden from other applicants — only
                          the thread author + admins see them. Backed
                          by mig 251's thread_type column. */}}
+                    {{/* The shared option-list (choice + note), not Bootstrap
+                         form-check — this was the plugin's one Bootstrap-default
+                         control after the rest of the form went components. */}}
                     <div class="mb-3">
                         <label class="form__label">Thread type</label>
-                        <div class="form-check fs-sm">
-                            <input class="form-check-input" type="radio" name="thread_type" id="tt-discussion" value="discussion" checked>
-                            <label class="form-check-label" for="tt-discussion">
-                                <strong>Discussion</strong> — open thread, every reply visible to everyone.
-                            </label>
-                        </div>
-                        <div class="form-check fs-sm">
-                            <input class="form-check-input" type="radio" name="thread_type" id="tt-recruitment" value="recruitment">
-                            <label class="form-check-label" for="tt-recruitment">
-                                <strong>Recruitment</strong> — public post, private replies. Other users can submit a reply (email / contact info / pitch) but won't see anyone else's. Only you and admins see the full list.
-                            </label>
-                        </div>
+                        <ul class="option-list">
+                            <li>
+                                <label><input type="radio" name="thread_type" value="discussion" checked> <strong>Discussion</strong></label>
+                                <span class="option-list__note">Open thread — every reply visible to everyone.</span>
+                            </li>
+                            <li>
+                                <label><input type="radio" name="thread_type" value="recruitment"> <strong>Recruitment</strong></label>
+                                <span class="option-list__note">Public post, private replies. Other users can submit a reply (email / contact info / pitch) but won't see anyone else's. Only you and admins see the full list.</span>
+                            </li>
+                        </ul>
                     </div>
                     <div class="mb-3">
                         <label class="form__label">Message</label>

@@ -144,10 +144,14 @@ func TestPagesRender(t *testing.T) {
 		"PageTitle": "x", "ActiveNav": "admin",
 		"Entries": []*ChangelogEntry{{ID: 1, Title: "Fixed the thing",
 			ReleasedAt: time.Now(), Category: ChangelogCategoryFix}},
-		"FlowNodes": []FlowNodePicker{}, "Total": 1, "Page": 1, "TotalPages": 1, "Saved": "",
+		"FlowNodes": []FlowNodePicker{}, "Total": 1,
+		"Pagination": template.HTML("<nav>pager</nav>"), "Saved": "",
 	})
 	if !strings.Contains(out, "Fixed the thing") {
 		t.Error("admin changelog missing the entry")
+	}
+	if !strings.Contains(out, "<nav>pager</nav>") {
+		t.Error("admin changelog dropped the shared pager")
 	}
 }
 
@@ -161,7 +165,7 @@ func TestEveryPostFormCarriesTheCSRFField(t *testing.T) {
 		},
 		"admin_changelog.html": {
 			"Entries":   []*ChangelogEntry{{ID: 1, Title: "x", ReleasedAt: time.Now()}},
-			"FlowNodes": []FlowNodePicker{}, "Total": 1, "Page": 1, "TotalPages": 1,
+			"FlowNodes": []FlowNodePicker{}, "Total": 1,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

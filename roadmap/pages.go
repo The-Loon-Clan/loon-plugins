@@ -267,18 +267,13 @@ func (h *Handlers) AdminChangelogPage(c *gin.Context) {
 		h.errs.Report(c.Request.Context(), "admin/changelog-list", err)
 	}
 	nodes, _ := h.store.ListFlowNodesForPicker(c.Request.Context())
-	totalPages := (total + pageSize - 1) / pageSize
-	if totalPages < 1 {
-		totalPages = 1
-	}
 	h.render(c, http.StatusOK, "Admin · Changelog", "admin_changelog.html", gin.H{
 		"PageTitle":  "Changelog",
 		"ActiveNav":  "admin",
 		"Entries":    entries,
 		"FlowNodes":  nodes,
 		"Total":      total,
-		"Page":       page,
-		"TotalPages": totalPages,
+		"Pagination": h.deps.RenderPagination(page, pageSize, total, "/admin/changelog"),
 		"Saved":      c.Query("saved") == "1",
 	})
 }
