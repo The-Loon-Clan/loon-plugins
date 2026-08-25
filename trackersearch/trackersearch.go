@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -147,8 +148,14 @@ func (c *Client) adapters() []adapter {
 
 // SearchEpisode fans out to every source and merges what came back.
 func (c *Client) SearchEpisode(ctx context.Context, q pluginapi.EpisodeSearch) ([]pluginapi.TrackerCandidate, error) {
-	if q.ShowTitle == "" && q.IMDbID == "" && q.TVMazeID == "" {
-		return nil, fmt.Errorf("empty query: no title and no id")
+	// A title or an IMDb id is required. TVMazeID is deliberately NOT accepted
+	// as sufficient: no wired adapter can search by it (the review found a
+	// TVMazeID-only query would pass this guard, hit every adapter's "cannot
+	// answer" path, and return an empty slice a caller reads as "no copies
+	// exist"). It stays on EpisodeSearch because the host resolves it to the
+	// imdb/tvdb ids the adapters DO use before calling.
+	if q.ShowTitle == "" && q.IMDbID == "" {
+		return nil, fmt.Errorf("empty query: a title or IMDb id is required")
 	}
 	var (
 		wg  sync.WaitGroup
@@ -182,15 +189,31 @@ func (c *Client) SearchEpisode(ctx context.Context, q pluginapi.EpisodeSearch) (
 		}()
 	}
 	wg.Wait()
-	// Healthiest swarm first: a candidate nobody seeds is a name, not a
-	// copy. Size breaks ties so two equally-seeded rips order stably.
+	// Dedup on content identity: the same release reaches us twice when an
+	// aggregator (knaben) and the source itself (thepiratebay) both carry it,
+	// same info_hash under different TrackerSlugs. Keep the FIRST seen of each
+	// hash after sorting, so the copy kept is the healthiest-swarm one rather
+	// than whichever adapter happened to answer first. Candidates with no hash
+	// (a private tracker that gives only a download URL) are never merged --
+	// they have no shared identity to merge on.
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Seeders != out[j].Seeders {
 			return out[i].Seeders > out[j].Seeders
 		}
 		return out[i].SizeBytes > out[j].SizeBytes
 	})
-	return out, nil
+	seen := make(map[string]bool, len(out))
+	deduped := out[:0]
+	for _, c := range out {
+		if h := strings.ToLower(c.InfoHash); h != "" {
+			if seen[h] {
+				continue
+			}
+			seen[h] = true
+		}
+		deduped = append(deduped, c)
+	}
+	return deduped, nil
 }
 
 // waitTurn blocks until this source may politely be asked again, or the

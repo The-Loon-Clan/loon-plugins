@@ -249,6 +249,7 @@ type MaintenanceStore interface {
 	seriesName(ctx context.Context, key string) (string, bool, error)
 	seriesSeasons(ctx context.Context, key string) ([]pluginapi.SeriesSeason, error)
 	seriesReleases(ctx context.Context, key string, season, episode, limit int) ([]pluginapi.Release, error)
+	seasonPresence(ctx context.Context, key string, season int) (map[int]bool, bool, error)
 	recategorizeSweep(ctx context.Context, fn func(group, title string) int, limit int) (int, error)
 	pruneNzbs(ctx context.Context, days int) (int64, error)
 	deleteJunkNzbs(ctx context.Context) (int, error)

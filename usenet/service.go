@@ -237,6 +237,10 @@ func (s *service) Seasons(ctx context.Context, key string) ([]pluginapi.SeriesSe
 	return s.store.seriesSeasons(ctx, key)
 }
 
+func (s *service) SeasonPresence(ctx context.Context, key string, season int) (map[int]bool, bool, error) {
+	return s.store.seasonPresence(ctx, key, season)
+}
+
 func (s *service) Releases(ctx context.Context, key string, season, episode, limit int) ([]pluginapi.Release, error) {
 	rs, err := s.store.seriesReleases(ctx, key, season, episode, limit)
 	if err != nil {

@@ -257,8 +257,8 @@ func TestAnEmptyQueryIsRefused(t *testing.T) {
 const piratebayNoResults = `[{"id":"0","name":"No results returned","info_hash":"0000000000000000000000000000000000000000","leechers":"0","seeders":"0","size":"0","added":"0","category":"208","imdb":""}]`
 
 const piratebayFixture = `[
- {"id":"84174226","name":"The Ark S03E04 1080p AMZN WEB-DL-RAWR","info_hash":"F1F66F859CCAC506FC23A4E18C838705ED38C38E","leechers":"102","seeders":"577","size":"2769078438","added":"1787222102","category":"208","imdb":"tt17371078"},
- {"id":"84174900","name":"The Ark S03E04 720p HDTV x264","info_hash":"AA11BB22CC33DD44EE55FF66AA77BB88CC99DD00","leechers":"5","seeders":"40","size":"514986736","added":"1787222999","category":"205","imdb":"tt17371078"},
+ {"id":"84174226","name":"The Ark S03E04 1080p AMZN WEB-DL-RAWR","info_hash":"F1F66F859CCAC506FC23A4E18C838705ED38C38E","leechers":"102","seeders":"577","size":"2769078438","added":"1787222102","category":"208","imdb":"tt15039982"},
+ {"id":"84174900","name":"The Ark S03E04 720p HDTV x264","info_hash":"AA11BB22CC33DD44EE55FF66AA77BB88CC99DD00","leechers":"5","seeders":"40","size":"514986736","added":"1787222999","category":"205","imdb":"tt15039982"},
  {"id":"84175999","name":"The Ark 2023 S03 Complete Boxset [not this episode, wrong category]","info_hash":"1111111111111111111111111111111111111111","leechers":"1","seeders":"9","size":"12345","added":"1787220000","category":"605","imdb":""}
 ]`
 
@@ -276,6 +276,31 @@ func TestPirateBayIgnoresTheNoResultsSentinel(t *testing.T) {
 }
 
 // Only TV categories come through; a boxset in a non-TV category is dropped.
+// A same-titled wrong show (different imdb) in a TV category is dropped when
+// the gap carries an id -- the fix for a real review finding.
+func TestPirateBayDropsImdbMismatch(t *testing.T) {
+	mixed := `[
+	 {"id":"1","name":"The Ark S03E04 right show","info_hash":"AAAA","seeders":"50","leechers":"1","size":"1000","added":"1787222102","category":"208","imdb":"tt15039982"},
+	 {"id":"2","name":"The Ark S03E04 OTHER show same title","info_hash":"BBBB","seeders":"99","leechers":"1","size":"1000","added":"1787222102","category":"208","imdb":"tt99999999"},
+	 {"id":"3","name":"The Ark S03E04 no id","info_hash":"CCCC","seeders":"10","leechers":"1","size":"1000","added":"1787222102","category":"208","imdb":""}
+	]`
+	srv := serve(t, mixed)
+	p := &piratebay{http: srv.Client(), url: srv.URL}
+	got, err := p.Search(context.Background(), q()) // q().IMDbID == tt15039982
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The matching id and the id-less hit are kept; the contradicting id is dropped.
+	if len(got) != 2 {
+		t.Fatalf("want 2 (matching + id-less), got %d: %v", len(got), got)
+	}
+	for _, c := range got {
+		if c.InfoHash == "BBBB" {
+			t.Fatal("the wrong-imdb same-titled show must be dropped")
+		}
+	}
+}
+
 func TestPirateBayKeepsOnlyTVCategories(t *testing.T) {
 	srv := serve(t, piratebayFixture)
 	p := &piratebay{http: srv.Client(), url: srv.URL}
@@ -395,5 +420,34 @@ func TestSetUnit3dActivatesPrivateAdaptersLive(t *testing.T) {
 	c.SetUnit3d(nil)
 	if len(c.Sources()) != before {
 		t.Fatal("clearing configs must remove the private adapters")
+	}
+}
+
+// The same release from two sources (aggregator + origin) merges to one, on
+// info_hash, keeping the healthiest-swarm copy.
+func TestSearchEpisodeDedupsOnInfoHash(t *testing.T) {
+	// knaben returns the release at 30 seeders; a second fake source returns
+	// the SAME hash (different case) at 500. After dedup, one row survives,
+	// and it is the 500-seeder copy.
+	knabenSrv := serve(t, `{"hits":[{"title":"weak copy","bytes":10,"seeders":30,"peers":1,"hash":"f1f66f","magnetUrl":"m","details":"","date":"2026-08-22T00:00:00+00:00","tracker":"x","virusDetection":0.1}]}`)
+	tpbSrv := serve(t, `[{"id":"1","name":"strong copy","info_hash":"F1F66F","seeders":"500","leechers":"1","size":"10","added":"1787222102","category":"208","imdb":""}]`)
+	c := &Client{
+		httpc:   knabenSrv.Client(),
+		lastErr: map[string]string{}, nextAt: map[string]time.Time{},
+		delay: map[string]time.Duration{"knaben": 0, "thepiratebay": 0},
+	}
+	c.public = []adapter{
+		&knaben{http: knabenSrv.Client(), url: knabenSrv.URL},
+		&piratebay{http: tpbSrv.Client(), url: tpbSrv.URL},
+	}
+	got, err := c.SearchEpisode(context.Background(), q())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("the same hash from two sources must merge to one, got %d: %v", len(got), got)
+	}
+	if got[0].Seeders != 500 {
+		t.Fatalf("dedup must keep the healthiest copy, kept %d seeders", got[0].Seeders)
 	}
 }

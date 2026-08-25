@@ -138,6 +138,47 @@ func (s *PGStore) seriesSeasons(ctx context.Context, key string) ([]pluginapi.Se
 // Negative means "every": the page's filter is removed by dropping a query
 // parameter, and -1 is what an absent parameter reads as. Zero cannot mean
 // that, because season 0 (specials) and episode 0 (a pack) are both real.
+// seasonPresence returns the distinct episode numbers held for one season and
+// whether a whole-season pack exists, UNBOUNDED.
+//
+// A DISTINCT set, not release rows: a popular season holds thousands of
+// releases, and reading episodes off a capped Releases query drops the lowest
+// numbers and the pack (episode 0) of any season past the cap -- reporting
+// held episodes as gaps. GROUP BY collapses the thousands to at most
+// one-per-episode, so the answer is the same whether a season was posted once
+// or ten thousand times.
+func (s *PGStore) seasonPresence(ctx context.Context, key string, season int) (map[int]bool, bool, error) {
+	type row struct {
+		Episode int  `db:"episode"`
+		IsPack  bool `db:"is_pack"`
+	}
+	var rows []row
+	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &rows, `
+			SELECT episode, bool_or(is_pack) AS is_pack
+			  FROM nzbs
+			 WHERE series_key = $1 AND season = $2 AND status = 'completed'
+			 GROUP BY episode`, key, season)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	eps := make(map[int]bool, len(rows))
+	pack := false
+	for _, r := range rows {
+		// A pack is stored as episode 0 with is_pack set; a non-pack episode 0
+		// does not exist, so episode 0 in the presence set only ever means the
+		// pack, which pack already carries.
+		if r.IsPack {
+			pack = true
+		}
+		if r.Episode > 0 {
+			eps[r.Episode] = true
+		}
+	}
+	return eps, pack, nil
+}
+
 func (s *PGStore) seriesReleases(ctx context.Context, key string, season, episode, limit int) ([]pluginapi.Release, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 200

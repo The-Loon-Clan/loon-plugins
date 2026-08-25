@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/the-loon-clan/loon-plugins/pluginapi"
@@ -42,6 +43,12 @@ type piratebay struct {
 func newPirateBay(h *http.Client) *piratebay { return &piratebay{http: h, url: piratebayAPI} }
 
 func (p *piratebay) Slug() string { return "thepiratebay" }
+
+// imdbEqual compares two IMDb ids tolerant of the "tt" prefix one side may
+// carry and the other may not.
+func imdbEqual(a, b string) bool {
+	return strings.TrimPrefix(a, "tt") == strings.TrimPrefix(b, "tt")
+}
 
 // piratebayHit is one result. Every numeric field arrives as a string, which
 // is the API's own shape, not a choice worth fighting.
@@ -91,6 +98,14 @@ func (p *piratebay) Search(ctx context.Context, q pluginapi.EpisodeSearch) ([]pl
 			continue
 		}
 		if !piratebayTVCats[h.Category] {
+			continue
+		}
+		// When the gap carries an IMDb id and the hit carries a DIFFERENT one,
+		// it is a same-titled other show -- apibay's text search cannot be
+		// asked by id, but every hit reports its own, so we can drop the
+		// wrong series here. A hit with no imdb is kept: absence is not a
+		// contradiction, only a different non-empty id is.
+		if q.IMDbID != "" && h.IMDb != "" && !imdbEqual(h.IMDb, q.IMDbID) {
 			continue
 		}
 		c := pluginapi.TrackerCandidate{

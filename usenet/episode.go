@@ -46,6 +46,12 @@ var (
 	// The dominant form, and the only one worth trusting for the episode
 	// number: S03E07, s03e07, S3E7, and the multi-episode S03E07E08 (whose
 	// first number is the one that files it).
+	//
+	// KNOWN LIMITATION: a double-bill "S03E07E08" files only episode 7, so a
+	// gap check for episode 8 reports a false gap when 8 was posted only as
+	// part of the pair. Recording both would need the row to hold an episode
+	// RANGE, not one int; deferred as a schema change, uncommon on the demo's
+	// mainstream-TV focus outside the occasional finale.
 	reSxxExx = regexp.MustCompile(`(?i)\bS(\d{1,2})[. _-]?E(\d{1,3})`)
 	// A whole-season pack: S03, Season 3, Season.03. Only trusted when NO
 	// SxxExx matched, because "S03E07" contains "S03" and would otherwise
@@ -64,6 +70,14 @@ var (
 	// is not in season 1 by any broadcast reckoning — but a reader looking for
 	// it wants it under the show, and inventing seasons from an absolute
 	// number would be a guess with no source.
+	//
+	// KNOWN LIMITATION (gap detection): the TV-gap join keys the index by the
+	// TVmaze BROADCAST season/episode, which for a multi-cour anime is not
+	// season 1. So an absolute-numbered anime held here under season 1 does
+	// not match a broadcast-season gap query and every aired episode reads as
+	// a false gap. Correct matching needs an absolute<->broadcast map (XEM-
+	// style) the pipeline does not have; the demo's focus is mainstream
+	// broadcast-numbered TV, where this does not arise.
 	reFansub = regexp.MustCompile(`^\s*(?:\[[^\]]+\]\s*)+([^\[\]]+?)\s+-\s+(\d{1,4})(?:v\d)?\s*[\[(]`)
 
 	// Everything after the episode marker is quality, group and noise. The

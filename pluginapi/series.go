@@ -90,4 +90,15 @@ type SeriesIndex interface {
 	// the whole filter the page needs: pick a season, then pick an episode
 	// inside it, and remove either to widen back out.
 	Releases(ctx context.Context, key string, season, episode, limit int) ([]Release, error)
+
+	// SeasonPresence answers, for one season, which episode numbers exist and
+	// whether a whole-season pack is held. It is what a gap check actually
+	// needs, and it is a SEPARATE method from Releases because Releases is
+	// capped (200-500 rows) for a page, and a popular season holds thousands
+	// of releases: asking Releases and reading the episodes off it silently
+	// loses the lowest episode numbers and the pack (episode 0 sorts last) of
+	// any season past the cap, reporting held episodes as gaps. This returns
+	// the DISTINCT episode set, unbounded, so the answer does not depend on
+	// how many times a season was posted.
+	SeasonPresence(ctx context.Context, key string, season int) (episodes map[int]bool, hasPack bool, err error)
 }
