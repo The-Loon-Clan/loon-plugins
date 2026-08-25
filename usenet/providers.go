@@ -53,6 +53,21 @@ func (pr provider) backboneKey() string {
 	return fmt.Sprintf("srv:%d", pr.ID)
 }
 
+// primaryBackbone resolves the backbone a watermark reset will actually
+// target: the first ENABLED server in listServers order (role, priority, id).
+// "" when none is enabled. renderSettings quotes a reset cost and
+// actionResetWatermark performs the reset — the two must resolve the same
+// backbone, or the prompt names a price for a different backbone than the
+// click charges.
+func primaryBackbone(servers []provider) string {
+	for _, sv := range servers {
+		if sv.Enabled {
+			return sv.backboneKey()
+		}
+	}
+	return ""
+}
+
 func (pr provider) addr() string {
 	port := pr.Port
 	if port == 0 {

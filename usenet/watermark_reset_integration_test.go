@@ -211,3 +211,72 @@ func TestResetWatermarkHistoryScope(t *testing.T) {
 		t.Errorf("unhelpful error: %v", err)
 	}
 }
+
+// The confirm prompt's figures must quote the backbone the button targets.
+// State is keyed (backbone, group_name), and the old cross-backbone max()
+// reported max(hw over all) - max(range_start over all): with "aa" at
+// hw 1000 / range 900 and "bb" at hw 500000 / range 100 it said 499100 —
+// true for neither backbone the click could charge.
+func TestResetCostQuotesTheTargetBackbone(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	db := s.db.DB()
+
+	const group = "multi.backbone.group"
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO newsgroups (name, active) VALUES ($1, TRUE)
+		 ON CONFLICT (name) DO NOTHING`, group); err != nil {
+		t.Fatal(err)
+	}
+	seed := func(backbone string, low, high, mark, rStart, rEnd int64) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx,
+			`INSERT INTO newsgroup_state (backbone, group_name, high_watermark, server_low, server_high, backfill_done)
+			 VALUES ($1,$2,$3,$4,$5,TRUE)`, backbone, group, mark, low, high); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(ctx,
+			`INSERT INTO newsgroup_ranges (backbone, group_name, range_start, range_end) VALUES ($1,$2,$3,$4)`,
+			backbone, group, rStart, rEnd); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed("aa", 100, 2000, 1000, 900, 999)
+	seed("bb", 50, 600000, 500000, 100, 400000)
+
+	costFor := func(backbone string) (reset, hist int64) {
+		t.Helper()
+		groups, err := s.allGroups(ctx, group, backbone, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(groups) != 1 {
+			t.Fatalf("allGroups(%q) returned %d rows", backbone, len(groups))
+		}
+		return groups[0].ResetArticles, groups[0].ResetHistoryArticles
+	}
+
+	if reset, hist := costFor("aa"); reset != 100 || hist != 800 {
+		t.Errorf(`backbone "aa": reset=%d hist=%d, want 100 and 800 (the old cross-backbone max said 499100)`, reset, hist)
+	}
+	if reset, hist := costFor("bb"); reset != 499900 || hist != 50 {
+		t.Errorf(`backbone "bb": reset=%d hist=%d, want 499900 and 50`, reset, hist)
+	}
+	// The prompt's figure equals what the click would charge — the invariant
+	// the prompt exists for.
+	for _, bb := range []string{"aa", "bb"} {
+		got, err := s.resetWatermark(ctx, bb, group, resetForward)
+		if err != nil {
+			t.Fatalf("resetWatermark(%s): %v", bb, err)
+		}
+		want := map[string]int64{"aa": 100, "bb": 499900}[bb]
+		if got.Articles != want {
+			t.Errorf("resetWatermark(%s).Articles = %d, want %d — the prompt and the click disagree", bb, got.Articles, want)
+		}
+	}
+	// No enabled provider (backbone "") hides the figures — the same install
+	// the reset action refuses.
+	if reset, hist := costFor(""); reset != 0 || hist != 0 {
+		t.Errorf(`backbone "": reset=%d hist=%d, want hidden zeros`, reset, hist)
+	}
+}

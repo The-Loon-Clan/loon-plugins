@@ -146,17 +146,21 @@ type settingsQuery struct {
 
 func (p *Plugin) renderSettings(ctx context.Context, q settingsQuery) (template.HTML, error) {
 	gq, msg, errMsg, showBuilder := q.GroupQuery, q.Msg, q.Err, q.ShowBuilder
-	groups, err := p.st.allGroups(ctx, gq, 300)
+	// Servers first: the reset-cost figures quote the backbone the reset
+	// buttons will target, which is the primary enabled provider's. A failed
+	// listServers stays non-fatal — backbone "" hides the buttons, the same
+	// degrade actionResetWatermark applies.
+	servers, err := p.st.listServers(ctx)
+	if err != nil {
+		p.core.Errors.Report(ctx, "usenet/list-servers", err)
+	}
+	groups, err := p.st.allGroups(ctx, gq, primaryBackbone(servers), 300)
 	if err != nil {
 		return "", err
 	}
 	total, err := p.st.groupCount(ctx)
 	if err != nil {
 		return "", err
-	}
-	servers, err := p.st.listServers(ctx)
-	if err != nil {
-		p.core.Errors.Report(ctx, "usenet/list-servers", err)
 	}
 	// The Crawlers dashboard and Filters blacklist render as embedded tab
 	// fragments — one page per plugin. Their msg/err slots stay empty because
@@ -600,13 +604,7 @@ func (p *Plugin) actionResetWatermark(gc *gin.Context) (template.HTML, error) {
 	if err != nil {
 		return settingsRedirect(gc, "err", err.Error())
 	}
-	backbone := ""
-	for _, sv := range servers {
-		if sv.Enabled {
-			backbone = sv.backboneKey()
-			break
-		}
-	}
+	backbone := primaryBackbone(servers)
 	if backbone == "" {
 		return settingsRedirect(gc, "err", "no enabled provider — cannot tell which backbone's state to reset")
 	}

@@ -193,7 +193,7 @@ func (s *service) newznabFeed(ctx context.Context, req pluginapi.NewznabRequest)
 	total := offset
 	if offset <= maxFeedOffset {
 		var err error
-		releases, total, err = s.store.feedReleases(ctx, strings.TrimSpace(req.Query), req.Categories, limit, offset)
+		releases, total, err = s.store.feedReleases(ctx, strings.TrimSpace(req.Query), s.expandCats(ctx, req.Categories), limit, offset)
 		if err != nil {
 			return pluginapi.NewznabResult{}, err
 		}

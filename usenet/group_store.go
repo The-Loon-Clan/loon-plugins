@@ -68,7 +68,15 @@ func (s *PGStore) upsertGroups(ctx context.Context, names []string) (int, error)
 // allGroups returns up to limit groups, active first then alphabetical, for the
 // admin picker. query filters by name substring so a 100k-group server is
 // searchable instead of truncated to the first page.
-func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]pluginapi.GroupInfo, error) {
+// allGroups reports groups with the reset-cost figures scoped to ONE
+// backbone: the one the reset buttons will actually target (the primary
+// enabled provider's — see primaryBackbone). State is keyed per backbone,
+// and the old cross-backbone max() reported a figure true for NO backbone:
+// with A at hw 1000/range 900 and B at hw 500000/range 100, the prompt
+// quoted 499100 against a click that would charge 100 or 499900. An empty
+// backbone matches no state rows, so both figures come back NULL and the
+// buttons hide — the same install actionResetWatermark refuses.
+func (s *PGStore) allGroups(ctx context.Context, query, backbone string, limit int) ([]pluginapi.GroupInfo, error) {
 	if limit <= 0 || limit > 5000 {
 		limit = 500
 	}
@@ -99,7 +107,7 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 			           FROM newsgroup_state st
 			           JOIN newsgroup_ranges r
 			             ON r.backbone = st.backbone AND r.group_name = st.group_name
-			          WHERE st.group_name = g.name
+			          WHERE st.group_name = g.name AND st.backbone = $3
 			         HAVING max(r.range_start) < max(st.high_watermark)) AS reset_articles,
 			        -- What a history re-walk would queue: everything below this
 			        -- crawler's own earliest recorded fetch, down to the server's
@@ -111,14 +119,14 @@ func (s *PGStore) allGroups(ctx context.Context, query string, limit int) ([]plu
 			           FROM newsgroup_state st
 			           JOIN newsgroup_ranges r
 			             ON r.backbone = st.backbone AND r.group_name = st.group_name
-			          WHERE st.group_name = g.name
+			          WHERE st.group_name = g.name AND st.backbone = $3
 			          GROUP BY st.server_low
 			         HAVING max(r.range_start) > st.server_low
 			          LIMIT 1) AS reset_history_articles
 			 FROM newsgroups g LEFT JOIN nzbs n ON n.group_name = g.name
 			 WHERE ($1 = '' OR g.name ILIKE '%' || $1 || '%')
 			 GROUP BY g.name, g.active, g.retention_days, g.throttle_ms, g.tier, g.sort_order
-			 ORDER BY g.active DESC, `+tierOrderSQL+`, g.sort_order, g.name LIMIT $2`, query, limit) // sqllint:allow constant tier-rank expression, no input
+			 ORDER BY g.active DESC, `+tierOrderSQL+`, g.sort_order, g.name LIMIT $2`, query, limit, backbone) // sqllint:allow constant tier-rank expression, no input
 	})
 	if err != nil {
 		return nil, err

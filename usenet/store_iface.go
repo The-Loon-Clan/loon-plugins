@@ -53,7 +53,7 @@ type ReleaseReader interface {
 // GroupStore manages the newsgroup catalog.
 type GroupStore interface {
 	groups(ctx context.Context) ([]pluginapi.GroupInfo, error)
-	allGroups(ctx context.Context, query string, limit int) ([]pluginapi.GroupInfo, error)
+	allGroups(ctx context.Context, query, backbone string, limit int) ([]pluginapi.GroupInfo, error)
 	activeGroups(ctx context.Context, limit int) ([]groupRow, error)
 	activeGroupsForBackbone(ctx context.Context, backbone string, limit int, holdLow bool) ([]groupRow, error)
 

@@ -322,16 +322,29 @@ const NewznabCachePrefix = "newznab:v1:"
 
 // NewznabCacheKey hashes the request fields that determine the response, so any
 // tier caching Newznab results (the loon-api read tier, a web host) computes the
-// SAME key and can share one Redis. BaseURL is excluded (constant per host);
-// APIKey is INCLUDED because the plugin embeds it in download links, so two keys
-// must not share an entry. t=get downloads should not be cached by the caller.
+// SAME key and can share one Redis.
+//
+// The rule: every field the rendered XML EMBEDS must partition the cache.
+// BaseURL used to be excluded on the claim "constant per host" — but both
+// shipped hosts derive it per request from the client's Host header, and the
+// plugin bakes it into every item's download/enclosure URL, the caps url=,
+// and the feed <link>: two hostnames reaching one Redis served each other's
+// download links, and a keyless cached t=caps could leak an internal-only
+// hostname to public callers. Title is the tier's channel title, same class.
+// APIKey stays because the plugin embeds it in download links, so two keys
+// must not share an entry. Deliberately NOT json.Marshal(r) wholesale: a
+// future per-caller field that does not change the response bytes must not
+// silently shatter hit rates — each inclusion stays a decision, and a new
+// response-affecting field on NewznabRequest must be added here. t=get
+// downloads should not be cached by the caller.
 func NewznabCacheKey(r NewznabRequest) string {
 	payload := struct {
-		T, Q  string
-		C     []int
-		L, O  int
-		ID, K string
-	}{r.Function, r.Query, r.Categories, r.Limit, r.Offset, r.ID, r.APIKey}
+		T, Q      string
+		C         []int
+		L, O      int
+		ID, K     string
+		B, Ti     string
+	}{r.Function, r.Query, r.Categories, r.Limit, r.Offset, r.ID, r.APIKey, r.BaseURL, r.Title}
 	b, _ := json.Marshal(payload)
 	sum := sha256.Sum256(b)
 	return NewznabCachePrefix + hex.EncodeToString(sum[:16])

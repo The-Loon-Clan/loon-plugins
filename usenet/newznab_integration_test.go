@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -120,4 +121,55 @@ func TestNewznabContract(t *testing.T) {
 			t.Errorf("want newznab error 202, got:\n%s", res.Body)
 		}
 	})
+}
+
+// A parent Newznab category id must reach subcategory-filed releases: caps
+// advertises 5000, Prowlarr's connectivity test queries it, and categorize
+// files everything under subcats — the exact IN(5000) answered total=0 for
+// an indexer full of TV. Runs with a nil catalog, so the expansion's
+// fallbackCats path is exercised end to end through the real catClause SQL,
+// page and COUNT both.
+func TestNewznabParentCategoryReachesSubcatReleases(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	svc := &service{store: s, retentionDays: 100}
+
+	var gz bytes.Buffer
+	zw := gzip.NewWriter(&gz)
+	_, _ = zw.Write([]byte("<nzb/>"))
+	_ = zw.Close()
+	for i, title := range []string{"Frieren.S01E01.1080p", "Frieren.S01E02.1080p"} {
+		if _, ok, err := s.insertNzb(ctx, nzbRow{
+			Title: title, Filename: title + ".nzb", Size: 1 << 30,
+			Group: "a.b.anime", ContentHash: fmt.Sprintf("hash-cat-%04d", i),
+			Posted: time.Now(), Data: gz.Bytes(), CategoryID: 5070,
+		}); err != nil || !ok {
+			t.Fatalf("seed %d: ok=%v err=%v", i, ok, err)
+		}
+	}
+
+	res, err := svc.Newznab(ctx, pluginapi.NewznabRequest{
+		Function: "tvsearch", Categories: []int{5000},
+		BaseURL: "http://x", Title: "T", Limit: 50,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(res.Body)
+	if !strings.Contains(body, `total="2"`) || !strings.Contains(body, "Frieren.S01E01.1080p") {
+		t.Errorf("cat=5000 did not reach the 5070-filed releases:\n%s", body)
+	}
+
+	// A parent with no matching children stays empty — expansion must not
+	// become match-everything.
+	res, err = svc.Newznab(ctx, pluginapi.NewznabRequest{
+		Function: "movie", Categories: []int{2000},
+		BaseURL: "http://x", Title: "T", Limit: 50,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(res.Body), `total="0"`) {
+		t.Errorf("cat=2000 matched something on a TV-only index:\n%s", res.Body)
+	}
 }

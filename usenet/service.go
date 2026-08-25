@@ -78,11 +78,56 @@ func (s *service) Search(ctx context.Context, q string, limit int) ([]pluginapi.
 }
 
 func (s *service) Feed(ctx context.Context, cats []int, limit, offset int) ([]pluginapi.Release, int, error) {
-	rs, total, err := s.store.feedReleases(ctx, "", cats, limit, offset)
+	rs, total, err := s.store.feedReleases(ctx, "", s.expandCats(ctx, cats), limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
 	return s.withCategories(rs), total, nil
+}
+
+// expandCats widens each top-level Newznab category id to include its
+// subcategories before the store's exact IN(...) match.
+//
+// Caps advertises the PARENT ids (5000 TV, 2000 Movies), every *arr client
+// queries them — Prowlarr's connectivity test uses cat=5000 — and categorize
+// files releases under SUBCATEGORY ids, so the exact match answered an empty
+// feed with total=0 for an indexer full of television. The parent id itself
+// stays in the output (Console files releases at bare 1000), a subcat or
+// unknown id passes through unchanged, and an already-host-expanded list
+// re-expands to itself — the demo host pre-expands, so double expansion is a
+// deployed shape. All(), not Enabled(): subcat queries were never gated on
+// the enabled set, and parent and child must agree.
+func (s *service) expandCats(ctx context.Context, cats []int) []int {
+	if len(cats) == 0 {
+		return cats
+	}
+	taxonomy := fallbackCats
+	if s.catalog != nil {
+		if all, err := s.catalog.All(ctx); err == nil && len(all) > 0 {
+			taxonomy = all
+		}
+	}
+	children := map[int][]int{}
+	for _, c := range taxonomy {
+		for _, sub := range c.Subcats {
+			children[c.ID] = append(children[c.ID], sub.ID)
+		}
+	}
+	seen := map[int]bool{}
+	out := make([]int, 0, len(cats))
+	add := func(id int) {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	for _, id := range cats {
+		add(id)
+		for _, sub := range children[id] {
+			add(sub)
+		}
+	}
+	return out
 }
 
 func (s *service) Browse(ctx context.Context, group string, limit int) ([]pluginapi.Release, error) {
@@ -188,7 +233,12 @@ func (s *service) FetchGroups(ctx context.Context) (int, error) {
 }
 
 func (s *service) AllGroups(ctx context.Context, query string, limit int) ([]pluginapi.GroupInfo, error) {
-	return s.store.allGroups(ctx, query, limit)
+	// The reset-cost figures are scoped to the backbone a reset would target.
+	servers, err := s.store.listServers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.allGroups(ctx, query, primaryBackbone(servers), limit)
 }
 
 func (s *service) GroupCount(ctx context.Context) (int, error) {

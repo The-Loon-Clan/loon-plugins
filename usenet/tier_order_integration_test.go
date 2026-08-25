@@ -46,7 +46,7 @@ func TestTierOrderingFollowsRankNotAlphabet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := s.allGroups(ctx, "a.b.", 50)
+	got, err := s.allGroups(ctx, "a.b.", "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}

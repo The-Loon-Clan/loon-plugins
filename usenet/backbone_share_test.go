@@ -124,3 +124,27 @@ func TestAssignPools(t *testing.T) {
 		t.Errorf("no providers: got %d, want 0", len(got))
 	}
 }
+
+// primaryBackbone: the first ENABLED server in listServers order wins — the
+// same backbone actionResetWatermark targets, so the prompt and the click
+// cannot disagree.
+func TestPrimaryBackbone(t *testing.T) {
+	if got := primaryBackbone(nil); got != "" {
+		t.Errorf("empty slice = %q, want \"\"", got)
+	}
+	if got := primaryBackbone([]provider{{ID: 1, Backbone: "omicron"}}); got != "" {
+		t.Errorf("disabled-only = %q, want \"\"", got)
+	}
+	servers := []provider{
+		{ID: 1, Backbone: "omicron"},                 // disabled
+		{ID: 2, Backbone: "netnews", Enabled: true},  // first enabled wins
+		{ID: 3, Backbone: "omicron", Enabled: true},
+	}
+	if got := primaryBackbone(servers); got != "netnews" {
+		t.Errorf("primaryBackbone = %q, want netnews", got)
+	}
+	// An unset backbone resolves to the per-server key.
+	if got := primaryBackbone([]provider{{ID: 7, Enabled: true}}); got != "srv:7" {
+		t.Errorf("bare server = %q, want srv:7", got)
+	}
+}
