@@ -37,7 +37,7 @@
                 <div class="eyebrow">Release Group</div>
                 <h1>
                     {{.Group.Name}}
-                    {{if eq .Group.Status "confirmed"}}<span class="badge-status badge-confirmed">Confirmed</span>{{else}}<span class="badge-status badge-unknown">Unknown</span>{{end}}
+                    {{if eq .Group.Status "confirmed"}}<span class="tag tag--success">Confirmed</span>{{else}}<span class="tag tag--warning">Unknown</span>{{end}}
                     {{if .Owners}}<span class="tag tag--success ms-2 fs-3xs align-middle" title="Claimed by an owner">Owned</span>{{end}}
                 </h1>
                 {{/* External links — admin-set. WebsiteURL is the

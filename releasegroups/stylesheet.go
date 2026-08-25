@@ -92,16 +92,6 @@ const releasegroupsCSS = `/* from release_group_archive.html */
         }
         .rg-header-stats strong { color: var(--text-primary); font-size: 0.95rem; display: block; }
         .rg-header-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
-        .badge-status {
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            padding: 3px 9px;
-            border-radius: 999px;
-            font-weight: 700;
-        }
-        .badge-confirmed { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
-        .badge-unknown   { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
 
 /* from release_group_suggest.html */
         .suggest-page { margin: 0 auto; padding: 2rem 1rem 4rem; }
