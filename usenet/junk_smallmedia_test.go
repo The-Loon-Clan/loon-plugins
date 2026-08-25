@@ -105,14 +105,48 @@ func TestNamesSmallMediaWantsARealExtension(t *testing.T) {
 	}
 }
 
-// The exemption must not leak onto the unsized ingest path: there the size is
-// unknown, the catchalls never run at all, and an .epub-named obfuscated post
-// must still be judged by the title rules like anything else.
-func TestSmallMediaExemptionIsSizedOnly(t *testing.T) {
+// The exemption is per-rule, and a junk-SHAPED title naming a media type is
+// still caught by its shape rules: spare_named_media excuses a rule's OWN
+// verdict, never the whole engine's. (This test used to claim the exemption
+// was sized-only; long_digit_run — a title rule that runs at ingest — now
+// opts in too, so the honest claim is the narrower one this asserts.)
+func TestSmallMediaExemptionDoesNotExcuseJunkShapes(t *testing.T) {
 	// A junk title that happens to carry a media extension is still junk by its
 	// own shape, with or without a size.
 	const obfuscated = "0N70ZyFoz8n50.epub"
 	if rule := whichJunkRule(obfuscated); rule == "" {
 		t.Errorf("whichJunkRule(%q) = \"\" — a junk-shaped title escaped because it names a media type", obfuscated)
+	}
+}
+
+// long_digit_run's exemption: an ISBN is 10/13 digits and ebook posters print
+// it in the title — a real 2 MB book was dropped at ingest and its catalogued
+// copy deleted for carrying its own catalogue number. A music barcode
+// (EAN-13) is the same shape. A digit-run title naming no medium is still a
+// timestamp.
+func TestLongDigitRunSparesNamedMedia(t *testing.T) {
+	spared := []string{
+		"Peter Watts - Blindsight (9780765319647).epub", // ISBN-13
+		"Author - Title (0765319640).epub",              // ISBN-10
+		"Artist - Album (5099749534728).flac",           // EAN-13 barcode
+	}
+	for _, title := range spared {
+		if rule := whichJunkRule(title); rule != "" {
+			t.Errorf("whichJunkRule(%q) = %q — dropped at ingest", title, rule)
+		}
+		if rule := whichJunkRuleSized(title, 2<<20); rule != "" {
+			t.Errorf("whichJunkRuleSized(%q, 2MiB) = %q — the sweep would delete the catalogued copy", title, rule)
+		}
+	}
+	// The catch survives the exemption.
+	if rule := whichJunkRule("1723456789012345 aBc"); rule != "long_digit_run" {
+		t.Errorf("nameless digit run attributed to %q, want long_digit_run", rule)
+	}
+	// Known residual, pinned deliberately: without an extension the engine
+	// cannot tell an ISBN from a timestamp (RE2 has no lookaround), so an
+	// extensionless ebook title still dies. If these show up in the drops
+	// view, the follow-up is a 978/979-prefixed heuristic, not a wider spare.
+	if rule := whichJunkRule("Peter Watts - Blindsight (9780765319647)"); rule != "long_digit_run" {
+		t.Errorf("extensionless ISBN title attributed to %q — if this changed on purpose, update the residual note", rule)
 	}
 }

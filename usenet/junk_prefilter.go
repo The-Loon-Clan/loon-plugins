@@ -71,7 +71,17 @@ func buildLiteralGate(pattern string) literalGate {
 		return literalGate{}
 	}
 	re = re.Simplify()
-	fold := strings.Contains(pattern, "(?i)")
+	// Fold comes from the parse TREE, not the pattern text. A fold flag has
+	// several spellings — (?i:...), (?is), (?si), mid-pattern (?i) — and the
+	// parser stores every folded literal min-folded (uppercase for ASCII), so
+	// a textual "(?i)" scan gave (?i:keygen) the gate {["KEYGEN"], no fold}:
+	// lowercase subjects failed the Contains and the regex never ran — a
+	// silently dead rule with zero filter_hits, the exact outcome the header
+	// above forbids. Folding is per-literal in the tree (EXACT(?i)folded
+	// folds only the tail); one tree-wide bool stays conservative, because
+	// lowercasing an exact-case literal together with the haystack only ever
+	// WIDENS the gate.
+	fold := hasFoldedLiteral(re)
 	lits := requiredLiterals(re)
 	out := make([]string, 0, len(lits))
 	for _, l := range lits {
@@ -108,6 +118,20 @@ func buildLiteralGate(pattern string) literalGate {
 //	Star/Quest/Repeat with min 0 → matches empty, so nothing is required.
 //	Plus/Repeat with min >= 1    → the body must appear at least once.
 //	anything else    → nil (unknown, so no gate).
+// hasFoldedLiteral reports whether any literal anywhere in the tree carries
+// the parser's FoldCase flag — the oracle buildLiteralGate trusts for Fold.
+func hasFoldedLiteral(re *syntax.Regexp) bool {
+	if re.Op == syntax.OpLiteral && re.Flags&syntax.FoldCase != 0 {
+		return true
+	}
+	for _, sub := range re.Sub {
+		if hasFoldedLiteral(sub) {
+			return true
+		}
+	}
+	return false
+}
+
 func requiredLiterals(re *syntax.Regexp) []string {
 	switch re.Op {
 	case syntax.OpLiteral:

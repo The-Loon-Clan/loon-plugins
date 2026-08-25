@@ -133,9 +133,48 @@ func (s *PGStore) pruneNzbs(ctx context.Context, days int) (int64, error) {
 	return n, err
 }
 
+// sweepVerdict is the junk sweep's per-row decision, extracted so the
+// build/sweep parity below is unit-testable without a database.
+type sweepVerdict int
+
+const (
+	sweepSpare sweepVerdict = iota
+	sweepDelete
+	sweepNeedsBlob
+)
+
+// junkSweepVerdict mirrors classifyRelease's decision order, because the
+// sweep re-judging with rules the build deliberately excused was deleting
+// real releases every prune pass: a 2.2 MB magazine whose ARTICLES named
+// .pdf (stored via the kind vouch, which demotes to the unsized rules) died
+// to under_5mib because the sweep saw only the title; a 4 MB "[hentai]"
+// tagged release (stored via the tag bypass) died the same way. The articles
+// are pruned on a ~6h horizon in this same job, so the build-then-delete
+// cycle repeated for every future copy.
+//
+//   - The tag bypass spares outright — those rows were stored on purpose.
+//   - Structural (unsized) junk deletes regardless: a recognised kind never
+//     excused a junk NAME at build either.
+//   - A verdict only the SIZE rules produce needs the blob: the build may
+//     have vouched the kind from the article filenames, and the stored NZB's
+//     <file subject> attributes are the only surviving copy of them.
+func junkSweepVerdict(title string, size int64) sweepVerdict {
+	if parseCategoryTag(title) != "" {
+		return sweepSpare
+	}
+	if isJunkTitle(title) {
+		return sweepDelete
+	}
+	if isJunkTitleSized(title, size) {
+		return sweepNeedsBlob
+	}
+	return sweepSpare
+}
+
 // deleteJunkNzbs removes already-built NZBs whose title is junk (rows from
 // before junk filtering, or that slipped through). Detection is Go-side, so we
-// scan titles then delete by id in chunks.
+// scan titles then delete by id in chunks. Rows only a size rule condemns get
+// a second look at their stored blob — see junkSweepVerdict.
 func (s *PGStore) deleteJunkNzbs(ctx context.Context) (int, error) {
 	removed := 0
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
@@ -147,13 +186,36 @@ func (s *PGStore) deleteJunkNzbs(ctx context.Context) (int, error) {
 		if err := tx.SelectContext(ctx, &rows, `SELECT id, title, size FROM nzbs`); err != nil {
 			return err
 		}
-		var ids []int64
+		var ids, needsBlob []int64
 		for _, r := range rows {
-			// Sized: built releases have a known payload, so the size-band rules
-			// apply — this sweep is what retroactively cleans junk that predates
-			// a rule (prod's TagJunkTitlesBatch is the SQL equivalent).
-			if isJunkTitleSized(r.Title, r.Size) {
+			switch junkSweepVerdict(r.Title, r.Size) {
+			case sweepDelete:
 				ids = append(ids, r.ID)
+			case sweepNeedsBlob:
+				needsBlob = append(needsBlob, r.ID)
+			}
+		}
+		// Second pass, chunked like the DELETE below: fetch the blobs and
+		// spare every row whose articles vouch a content kind — exactly the
+		// input classifyRelease had at build. A nil or unreadable blob
+		// spares too: this decision deletes a release.
+		for start := 0; start < len(needsBlob); start += 1000 {
+			end := min(start+1000, len(needsBlob))
+			q, args, err := sqlx.In(`SELECT id, nzb_data FROM nzbs WHERE id IN (?)`, needsBlob[start:end])
+			if err != nil {
+				return err
+			}
+			var blobs []struct {
+				ID   int64  `db:"id"`
+				Data []byte `db:"nzb_data"`
+			}
+			if err := tx.SelectContext(ctx, &blobs, tx.Rebind(q), args...); err != nil {
+				return err
+			}
+			for _, b := range blobs {
+				if contentKindFromNZB(b.Data) == "" {
+					ids = append(ids, b.ID)
+				}
 			}
 		}
 		for start := 0; start < len(ids); start += 1000 {

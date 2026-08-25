@@ -1,6 +1,8 @@
 package usenet
 
 import (
+	"bytes"
+	"encoding/xml"
 	"regexp"
 	"strings"
 )
@@ -145,6 +147,20 @@ func parseCategoryTag(title string) string {
 // depended on which split happened to name the title. Operators who don't
 // want ISOs can junk-rule or blacklist them, where the policy is visible
 // and editable.
+//
+// Also minus "pl" — PL is the Polish-language tag, and it is title-final on
+// the ORDINARY path, not an exotic one: reExt takes the media extension off
+// a single-file subject, so "Kler.2018.PL.mkv (1/45) yEnc" derives the base
+// "Kler.2018.PL", and the check read the language code as a Perl script and
+// deleted the staged set — a whole language's releases, silently, counted
+// only as blocked_ext. A Perl script is not Windows-executable, and posts
+// that ARE .pl files are judged by the agent's post-download file blocklist,
+// which sees real filenames — the correct layer for that rule. The other
+// short collisions were considered and KEPT: .com is a genuinely dangerous
+// DOS executable and its title-final occurrences are spam-domain tags
+// (WWW.X.COM); .ws/.vb likewise show no real-release population. If one
+// turns up in the blocked_ext outcome samples, it gets the same one-line
+// treatment as iso and pl — not a redesign.
 var blockedExtensions = map[string]bool{
 	"ade": true, "adp": true, "app": true, "application": true, "appref-ms": true,
 	"asp": true, "aspx": true, "asx": true, "bas": true, "bat": true, "bgi": true,
@@ -158,7 +174,7 @@ var blockedExtensions = map[string]bool{
 	"mda": true, "mdb": true, "mde": true, "mdt": true, "mdw": true, "mdz": true,
 	"msc": true, "msh": true, "msh1": true, "msh2": true, "mshxml": true,
 	"msh1xml": true, "msh2xml": true, "msi": true, "msp": true, "mst": true,
-	"msu": true, "ops": true, "osd": true, "pcd": true, "pif": true, "pl": true,
+	"msu": true, "ops": true, "osd": true, "pcd": true, "pif": true,
 	"plg": true, "prf": true, "prg": true, "printerexport": true, "ps1": true,
 	"ps1xml": true, "ps2": true, "ps2xml": true, "psc1": true, "psc2": true,
 	"psd1": true, "psdm1": true, "pst": true, "py": true, "pyc": true, "pyo": true,
@@ -293,6 +309,35 @@ func contentKindFromArticles(arts []stagedArticle) string {
 		}
 	}
 	return ""
+}
+
+// contentKindFromNZB reconstructs the article-kind vouch from a stored,
+// gzipped NZB blob: the <file subject> attributes are the only surviving copy
+// of the article filenames once the staging horizon clears, and delegating to
+// contentKindFromArticles keeps the sweep's judgment byte-identical with the
+// build's. Any error — nil, corrupt gzip, unparseable XML — answers "": the
+// caller treats that as "no vouch", which for the junk sweep means SPARE (a
+// false spare costs one junk row other passes may catch; the reverse deletes
+// a real release).
+func contentKindFromNZB(gzipped []byte) string {
+	if len(gzipped) == 0 {
+		return ""
+	}
+	raw, err := gunzipBytes(gzipped)
+	if err != nil {
+		return ""
+	}
+	var doc nzbXML
+	dec := xml.NewDecoder(bytes.NewReader(raw))
+	dec.CharsetReader = nzbCharsetReader
+	if err := dec.Decode(&doc); err != nil {
+		return ""
+	}
+	arts := make([]stagedArticle, 0, len(doc.Files))
+	for _, f := range doc.Files {
+		arts = append(arts, stagedArticle{Subject: f.Subject})
+	}
+	return contentKindFromArticles(arts)
 }
 
 // namesFileWithExt reports whether ext appears in s as a real filename ending —

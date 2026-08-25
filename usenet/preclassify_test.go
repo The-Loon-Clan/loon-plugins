@@ -83,6 +83,12 @@ func TestPreClassifyRefusesBlockedExtensions(t *testing.T) {
 	for _, subject := range []string{
 		"[SubsPlease] Frieren - 12 (1080p) [B4F1A9C2].mkv",
 		"Akira.1988.JPN.Blu-ray.AVC.TrueHD.5.1.REMUX.iso",
+		// The Polish-language tag, title-final on the ordinary path (reExt
+		// peels the media extension, exposing ".PL" at the end). The old
+		// list read it as a Perl script and deleted the staged set — a
+		// whole language's releases, counted only as blocked_ext.
+		"Kler.2018.PL",
+		"Nazwa.Filmu.2023.PL",
 	} {
 		if _, _, blocked := preClassify(subject); blocked {
 			t.Errorf("%q was refused as a blocked extension — it is an ordinary release", subject)

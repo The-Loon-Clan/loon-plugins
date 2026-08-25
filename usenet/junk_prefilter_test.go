@@ -219,6 +219,49 @@ func TestShortLiteralsDisableTheGate(t *testing.T) {
 	}
 }
 
+// Every spelling of the fold flag must set Fold. The old oracle was a
+// textual "(?i)" scan, so (?i:keygen) — a valid, compiling, enabled operator
+// rule — got the gate {["KEYGEN"], no fold}: lowercase subjects failed the
+// Contains, the regex never ran, and the rule sat silently dead with zero
+// filter_hits.
+func TestInlineFlagFormsSetFold(t *testing.T) {
+	cases := []struct {
+		pattern string
+		subject string
+	}{
+		{`(?i:keygen)`, "photoshop 2026 keygen included"},
+		{`(?is)keygen.title`, "free keygen\ntitle inside"},
+		{`(?si)keygen`, "some keygen post"},
+		{`EXACT(?i)folded`, "has EXACTfolded inside"},
+	}
+	for _, c := range cases {
+		g := buildLiteralGate(c.pattern)
+		if !g.Fold {
+			t.Errorf("buildLiteralGate(%q).Fold = false — the gate would miss cased subjects", c.pattern)
+		}
+		gateIsNecessary(t, "inline_fold", c.pattern, c.subject)
+	}
+	// And a plain exact-case pattern stays exact: fold only ever widens.
+	if g := buildLiteralGate(`keygen`); g.Fold || len(g.Any) != 1 || g.Any[0] != "keygen" {
+		t.Errorf("exact-case literal gate changed: %+v", g)
+	}
+}
+
+// End to end through the matcher: an operator-authored inline-flag rule must
+// fire on lowercase subjects — the gate may only ever skip work the regex
+// would have declined.
+func TestInlineFoldRuleFiresThroughTheMatcher(t *testing.T) {
+	m, err := newJunkMatcher([]junkRuleSpec{{
+		Name: "inline_fold", Kind: "regex", Rule: `(?i:keygen)`, Enabled: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.match("photoshop 2026 keygen incl crack", "photoshop 2026 keygen incl crack", 0); got != "inline_fold" {
+		t.Errorf("lowercase subject: match = %q, want inline_fold — the gate starved the rule", got)
+	}
+}
+
 // Sanity: the analysis agrees with the regexp package about a prefix it can
 // also derive, which catches a whole class of mistakes in the walker.
 func TestGateAgreesWithLiteralPrefix(t *testing.T) {

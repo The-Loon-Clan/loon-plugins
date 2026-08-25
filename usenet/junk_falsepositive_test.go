@@ -38,6 +38,17 @@ func TestJunkRules_RealReleaseNamesSurvive(t *testing.T) {
 	}
 }
 
+// The SIZED path must spare them too: short_random_token is sized_only, so
+// the unsized survivals above never exercised it — a bare Capitalised title
+// at a real archive size was deleted at build while this file stayed green.
+func TestJunkRules_RealReleaseNamesSurviveSized(t *testing.T) {
+	for _, title := range []string{"Gunbuster", "Evangelion", "Bakemonogatari"} {
+		if rule := whichJunkRuleSized(title, 40<<30); rule != "" {
+			t.Errorf("REAL RELEASE DROPPED AT BUILD: whichJunkRuleSized(%q, 40GB) = %q", title, rule)
+		}
+	}
+}
+
 // The other half: the obfuscation these rules exist for must still be caught.
 // A survival-only test would be satisfied by disabling everything.
 //

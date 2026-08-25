@@ -80,6 +80,12 @@ func TestJunkParitySized(t *testing.T) {
 		{")yury0WgtSBL&LmHFHgI1IFskNRLzPAv k2cwcKzuD!2PlOS7HR-p mB#nbz-B7^", 723 * kb, "chaotic_specials_small"},
 		{"XIfhyEYhXpZaXTVK", 433 * mib, "short_random_token"}, // size-agnostic since May 2026
 		{"SteinsGate", 700 * mib, "short_random_token"},       // prod's tradeoff, kept faithfully
+		// A bare Capitalised word is a WORD (exclude_word_shaped): a rar
+		// batch posted as "Gunbuster (001/220)" has no quoted filename, so
+		// the title is the show name alone — and it was deleted at 40GB.
+		// CamelCase (SteinsGate above) stays caught; this is the boundary.
+		{"Gunbuster", 40 << 30, ""},
+		{"Bakemonogatari", 40 << 30, ""}, // the host mirror's own named example
 
 		// The catchalls: anime-only policy, tiny NZBs are junk whatever the title.
 		{"A Real Looking Title - 01", 500 * kb, "under_1mib"},

@@ -13,7 +13,16 @@ import (
 
 // seedJunkRules upserts the shipped rules. It deliberately does NOT overwrite
 // operator-authored rows (source='user'), and never touches `enabled` — so a
-// locally disabled rule stays disabled across upgrades. Returns rows written.
+// locally disabled rule stays disabled across upgrades. `position` joins
+// enabled as operator-owned the moment the row exists: the order editor and
+// the optimizer write it, and the reseed restoring the shipped order silently
+// undid a hit-ranked reorder on every restart — the measured CPU win of
+// moving a billions-of-hits rule off the tail came back as a regression with
+// no log beyond "junk rules reloaded", while the optimizer's rollback token
+// then "restored" positions that were already reverted. An existing install
+// tracks shipped rule CONTENT (kind/rule/params/notes) but not shipped
+// re-ranks; the recovery lever for order drift is the hit-driven "apply
+// recommended", which beats any shipped guess anyway. Returns rows written.
 func (s *PGStore) seedJunkRules(ctx context.Context, specs []junkRuleSpec) (int, error) {
 	n := 0
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
@@ -46,7 +55,6 @@ func (s *PGStore) seedJunkRules(ctx context.Context, specs []junkRuleSpec) (int,
 				       rule = EXCLUDED.rule,
 				       params = EXCLUDED.params,
 				       notes = EXCLUDED.notes,
-				       position = EXCLUDED.position,
 				       updated_at = now()
 				 WHERE junk_rules.source = 'seed'`,
 				sp.Name, sp.Kind, sp.Rule, string(params), sp.Notes, pos)

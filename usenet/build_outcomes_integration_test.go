@@ -214,6 +214,83 @@ func TestSeedJunkRulesPreservesOperatorState(t *testing.T) {
 	}
 }
 
+// Position is operator-owned the moment the row exists, exactly like enabled:
+// the order editor and the optimizer write it, and the reseed used to restore
+// the shipped order on every restart — silently undoing a hit-ranked reorder
+// while the "junk rules reloaded" log read as routine. Content still deploys;
+// re-ranks do not.
+func TestSeedJunkRulesPreservesOperatorOrder(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	specs := []junkRuleSpec{
+		{Name: "seed_a", Kind: "regex", Rule: "^a$", Enabled: true},
+		{Name: "seed_b", Kind: "regex", Rule: "^b$", Enabled: true},
+		{Name: "seed_c", Kind: "regex", Rule: "^c$", Enabled: true},
+	}
+	if _, err := s.seedJunkRules(ctx, specs); err != nil {
+		t.Fatal(err)
+	}
+	// The REAL operator write path, not raw SQL — this pins the actual pair.
+	if err := s.setJunkRulePositions(ctx, map[string]int{
+		"seed_c": 10, "seed_a": 20, "seed_b": 30,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Next deploy: a shipped pattern fix rides the reseed.
+	specs[0].Rule = "^a2$"
+	if _, err := s.seedJunkRules(ctx, specs); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := s.db.DB().Query(
+		`SELECT name, rule FROM ` + s.db.Schema() + `.junk_rules ORDER BY position, name`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var order []string
+	rules := map[string]string{}
+	for rows.Next() {
+		var name, rule string
+		if err := rows.Scan(&name, &rule); err != nil {
+			t.Fatal(err)
+		}
+		order = append(order, name)
+		rules[name] = rule
+	}
+	if len(order) != 3 || order[0] != "seed_c" || order[1] != "seed_a" || order[2] != "seed_b" {
+		t.Errorf("re-seed clobbered the operator's order: %v", order)
+	}
+	if rules["seed_a"] != "^a2$" {
+		t.Errorf("re-seed did not deploy the fixed pattern (rule = %q) — preserving order must not freeze the rule body", rules["seed_a"])
+	}
+
+	// A brand-new rule still lands at its shipped slot, catchalls at 900+.
+	specs = append(specs,
+		junkRuleSpec{Name: "seed_d", Kind: "regex", Rule: "^d$", Enabled: true},
+		junkRuleSpec{Name: "seed_small", Kind: "size_catchall", Rule: "size_catchall", Enabled: true},
+	)
+	if _, err := s.seedJunkRules(ctx, specs); err != nil {
+		t.Fatal(err)
+	}
+	var dPos, catchPos int
+	if err := s.db.DB().QueryRow(
+		`SELECT position FROM `+s.db.Schema()+`.junk_rules WHERE name = 'seed_d'`).Scan(&dPos); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.DB().QueryRow(
+		`SELECT position FROM `+s.db.Schema()+`.junk_rules WHERE name = 'seed_small'`).Scan(&catchPos); err != nil {
+		t.Fatal(err)
+	}
+	if dPos != 40 {
+		t.Errorf("new rule's shipped slot = %d, want 40 ((i+1)*10)", dPos)
+	}
+	if catchPos < 900 {
+		t.Errorf("catchall's slot = %d, want 900+", catchPos)
+	}
+}
+
 // The corpus store: batch insert lands rows with their residue flag, and the
 // prune trims by age — the rolling window that keeps a sampled table small
 // however long the install runs.

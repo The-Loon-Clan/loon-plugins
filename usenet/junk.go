@@ -104,9 +104,28 @@ type junkParams struct {
 	// "too small to be real", it is "too small to be real AND unnamed". A
 	// filename extension is the poster's own claim about what the file IS, and
 	// no obfuscation bot writes `.epub` — the junk in this band is nameless
-	// tokens. Requires LightInput, since full normalisation strips the very
-	// extension this reads.
+	// tokens.
+	//
+	// Does NOT require LightInput: full normalisation peels only the
+	// release/archive extensions (staticReleaseExts), never the small-media
+	// list, so the exemption reads whichever input the rule already matches
+	// on. The sized catchalls pair it with light_input because prod's sized
+	// section works on that form — not because the exemption demands it, and
+	// "correcting" a title rule's params by adding light_input would silently
+	// WEAKEN it ("Book.epub.par2" peels to expose ".epub" at end-of-string;
+	// light input leaves ".epub." mid-token, which endsFilename refuses).
 	SpareNamedMedia bool `json:"spare_named_media,omitempty"`
+	// ExcludeWordShaped refuses a title isWordShaped accepts. A bare
+	// Capitalised word is a WORD, not a token: the digit gate that spares
+	// pure-letter titles on the band rules (short/mid_alnum_token) never
+	// applied to short_random_token, so a complete rar-packed release named
+	// by one Capitalised word ("Gunbuster (001/220)" → title "Gunbuster")
+	// matched the same regex as "XIfhyEYhXpZaXTVK" and was deleted at build,
+	// at any size. Within that rule's reach — digitless 8-19 tokens, both
+	// cases required — word-shaped reduces to exactly "Capitalised":
+	// ALLCAPS/alllower already fail its case gates, and CamelCase (two or
+	// more uppers) stays caught, preserving the recorded SteinsGate trade.
+	ExcludeWordShaped bool `json:"exclude_word_shaped,omitempty"`
 }
 
 func (p junkParams) sized() bool { return p.MinSizeBytes > 0 || p.MaxSizeBytes > 0 }
@@ -469,6 +488,9 @@ func gatesPass(t string, p junkParams) bool {
 		return false
 	}
 	if p.RequireDigit && !hasByteInRange(t, '0', '9') {
+		return false
+	}
+	if p.ExcludeWordShaped && isWordShaped(t) {
 		return false
 	}
 	return true
