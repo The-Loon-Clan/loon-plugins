@@ -52,7 +52,11 @@ var (
 	// part of the pair. Recording both would need the row to hold an episode
 	// RANGE, not one int; deferred as a schema change, uncommon on the demo's
 	// mainstream-TV focus outside the occasional finale.
-	reSxxExx = regexp.MustCompile(`(?i)\bS(\d{1,2})[. _-]?E(\d{1,3})`)
+	// E takes up to FOUR digits: an absolute-numbered show carried in SxxExx
+	// form ("One.Piece.S01E1077") has a four-digit episode, and E(\d{1,3})
+	// truncated 1077 to 107 — silently filing the wrong episode rather than
+	// refusing. RE2 has no lookahead, so the width is the guard.
+	reSxxExx = regexp.MustCompile(`(?i)\bS(\d{1,2})[. _-]?E(\d{1,4})`)
 	// A whole-season pack: S03, Season 3, Season.03. Only trusted when NO
 	// SxxExx matched, because "S03E07" contains "S03" and would otherwise
 	// file every episode as a pack.

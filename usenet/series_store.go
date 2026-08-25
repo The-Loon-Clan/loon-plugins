@@ -2,6 +2,7 @@ package usenet
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -85,18 +86,25 @@ func (s *PGStore) seriesName(ctx context.Context, key string) (string, bool, err
 	if key == "" {
 		return "", false, nil
 	}
-	var name string
+	// NullString because mode() over zero rows is one NULL row, which is the
+	// legitimate "no such show" answer — a key from a typo'd URL must render
+	// a page, not a 500. Everything else is a REAL error and must say so:
+	// the previous blanket `err != nil -> not found` disguised a database
+	// outage as every show having been deleted, with nothing reaching the
+	// error reporter. (Demo session's adversarial review, 2026-08-25.)
+	var name sql.NullString
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		return tx.GetContext(ctx, &name, `
 			SELECT mode() WITHIN GROUP (ORDER BY series_name) FROM nzbs
 			 WHERE series_key = $1 AND status = 'completed'`, key)
 	})
-	if err != nil || name == "" {
-		// A key nobody has released under is "no such show", not an error: it
-		// arrives from a URL and a typo must render a page, not a 500.
+	if err != nil {
+		return "", false, err
+	}
+	if !name.Valid || name.String == "" {
 		return "", false, nil
 	}
-	return name, true, nil
+	return name.String, true, nil
 }
 
 // seriesSeasons lists one show's seasons with their counts — the numbers the

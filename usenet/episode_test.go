@@ -23,6 +23,11 @@ func TestParseEpisode(t *testing.T) {
 		{"Dexter.S08E11E12.1080p.BluRay.x265", "dexter", 8, 11, false},
 		// Separators inside the marker.
 		{"Suits.S05.E10.HDTV.x264", "suits", 5, 10, false},
+		// Four-digit absolute numbering in SxxExx form (Sonarr's convention
+		// for long-running shows). E(\d{1,3}) truncated this to episode 107 —
+		// listed beside the real 107, absent from its own episode's search,
+		// and reported as a gap the index already held.
+		{"One.Piece.S01E1077.1080p.WEB.x264", "onepiece", 1, 1077, false},
 
 		// Whole-season packs. Episode 0 and Pack, which is a different thing
 		// from "episode zero" and has to stay tellable apart.

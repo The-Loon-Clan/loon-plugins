@@ -664,14 +664,24 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 			p.reportErr(ctx, "usenet/salvage-store", fmt.Errorf("%s: %w", title, err))
 			continue
 		}
-		if verdict == healthBroken {
+		if verdict == healthBroken && created {
 			// The broken mark is the whole point — an unmarked broken release
-			// serves as complete — so it is written BEFORE staging is deleted,
-			// regardless of created: a duplicate here means a previous salvage
-			// attempt stored the row and died before marking it, and the sink
-			// returns the existing id exactly so this retry can finish the
-			// job. A failed write leaves the set staged and the cursor retries
-			// the whole store+verdict pair.
+			// serves as complete — so it is written BEFORE staging is deleted.
+			// A failed write leaves the set staged and the cursor retries the
+			// whole store+verdict pair.
+			//
+			// ONLY when created. This used to run on duplicates too, reasoning
+			// that a dedup meant a previous salvage attempt died between store
+			// and verdict. But the sink dedups by content sketch, which matches
+			// ACROSS GROUPS: the routine case is a crosspost whose copy in
+			// group A completed and stored healthy, while group B's copy ended
+			// a few articles short and walked past — and this line then marked
+			// the complete, downloadable release broken with a rewritten
+			// segment total, which the recheck baseline decayed toward dead.
+			// (Demo session's adversarial review, 2026-08-25.) The crash
+			// window it guarded — store succeeded, process died before the
+			// verdict landed — is real but rare, and it now reports loudly
+			// below instead of silently downgrading healthy rows.
 			//
 			// The stored total is totals.Segments+missData, NOT salvageTally's
 			// total: a health recheck reconstructs its baseline as
@@ -693,6 +703,14 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 				p.reportErr(ctx, "usenet/salvage-verdict", fmt.Errorf("nzb %d stored but not marked broken: %w", id, err))
 				continue
 			}
+		} else if verdict == healthBroken {
+			// Deduped broken salvage: almost always a partial crosspost copy
+			// of a release another group already completed — the stored row is
+			// the better copy and keeps its verdict. The one case this can
+			// leave wrong is a retry after a crash between our own store and
+			// verdict; report it so that window is visible, not silent.
+			p.reportErr(ctx, "usenet/salvage-dedup", fmt.Errorf(
+				"%s: broken salvage deduped onto existing nzb %d — keeping its verdict (crosspost copy, or a store-then-crash retry)", title, id))
 		}
 		// (The healthy case — par2-only gaps — stays unmarked on purpose: all
 		// data is present, and the health job confirms from the live server.)
@@ -897,7 +915,24 @@ func isComplete(arts []stagedArticle) bool {
 			total = a.TotalParts
 		}
 	}
-	return total > 0 && len(parts) >= total
+	if total <= 0 {
+		return false
+	}
+	// Only parts numbered 1..total count toward the poster's own total — the
+	// single-file twin of the file-0 rule above, with the same failure: a
+	// "(0/45)" text header lands in part 0, and counting it completed the set
+	// one real segment early. The NZB shipped without its final part, the set
+	// was deleted, and the late part TTL'd out as an orphan — the tail of the
+	// release permanently lost, exactly the window the multi-file arm's
+	// comment describes. (Found by the demo session's adversarial review,
+	// 2026-08-25.)
+	complete := 0
+	for pn := range parts {
+		if pn >= 1 && pn <= total {
+			complete++
+		}
+	}
+	return complete >= total
 }
 
 // buildNZB serializes a complete set into NZB XML. A multi-file release gets one
@@ -961,7 +996,22 @@ func buildNZB(arts []stagedArticle) ([]byte, nzbTotals, error) {
 			doc.Files = append(doc.Files, makeFile(byFile[fn]))
 		}
 	} else {
-		doc.Files = []nzbFile{makeFile(arts)}
+		// Part 0 is the "(0/N)" text header, not file content — the same
+		// article isComplete refuses to count. Emitting it handed downloaders
+		// a yEnc-less text article as segment 0 of the file, and put it first
+		// in makeFile's lowest-part-wins pick for the file's subject/date.
+		// Salvage builds partial docs, so a set holding ONLY the header still
+		// emits it rather than an empty <file>.
+		single := make([]stagedArticle, 0, len(arts))
+		for _, a := range arts {
+			if a.PartNum >= 1 {
+				single = append(single, a)
+			}
+		}
+		if len(single) == 0 {
+			single = arts
+		}
+		doc.Files = []nzbFile{makeFile(single)}
 	}
 	var totals nzbTotals
 	for _, f := range doc.Files {
@@ -1503,7 +1553,9 @@ func (s *PGStore) candidateGroups(ctx context.Context, limit int) ([]groupKey, c
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		// The multi-file arm counts only file numbers >= 1: a "[00/N]" header
 		// post or an unnumbered companion sits at file_num 0 and counting it
-		// satisfied MAX(total_files) one real file early. This is a cheap
+		// satisfied MAX(total_files) one real file early. The single-file arm
+		// counts only part numbers >= 1 for the same reason — a "(0/N)" text
+		// header is not one of the poster's N parts. This is a cheap
 		// PRE-filter — isComplete re-verifies per file on the loaded articles
 		// — so it may stay optimistic, but it must not be optimistic in a way
 		// that admits every [0/N]-companioned set the moment its last file
@@ -1515,7 +1567,7 @@ func (s *PGStore) candidateGroups(ctx context.Context, limit int) ([]groupKey, c
 		return tx.SelectContext(ctx, &rows,
 			`SELECT group_name, base_subject FROM articles
 			 GROUP BY group_name, base_subject
-			 HAVING (bool_or(file_parts) = FALSE AND COUNT(DISTINCT part_num) >= MAX(total_parts))
+			 HAVING (bool_or(file_parts) = FALSE AND COUNT(DISTINCT part_num) FILTER (WHERE part_num >= 1) >= MAX(total_parts))
 			     OR (bool_or(file_parts) = TRUE  AND COUNT(DISTINCT file_num) FILTER (WHERE file_num >= 1) >= MAX(total_files))
 			 LIMIT $1`, limit)
 	})
@@ -1879,8 +1931,12 @@ func classifyRelease(base string, arts []stagedArticle) (title, cat, junkRule st
 // a single error instead of one per candidate.
 type releaseSink interface {
 	// store returns the stored release's id so the salvage path can hand it
-	// to the health backend; the normal build path ignores it. id is 0 when
-	// created is false (duplicate).
+	// to the health backend; the normal build path ignores it. On a duplicate
+	// (created false) the sink returns the EXISTING row's id — the host's
+	// IngestAssembled dedups by content sketch and hands back the row it
+	// matched, which can be another group's copy of a crosspost, not
+	// necessarily a row this caller stored. (This doc previously claimed
+	// id==0 on duplicates, and salvage trusted the id as its own.)
 	store(ctx context.Context, rel pluginapi.AssembledRelease) (id int64, created bool, err error)
 }
 
@@ -1969,7 +2025,7 @@ func (s *PGStore) builderInfo(ctx context.Context, limit int) (BuilderInfo, erro
 		const setsCTE = `
 			WITH sets AS (
 			  SELECT bool_or(file_parts) AS multi,
-			         CASE WHEN bool_or(file_parts) THEN COUNT(DISTINCT file_num) FILTER (WHERE file_num >= 1) ELSE COUNT(DISTINCT part_num) END AS have,
+			         CASE WHEN bool_or(file_parts) THEN COUNT(DISTINCT file_num) FILTER (WHERE file_num >= 1) ELSE COUNT(DISTINCT part_num) FILTER (WHERE part_num >= 1) END AS have,
 			         CASE WHEN bool_or(file_parts) THEN MAX(total_files)          ELSE MAX(total_parts)          END AS need,
 			         base_subject, COUNT(*) AS segs
 			  FROM articles GROUP BY group_name, base_subject

@@ -1024,7 +1024,22 @@ func isGroupComplete(meta map[string]string, fields []string) bool {
 		return completeFiles >= totalFiles
 	}
 	if !fileParts && totalParts > 0 {
-		return len(fields) >= totalParts
+		// Count only parts 1..totalParts, mirroring isComplete's single-file
+		// arm: the "(0/N)" text header stages as field "0:0" and counting it
+		// queued the set ready one real segment early — at STAGE time, the
+		// exact moment the last part was still in flight.
+		n := 0
+		for _, f := range fields {
+			p := strings.SplitN(f, ":", 2)
+			if len(p) != 2 {
+				continue
+			}
+			pn, err := strconv.Atoi(p[1])
+			if err == nil && pn >= 1 && pn <= totalParts {
+				n++
+			}
+		}
+		return n >= totalParts
 	}
 	return false
 }
