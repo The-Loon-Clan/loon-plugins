@@ -97,7 +97,7 @@
             <aside class="c-side">
                 <div class="c-side-card">
                     <h2>About /c/{{.Community.Slug}}</h2>
-                    {{if .Community.Description}}<div style="font-size:0.86rem;color:var(--text-primary);line-height:1.5;">{{.Community.Description}}</div>{{end}}
+                    {{if .Community.Description}}<div class="fs-sm text-light lh-base">{{.Community.Description}}</div>{{end}}
                     <div style="display:flex;gap:0.95rem;font-size:0.82rem;margin-top:0.55rem;">
                         <div><strong class="text-light fs-base">{{.Community.SubscriberCount}}</strong> <span class="text-muted">members</span></div>
                         <div><strong class="text-light fs-base">{{.Community.ThreadCount}}</strong> <span class="text-muted">threads</span></div>
@@ -107,7 +107,7 @@
                 {{if .SidebarHTML}}
                 <div class="c-side-card">
                     <h2>Description</h2>
-                    <div style="font-size:0.86rem;color:var(--text-primary);line-height:1.5;">{{.SidebarHTML}}</div>
+                    <div class="fs-sm text-light lh-base">{{.SidebarHTML}}</div>
                 </div>
                 {{end}}
 

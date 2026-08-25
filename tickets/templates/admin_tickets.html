@@ -29,7 +29,7 @@
                 </thead>
                 <tbody>
                     {{range .Tickets}}
-                    <tr style="cursor:pointer;" onclick="window.location='/support/{{.ID}}'">
+                    <tr class="cursor-pointer" onclick="window.location='/support/{{.ID}}'">
                         <td class="text-muted fs-sm">{{.ID}}</td>
                         <td class="fs-md">{{.Username}}</td>
                         <td>

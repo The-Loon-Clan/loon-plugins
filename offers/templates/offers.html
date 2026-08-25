@@ -82,7 +82,7 @@
                         <span class="nzb-thumb" data-cover="{{.Picture}}" data-fallback="{{.PictureFallback}}"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
                               onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}"></span>
                         {{end}}
-                        <div style="min-width:0;flex:1;">
+                        <div class="min-w-0 flex-1">
                             {{/* stopPropagation so the title stays a LINK to the
                                  catalogue page; the rest of the header toggles. */}}
                             <a class="text-light text-decoration-none fw-semibold" href="/{{.EntityType}}/{{.EntityID}}" onclick="event.stopPropagation()">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{.EntityID}}{{end}}</a>
@@ -94,7 +94,7 @@
                         <tbody>
                         {{range .Buckets}}
                             <tr>
-                                <td style="min-width:0;">
+                                <td class="min-w-0">
                                     {{/* The variant's identity: a representative
                                          filename. "[VCB-Studio] ... [01][Ma10p_1080p]"
                                          says season, group and quality where the

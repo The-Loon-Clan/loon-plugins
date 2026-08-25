@@ -14,7 +14,7 @@
 
         {{/* Add-new form. Collapsed by default to keep the index dense. */}}
         <details class="panelV2 mb-3" style="background:var(--bg-surface);border-color:var(--border);">
-            <summary class="panel__header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add tracker</summary>
+            <summary class="panel__header cursor-pointer fs-md fw-semibold">&plus; Add tracker</summary>
             <div class="panel__body">
                 {{template "admin_tracker_form" (dict "Tracker" nil "CSRFToken" .CSRFToken)}}
             </div>
@@ -61,7 +61,7 @@
                                 {{/* <details>, the shape rewards_admin.html uses: a <tr> cannot be
                                      wrapped in one, but the cell can hold it. */}}
                                 <details>
-                                <summary class="text-muted small" style="cursor:pointer;">Edit this tracker</summary>
+                                <summary class="text-muted small cursor-pointer">Edit this tracker</summary>
                                 {{template "admin_tracker_form" (dict "Tracker" . "CSRFToken" $.CSRFToken)}}
                                 </details>
                             </td>

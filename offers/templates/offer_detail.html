@@ -8,7 +8,7 @@
                      onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}">
             </div>
             {{end}}
-            <div style="flex:1;min-width:0;">
+            <div class="flex-1 min-w-0">
                 <h1 class="od-title">
                     {{if .Bucket.Title}}{{.Bucket.Title}}{{else}}{{.Bucket.EntityType}}{{if .Bucket.EntityID}} #{{deref .Bucket.EntityID}}{{end}}{{end}}
                 </h1>
@@ -71,7 +71,7 @@
                     {{end}}
                     {{if .Request.FileFilter}}
                     <details class="od-note mt-1">
-                        <summary style="cursor:pointer;">Scoped to {{len .Request.FileFilter}} of the offered files</summary>
+                        <summary class="cursor-pointer">Scoped to {{len .Request.FileFilter}} of the offered files</summary>
                         <div style="margin-top:.3rem;font-family:var(--bs-font-monospace,monospace);font-size:.78rem;">
                             {{range .Request.FileFilter}}<div>{{.}}</div>{{end}}
                         </div>
@@ -120,7 +120,7 @@
                 <div class="od-file">
                     <div class="od-fname">
                         {{if and $canScope (gt (len $.Files) 1)}}
-                        <label style="display:flex;gap:.5rem;align-items:baseline;cursor:pointer;margin:0;">
+                        <label class="d-flex gap-2 align-items-baseline cursor-pointer m-0">
                             <input type="checkbox" class="js-of-file-pick" value="{{.Name}}" style="flex-shrink:0;">
                             <span>{{.Name}}</span>
                         </label>

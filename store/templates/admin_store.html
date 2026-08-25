@@ -135,7 +135,7 @@
                                      a <tr> cannot be wrapped in <details>, but the cell
                                      can hold one. */}}
                                 <details>
-                                <summary class="text-muted small" style="cursor:pointer;">Edit {{.Name}}</summary>
+                                <summary class="text-muted small cursor-pointer">Edit {{.Name}}</summary>
                                 <form method="POST" action="/admin/store/{{.ID}}/update" class="d-flex gap-2 align-items-end flex-wrap p-2">
                                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                     <div>

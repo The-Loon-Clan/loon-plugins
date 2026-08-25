@@ -4,7 +4,7 @@
 
         {{/* ── Header ─────────────────────────────────────────── */}}
         <div class="fr-hero">
-            <div style="flex:1;min-width:0;">
+            <div class="flex-1 min-w-0">
                 <p class="mb-1" style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);font-weight:600;">Community</p>
                 <h2>Feature Requests</h2>
                 <p>
@@ -139,7 +139,7 @@
                         {{else}}
                         <a class="text-decoration-none" href="/u/{{.Username}}" onclick="event.stopPropagation();"><div class="prop-avatar-fallback">{{initial .Username}}</div></a>
                         {{end}}
-                        <div style="flex:1;min-width:0;">
+                        <div class="flex-1 min-w-0">
                             <div class="prop-title" style="overflow:hidden;text-overflow:ellipsis;">
                                 {{.Label}}
                                 {{if .Tag}}<span class="prop-tag prop-tag-{{.Tag}} ms-1">{{.Tag}}</span>{{end}}

@@ -97,7 +97,7 @@
                     {{if .Leaders}}
                         {{range .Leaders}}
                         <div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
-                            <div style="flex:1;min-width:0;">
+                            <div class="flex-1 min-w-0">
                                 {{userTag .Username}}
                                 <div class="text-muted fs-3xs">{{.OfferCount}} offer{{if ne .OfferCount 1}}s{{end}}</div>
                             </div>
@@ -117,7 +117,7 @@
                     {{if .Trackers}}
                         {{range .Trackers}}
                         <div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
-                            <div style="flex:1;min-width:0;">
+                            <div class="flex-1 min-w-0">
                                 <div class="text-light fw-semibold">{{.TrackerName}}</div>
                                 <div class="text-muted fs-3xs">
                                     {{if eq .TrackerVisibility "private"}}<span class="of-pill of-pill-priv">private</span>{{end}}

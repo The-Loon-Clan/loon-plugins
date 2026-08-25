@@ -8,7 +8,7 @@
         {{if .Saved}}<div class="notice notice--success py-2 fs-sm">Saved.</div>{{end}}
 
         <details class="panelV2 mb-3" style="background:var(--bg-surface);border-color:var(--border);">
-            <summary class="panel__header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add changelog entry</summary>
+            <summary class="panel__header cursor-pointer fs-md fw-semibold">&plus; Add changelog entry</summary>
             <div class="panel__body">
                 {{template "admin_changelog_form" (dict "Entry" nil "CSRFToken" .CSRFToken "FlowNodes" .FlowNodes)}}
             </div>
@@ -50,7 +50,7 @@
                                 {{/* <details>, the shape rewards_admin.html uses: a <tr> cannot be
                                      wrapped in one, but the cell can hold it. */}}
                                 <details>
-                                <summary class="text-muted small" style="cursor:pointer;">Edit this entry</summary>
+                                <summary class="text-muted small cursor-pointer">Edit this entry</summary>
                                 {{template "admin_changelog_form" (dict "Entry" . "CSRFToken" $.CSRFToken "FlowNodes" $.FlowNodes)}}
                                 </details>
                             </td>

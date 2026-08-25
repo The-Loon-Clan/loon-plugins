@@ -10,7 +10,7 @@
         {{/* New-item form (id=0 → create). Reused on the row-level
              edit modal below; here it's the top-of-page quick-add. */}}
         <details class="panelV2 mb-3" style="background:var(--bg-surface);border-color:var(--border);">
-            <summary class="panel__header" style="cursor:pointer;font-size:0.88rem;font-weight:600;">&plus; Add roadmap item</summary>
+            <summary class="panel__header cursor-pointer fs-md fw-semibold">&plus; Add roadmap item</summary>
             <div class="panel__body">
                 {{template "admin_roadmap_form" (dict "Item" nil "CSRFToken" .CSRFToken "FlowNodes" .FlowNodes)}}
             </div>
@@ -58,7 +58,7 @@
                                 {{/* <details>, the shape rewards_admin.html uses: a <tr> cannot be
                                      wrapped in one, but the cell can hold it. */}}
                                 <details>
-                                <summary class="text-muted small" style="cursor:pointer;">Edit this item</summary>
+                                <summary class="text-muted small cursor-pointer">Edit this item</summary>
                                 {{template "admin_roadmap_form" (dict "Item" . "CSRFToken" $.CSRFToken "FlowNodes" $.FlowNodes)}}
                                 </details>
                             </td>
