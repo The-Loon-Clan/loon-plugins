@@ -388,3 +388,26 @@ func TestAudiobookGroupsBeatTheMP3Substring(t *testing.T) {
 		t.Errorf("a film in an audiobook group = %d (%s), want Movies/HD", got, categoryName(got))
 	}
 }
+
+// TestSeasonPacksAreTelevisionNotMovies pins the fix for a review finding: a
+// whole-season pack names both a season and "bluray"/"remux", and first-match
+// order was filing it as Movies/BluRay.
+func TestSeasonPacksAreTelevisionNotMovies(t *testing.T) {
+	tv := []string{
+		"Chernobyl.Season.1.Complete.1080p.BluRay.REMUX.AVC",
+		"The.Wire.Season.1.1080p.BluRay.REMUX.AVC",
+		"Breaking.Bad.S05.Complete.1080p.BluRay.x264",
+	}
+	for _, title := range tv {
+		if got := categorize("", title); got/1000 != 5 {
+			t.Errorf("%q = %d (%s), want a TV (5xxx) shelf", title, got, categoryName(got))
+		}
+	}
+	// A genuine film with a season-looking token but no season-pack marker
+	// stays a film -- the boundary the fix must not cross.
+	for _, title := range []string{"Some.Show.S01.2024.1080p.WEB-DL", "Blade.Runner.2049.2160p.UHD.BluRay.REMUX"} {
+		if got := categorize("", title); got/1000 != 2 {
+			t.Errorf("%q = %d (%s), want a Movies (2xxx) shelf", title, got, categoryName(got))
+		}
+	}
+}

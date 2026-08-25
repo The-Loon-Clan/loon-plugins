@@ -343,7 +343,27 @@ func ParseReleaseName(raw string) Query {
 	// with a non-space on both sides AND at least two letters after are cut.
 	s = reFormatWords.ReplaceAllString(s, " ")
 	s = reEdition.ReplaceAllString(s, " ")
-	s = reYear.ReplaceAllString(s, " ")
+	// The year is stripped PER SEGMENT, and a segment that IS the year keeps
+	// it: "George Orwell - 1984" has 1984 as the whole title segment, and the
+	// old global strip deleted it, collapsing the query to the author alone --
+	// Open Library then answered with whichever Orwell edition ranked first.
+	// A year alongside other words in its segment ("The Hobbit 1937") is still
+	// the edition-year decoration the strip exists for.
+	{
+		parts := reSegment.Split(s, -1)
+		seps := reSegment.FindAllString(s, -1)
+		var b strings.Builder
+		for i, p := range parts {
+			if strings.TrimSpace(reYear.ReplaceAllString(p, " ")) != "" {
+				p = reYear.ReplaceAllString(p, " ")
+			}
+			b.WriteString(p)
+			if i < len(seps) {
+				b.WriteString(seps[i])
+			}
+		}
+		s = b.String()
+	}
 	s = strings.Trim(reSpace.ReplaceAllString(s, " "), " -_.")
 
 	q := Query{Year: year, bracket: bracket}

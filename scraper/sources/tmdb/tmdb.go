@@ -372,7 +372,12 @@ func ParseReleaseName(raw string, kind Kind) Query {
 func cleanTitle(title string) string {
 	f := strings.Fields(title)
 	for len(f) > 1 {
-		switch strings.ToLower(f[len(f)-1]) {
+		// LOWERCASE only. A dangling codec initial ("x.264" -> "x" once the
+		// number is cut as junk) follows the scene convention and is lowercase;
+		// a title that genuinely ends in a single letter is capitalised
+		// ("Malcolm X", "Kevin H"). Matching case-insensitively stripped the
+		// title letter too and searched TMDB for the wrong film.
+		switch f[len(f)-1] {
 		case "h", "x", "v":
 			f = f[:len(f)-1]
 			continue

@@ -516,3 +516,20 @@ func TestATransportFailureDoesNotLeakTheKey(t *testing.T) {
 		t.Errorf("nothing was redacted, so the guard did not run:\n%v", err)
 	}
 }
+
+// TestCleanTitleKeepsCapitalTitleLetters pins the fix for a review finding:
+// a dangling lowercase codec initial ("x" from x264) is trimmed, but a title
+// that genuinely ends in a capital single letter (Malcolm X) is kept.
+func TestCleanTitleKeepsCapitalTitleLetters(t *testing.T) {
+	q := ParseReleaseName("Malcolm.X.1992.1080p.BluRay.x264-GRP", KindMovie)
+	if q.Title != "Malcolm X" {
+		t.Fatalf("Title = %q, want %q -- the capital X is part of the title", q.Title, "Malcolm X")
+	}
+	if q.Year != 1992 {
+		t.Fatalf("Year = %d, want 1992", q.Year)
+	}
+	// A lowercase codec remnant is still trimmed.
+	if got := cleanTitle("Some Movie x"); got != "Some Movie" {
+		t.Fatalf("cleanTitle(%q) = %q, want %q", "Some Movie x", got, "Some Movie")
+	}
+}

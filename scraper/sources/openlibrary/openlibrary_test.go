@@ -394,3 +394,25 @@ func TestGenreOnlyPostingsAreRefused(t *testing.T) {
 		}
 	}
 }
+
+// TestAYearAsTitleSurvivesTheYearStrip pins a review finding: "1984" as the
+// book's title must not be deleted by the edition-year strip, which collapsed
+// "George Orwell - 1984" to the author alone.
+func TestAYearAsTitleSurvivesTheYearStrip(t *testing.T) {
+	q := ParseReleaseName("George Orwell - 1984")
+	if len(q.parts) != 2 {
+		t.Fatalf("parts = %q, want both the author and the year-title", q.parts)
+	}
+	found := false
+	for _, p := range q.parts {
+		found = found || p == "1984"
+	}
+	if !found {
+		t.Fatalf("the title segment %q was stripped; parts = %q", "1984", q.parts)
+	}
+	// A year DECORATING a segment is still stripped.
+	q = ParseReleaseName("The_Hobbit_1937")
+	if len(q.parts) != 1 || q.parts[0] != "The Hobbit" {
+		t.Fatalf("decoration year must still strip; parts = %q", q.parts)
+	}
+}

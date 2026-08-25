@@ -278,7 +278,20 @@ func ParseReleaseName(raw string) Query {
 			// Safe for a title that CONTAINS a year, because the year taken is
 			// the last one in the head: "Blade Runner 2049 2017" cuts after
 			// 2017, and "2001 A Space Odyssey 1968" after 1968.
-			head = head[:last[0]]
+			//
+			// UNLESS that assumption fails: a release can OMIT the redundant
+			// release year, leaving the title's own year as the only one
+			// ("Blade Runner 2049" without a trailing 2017). Two tells, and in
+			// either the year belongs to the title, not the release:
+			//   - it is an implausible release year -- a far-future setting
+			//     (2049, 2067) no film was released in;
+			//   - cutting it would leave the title empty ("1984", "1917").
+			trimmed := strings.TrimRight(head[:last[0]], " ([{-–—")
+			if year > time.Now().Year()+1 || strings.TrimSpace(trimmed) == "" {
+				year = 0 // the year is the title's; we do not know the release's
+			} else {
+				head = head[:last[0]]
+			}
 		}
 		// Drop a bracket or dash left dangling by the cut.
 		head = strings.TrimRight(head, " ([{-–—")

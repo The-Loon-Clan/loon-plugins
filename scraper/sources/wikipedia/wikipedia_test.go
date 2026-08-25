@@ -474,3 +474,26 @@ func TestOneLookupPerFilm(t *testing.T) {
 		t.Errorf("made %d searches after a different year, want 2 — years must not share a cache key", searches)
 	}
 }
+
+// TestTitleYearWithoutReleaseYearIsKept pins a review finding: a release that
+// omits the redundant release year must not have the title's own year taken as
+// the release year and stripped ("Blade Runner 2049", "1917").
+func TestTitleYearWithoutReleaseYearIsKept(t *testing.T) {
+	q := ParseReleaseName("Blade.Runner.2049.2160p.UHD.BluRay.REMUX.HDR.HEVC-FraMeSToR")
+	if q.Title != "Blade Runner 2049" {
+		t.Fatalf("Title = %q, want the year kept in the title", q.Title)
+	}
+	if q.Year != 0 {
+		t.Fatalf("Year = %d, want 0 -- 2049 is the setting, not the release", q.Year)
+	}
+	// A bare year-title must not become an empty title.
+	q = ParseReleaseName("1917.1080p.BluRay.x264")
+	if q.Title != "1917" || q.Year != 0 {
+		t.Fatalf("got title=%q year=%d, want the year AS the title", q.Title, q.Year)
+	}
+	// With the release year present, everything works as before.
+	q = ParseReleaseName("Blade.Runner.2049.2017.1080p.BluRay")
+	if q.Title != "Blade Runner 2049" || q.Year != 2017 {
+		t.Fatalf("got title=%q year=%d", q.Title, q.Year)
+	}
+}

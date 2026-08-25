@@ -49,6 +49,23 @@ func topLevelOf(id int) int { return (id / 1000) * 1000 }
 // The scale this was hiding: 806 of the 810 releases in Audio were video, and
 // 41 of the 43 in PC/Games. Whole categories, not rounding errors — and the
 // reason Audio looked like it held music worth fetching metadata for.
+// KNOWN LIMITATIONS, verified and left unfixed because every fix regresses a
+// real case more than the miss it corrects -- these are inherent to a
+// keyword/structure classifier with no title database:
+//
+//   - A film whose subtitle is "Episode <arabic-number>" (the Star Wars
+//     prequels) reads as television, because "Star Wars Episode 1 ... 1999
+//     1080p" is structurally identical to the legitimately-TV "Death Note
+//     Episode 12 ... 2024 1080p" that TestCategorizeReadsEpisodeFormsThatFellBetweenTheRules
+//     requires to be TV. Only franchise knowledge separates them.
+//   - A mainstream film with "sex" in the title ("Sex and the City") reads as
+//     XXX, and a documentary "about anime" reads as TV/Anime. The words ARE
+//     the signals; dropping them loses real adult/anime detection, and no
+//     structural feature distinguishes the innocent use.
+//
+// The group is only a fallback (a title that keyword-matches nothing), so it
+// cannot override these; making it override would file an ebook in an anime
+// group as anime, which is the worse error the fallback ordering prevents.
 var catRules = []struct {
 	cat      int
 	keywords []string
@@ -74,8 +91,13 @@ var catRules = []struct {
 	{notVideo: true, cat: 4020, keywords: []string{".iso", "installer", "portable", "setup"}},
 	{notVideo: true, cat: 4050, keywords: []string{"repack", "fitgirl", "dodi", "-codex", "-plaza", "-flt"}},
 	{notVideo: true, cat: 1000, keywords: []string{"nsw", "switch", "ps4", "ps5", "xbox", "-goldberg"}},
-	{cat: 2050, keywords: []string{"bluray", "blu-ray", "remux"}},
+	// TV before BluRay: a season pack names both "season" and "bluray"/"remux",
+	// and it is television, not a film. First-match-wins meant the BluRay rule
+	// (a movie shelf) claimed "Chernobyl.Season.1.Complete.1080p.BluRay.REMUX"
+	// as Movies. season/hdtv/pdtv do not appear in film titles, so ordering
+	// this first costs nothing and shelves season packs correctly.
 	{cat: 5040, keywords: []string{"season", "hdtv", "pdtv"}},
+	{cat: 2050, keywords: []string{"bluray", "blu-ray", "remux"}},
 }
 
 // categorize maps a group + title to a best-fit Newznab category id. The TITLE
@@ -369,7 +391,7 @@ func hasEpisodePattern(s string) bool {
 	if strings.Contains(s, "season ") && strings.Contains(s, "episode ") {
 		return true
 	}
-	return hasSpelledEpisodeNumber(s) || hasSeasonNumberForm(s) || hasBareEpisodeToken(s)
+	return hasSpelledEpisodeNumber(s) || hasSeasonNumberForm(s) || hasSeasonPackForm(s) || hasBareEpisodeToken(s)
 }
 
 // hasSpelledEpisodeNumber spots "Episode 12" with NO season anywhere near it:
@@ -385,6 +407,48 @@ func hasEpisodePattern(s string) bool {
 // Digits only, one to three. "Star Wars: Episode IV" is Roman and never
 // matches; measured over every 2xxx release on this index, none of the 102
 // hits is a film.
+// hasSeasonPackForm matches a whole-season pack named by a bare season token
+// with no episode after it: "Breaking.Bad.S05.Complete", "Game.of.Thrones.S08.1080p".
+//
+// hasSeasonNumberForm above needs a digit or "episode" AFTER the season; a pack
+// is exactly the case where nothing follows but the release quality, so the
+// bluray/remux movie rule was claiming season packs as films. The token must be
+// "s" + one or two digits, bounded on both sides (so "Ocean's 11", "H.264" and
+// a bare year are safe), and not the start of an SxxExx (those are episodes,
+// caught above regardless).
+func hasSeasonPackForm(s string) bool {
+	// Gated on "complete": a bare "S01" alone cannot be told from a film that
+	// carries one ("Some.Show.S01.2024" is a film, TestEpisodeRulesDoNotClaimFilms
+	// pins that), but "S05" WITH "complete" is unambiguously a whole-season pack.
+	if !strings.Contains(s, "complete") {
+		return false
+	}
+	for i := 0; i+1 < len(s); i++ {
+		if s[i] != 's' || !isDigit(s[i+1]) {
+			continue
+		}
+		if i > 0 && alnumByte(s[i-1]) {
+			continue // mid-word
+		}
+		j := i + 1
+		for j < len(s) && isDigit(s[j]) {
+			j++
+		}
+		if n := j - i - 1; n < 1 || n > 2 {
+			continue // a plausible season number is one or two digits
+		}
+		// A trailing 'e'+digit is SxxExx -- an episode, not a pack.
+		if j < len(s) && (s[j] == 'e' || s[j] == 'E') && j+1 < len(s) && isDigit(s[j+1]) {
+			continue
+		}
+		// Must end the token here: a separator or end of string.
+		if j >= len(s) || isSeparatorByte(s[j]) {
+			return true
+		}
+	}
+	return false
+}
+
 func hasSpelledEpisodeNumber(s string) bool {
 	const word = "episode"
 	for i := 0; i+len(word) < len(s); i++ {
