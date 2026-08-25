@@ -17,7 +17,7 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **65** of them, counted from the EXPORTED `…Name` and
+importing the other. There are **66** of them, counted from the EXPORTED `…Name` and
 `…Prefix` constants in `pluginapi` whose value is a NAMESPACED key, on
 22 Aug 2026. They are discoverable: an
 author reading `pluginapi` sees what exists, the compiler catches interface
@@ -192,6 +192,7 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 | `search.torznab` | `TorznabSearch` | Torrent search, answered by whoever has torrents. |
 | `trackers.search` | `TrackerSearcher` | Ask EXTERNAL trackers what they have — the plural is the distinction from every `tracker.*` key, which belongs to this site's own tracker. Third piece of the content pipeline: schedule knows it aired, gaps knows we lack it, this answers where a copy might come from. Adapters for clean interfaces only; politeness is structural (per-source spacing floored at 2s). |
 | `requests.filer` | `RequestFiler` | **Proposed.** File an automated request with the board's `ScopeAutomated` origin, deduped by the board. Fourth piece of the content pipeline — the trigger that closes the loop. Dormant until a request board registers a filer (none does today); the host trigger computes what it would file and files nothing. Maps onto the board's existing `Request` fields, asks for no new column. |
+| `agent.dispatch` | `GrabDispatcher` | **Proposed.** Hand a chosen torrent to the fleet to fetch and re-upload; the OUTBOUND half of the loop `content.pipeline` closes inbound. Implemented by whatever owns the agent work queue (host-side runtime, not a plugin), so dormant on this demo. Distinct from `requests.filer`: dispatch fetches a specific chosen copy now, the filer files a community request to source later. |
 | `content.block.*` | — | **Prefix.** A block a page can render. |
 | `content.pipeline` | `ContentPipeline` | Delivered bytes become a published release: dedup, artifact, metadata, fulfil the request, award, announce. Delivery-agnostic on purpose — Usenet feeds it today, the tracker and direct-download paths feed the same one. (It was catalogued here as "the shared render pipeline", which is a different thing entirely and describes nothing this contract does.) |
 | `entity.editors` | — | Editors registered per entity kind. |
