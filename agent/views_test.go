@@ -117,7 +117,7 @@ func TestRenderCard_OwnerSeesFleet(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 	s := string(html)
-	for _, want := range []string{"Agent Fleet", "alpha", "request #42", "50%"} {
+	for _, want := range []string{"My Agents", "alpha", "request #42", "50%", "/p/agents"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("card missing %q; got: %s", want, s)
 		}
@@ -206,5 +206,78 @@ func TestShortDuration(t *testing.T) {
 		if got := shortDuration(tc.d); got != tc.want {
 			t.Errorf("shortDuration(%v) = %q, want %q", tc.d, got, tc.want)
 		}
+	}
+}
+
+// The public-profile opt-in, default HIDDEN — the inverse of achievements'
+// absence-means-shown, because an agent roster names machines and nobody
+// consented to that by installing an agent. When ON, the public variant is
+// REDACTED: names and online dots, never tasks or last-seen.
+func TestRenderCard_PublicOptIn(t *testing.T) {
+	seen := time.Now().Add(-2 * time.Minute)
+	roster := agentsFrom(map[int][]Agent{5: {{ID: 1, Name: "alpha", LastSeen: &seen}}})
+	tasks := tasksFrom(map[int]*Task{1: {RequestID: 42, Progress: "50%"}})
+	optIn := false
+	SetDeps(Deps{
+		Viewer:        testViewer,
+		AgentsForUser: roster,
+		ActiveTask:    tasks,
+		ShowOnProfile: func(context.Context, int) (bool, error) { return optIn, nil },
+	})
+	t.Cleanup(func() { deps = nil })
+	p := &Plugin{}
+
+	pub := func(viewer int) string {
+		c := testCtx()
+		core.SetViewSubject(c, 5)
+		core.SetPublicProfile(c)
+		if viewer != 0 {
+			c.Set("test-viewer", viewer)
+		}
+		html, err := p.renderCard(c)
+		if err != nil {
+			t.Fatalf("err=%v", err)
+		}
+		return string(html)
+	}
+
+	// Default hidden: nothing on the public profile, owner included.
+	if got := pub(5); got != "" {
+		t.Fatalf("opted-out public profile rendered: %q", got)
+	}
+	if got := pub(6); got != "" {
+		t.Fatalf("opted-out public profile rendered for a stranger: %q", got)
+	}
+
+	// Opted in: the REDACTED variant for everyone.
+	optIn = true
+	for _, viewer := range []int{5, 6, 0} {
+		got := pub(viewer)
+		if !strings.Contains(got, "alpha") {
+			t.Fatalf("opted-in public card missing the agent (viewer %d): %q", viewer, got)
+		}
+		for _, leak := range []string{"request #42", "50%", "seen ", "never seen", "Manage"} {
+			if strings.Contains(got, leak) {
+				t.Errorf("public variant leaked %q (viewer %d)", leak, viewer)
+			}
+		}
+	}
+}
+
+// Nil ShowOnProfile means the opt-in does not exist: the public profile
+// stays empty however the member feels about it — a host without the seam
+// must not accidentally publish.
+func TestRenderCard_PublicHiddenWithoutOptInSeam(t *testing.T) {
+	roster := agentsFrom(map[int][]Agent{5: {{ID: 1, Name: "alpha"}}})
+	SetDeps(Deps{Viewer: testViewer, AgentsForUser: roster, ActiveTask: tasksFrom(nil)})
+	t.Cleanup(func() { deps = nil })
+
+	c := testCtx()
+	core.SetViewSubject(c, 5)
+	core.SetPublicProfile(c)
+	c.Set("test-viewer", 5)
+	html, err := (&Plugin{}).renderCard(c)
+	if err != nil || html != "" {
+		t.Fatalf("want empty without the seam, got %q err=%v", html, err)
 	}
 }

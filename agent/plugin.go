@@ -21,7 +21,10 @@ func init() {
 }
 
 // Plugin is the core.Plugin lifecycle wrapper.
-type Plugin struct{}
+type Plugin struct {
+	// core is kept for the member page's CSRF mint; set in Provision.
+	core *core.Core
+}
 
 func (p *Plugin) Metadata() core.Metadata {
 	return core.Metadata{
@@ -38,11 +41,15 @@ func (p *Plugin) Provision(c *core.Core) error {
 	}
 	// Fail loud rather than render an empty card forever: a missed SetDeps is a
 	// wiring bug, and a silently blank widget is exactly the kind of thing that
-	// survives a deploy unnoticed.
+	// survives a deploy unnoticed. Only the ORIGINAL five are required — the
+	// member page's seams (AgentsDetail, the self-service trio, the opt-in
+	// pair) are optional by contract: each nil degrades one page feature, so
+	// a host adopts them at its own pace without a boot barrier.
 	if deps == nil || deps.Viewer == nil || deps.AgentsForUser == nil ||
 		deps.ActiveTask == nil || deps.CountAgents == nil || deps.MaxConcurrent == nil {
 		return fmt.Errorf("agent: SetDeps was not called with a full Deps before core.Boot")
 	}
+	p.core = c
 	if err := c.RegisterView(core.View{
 		Slug:   "agent-fleet",
 		Title:  "Agent Fleet",
@@ -60,6 +67,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 		Render:  p.renderDispatchPanel,
 	}); err != nil {
 		return fmt.Errorf("agent: register dispatch panel view: %w", err)
+	}
+	if err := p.registerMemberPage(c); err != nil {
+		return fmt.Errorf("agent: register member page: %w", err)
 	}
 	return nil
 }
