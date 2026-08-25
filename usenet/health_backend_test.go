@@ -158,3 +158,103 @@ func TestInternalModeClearRecheckIsInert(t *testing.T) {
 		t.Errorf("internal clearRecheck returned %v, want nil", err)
 	}
 }
+
+// applyOutcome's writes, per arm — the write-or-not decision is where the
+// sweep went wrong twice (the unstamped-inconclusive monopoly, and before it
+// the pass-ending starvation). The fake's separate maps make touch-vs-clear
+// conflation impossible to miss.
+func TestApplyOutcomeWrites(t *testing.T) {
+	ctx := context.Background()
+	report := func(string, error) {}
+	run := func(outcome healthOutcome, userRequested bool) (*fakeHealthStore, bool, bool) {
+		fake := &fakeHealthStore{}
+		wrote, cleared := applyOutcome(ctx, hostHealth{hs: fake},
+			healthRow{ID: 7, UserRequested: userRequested}, outcome, healthDead, 10, 10, 0, report)
+		return fake, wrote, cleared
+	}
+
+	// Deterministic-inconclusive: stamped, verdict untouched, request cleared
+	// only when a user asked.
+	if fake, wrote, cleared := run(healthSkipRow, false); !fake.touched[7] || wrote || cleared || len(fake.verdicts) != 0 || len(fake.cleared) != 0 {
+		t.Errorf("healthSkipRow: touched=%v wrote=%v cleared=%v verdicts=%v", fake.touched[7], wrote, cleared, fake.verdicts)
+	}
+	if fake, _, cleared := run(healthSkipRow, true); !fake.touched[7] || !fake.cleared[7] || !cleared {
+		t.Errorf("healthSkipRow+user: touched=%v clearedMap=%v cleared=%v", fake.touched[7], fake.cleared[7], cleared)
+	}
+	// Pool-minted doubt stays unstamped — a stamp would cost a checkable row
+	// the full recheck window for the pool's sin.
+	if fake, wrote, cleared := run(healthSkipTransport, true); len(fake.touched) != 0 || len(fake.verdicts) != 0 || len(fake.cleared) != 0 || wrote || cleared {
+		t.Errorf("healthSkipTransport wrote something: %+v wrote=%v cleared=%v", fake, wrote, cleared)
+	}
+	if fake, wrote, _ := run(healthSkipTransient, false); len(fake.touched) != 0 || len(fake.verdicts) != 0 || wrote {
+		t.Errorf("healthSkipTransient wrote something: %+v", fake)
+	}
+	// The existing arms, pinned.
+	if fake, wrote, _ := run(healthSkipPermanent, false); !fake.touched[7] || wrote || len(fake.verdicts) != 0 {
+		t.Errorf("healthSkipPermanent: touched=%v verdicts=%v", fake.touched[7], fake.verdicts)
+	}
+	if fake, wrote, _ := run(healthWritten, false); !wrote || fake.verdicts[7] != healthDead || len(fake.touched) != 0 {
+		t.Errorf("healthWritten: wrote=%v verdicts=%v touched=%v", wrote, fake.verdicts, fake.touched)
+	}
+}
+
+// missingBackbones: every enabled non-backup backbone must have a live run,
+// or a dead verdict is written against a partial fleet.
+func TestMissingBackbones(t *testing.T) {
+	act := func(id int, backbone string) provider {
+		return provider{ID: id, Backbone: backbone, Role: "active"}
+	}
+	bak := func(id int, backbone string) provider {
+		return provider{ID: id, Backbone: backbone, Role: roleBackup}
+	}
+	runOf := func(p provider) providerRun { return providerRun{prov: p} }
+
+	all := []provider{act(1, "omicron"), act(2, "netnews"), bak(3, "shortretention")}
+
+	// Whole fleet up: nothing missing.
+	if m := missingBackbones(all, []providerRun{runOf(all[0]), runOf(all[1])}); len(m) != 0 {
+		t.Errorf("whole fleet reported missing: %v", m)
+	}
+	// The omicron active benched: its backbone is missing even with the
+	// backup promoted — a backup on a DIFFERENT backbone is not testimony.
+	if m := missingBackbones(all, []providerRun{runOf(all[1]), runOf(all[2])}); len(m) != 1 || m[0] != "omicron" {
+		t.Errorf("benched active's backbone not reported: %v", m)
+	}
+	// A promoted backup SHARING the benched active's backbone satisfies it.
+	shared := bak(4, "omicron")
+	if m := missingBackbones(append(all, shared), []providerRun{runOf(all[1]), runOf(shared)}); len(m) != 0 {
+		t.Errorf("same-backbone backup did not satisfy the requirement: %v", m)
+	}
+	// Two accounts on one backbone need only one present.
+	twoAcc := []provider{act(1, "omicron"), act(5, "omicron")}
+	if m := missingBackbones(twoAcc, []providerRun{runOf(twoAcc[0])}); len(m) != 0 {
+		t.Errorf("second same-backbone account demanded its own run: %v", m)
+	}
+	// An unset backbone is its own key (srv:ID) — a distinct requirement.
+	bare := act(6, "")
+	if m := missingBackbones([]provider{act(1, "omicron"), bare}, []providerRun{runOf(act(1, "omicron"))}); len(m) != 1 || m[0] != "srv:6" {
+		t.Errorf("unset-backbone provider not required by its own key: %v", m)
+	}
+}
+
+// foldConfirmation: present on any backbone beats the primary's 430; a
+// backbone that fails to answer converts the claim to doubt (which the
+// inconclusive guard turns into keep-the-prior-verdict); missing survives
+// only unanimously.
+func TestFoldConfirmation(t *testing.T) {
+	res := []statResult{statMissing, statMissing, statMissing, statPresent}
+	missIdx := []int{0, 1, 2}
+	next := foldConfirmation(res, missIdx, []statResult{statPresent, statUnknown, statMissing})
+	if res[0] != statPresent {
+		t.Error("present on the second backbone did not rescue the segment")
+	}
+	if res[1] != statUnknown {
+		t.Error("an unanswering backbone did not convert the 430 to doubt")
+	}
+	if res[2] != statMissing || len(next) != 1 || next[0] != 2 {
+		t.Errorf("unanimity tracking wrong: res[2]=%v next=%v", res[2], next)
+	}
+	if res[3] != statPresent {
+		t.Error("an untouched segment changed")
+	}
+}

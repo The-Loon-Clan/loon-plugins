@@ -258,7 +258,7 @@ const (
 
 // checkOne STATs an entire release and returns its verdict plus what should be
 // persisted.
-func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, chunk int, statTimeout time.Duration) (verdict string, totalSegs, missingData, par2Total int, outcome healthOutcome) {
+func (p *Plugin) checkOne(ctx context.Context, pools []*nntp.Pool, row healthRow, chunk int, statTimeout time.Duration) (verdict string, totalSegs, missingData, par2Total int, outcome healthOutcome) {
 	segs, err := parseNzbSegments(row.Data)
 	if err != nil {
 		// A blob we can't parse is a storage problem, not evidence about the
@@ -267,8 +267,65 @@ func (p *Plugin) checkOne(ctx context.Context, pool *nntp.Pool, row healthRow, c
 		return "", 0, 0, 0, healthSkipPermanent
 	}
 	return checkSegments(ctx, segs, chunk, row.Total, func(ids []string) ([]statResult, error) {
-		return p.statBatch(ctx, pool, ids, statTimeout)
+		res, err := p.statBatch(ctx, pools[0], ids, statTimeout)
+		p.confirmMissing(ctx, pools[1:], ids, res, statTimeout)
+		return res, err
 	})
+}
+
+// confirmMissing re-STATs the ids the leading backbone answered 430 against
+// every OTHER backbone. A missing verdict needs every backbone's testimony:
+// the staging key carries no backbone component, so a stored NZB can list
+// message-ids only a second backbone ever carried — and those drew conclusive
+// 430s from the priority-1 backbone on every sweep, decaying live releases
+// toward dead. Present on any backbone flips the segment present; 430 on
+// every backbone keeps it missing; a backbone that fails to answer leaves it
+// statUnknown — doubt the inconclusive guard already converts into
+// keep-the-prior-verdict. Zero cost for healthy releases: only 430s are
+// re-asked.
+func (p *Plugin) confirmMissing(ctx context.Context, pools []*nntp.Pool, ids []string, res []statResult, statTimeout time.Duration) {
+	if len(pools) == 0 {
+		return
+	}
+	var missIdx []int
+	for i, r := range res {
+		if r == statMissing {
+			missIdx = append(missIdx, i)
+		}
+	}
+	for _, pool := range pools {
+		if len(missIdx) == 0 {
+			return
+		}
+		sub := make([]string, len(missIdx))
+		for j, i := range missIdx {
+			sub[j] = ids[i]
+		}
+		// The error is deliberately dropped: statBatch pre-fills unknowns and
+		// classifies whatever was answered before a failure, and an unknown
+		// here is exactly the doubt the caller's guard must see.
+		subRes, _ := p.statBatch(ctx, pool, sub, statTimeout)
+		missIdx = foldConfirmation(res, missIdx, subRes)
+	}
+}
+
+// foldConfirmation folds one backbone's answers about the still-missing ids
+// into res, returning the indices still missing afterwards. Pure, so the
+// present-beats-missing / unknown-is-doubt / missing-needs-unanimity rules
+// are table-testable without a pool.
+func foldConfirmation(res []statResult, missIdx []int, subRes []statResult) []int {
+	next := missIdx[:0]
+	for j, r := range subRes {
+		switch r {
+		case statPresent:
+			res[missIdx[j]] = statPresent
+		case statUnknown:
+			res[missIdx[j]] = statUnknown
+		case statMissing:
+			next = append(next, missIdx[j])
+		}
+	}
+	return next
 }
 
 // checkSegments runs the STAT tally over a release's segments and decides the
@@ -370,6 +427,78 @@ func checkSegments(ctx context.Context, segs releaseSegments, chunk, claimedTota
 	}
 	missData += baseline
 	return healthVerdict(missData, len(segs.Par2), missPar2), total, missData, len(segs.Par2), healthWritten
+}
+
+// applyOutcome performs the store writes a sweep outcome demands — split from
+// the loop (like checkSegments before it) because the write-or-not decision
+// per arm is where this went wrong in production, twice.
+//
+// healthWritten persists the verdict. healthSkipPermanent stamps checked-at:
+// bad data answers identically forever, and unstamped rows sit at the head of
+// the candidate queue. healthSkipRow now stamps for the SAME reason — the
+// server ANSWERED, so the row is exactly as inconclusive next pass, and
+// "retried promptly" really meant "retried forever": every conclusive row
+// leaves the batch when stamped, so once HealthBatchSize deterministic-
+// inconclusive rows accumulated, the hourly sweep re-STATted the same fifty
+// releases while the rest of the catalogue silently went unchecked. Its
+// verdict stays untouched, and a user's recheck request is cleared
+// explicitly (the healthBackend contract; also what feeds the log counter).
+// Transport and transient doubt stay UNSTAMPED: that doubt is minted by the
+// pool, not the server, and a stamp would cost a checkable row the full
+// recheck window (checkSegments already routes mixed doubt to Transport).
+func applyOutcome(ctx context.Context, backend healthBackend, row healthRow, outcome healthOutcome, verdict string, total, missing, par2 int, report func(string, error)) (wrote, cleared bool) {
+	switch outcome {
+	case healthWritten:
+		if err := backend.setVerdict(ctx, row.ID, verdict, total, missing, par2); err != nil {
+			report("usenet/health-update", fmt.Errorf("nzb %d: %w", row.ID, err))
+			return false, false
+		}
+		return true, false
+	case healthSkipPermanent:
+		if err := backend.touch(ctx, row.ID); err != nil {
+			report("usenet/health-touch", err)
+		}
+	case healthSkipRow:
+		if err := backend.touch(ctx, row.ID); err != nil {
+			report("usenet/health-touch", err)
+		}
+		if row.UserRequested {
+			if err := backend.clearRecheck(ctx, row.ID); err != nil {
+				report("usenet/health-clear-recheck", fmt.Errorf("nzb %d: %w", row.ID, err))
+			} else {
+				cleared = true
+			}
+		}
+	}
+	return false, cleared
+}
+
+// missingBackbones lists the backbones the sweep REQUIRES but the opened
+// fleet does not carry: every distinct backbone of an enabled non-backup
+// provider must have at least one live run, or a dead verdict is being
+// written against a partial view. A promoted backup sharing the benched
+// active's Backbone value satisfies the requirement automatically — both map
+// to one key — and a DISABLED provider is not required (providers() returns
+// enabled rows only), which is the operator's lever for a long outage.
+func missingBackbones(all []provider, runs []providerRun) []string {
+	have := map[string]bool{}
+	for _, r := range runs {
+		have[r.prov.backboneKey()] = true
+	}
+	seen := map[string]bool{}
+	var missing []string
+	for _, pr := range all {
+		if pr.Role == roleBackup {
+			continue
+		}
+		k := pr.backboneKey()
+		if seen[k] || have[k] {
+			continue
+		}
+		seen[k] = true
+		missing = append(missing, k)
+	}
+	return missing
 }
 
 // passYield decides when a RUN of provider timeouts means the pool is sick
@@ -513,23 +642,56 @@ func (p *Plugin) runHealthCheck(ctx context.Context) {
 func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 	p.healthJob.SetRunning()
 
-	// The sweep borrows the FLEET's primary pool. A private ensurePool here
-	// broke both halves of the design: its TryDo tested an otherwise-unused
-	// pool (always "idle", never sensing crawler pressure) and its dials were
+	// The sweep borrows the FLEET's pools. A private ensurePool here broke
+	// both halves of the design: its TryDo tested an otherwise-unused pool
+	// (always "idle", never sensing crawler pressure) and its dials were
 	// invisible to the account-cap machinery — the provider saw fleet-size
 	// PLUS a whole second pool.
-	runs, err := p.activeFleet(ctx, cfg)
+	//
+	// activeFleet's body is inlined (providers, then openFleet) because the
+	// gate below needs the FULL enabled list, which activeFleet discards —
+	// an edit to activeFleet must be mirrored here.
+	all, err := p.st.providers(ctx)
 	if err != nil {
-		if errors.Is(err, errNoServer) {
-			p.healthJob.Log("no server configured — add one in the admin wizard")
-			p.healthJob.SetIdle(p.nextHealth(cfg))
-			return
-		}
 		p.healthJob.SetError(err.Error())
 		p.reportErr(ctx, "usenet/health-pool", err)
 		return
 	}
-	pool := runs[0].pool
+	if len(all) == 0 {
+		p.healthJob.Log("no server configured — add one in the admin wizard")
+		p.healthJob.SetIdle(p.nextHealth(cfg))
+		return
+	}
+	runs, err := p.openFleet(ctx, all, cfg)
+	if err != nil {
+		p.healthJob.SetError(err.Error())
+		p.reportErr(ctx, "usenet/health-pool", err)
+		return
+	}
+	// A dead verdict is a conclusion about EVERY backbone, and this sweep
+	// writes it durably. Sweeping while a non-backup backbone is benched
+	// judged the whole catalogue against whatever provider happened to dial —
+	// during a primary's 10-minute cooldown, a short-retention backup at
+	// runs[0] answered conclusive 430s for every release older than ITS
+	// horizon, and the candidate order (oldest content first) selected
+	// exactly the releases most likely beyond it: 50 live releases marked
+	// dead per hourly sweep, hidden from browse/search for the whole
+	// recheck window. Skip instead; the rows are untouched and the sweep
+	// resumes when the bench lapses — or when the operator DISABLES the dead
+	// provider, which removes its backbone from the requirement on purpose:
+	// that is the operator declaring the backbone gone.
+	if missing := missingBackbones(all, runs); len(missing) > 0 {
+		p.healthJob.Log("health check skipped — backbone(s) %s unavailable, and a dead verdict written against a partial fleet condemns releases the missing backbone still carries", strings.Join(missing, ", "))
+		p.healthJob.SetIdle(p.nextHealth(cfg))
+		return
+	}
+	// One pool per distinct backbone, fleet order preserved: a second account
+	// on the same backbone sees the same articles, so STATting it is cost
+	// without evidence.
+	var pools []*nntp.Pool
+	for _, bucket := range groupByBackbone(runs) {
+		pools = append(pools, bucket[0].pool)
+	}
 
 	backend, err := p.resolveHealthBackend()
 	if err != nil {
@@ -565,48 +727,25 @@ func (p *Plugin) healthLocked(ctx context.Context, cfg Config) {
 		if ctx.Err() != nil {
 			break
 		}
-		verdict, total, missing, par2, outcome := p.checkOne(ctx, pool, row, cfg.HealthStatChunk,
+		verdict, total, missing, par2, outcome := p.checkOne(ctx, pools, row, cfg.HealthStatChunk,
 			time.Duration(cfg.HealthStatTimeoutSec)*time.Second)
+		wrote, cleared := applyOutcome(ctx, backend, row, outcome, verdict, total, missing, par2,
+			func(op string, err error) { p.reportErr(ctx, op, err) })
 		switch outcome {
 		case healthWritten:
-			if err := backend.setVerdict(ctx, row.ID, verdict, total, missing, par2); err != nil {
-				p.reportErr(ctx, "usenet/health-update", fmt.Errorf("nzb %d: %w", row.ID, err))
-				continue
+			if wrote {
+				checked++
+				tally[verdict]++
 			}
-			checked++
-			tally[verdict]++
 		case healthSkipPermanent:
-			// Bad data, not bad luck. Stamp it so an unreadable row doesn't sit at
-			// the head of the queue forever, but leave its verdict untouched.
-			if err := backend.touch(ctx, row.ID); err != nil {
-				p.reportErr(ctx, "usenet/health-touch", err)
-			}
 			unreadable++
 		case healthSkipRow:
-			// This release's answers were too doubtful to trust, but the pool
-			// is fine — move on. The row keeps its prior verdict and stays
-			// unstamped (retried promptly), but it must never end the pass:
-			// candidates order these first, so breaking here let one
-			// pathological release starve every other check forever.
 			inconclusive++
 			if len(inconclusiveIDs) < 3 {
 				inconclusiveIDs = append(inconclusiveIDs, row.ID)
 			}
-			// A USER asked for this one, and this is the only ending that
-			// writes nothing — a verdict clears their request, so does a
-			// touch, and an inconclusive result does neither. Left alone the
-			// request stays set forever: the row is re-STATted every pass and
-			// the page they are watching says "queued" indefinitely. Drop the
-			// request, not the checked-at stamp: the release genuinely has not
-			// been checked, and stamping would hide a release nobody can get
-			// an answer about at the back of the rotation.
-			if row.UserRequested {
-				if err := backend.clearRecheck(ctx, row.ID); err != nil {
-					p.reportErr(ctx, "usenet/health-clear-recheck",
-						fmt.Errorf("nzb %d: %w", row.ID, err))
-				} else {
-					inconclusiveRequests++
-				}
+			if cleared {
+				inconclusiveRequests++
 			}
 		case healthSkipTransport:
 			// We held a connection and the provider failed the request. Say

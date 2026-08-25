@@ -519,7 +519,7 @@ plausible "connection pool busy or failing":
 |---|---|---|
 | the pool had nothing to lend (`ErrPoolBusy` / `ErrPoolEmpty`) | `healthSkipTransient` | **ends the pass at once** — the crawler is using those connections and waiting for them is its loss |
 | we held a connection and the provider failed the read | `healthSkipTransport` | **abandons that release**, tries the next; the pass ends only after `health_transport_yield` of them in a row |
-| the server answered, but too much of the answer was unusable | `healthSkipRow` | abandons that release; it will be exactly as inconclusive next pass, so ending the pass on it starved every other check |
+| the server answered, but too much of the answer was unusable | `healthSkipRow` | abandons that release AND stamps it, like an unreadable blob — the server answered, so it is exactly as inconclusive next pass, and unstamped it re-led every batch |
 
 `health_stat_timeout_sec` (default 10) bounds ONE STAT, and is the other half
 of the same problem. The sweep borrows the crawler's pool and inherited its
@@ -539,11 +539,16 @@ kill idle NNTP sessions, so after a quiet gap every socket is a corpse and
 grinding on costs an op-timeout each. Any release that reaches an answer resets
 the run, because that proves the connections work.
 
-None of the three stamps `last_health_check_at`, so a release that could not be
-checked is retried promptly rather than waiting out the recheck window. The one
-thing a skip DOES clear is a user's recheck request, and only for
-`healthSkipRow`: a person pressed a button, the answer is "we genuinely cannot
-tell", and leaving the request set means re-STATting that release on every pass
-forever while their page says "queued". `healthSkipTransport` and
-`healthSkipTransient` leave the request alone — their check never really
-happened, so the request has not been serviced.
+Transport and transient stay unstamped — their doubt is minted by the pool,
+not the server, so the release is retried promptly rather than waiting out
+the recheck window. Row-doubt is STAMPED like an unreadable blob, verdict
+untouched: the server answered, so the row answers identically next pass, and
+candidates sort unstamped rows first — once `health_batch_size` deterministic-
+inconclusive rows accumulated, every hourly sweep re-STATted the same fifty
+releases while the rest of the catalogue silently went unchecked. A skip also
+clears a user's recheck request, and only for `healthSkipRow`: a person
+pressed a button, the answer is "we genuinely cannot tell", and leaving the
+request set means re-STATting that release on every pass forever while their
+page says "queued". `healthSkipTransport` and `healthSkipTransient` leave the
+request alone — their check never really happened, so the request has not
+been serviced.

@@ -171,6 +171,18 @@ func (s *PGStore) updateGroupStateForBackbone(ctx context.Context, backbone, nam
 			   high_watermark_date = COALESCE(EXCLUDED.high_watermark_date, newsgroup_state.high_watermark_date),
 			   back_watermark      = COALESCE(newsgroup_state.back_watermark, EXCLUDED.back_watermark),
 			   server_low          = EXCLUDED.server_low,
+			   -- server_low is last-writer-wins ON PURPOSE (it drifts upward
+			   -- as articles expire, and freezing it would overstate the
+			   -- backlog forever) — but the LEAD account is what reports it,
+			   -- and two accounts on one backbone can carry unequal
+			   -- retention. When the deeper account takes the lead back
+			   -- after a bench cooldown or a priority edit, its low arrives
+			   -- BELOW the stored one, exposing history the shallow lead's
+			   -- passes never saw — and backfill_done=TRUE meant that span
+			   -- was never fetched, permanently. Re-arm on a deepening low;
+			   -- since gaps are the complement of recorded ranges, a
+			   -- spurious re-arm costs one empty derivation, not a refetch.
+			   backfill_done       = newsgroup_state.backfill_done AND EXCLUDED.server_low >= newsgroup_state.server_low,
 			   server_high         = EXCLUDED.server_high,
 			   last_crawl          = now()`,
 			backbone, name, watermark, hw, back, serverLow, serverHigh)

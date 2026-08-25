@@ -350,9 +350,12 @@ func TestHealthOutcomeSemantics(t *testing.T) {
 	}
 	// Permanent = bad data; the row gets stamped so it stops jamming the queue.
 	// Transient = bad luck with the POOL; end the pass, retry promptly.
-	// Row = doubt about THIS release only; skip it and keep the pass going.
-	// This test documents the contract the sweep loop relies on; the loop's
-	// branches are asserted by the switch in runHealthCheck.
+	// Row = deterministic doubt about THIS release; skip it, keep the pass
+	//       going, and STAMP it like an unreadable blob — the server
+	//       answered, so unstamped it re-led every batch until the sweep
+	//       checked nothing else.
+	// This test documents the contract; applyOutcome's writes are asserted
+	// in TestApplyOutcomeWrites (health_backend_test.go).
 }
 
 // A release the SERVER answers ambiguously is deterministically inconclusive:

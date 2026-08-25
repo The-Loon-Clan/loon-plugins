@@ -447,3 +447,54 @@ func TestFailedFirstPassDoesNotPinBackWatermark(t *testing.T) {
 		t.Fatalf("a later pass moved the seeded back_watermark: %+v", rows)
 	}
 }
+
+// server_low is last-writer-wins (it drifts upward as articles expire), but
+// the LEAD account reports it and two accounts on one backbone can carry
+// unequal retention: when the deeper account takes the lead back, its low
+// arrives BELOW the stored one — and backfill_done=TRUE meant the exposed
+// [deep, shallow) span was never fetched, permanently. A deepening low
+// re-arms; the everyday upward drift and the equal case keep the flag.
+func TestServerLowDeepeningReArmsBackfill(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	mustGroups(t, s, "alt.binaries.anime")
+	up := func(low int64) {
+		t.Helper()
+		if err := s.updateGroupStateForBackbone(ctx, "omicron", "alt.binaries.anime",
+			low, 9000, 8000, 7999, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	up(5000)
+	if err := s.markBackfillDoneForBackbone(ctx, "omicron", "alt.binaries.anime"); err != nil {
+		t.Fatal(err)
+	}
+	if rows, err := s.groupsNeedingBackfillForBackbone(ctx, "omicron", 0); err != nil || len(rows) != 0 {
+		t.Fatalf("marked-done group still pending: rows=%v err=%v", rows, err)
+	}
+
+	// The deep lead returns: history below the stored low is exposed.
+	up(1000)
+	rows, err := s.groupsNeedingBackfillForBackbone(ctx, "omicron", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].ServerLow != 1000 {
+		t.Fatalf("deepening low did not re-arm backfill: %+v", rows)
+	}
+	if pending, err := s.anyBackfillPending(ctx); err != nil || !pending {
+		t.Fatalf("anyBackfillPending = %v err=%v after a deepening low", pending, err)
+	}
+
+	// The everyday upward drift — and the equal case — keep the flag.
+	if err := s.markBackfillDoneForBackbone(ctx, "omicron", "alt.binaries.anime"); err != nil {
+		t.Fatal(err)
+	}
+	up(6000)
+	up(6000)
+	if rows, err := s.groupsNeedingBackfillForBackbone(ctx, "omicron", 0); err != nil || len(rows) != 0 {
+		t.Fatalf("upward drift re-armed backfill: rows=%v err=%v", rows, err)
+	}
+}
