@@ -353,6 +353,10 @@ func (p *Plugin) actionRotateToken(gc *gin.Context) (template.HTML, error) {
 		return "", nil
 	}
 	token, err := deps.RotateTokenFor(gc.Request.Context(), userID, agentID)
+	if errors.Is(err, ErrNotFound) {
+		gc.Redirect(http.StatusSeeOther, "/p/agents?err=notfound")
+		return "", nil
+	}
 	if err != nil {
 		return "", err
 	}
@@ -374,7 +378,10 @@ func (p *Plugin) actionDeleteAgent(gc *gin.Context) (template.HTML, error) {
 		gc.Redirect(http.StatusSeeOther, "/p/agents?err=notfound")
 		return "", nil
 	}
-	if err := deps.DeleteAgentFor(gc.Request.Context(), userID, agentID); err != nil {
+	if err := deps.DeleteAgentFor(gc.Request.Context(), userID, agentID); errors.Is(err, ErrNotFound) {
+		gc.Redirect(http.StatusSeeOther, "/p/agents?err=notfound")
+		return "", nil
+	} else if err != nil {
 		return "", err
 	}
 	gc.Redirect(http.StatusSeeOther, "/p/agents?msg=deleted")

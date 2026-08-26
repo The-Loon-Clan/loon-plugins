@@ -16,6 +16,13 @@ import (
 // business, not the form's.
 var ErrNameTaken = errors.New("agent name taken")
 
+// ErrNotFound is the sentinel a host returns when the agent id does not belong
+// to that member -- or no longer exists at all. Deliberately ONE sentinel for
+// both: a host scopes its update by owner in SQL, so "not yours" and "gone"
+// arrive as the same zero-rows answer, and distinguishing them in the message
+// would confirm that somebody else's agent id is real.
+var ErrNotFound = errors.New("agent not found")
+
 // Agent is one row of the fleet card. It is deliberately NOT the host's agent
 // token record: the card renders three fields, and the token carries the
 // secret hash, the owner id, and the revocation state alongside them. A plugin
