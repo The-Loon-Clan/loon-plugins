@@ -148,6 +148,22 @@ func (p *Plugin) Provision(c *core.Core) error {
 		pluginapi.MetricSource(p)); err != nil {
 		return fmt.Errorf("mediainfo: register metrics: %w", err)
 	}
+	// The batch summary, for listings that want to say which copy a row is.
+	//
+	// The store already answered this; what was missing was a second side.
+	// Publishing a contract before one exists is how a capability registry
+	// fills with interfaces nobody consumes, so this waited for a consumer
+	// and got one (the demo's series page, which puts the measured line
+	// beside the filename tags — and immediately found a row whose tags say
+	// x264 while the report says HEVC).
+	//
+	// p.st, not a per-request store: the handle is built once in Provision
+	// from the plugin's own schema, so a consumer that reaches for the
+	// capability does not have to know how this plugin's storage is wired.
+	if err := c.Register(pluginapi.MediaSummariesName,
+		pluginapi.MediaSummaries(p.st)); err != nil {
+		return fmt.Errorf("mediainfo: register media summaries: %w", err)
+	}
 
 	return c.RegisterWidget(core.Widget{
 		Slug:        "mediainfo",
