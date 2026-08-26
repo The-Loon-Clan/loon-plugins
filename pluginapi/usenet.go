@@ -355,7 +355,20 @@ func NewznabCacheKey(r NewznabRequest) string {
 		L, O  int
 		ID, K string
 		B, Ti string
-	}{r.Function, r.Query, r.Categories, r.Limit, r.Offset, r.ID, r.APIKey, r.BaseURL, r.Title}
+		// Season / Episode partition the cache because they change which rows
+		// the feed embeds. Added late and wrongly omitted at first, exactly as
+		// the rule above warns: for one release `tvsearch&q=X&season=4&ep=1`
+		// and `tvsearch&q=X` hashed the same, so whichever ran first answered
+		// for both -- a client that narrowed got the whole series, or one that
+		// did not got someone else's narrowing, and the response looked
+		// perfectly valid either way.
+		//
+		// POINTERS, not ints: nil, 0 and 4 marshal to null, 0 and 4, so "did
+		// not ask" keeps its own key rather than colliding with "asked for
+		// zero".
+		S, E *int
+	}{r.Function, r.Query, r.Categories, r.Limit, r.Offset, r.ID, r.APIKey,
+		r.BaseURL, r.Title, r.Season, r.Episode}
 	b, _ := json.Marshal(payload)
 	sum := sha256.Sum256(b)
 	return NewznabCachePrefix + hex.EncodeToString(sum[:16])
