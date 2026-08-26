@@ -143,6 +143,46 @@ type Deps struct {
 
 	// SetShowOnProfile records the opt-in from the /p/agents page.
 	SetShowOnProfile func(ctx context.Context, ownerID int, show bool) error
+
+	// CanUseAgents decides whether a member may use the fleet surfaces at
+	// all: the profile card, the member page, and every action on it.
+	//
+	// It exists because "who may run an agent" is a real operator question --
+	// keeping new members from being handed a capability they have not asked
+	// for, or restricting the fleet to staff -- and the plugin has no basis
+	// to answer it. The host does: see EntitlementKey.
+	//
+	// NIL MEANS ALLOWED, which is the opposite of the tracker plugin's gate
+	// and deliberately so. tracker.access gates a capability that was gated
+	// from birth, so a host that has not wired the decider has not decided
+	// everyone may announce. Agents are the other case: hosts have been
+	// running them for years, so failing closed on an absent seam would
+	// switch off a working fleet on upgrade. A gate retrofitted onto a live
+	// capability has to default to today's behaviour.
+	CanUseAgents func(ctx context.Context, userID int) (bool, error)
+}
+
+// EntitlementKey is the entitlement a host grants to let a member use agents.
+//
+// Exported because the HOST grants it and needs the same string; a literal in
+// two repositories is how somebody ends up entitled to something nothing
+// checks. Spelled like tracker.access, and a host wires it through the same
+// core.Entitlements service:
+//
+//	CanUseAgents: func(ctx context.Context, uid int) (bool, error) {
+//	    return c.Entitlements.Has(ctx, int64(uid), agent.EntitlementKey), nil
+//	}
+const EntitlementKey = "agent.use"
+
+// allowed reports whether this member may see the fleet surfaces. An error
+// from the host is treated as a refusal: the seam exists to answer this
+// question, and a seam that failed has not answered it.
+func allowed(ctx context.Context, userID int) bool {
+	if deps == nil || deps.CanUseAgents == nil {
+		return true
+	}
+	ok, err := deps.CanUseAgents(ctx, userID)
+	return err == nil && ok
 }
 
 var deps *Deps

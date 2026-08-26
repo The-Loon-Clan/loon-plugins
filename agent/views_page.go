@@ -230,6 +230,12 @@ func (p *Plugin) renderMemberPage(gc *gin.Context) (template.HTML, error) {
 		gc.Redirect(http.StatusSeeOther, "/login")
 		return "", nil
 	}
+	// The operator's answer to "who may run an agent". Checked HERE as well
+	// as on every action below, because a page that renders a create form to
+	// somebody who cannot use it is a worse refusal than no page.
+	if !allowed(gc.Request.Context(), userID) {
+		return notEntitledHTML(), nil
+	}
 	ctx := gc.Request.Context()
 	vm := agentsPageVM{
 		CanManage:     deps.CreateAgentFor != nil && deps.RotateTokenFor != nil && deps.DeleteAgentFor != nil,
@@ -312,6 +318,12 @@ func (p *Plugin) actionCreateAgent(gc *gin.Context) (template.HTML, error) {
 		gc.Redirect(http.StatusSeeOther, "/login")
 		return "", nil
 	}
+	// Re-checked per action: a form outlives the page that drew it, and an
+	// entitlement can be revoked between the two.
+	if !allowed(gc.Request.Context(), userID) {
+		gc.Redirect(http.StatusSeeOther, "/p/agents")
+		return "", nil
+	}
 	if deps.CreateAgentFor == nil {
 		gc.Redirect(http.StatusSeeOther, "/p/agents?err=unavailable")
 		return "", nil
@@ -343,6 +355,12 @@ func (p *Plugin) actionRotateToken(gc *gin.Context) (template.HTML, error) {
 		gc.Redirect(http.StatusSeeOther, "/login")
 		return "", nil
 	}
+	// Re-checked per action: a form outlives the page that drew it, and an
+	// entitlement can be revoked between the two.
+	if !allowed(gc.Request.Context(), userID) {
+		gc.Redirect(http.StatusSeeOther, "/p/agents")
+		return "", nil
+	}
 	if deps.RotateTokenFor == nil {
 		gc.Redirect(http.StatusSeeOther, "/p/agents?err=unavailable")
 		return "", nil
@@ -369,6 +387,12 @@ func (p *Plugin) actionDeleteAgent(gc *gin.Context) (template.HTML, error) {
 		gc.Redirect(http.StatusSeeOther, "/login")
 		return "", nil
 	}
+	// Re-checked per action: a form outlives the page that drew it, and an
+	// entitlement can be revoked between the two.
+	if !allowed(gc.Request.Context(), userID) {
+		gc.Redirect(http.StatusSeeOther, "/p/agents")
+		return "", nil
+	}
 	if deps.DeleteAgentFor == nil {
 		gc.Redirect(http.StatusSeeOther, "/p/agents?err=unavailable")
 		return "", nil
@@ -392,6 +416,12 @@ func (p *Plugin) actionSetVisibility(gc *gin.Context) (template.HTML, error) {
 	userID, ok := deps.Viewer(gc)
 	if !ok {
 		gc.Redirect(http.StatusSeeOther, "/login")
+		return "", nil
+	}
+	// Re-checked per action: a form outlives the page that drew it, and an
+	// entitlement can be revoked between the two.
+	if !allowed(gc.Request.Context(), userID) {
+		gc.Redirect(http.StatusSeeOther, "/p/agents")
 		return "", nil
 	}
 	if deps.SetShowOnProfile == nil {
@@ -432,4 +462,14 @@ func agentName(gc *gin.Context, userID, agentID int) string {
 		}
 	}
 	return "agent"
+}
+
+// notEntitledHTML is what a member sees when the host says they may not use
+// agents. A plain sentence rather than a 403: they are signed in and looking
+// at a page the navigation offered them, and the honest answer is that this
+// site does not give them this feature -- not that something went wrong.
+func notEntitledHTML() template.HTML {
+	return template.HTML(`<div class="page-narrow"><div class="card"><div class="card-body ag-empty">` +
+		`Agents are not enabled for your account on this site.` +
+		`</div></div></div>`)
 }

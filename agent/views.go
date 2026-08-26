@@ -82,6 +82,13 @@ func (p *Plugin) renderCard(c *gin.Context) (template.HTML, error) {
 	viewerID, signedIn := deps.Viewer(c)
 	isOwner := signedIn && int64(viewerID) == subject
 
+	// The SUBJECT's entitlement, not the viewer's: this card is about whose
+	// profile it is. A member the operator has not given agents to has no
+	// fleet to show on their own page or anyone else's.
+	if !allowed(ctx, int(subject)) {
+		return "", nil
+	}
+
 	// The PUBLIC profile — /u/<username>, the page whose whole purpose is
 	// "what other members see". Hidden by default even for the owner (a
 	// roster here reads as a leak to the person looking at it); shown, in
