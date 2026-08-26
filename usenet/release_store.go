@@ -14,31 +14,102 @@ import (
 
 // Release reads: search, browse, the Newznab feed, and single-release detail.
 
+// maxTitleTokens bounds how many words one query turns into predicates. Each
+// costs a leading-wildcard ILIKE, which no index accelerates, so an unbounded
+// count would let a pasted paragraph become a hundred sequential scans.
+const maxTitleTokens = 8
+
+// titleTokens splits a search phrase the way release names are actually
+// written.
+//
+// Scene releases are dot- or underscore-separated and humans type spaces, so a
+// contiguous substring match means the two spellings NEVER meet: measured on a
+// live index, "Fear the Walking Dead" returned 154 rows of which none were
+// dot-named, and "Fear.the.Walking.Dead" returned 316 of which none were
+// space-named. Neither spelling showed a member what the index held. Splitting
+// on all three separators and ANDing the parts makes them one query, and word
+// order and interior text stop mattering as a side effect.
+//
+// Metacharacters are escaped rather than passed through: '%' and '_' typed
+// into a search box are characters somebody meant, not operators. Backslash is
+// PostgreSQL's default LIKE escape, so no ESCAPE clause is needed — and
+// spelling one out is a trap, because an empty escape silently disables
+// escaping altogether.
+func titleTokens(q string) []string {
+	fields := strings.FieldsFunc(q, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '.' || r == '_'
+	})
+	out := make([]string, 0, len(fields))
+	for _, f := range fields {
+		// Backslash first, or escaping '%' manufactures a backslash that then
+		// escapes the wrong thing. '_' needs no entry: it is a separator
+		// above, so no token can contain one.
+		f = strings.NewReplacer(`\`, `\\`, `%`, `\%`).Replace(f)
+		if f == "" {
+			continue
+		}
+		out = append(out, "%"+f+"%")
+		if len(out) == maxTitleTokens {
+			break
+		}
+	}
+	return out
+}
+
+// titleClause renders the AND-ed title predicates, starting at $startIdx. An
+// empty result means "no usable terms", which callers read as "match
+// everything" — the same answer an empty query already gave.
+func titleClause(q string, startIdx int) (string, []any) {
+	toks := titleTokens(q)
+	if len(toks) == 0 {
+		return "", nil
+	}
+	parts := make([]string, 0, len(toks))
+	args := make([]any, 0, len(toks))
+	for i, t := range toks {
+		parts = append(parts, "title ILIKE $"+strconv.Itoa(startIdx+i))
+		args = append(args, t)
+	}
+	return "(" + strings.Join(parts, " AND ") + ")", args
+}
+
 func (s *PGStore) searchNzbs(ctx context.Context, q string, limit int) ([]pluginapi.Release, error) {
-	return s.queryReleases(ctx, `title ILIKE '%' || $1 || '%'`, q, limit)
+	clause, args := titleClause(q, 1)
+	if clause == "" {
+		clause = "TRUE"
+	}
+	return s.queryReleases(ctx, clause, args, limit)
 }
 
 func (s *PGStore) browseNzbs(ctx context.Context, group string, limit int) ([]pluginapi.Release, error) {
-	return s.queryReleases(ctx, `($1 = '' OR group_name = $1)`, group, limit)
+	return s.queryReleases(ctx, `($1 = '' OR group_name = $1)`, []any{group}, limit)
 }
 
 // queryReleases lists completed NZBs newest-first. cond is a fixed literal
-// referencing $1 (the search term or group name); arg flows through the
-// placeholder, so there is no injection despite the concatenation.
-func (s *PGStore) queryReleases(ctx context.Context, cond, arg string, limit int) ([]pluginapi.Release, error) {
-	if limit <= 0 || limit > 200 {
+// referencing $1..$N; every value flows through a placeholder, so there is no
+// injection despite the concatenation.
+func (s *PGStore) queryReleases(ctx context.Context, cond string, args []any, limit int) ([]pluginapi.Release, error) {
+	// Clamp to the CEILING, not down to the default. Asking for 500 and
+	// getting 200 is an obvious truncation; asking for 200 and silently
+	// getting 50 reads as "that is all there is", and cost a host real
+	// debugging time.
+	if limit <= 0 {
 		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
 	}
 	var rows []releaseRow
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		// sqllint:allow cond is a fixed WHERE fragment from the two internal callers (searchNzbs/browseNzbs); the search value flows through $1
+		// sqllint:allow cond is a fixed WHERE fragment from the two internal callers (searchNzbs/browseNzbs); every value flows through $N
 		return tx.SelectContext(ctx, &rows,
 			`SELECT id, title, size, posted_at, group_name,
 			        resolution, source, video_codec, audio, language, category_id,
 			        series_key, series_name, season, episode, is_pack
 			 FROM nzbs
 			 WHERE status = 'completed' AND `+cond+`
-			 ORDER BY COALESCE(posted_at, created_at) DESC LIMIT $2`, arg, limit)
+			 ORDER BY COALESCE(posted_at, created_at) DESC LIMIT $`+strconv.Itoa(len(args)+1),
+			append(append([]any{}, args...), limit)...)
 	})
 	if err != nil {
 		return nil, err
@@ -50,12 +121,29 @@ func (s *PGStore) queryReleases(ctx context.Context, cond, arg string, limit int
 // filter (empty = recent-all), newest first, with the matching total for the
 // newznab:response offset/total attrs. query flows through $1 (no injection).
 func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, limit, offset int) ([]pluginapi.Release, int, error) {
-	if limit <= 0 || limit > 100 {
+	// Clamp to the ceiling rather than down to the default, for the same
+	// reason as queryReleases: a host that asked for 200 and silently got 50
+	// reads it as "that is all there is".
+	if limit <= 0 {
 		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
 	}
 	if offset < 0 {
 		offset = 0
 	}
+	// The same tokenised title match searchNzbs uses. This is the path Sonarr
+	// and Radarr take: they send `q=Breaking Bad` because that is how their
+	// own database stores a title, and against a contiguous substring that
+	// reached ~22% of the matching releases while `q=Dead to Me` reached
+	// none at all.
+	titleCond, titleArgs := titleClause(query, 1)
+	if titleCond == "" {
+		titleCond = "TRUE"
+	}
+	nArgs := len(titleArgs)
+
 	// cat filter: category ids are ints, so an inlined IN() list is injection-safe.
 	catClause := ""
 	if len(cats) > 0 {
@@ -84,9 +172,10 @@ func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, li
 			        resolution, source, video_codec, audio, language, category_id,
 			        series_key, series_name, season, episode, is_pack
 			 FROM nzbs
-			 WHERE status = 'completed' AND ($1 = '' OR title ILIKE '%' || $1 || '%')`+catClause+`
+			 WHERE status = 'completed' AND `+titleCond+catClause+`
 			 ORDER BY COALESCE(posted_at, created_at) DESC
-			 LIMIT $2 OFFSET $3`, query, limit, offset); err != nil {
+			 LIMIT $`+strconv.Itoa(nArgs+1)+` OFFSET $`+strconv.Itoa(nArgs+2),
+			append(append([]any{}, titleArgs...), limit, offset)...); err != nil {
 			return err
 		}
 		if len(rows) < limit {
@@ -114,7 +203,8 @@ func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, li
 		// sqllint:allow catClause is a literal built from int-only category ids (strconv.Itoa); all values flow through $N
 		return tx.GetContext(ctx, &total,
 			`SELECT COUNT(*) FROM nzbs
-			 WHERE status = 'completed' AND ($1 = '' OR title ILIKE '%' || $1 || '%')`+catClause, query)
+			 WHERE status = 'completed' AND `+titleCond+catClause,
+			titleArgs...)
 	})
 	if err != nil {
 		return nil, 0, err
