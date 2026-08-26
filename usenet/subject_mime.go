@@ -6,6 +6,8 @@ import (
 	"mime"
 	"strings"
 	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 // RFC 2047 encoded-words in overview subjects.
@@ -92,8 +94,43 @@ func unmojibake(s string) string {
 // decodeSubject expands encoded-words, returning the subject unchanged when
 // there are none (the overwhelming majority — this sits on the per-article
 // ingest path) or when decoding fails.
+// decodeRaw8Bit reads a header that carries no encoded-words and is not valid
+// UTF-8 as Windows-1252.
+//
+// Such a header is the poster's raw 8-bit bytes. Left alone they reach
+// pgSafeText, which can only replace them with U+FFFD to make them storable --
+// and that is destruction, not sanitisation: the byte is gone from the
+// database and only a re-crawl could recover it. Measured on production
+// 2026-08-26: 2,834 of 1,143,872 titles carried U+FFFD, still accruing (newest
+// the day before), concentrated in the German audiobook and European music
+// groups. "H<?>rbuch" is Hörbuch; ö is 0xF6. Two magazine titles wanted an en
+// dash, 0x96 -- which is why this is CP1252 rather than Latin-1, where 0x96 is
+// a control character.
+//
+// SAFE PRECISELY BECAUSE OF WHERE IT SITS. The one thing that must not be
+// CP1252-decoded is a Shift_JIS/GBK encoded-word, which passthroughCharset
+// hands back as invalid UTF-8 BY DESIGN -- read as CP1252 it would become
+// mojibake, worse than the replacement character. Those subjects contain "=?"
+// and leave through the branch below, never reaching here. This sees only
+// headers with no encoded-words at all.
+//
+// A last guard: if the bytes were already valid UTF-8 this is not called, so a
+// correct subject is never rewritten.
+func decodeRaw8Bit(s string) string {
+	out, err := charmap.Windows1252.NewDecoder().String(s)
+	if err != nil || out == "" {
+		return s
+	}
+	return out
+}
+
 func decodeSubject(s string) string {
 	if !strings.Contains(s, "=?") {
+		// No encoded-words: the poster's own bytes. If they are not UTF-8 they
+		// are almost certainly CP1252, and decoding beats losing them.
+		if !utf8.ValidString(s) {
+			return decodeRaw8Bit(s)
+		}
 		return s
 	}
 	d, err := subjectDecoder.DecodeHeader(s)
