@@ -117,10 +117,56 @@ func (s *PGStore) queryReleases(ctx context.Context, cond string, args []any, li
 	return releasesToAPI(rows), nil
 }
 
+// feedFilter is what one Newznab feed request narrows by. A struct rather
+// than a fifth and sixth positional argument, because season and episode are
+// optional in a way cats and query are not.
+type feedFilter struct {
+	Query string
+	Cats  []int
+	// Season / Episode are nil when the client did not ask.
+	Season  *int
+	Episode *int
+}
+
+// episodeClause renders the tvsearch narrowing, starting at $startIdx.
+//
+// season and episode are NOT NULL DEFAULT 0 in this schema, and 0 means
+// UNPARSED rather than "specials" (see migration 042). So a season=0 filter
+// would match every release the parser has never read — the opposite of
+// narrowing — and it is ignored instead. That costs Sonarr's specials search,
+// which this schema cannot express at all; returning everything unparsed
+// would be a worse answer than returning the unfiltered series.
+//
+// An episode filter also matches SEASON PACKS of that season, because a pack
+// contains the episode: a client asking for S04E01 and being handed only the
+// single-episode releases would miss the complete-season upload that is often
+// the only one there.
+func episodeClause(f feedFilter, startIdx int) (string, []any) {
+	var parts []string
+	var args []any
+	idx := startIdx
+	if f.Season != nil && *f.Season > 0 {
+		parts = append(parts, "season = $"+strconv.Itoa(idx))
+		args = append(args, *f.Season)
+		idx++
+	}
+	if f.Episode != nil && *f.Episode > 0 {
+		parts = append(parts, "(episode = $"+strconv.Itoa(idx)+" OR is_pack)")
+		args = append(args, *f.Episode)
+		idx++
+	}
+	if len(parts) == 0 {
+		return "", nil
+	}
+	return " AND " + strings.Join(parts, " AND "), args
+}
+
 // feedReleases pages completed releases for the Newznab feed: optional title
-// filter (empty = recent-all), newest first, with the matching total for the
-// newznab:response offset/total attrs. query flows through $1 (no injection).
-func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, limit, offset int) ([]pluginapi.Release, int, error) {
+// and episode filters (empty = recent-all), newest first, with the matching
+// total for the newznab:response offset/total attrs. Every value flows through
+// a placeholder.
+func (s *PGStore) feedReleases(ctx context.Context, f feedFilter, limit, offset int) ([]pluginapi.Release, int, error) {
+	query, cats := f.Query, f.Cats
 	// Clamp to the ceiling rather than down to the default, for the same
 	// reason as queryReleases: a host that asked for 200 and silently got 50
 	// reads it as "that is all there is".
@@ -142,7 +188,9 @@ func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, li
 	if titleCond == "" {
 		titleCond = "TRUE"
 	}
-	nArgs := len(titleArgs)
+	epCond, epArgs := episodeClause(f, len(titleArgs)+1)
+	filterArgs := append(append([]any{}, titleArgs...), epArgs...)
+	nArgs := len(filterArgs)
 
 	// cat filter: category ids are ints, so an inlined IN() list is injection-safe.
 	catClause := ""
@@ -172,17 +220,17 @@ func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, li
 			        resolution, source, video_codec, audio, language, category_id,
 			        series_key, series_name, season, episode, is_pack
 			 FROM nzbs
-			 WHERE status = 'completed' AND `+titleCond+catClause+`
+			 WHERE status = 'completed' AND `+titleCond+epCond+catClause+`
 			 ORDER BY COALESCE(posted_at, created_at) DESC
 			 LIMIT $`+strconv.Itoa(nArgs+1)+` OFFSET $`+strconv.Itoa(nArgs+2),
-			append(append([]any{}, titleArgs...), limit, offset)...); err != nil {
+			append(append([]any{}, filterArgs...), limit, offset)...); err != nil {
 			return err
 		}
 		if len(rows) < limit {
 			total = offset + len(rows)
 			return nil
 		}
-		if query == "" && len(cats) == 0 {
+		if query == "" && len(cats) == 0 && epCond == "" {
 			// Unfiltered full page: total ≈ every completed release. The feed
 			// total is a pagination hint, not an accounting figure, so the
 			// planner's estimate serves; the offset+len floor keeps it
@@ -203,8 +251,8 @@ func (s *PGStore) feedReleases(ctx context.Context, query string, cats []int, li
 		// sqllint:allow catClause is a literal built from int-only category ids (strconv.Itoa); all values flow through $N
 		return tx.GetContext(ctx, &total,
 			`SELECT COUNT(*) FROM nzbs
-			 WHERE status = 'completed' AND `+titleCond+catClause,
-			titleArgs...)
+			 WHERE status = 'completed' AND `+titleCond+epCond+catClause,
+			filterArgs...)
 	})
 	if err != nil {
 		return nil, 0, err

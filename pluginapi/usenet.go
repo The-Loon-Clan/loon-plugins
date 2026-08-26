@@ -214,9 +214,20 @@ type NewznabRequest struct {
 	Limit      int
 	Offset     int
 	ID         string // id= (get/details)
-	BaseURL    string // host public base, e.g. http://localhost:8090
-	Title      string // site title (caps/feed channel)
-	APIKey     string // passed through into download links; plugin may ignore
+	// Season / Episode are the tvsearch narrowing, and they are POINTERS so a
+	// host can distinguish "not asked" from "asked for zero".
+	//
+	// A host that serves tvsearch MUST populate these from season= and ep=.
+	// They are the single most common query Sonarr makes, and without them a
+	// member asking for one episode is handed every episode of the series --
+	// every time, forever, with nothing in the response admitting it. A host
+	// that leaves them nil gets exactly today's behaviour, so adding them
+	// breaks nobody; it just means that host's tvsearch stays unfiltered.
+	Season  *int   // season=
+	Episode *int   // ep=
+	BaseURL string // host public base, e.g. http://localhost:8090
+	Title   string // site title (caps/feed channel)
+	APIKey  string // passed through into download links; plugin may ignore
 }
 
 // NewznabResult is a rendered API response (XML feed/caps, or NZB bytes for get).
@@ -339,11 +350,11 @@ const NewznabCachePrefix = "newznab:v1:"
 // downloads should not be cached by the caller.
 func NewznabCacheKey(r NewznabRequest) string {
 	payload := struct {
-		T, Q      string
-		C         []int
-		L, O      int
-		ID, K     string
-		B, Ti     string
+		T, Q  string
+		C     []int
+		L, O  int
+		ID, K string
+		B, Ti string
 	}{r.Function, r.Query, r.Categories, r.Limit, r.Offset, r.ID, r.APIKey, r.BaseURL, r.Title}
 	b, _ := json.Marshal(payload)
 	sum := sha256.Sum256(b)

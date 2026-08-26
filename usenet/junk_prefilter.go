@@ -118,6 +118,7 @@ func buildLiteralGate(pattern string) literalGate {
 //	Star/Quest/Repeat with min 0 → matches empty, so nothing is required.
 //	Plus/Repeat with min >= 1    → the body must appear at least once.
 //	anything else    → nil (unknown, so no gate).
+//
 // hasFoldedLiteral reports whether any literal anywhere in the tree carries
 // the parser's FoldCase flag — the oracle buildLiteralGate trusts for Fold.
 func hasFoldedLiteral(re *syntax.Regexp) bool {

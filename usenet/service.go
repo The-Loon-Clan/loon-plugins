@@ -78,7 +78,8 @@ func (s *service) Search(ctx context.Context, q string, limit int) ([]pluginapi.
 }
 
 func (s *service) Feed(ctx context.Context, cats []int, limit, offset int) ([]pluginapi.Release, int, error) {
-	rs, total, err := s.store.feedReleases(ctx, "", s.expandCats(ctx, cats), limit, offset)
+	rs, total, err := s.store.feedReleases(ctx,
+		feedFilter{Cats: s.expandCats(ctx, cats)}, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}

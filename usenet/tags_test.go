@@ -49,9 +49,9 @@ func TestHasBlockedExtension(t *testing.T) {
 	}{
 		{"KMSpico.Setup.exe", true},
 		{"setup.msi", true},
-		{base, false},                // the Polish tag is a language, not Perl
+		{base, false}, // the Polish tag is a language, not Perl
 		{"Nazwa.Filmu.2023.PL", false},
-		{"WWW.SPAMSITE.COM", true},   // considered and KEPT — spam-domain tag
+		{"WWW.SPAMSITE.COM", true}, // considered and KEPT — spam-domain tag
 		{"no dots here", false},
 		{"trailing.", false},
 	}

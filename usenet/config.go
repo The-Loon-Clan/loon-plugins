@@ -159,9 +159,9 @@ type Config struct {
 	// the ReleaseSink capability and owns the NZB domain — how prod adopts the
 	// crawler). Boot config: switching sinks live would split the catalogue.
 	Sink              SinkMode `json:"sink"`
-	StagingMaxRows    int      `json:"staging_max_rows"`    // pg back-pressure denominator: staged rows / this (default 2_000_000)
-	StagingPruneHours int      `json:"staging_prune_hours"` // pg stale-staging horizon in hours (default 6)
-	StagingTTLHours   int      `json:"staging_ttl_hours"`   // redis staged-key TTL in hours (default 2) — must exceed the gap between passes that stage parts of one release
+	StagingMaxRows    int      `json:"staging_max_rows"`     // pg back-pressure denominator: staged rows / this (default 2_000_000)
+	StagingPruneHours int      `json:"staging_prune_hours"`  // pg stale-staging horizon in hours (default 6)
+	StagingTTLHours   int      `json:"staging_ttl_hours"`    // redis staged-key TTL in hours (default 2) — must exceed the gap between passes that stage parts of one release
 	EvictStaleSecs    int      `json:"evict_staleness_secs"` // redis inline hopeless-eviction staleness window in seconds (default 300) — must exceed routine staging-pressure pauses or resumed sets are judged abandoned
 
 	// Splitting groups between crawlers (assign.go). Membership is fixed for a

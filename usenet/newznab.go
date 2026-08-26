@@ -30,9 +30,15 @@ var capsTmpl = template.Must(template.New("caps").Funcs(newznabFuncs).Parse(
   <registration available="no" open="no"/>
   <searching>
     <search available="yes" supportedParams="q,cat,limit,offset"/>
-    {{/* no season/ep: NewznabRequest doesn't carry them, so advertising
-         them would promise filtering that silently doesn't happen */ -}}
-    <tv-search available="yes" supportedParams="q,cat,limit,offset"/>
+    {{/* season/ep are advertised because NewznabRequest carries them and this
+         plugin filters on them. A host that serves tvsearch must populate
+         them from season=/ep=; one that does not will over-return, and that
+         is a host bug rather than a lie told here.
+
+         tvdbid/imdbid are NOT advertised: nothing in this schema stores an
+         external id, so a client filtering by one would get everything back
+         while believing it had narrowed. */}}
+    <tv-search available="yes" supportedParams="q,cat,limit,offset,season,ep"/>
     <movie-search available="yes" supportedParams="q,cat,limit,offset"/>
     <audio-search available="no" supportedParams=""/>
     <book-search available="no" supportedParams=""/>
@@ -193,7 +199,18 @@ func (s *service) newznabFeed(ctx context.Context, req pluginapi.NewznabRequest)
 	total := offset
 	if offset <= maxFeedOffset {
 		var err error
-		releases, total, err = s.store.feedReleases(ctx, strings.TrimSpace(req.Query), s.expandCats(ctx, req.Categories), limit, offset)
+		f := feedFilter{
+			Query: strings.TrimSpace(req.Query),
+			Cats:  s.expandCats(ctx, req.Categories),
+		}
+		// Only tvsearch narrows by episode. The Newznab spec puts season/ep on
+		// that function alone, and honouring them on t=search would quietly
+		// change what a movie or generic search returns for a client that sent
+		// them by habit.
+		if req.Function == "tvsearch" {
+			f.Season, f.Episode = req.Season, req.Episode
+		}
+		releases, total, err = s.store.feedReleases(ctx, f, limit, offset)
 		if err != nil {
 			return pluginapi.NewznabResult{}, err
 		}

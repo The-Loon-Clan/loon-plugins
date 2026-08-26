@@ -136,8 +136,8 @@ func TestPrimaryBackbone(t *testing.T) {
 		t.Errorf("disabled-only = %q, want \"\"", got)
 	}
 	servers := []provider{
-		{ID: 1, Backbone: "omicron"},                 // disabled
-		{ID: 2, Backbone: "netnews", Enabled: true},  // first enabled wins
+		{ID: 1, Backbone: "omicron"},                // disabled
+		{ID: 2, Backbone: "netnews", Enabled: true}, // first enabled wins
 		{ID: 3, Backbone: "omicron", Enabled: true},
 	}
 	if got := primaryBackbone(servers); got != "netnews" {

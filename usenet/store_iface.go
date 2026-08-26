@@ -35,7 +35,7 @@ type ReleaseReader interface {
 	searchNzbs(ctx context.Context, q string, limit int) ([]pluginapi.Release, error)
 	browseNzbs(ctx context.Context, group string, limit int) ([]pluginapi.Release, error)
 	queryReleases(ctx context.Context, cond string, args []any, limit int) ([]pluginapi.Release, error)
-	feedReleases(ctx context.Context, query string, cats []int, limit, offset int) ([]pluginapi.Release, int, error)
+	feedReleases(ctx context.Context, f feedFilter, limit, offset int) ([]pluginapi.Release, int, error)
 	releaseByID(ctx context.Context, id int64) (*detailRow, error)
 	nzbData(ctx context.Context, id int64) ([]byte, string, error)
 	stats(ctx context.Context) (pluginapi.IndexStats, error)

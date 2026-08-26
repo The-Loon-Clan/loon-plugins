@@ -276,11 +276,11 @@ func TestSeedJunkRulesPreservesOperatorOrder(t *testing.T) {
 	}
 	var dPos, catchPos int
 	if err := s.db.DB().QueryRow(
-		`SELECT position FROM `+s.db.Schema()+`.junk_rules WHERE name = 'seed_d'`).Scan(&dPos); err != nil {
+		`SELECT position FROM ` + s.db.Schema() + `.junk_rules WHERE name = 'seed_d'`).Scan(&dPos); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.db.DB().QueryRow(
-		`SELECT position FROM `+s.db.Schema()+`.junk_rules WHERE name = 'seed_small'`).Scan(&catchPos); err != nil {
+		`SELECT position FROM ` + s.db.Schema() + `.junk_rules WHERE name = 'seed_small'`).Scan(&catchPos); err != nil {
 		t.Fatal(err)
 	}
 	if dPos != 40 {

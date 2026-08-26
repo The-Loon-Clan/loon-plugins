@@ -640,8 +640,8 @@ func (r *redisStaging) stageArticlesOnce(ctx context.Context, arts []stagedArtic
 		// prevStrike is the set's eviction strike from BEFORE this batch —
 		// same pre-batch-read pattern as prevTouch, same reason.
 		prevStrike *redis.StringCmd
-		metaCmd   *redis.MapStringStringCmd
-		lenCmd    *redis.IntCmd
+		metaCmd    *redis.MapStringStringCmd
+		lenCmd     *redis.IntCmd
 	}
 	checks := make([]checkItem, 0, len(groups))
 
