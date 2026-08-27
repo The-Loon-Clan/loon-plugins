@@ -46,7 +46,7 @@ var adminRosterTmpl = template.Must(template.New("agent-admin-roster").Parse(`
   <div class="ag-adm__summary">
     <span><strong>{{.Online}}</strong> online</span>
     <span><strong>{{.Total}}</strong> registered</span>
-    {{if .Revoked}}<span><strong>{{.Revoked}}</strong> revoked</span>{{end}}
+    {{if .Inactive}}<span><strong>{{.Inactive}}</strong> not active</span>{{end}}
   </div>
 
   {{if not .Agents}}
@@ -55,6 +55,7 @@ var adminRosterTmpl = template.Must(template.New("agent-admin-roster").Parse(`
   <div class="card">
     <div class="table-responsive">
       <table class="table table-sm mb-0 ag-adm__table">
+        <caption class="visually-hidden">Every agent registered on this site, its owner, and its last check-in</caption>
         <thead>
           <tr>
             <th>Name</th>
@@ -152,16 +153,22 @@ func (p *Plugin) renderAdminRoster(gc *gin.Context) (template.HTML, error) {
 	}
 
 	vm := struct {
-		Agents                 []rosterRow
-		Online, Total, Revoked int
+		Agents                  []rosterRow
+		Online, Total, Inactive int
 	}{Total: len(agents)}
 
 	for _, a := range agents {
 		if a.Online() {
 			vm.Online++
 		}
+		// Counted as NOT ACTIVE rather than as revoked. The count is
+		// deliberately everything that is not active, so a state the host
+		// adds later cannot vanish from both totals -- but StatusLabel is
+		// open-vocabulary by design, so naming the tally after one specific
+		// state would file an "expired" agent under a word that is false
+		// about it.
 		if a.Status != "active" {
-			vm.Revoked++
+			vm.Inactive++
 		}
 		vm.Agents = append(vm.Agents, rosterRow{AdminAgent: a})
 	}

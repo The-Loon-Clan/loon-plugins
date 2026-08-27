@@ -100,7 +100,14 @@ type AdminAgent struct {
 // dot. Display only, and the same window the profile card uses so an operator
 // and a member never disagree about who is up.
 func (a AdminAgent) Online() bool {
-	return a.LastSeen != nil && time.Since(*a.LastSeen) < agentOnlineWindow
+	return a.LastSeen != nil && time.Since(*a.LastSeen) < onlineWindow()
+}
+
+// AdminLink is one entry on the dispatch panel's jump list: a host's own
+// agent-related admin page, named by the host that mounts it.
+type AdminLink struct {
+	Label string
+	Href  string
 }
 
 // AgentGroup is one posting profile pushed to the fleet: which newsgroups a
@@ -210,6 +217,31 @@ type Deps struct {
 	// "all" mode would give the member surfaces a parameter that turns the
 	// scoping off. Two seams, each of which can only do its own job.
 	AllAgents func(ctx context.Context) ([]AdminAgent, error)
+
+	// OnlineWindow is how long an agent may be silent and still read as
+	// online. Nil, or a non-positive value, falls back to 5 minutes.
+	//
+	// The host knows its own poll interval and this plugin does not, so a
+	// constant here is a guess that CONTRADICTS the host in front of an
+	// operator: with agents ~4 minutes quiet, a host page on a 3-minute
+	// window read "0 of 5 online" beside this plugin's three green dots,
+	// same fleet, same instant. CountAgents already took its cutoff from
+	// the host; this makes the other two surfaces agree with it.
+	OnlineWindow func() time.Duration
+
+	// AdminLinks are the host's OWN agent-related admin pages, listed on
+	// the dispatch panel beside the plugin's.
+	//
+	// It is a seam and not a hardcoded list because a plugin cannot know a
+	// host's route names. The panel used to hardcode /admin/dispatch and
+	// /admin/agents; the first is a 404 on a host that draws its dispatch
+	// queue as a panel rather than a page, and a link-audit found it. A
+	// plugin that invents a host's URLs is dead on arrival everywhere but
+	// the host it was written against.
+	//
+	// Nil renders only the plugin's own pages, which always exist because
+	// the plugin mounts them.
+	AdminLinks func() []AdminLink
 
 	// ── The agent-groups admin page's seams ─────────────────────────
 	//

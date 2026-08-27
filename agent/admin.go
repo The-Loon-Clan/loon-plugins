@@ -34,25 +34,42 @@ var dispatchPanelTmpl = template.Must(template.New("agent-dispatch-panel").Parse
                     </div>
                 </div>
                 <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-                    {{/* Roster first, and it is the PLUGIN's page. The host's
-                         /admin/agents keeps the live dispatch table, which
-                         reads a queue table this plugin does not own. */}}
+                    {{/* The PLUGIN's own pages first: it mounts them, so it
+                         knows they answer. Host pages come from the host --
+                         hardcoding a route name here made /admin/dispatch a
+                         404 on a host that draws its queue as a panel. */}}
                     {{if .HasRoster}}<a href="/admin/p/agents" class="btn btn-outline-secondary btn-sm">Agents</a>{{end}}
-                    <a href="/admin/agents" class="btn btn-outline-secondary btn-sm">Active Tasks</a>
                     {{if .HasGroups}}<a href="/admin/p/agent-groups" class="btn btn-outline-secondary btn-sm">Agent Groups</a>{{end}}
-                    <a href="/admin/dispatch" class="btn btn-outline-secondary btn-sm">Dispatch Debug</a>
+                    {{range .HostLinks}}<a href="{{.Href}}" class="btn btn-outline-secondary btn-sm">{{.Label}}</a>{{end}}
                 </div>
                 <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.6rem;">
                     The concurrency cap + dispatch defaults are set in <strong>Agent Defaults</strong> on this page; this panel is a read-only overview.
                 </div>
 `))
 
+// hostAdminLinks returns the host's own agent admin pages, or nothing.
+func hostAdminLinks() []AdminLink {
+	if deps == nil || deps.AdminLinks == nil {
+		return nil
+	}
+	out := make([]AdminLink, 0, 4)
+	for _, l := range deps.AdminLinks() {
+		// A blank half is a wiring slip, and half a button is worse than
+		// none -- an unlabelled link is unclickable and a labelled one with
+		// no href navigates to the current page.
+		if strings.TrimSpace(l.Label) != "" && strings.TrimSpace(l.Href) != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
 // renderDispatchPanel is the SlotAdminSettings Render for the agent dispatch
 // overview. The host gates the page on admin, so anyone reaching here is
 // already authorised.
 func (p *Plugin) renderDispatchPanel(c *gin.Context) (template.HTML, error) {
 	ctx := c.Request.Context()
-	online, total, _ := deps.CountAgents(ctx, time.Now().Add(-agentOnlineWindow))
+	online, total, _ := deps.CountAgents(ctx, time.Now().Add(-onlineWindow()))
 	var sb strings.Builder
 	if err := dispatchPanelTmpl.Execute(&sb, map[string]any{
 		"Online":        online,
@@ -62,6 +79,9 @@ func (p *Plugin) renderDispatchPanel(c *gin.Context) (template.HTML, error) {
 		// links to a page this host did not mount.
 		"HasRoster": deps.AllAgents != nil,
 		"HasGroups": deps.ListAgentGroups != nil,
+		// The host's own pages, named by the host. Nil is fine: the plugin's
+		// two are always reachable because the plugin mounts them.
+		"HostLinks": hostAdminLinks(),
 	}); err != nil {
 		return "", err
 	}

@@ -161,16 +161,12 @@ func TestRenderDispatchPanel(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 	s := string(html)
-	// labels + the HOST's jump links + the online/total pair + the cap value.
-	//
-	// The roster and agent-groups links are the PLUGIN's own pages and are
-	// conditional on their seams, which these deps do not wire — see
-	// TestDispatchPanelLinksRosterOnlyWhenMounted and
-	// TestDispatchPanelLinksGroupsOnlyWhenMounted. Only /admin/agents and
-	// /admin/dispatch are unconditional, because those stay host-side.
+	// Labels, the online/total pair and the cap value. NO links at all with
+	// these deps: the plugin's two pages are conditional on their seams, and
+	// host pages now come from AdminLinks rather than being hardcoded — see
+	// TestDispatchPanelLinksHostPagesFromTheHost.
 	for _, want := range []string{
 		"Agents online", "Max concurrent",
-		"/admin/agents", "/admin/dispatch",
 		">1</span> / 2",
 		">3</div>",
 	} {

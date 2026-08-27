@@ -74,10 +74,11 @@ func TestRosterPageAbsentWithoutTheSeam(t *testing.T) {
 	}
 }
 
-// The counters are the only computed thing on the page, and "revoked" is
-// deliberately everything that is not active — a state the host adds later
-// (expired, suspended) counts as not-active rather than silently vanishing
-// from both totals.
+// The counters are the only computed thing on the page. The tally is
+// everything that is not active, so a state the host adds later cannot vanish
+// from both totals — and it is LABELLED "not active" rather than "revoked",
+// because StatusLabel is open-vocabulary and naming the tally after one
+// specific state files a suspended agent under a word that is false about it.
 func TestRosterCountsOnlineAndNotActive(t *testing.T) {
 	recent := time.Now().Add(-time.Minute)
 	stale := time.Now().Add(-24 * time.Hour)
@@ -101,7 +102,7 @@ func TestRosterCountsOnlineAndNotActive(t *testing.T) {
 	for _, want := range []string{
 		"<strong>2</strong> online", // alpha + delta reported recently
 		"<strong>4</strong> registered",
-		"<strong>2</strong> revoked", // charlie + delta: not active
+		"<strong>2</strong> not active", // charlie + delta
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("summary missing %q in:\n%s", want, s)
@@ -112,7 +113,11 @@ func TestRosterCountsOnlineAndNotActive(t *testing.T) {
 			t.Errorf("roster missing %q", name)
 		}
 	}
-	// An unknown state is shown as itself rather than mislabelled Active.
+	// An unknown state is shown as itself rather than mislabelled Active,
+	// and the summary above must not call it revoked either.
+	if strings.Contains(s, "revoked") {
+		t.Errorf("summary named a specific state it cannot know:\n%s", s)
+	}
 	if !strings.Contains(s, "Suspended") {
 		t.Errorf("unknown status not rendered readably:\n%s", s)
 	}
@@ -194,5 +199,77 @@ func TestAdminAgentCannotCarryASecret(t *testing.T) {
 		if fieldExists[AdminAgent](banned) {
 			t.Errorf("AdminAgent grew a %q field — the roster template can now print a credential", banned)
 		}
+	}
+}
+
+// A plugin cannot know a host's route names. Hardcoding /admin/dispatch made
+// the panel draw a 404 button on a host whose dispatch queue is a panel rather
+// than a page, and that host's link audit is what found it. Host pages now
+// come from the host.
+func TestDispatchPanelLinksHostPagesFromTheHost(t *testing.T) {
+	SetDeps(baseDeps())
+	t.Cleanup(func() { deps = nil })
+
+	html, err := (&Plugin{}).renderDispatchPanel(adminCtx())
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	for _, invented := range []string{"/admin/dispatch", "/admin/agents"} {
+		if strings.Contains(string(html), invented) {
+			t.Errorf("panel invented host route %q:\n%s", invented, html)
+		}
+	}
+
+	d := baseDeps()
+	d.AdminLinks = func() []AdminLink {
+		return []AdminLink{
+			{Label: "Active Tasks", Href: "/admin/agents"},
+			{Label: "", Href: "/admin/nolabel"}, // half-wired: dropped
+			{Label: "No href", Href: "   "},     // half-wired: dropped
+		}
+	}
+	SetDeps(d)
+	html, err = (&Plugin{}).renderDispatchPanel(adminCtx())
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	s := string(html)
+	if !strings.Contains(s, `href="/admin/agents"`) || !strings.Contains(s, "Active Tasks") {
+		t.Errorf("host link not rendered:\n%s", s)
+	}
+	// Half a button is worse than none: an unlabelled link is unclickable, and
+	// a labelled one with no href navigates to the current page.
+	if strings.Contains(s, "/admin/nolabel") || strings.Contains(s, "No href") {
+		t.Errorf("a half-wired link was rendered:\n%s", s)
+	}
+}
+
+// The host decides how long silence means offline, because it knows its own
+// poll interval. While the plugin guessed, a host page on a 3-minute window
+// read "0 of 5 online" beside this plugin's three green dots — same fleet,
+// same instant, two answers in front of one operator.
+func TestOnlineWindowComesFromTheHost(t *testing.T) {
+	t.Cleanup(func() { deps = nil })
+	quiet := time.Now().Add(-4 * time.Minute)
+
+	// Unwired: the 5-minute default, so a 4-minute-quiet agent reads online.
+	SetDeps(baseDeps())
+	if !(AdminAgent{LastSeen: &quiet}).Online() {
+		t.Error("default window should still call a 4-minute-quiet agent online")
+	}
+
+	// The host says three minutes; the same agent is offline everywhere.
+	d := baseDeps()
+	d.OnlineWindow = func() time.Duration { return 3 * time.Minute }
+	SetDeps(d)
+	if (AdminAgent{LastSeen: &quiet}).Online() {
+		t.Error("host window of 3m ignored — the plugin is still guessing")
+	}
+
+	// A nonsense value falls back rather than reporting the whole fleet down.
+	d.OnlineWindow = func() time.Duration { return 0 }
+	SetDeps(d)
+	if !(AdminAgent{LastSeen: &quiet}).Online() {
+		t.Error("a zero window should fall back to the default, not blank the fleet")
 	}
 }

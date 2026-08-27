@@ -12,9 +12,33 @@ import (
 	"github.com/the-loon-clan/loon/core"
 )
 
-// agentOnlineWindow is a DISPLAY heuristic only: an agent that polled within
+// defaultOnlineWindow is a DISPLAY heuristic only: an agent that polled within
 // this window shows a green "online" dot. It gates nothing operational.
-const agentOnlineWindow = 5 * time.Minute
+//
+// It is the FALLBACK, not the rule — see onlineWindow below.
+const defaultOnlineWindow = 5 * time.Minute
+
+// onlineWindow is how long an agent may be silent and still read as online.
+//
+// The host decides, because the host knows its own poll interval and this
+// plugin does not: a fleet that checks in every 30s and one that checks in
+// every 4 minutes disagree completely about what silence means. Wired to a
+// constant, the two surfaces contradicted each other in front of an operator
+// — with agents ~4 minutes quiet, a host page built on its own 3-minute
+// window read "0 of 5 online" while this plugin's page showed three green
+// dots for the same fleet at the same instant.
+//
+// The precedent was already here and only half-followed: CountAgents takes
+// its cutoff FROM the host, so the dispatch panel was right while
+// AdminAgent.Online() and the profile card were guessing. One source now.
+func onlineWindow() time.Duration {
+	if deps != nil && deps.OnlineWindow != nil {
+		if d := deps.OnlineWindow(); d > 0 {
+			return d
+		}
+	}
+	return defaultOnlineWindow
+}
 
 var fleetCardTmpl = template.Must(template.New("agent-fleet-card").Parse(`
 <div class="card mb-4">
@@ -121,7 +145,7 @@ func (p *Plugin) renderFleet(ctx context.Context, userID int, owner bool) (templ
 	for _, a := range agentList {
 		fa := fleetAgent{
 			Name:   a.Name,
-			Online: a.LastSeen != nil && time.Since(*a.LastSeen) < agentOnlineWindow,
+			Online: a.LastSeen != nil && time.Since(*a.LastSeen) < onlineWindow(),
 			Owner:  owner,
 		}
 		if owner {

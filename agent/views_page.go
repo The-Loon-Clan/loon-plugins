@@ -448,7 +448,7 @@ func renderTokenPage(name, token string) (template.HTML, error) {
 
 // onlineNow is the card's display heuristic, shared by the page.
 func onlineNow(t *time.Time) bool {
-	return t != nil && time.Since(*t) < agentOnlineWindow
+	return t != nil && time.Since(*t) < onlineWindow()
 }
 
 // agentName resolves a display name for the token page, best-effort — the
