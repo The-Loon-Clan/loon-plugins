@@ -7,7 +7,34 @@ import (
 )
 
 var (
-	reFileOf = regexp.MustCompile(`\[(\d+)/(\d+)\]`) // [1/12] multi-file header
+	// [1/12] multi-file header and (1/45) yEnc segment marker — each
+	// accepting EITHER closing bracket, because a mismatched pair is a
+	// keystroke and not a different notation.
+	//
+	// Posters emit "(06/65]" and "[06/65)" consistently across whole posts,
+	// which is what makes them house style rather than corruption in transit.
+	// Neither matched before, and because these regexes both READ the counter
+	// and STRIP it from the base, a miss costs twice: no counter is parsed AND
+	// the marker stays in the base subject. Every article then derives a base
+	// containing its own counter, so a 65-part post becomes 65 one-part
+	// "releases". Measured on production: 123 rows that are 36 posts for the
+	// "(n/m]" form, 27 rows that are 7 posts for "[n/m)", newest five days
+	// old. Reported from the demo index, where four such posts were offering
+	// their fragments individually.
+	//
+	// THE OPENER DECIDES which counter it is, and that asymmetry is the whole
+	// rule: "(" means segment, "[" means file, whatever the closer says. The
+	// opening bracket is typed deliberately and the closing one is where a
+	// shifted keystroke lands, so trusting the opener follows the mistake
+	// rather than the intent behind it. The two can never be confused for each
+	// other either way, since their openers still differ.
+	//
+	// Unlike the rar-volume split in subject_rarsplit_test.go, this is safe to
+	// fix alone: the well-formed spelling already produces the right answer
+	// end to end — one shared base, and a distinct field key per segment — so
+	// this only routes a typo onto a path that is already proven. There is no
+	// mosaic to build, because there is a real segment counter to read.
+	reFileOf = regexp.MustCompile(`\[(\d+)/(\d+)[\])]`)
 	// Two more file-counter forms, both verified against 430k production titles
 	// before being trusted.
 	//
@@ -23,7 +50,7 @@ var (
 	// for it.
 	reFileOfWords = regexp.MustCompile(`\[?(\d{1,4})\s+of\s+(\d{1,4})\]?`)
 	reFileOfBare  = regexp.MustCompile(`(?:^|\s)(\d{2,4})/(\d{2,4})(?:\s|$)`)
-	rePartOf      = regexp.MustCompile(`\((\d+)/(\d+)\)`) // (1/45) yEnc segment marker
+	rePartOf      = regexp.MustCompile(`\((\d+)/(\d+)[\])]`) // see reFileOf above
 	reYenc        = regexp.MustCompile(`(?i)\byenc\b`)
 	// The byte count some posters emit between the yEnc keyword and the segment
 	// counter: `... yEnc  1053788 (1/2)`. It has to be removed BEFORE the
