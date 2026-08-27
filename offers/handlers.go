@@ -24,6 +24,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // Handlers serves the offer-system surfaces. Deps carries the
@@ -272,21 +274,25 @@ func (h *Handlers) ClaimRequest(c *gin.Context) {
 		deps.ReportError(c, "offer-api/claim", err)
 		return
 	}
-	// Guarded on the field this actually CALLS, not on NotifyRequest. Deps
-	// permits a host to wire some notifiers and not others, and the call below
-	// is in a bare goroutine -- a nil func there panics with nothing to recover
-	// it and takes the whole web process down. jobs.go:66 has the right shape.
+	// Guarded on the field this actually CALLS, not on NotifyRequest: Deps
+	// permits a host to wire some notifiers and not others, and a nil func
+	// here would panic. The guard stays because a nil is a WIRING fault worth
+	// not reaching at all -- but the goroutine no longer has to be perfect,
+	// because pluginapi.Go contains a panic from inside the host's notifier
+	// too. Before it, this comment could only warn: "a nil func there panics
+	// with nothing to recover it and takes the whole web process down".
 	if got && deps.NotifyClaimed != nil {
 		// Fire-and-forget: notify the requester their request was
 		// picked up. Background ctx since the HTTP request will
 		// return before this completes. Funcs captured at dispatch —
 		// see UserCreateRequest's notify block for why.
 		notify, requesterOf := deps.NotifyClaimed, deps.RequesterOf
-		go func(rid int) {
+		rid := reqID
+		pluginapi.Go(asyncErrs(), "offer-api/notify-claimed", func() {
 			bg := context.Background()
 			requester, _ := requesterOf(bg, rid)
 			notify(bg, requester, rid)
-		}(reqID)
+		})
 	}
 	deps.JSONOK(c, gin.H{"claimed": got})
 }
@@ -325,11 +331,12 @@ func (h *Handlers) DeliverRequest(c *gin.Context) {
 	}
 	if ok2 && deps.NotifyDelivered != nil {
 		notify, requesterOf := deps.NotifyDelivered, deps.RequesterOf
-		go func(rid int, nid int64) {
+		rid, nid := reqID, body.NzbID
+		pluginapi.Go(asyncErrs(), "offer-api/notify-delivered", func() {
 			bg := context.Background()
 			requester, _ := requesterOf(bg, rid)
 			notify(bg, requester, rid, nid)
-		}(reqID, body.NzbID)
+		})
 	}
 	deps.JSONOK(c, gin.H{"delivered": ok2})
 }
@@ -502,14 +509,15 @@ func (h *Handlers) UserCreateRequest(c *gin.Context) {
 		// wiring than the one that served the request (which is also how a
 		// test's stray goroutine set the NEXT test's flag).
 		notify, offerersFor := deps.NotifyRequest, deps.OfferersFor
-		go func(bucketID, requestID, requesterID int, name string) {
+		bucketID, requestID, requesterID, name := body.BucketID, id, user.ID, user.Username
+		pluginapi.Go(asyncErrs(), "offer-api/notify-request", func() {
 			bgCtx := context.Background()
 			ids, err := offerersFor(bgCtx, bucketID)
 			if err != nil {
 				return
 			}
 			notify(bgCtx, ids, requesterID, name, bucketID, requestID)
-		}(body.BucketID, id, user.ID, user.Username)
+		})
 	}
 	if !joined {
 		h.emit(ctx, EventRequestCreated, user.ID,

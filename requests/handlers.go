@@ -12,12 +12,12 @@ package requests
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
@@ -28,6 +28,8 @@ import (
 
 	"github.com/the-loon-clan/loon/core"
 	"github.com/the-loon-clan/loon/httpclient"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 const requestsPageSize = 30
@@ -966,11 +968,15 @@ func (h *Handlers) CreateRequest(c *gin.Context) {
 	// Queue anime metadata scrape if an anime ID was provided, so cover art
 	// and details are available on the request page.
 	if created.AnimeID != nil && *created.AnimeID > 0 && h.deps.RefreshAnime != nil {
-		go func(aid int) {
+		// Through pluginapi.Go: RefreshAnime is the HOST's code reaching an
+		// external metadata API, and a panic in it would take the whole web
+		// process down long after this request was answered.
+		aid := *created.AnimeID
+		pluginapi.Go(h.errs, "request/refresh-anime", func() {
 			if err := h.deps.RefreshAnime(context.Background(), aid); err != nil {
 				log.Printf("anime metadata refresh for aid=%d: %v", aid, err)
 			}
-		}(*created.AnimeID)
+		})
 	}
 
 	// ?created=<id> drives the post-submit success banner in the template
@@ -1060,11 +1066,15 @@ func (h *Handlers) EditRequest(c *gin.Context) {
 	// If the anime_id changed and we have a refresher, queue a metadata
 	// scrape so the cover art / details on the request page line up.
 	if req.AnimeID != nil && *req.AnimeID > 0 && h.deps.RefreshAnime != nil {
-		go func(aid int) {
+		// Through pluginapi.Go: RefreshAnime is the HOST's code reaching an
+		// external metadata API, and a panic in it would take the whole web
+		// process down long after this request was answered.
+		aid := *req.AnimeID
+		pluginapi.Go(h.errs, "request/refresh-anime", func() {
 			if err := h.deps.RefreshAnime(context.Background(), aid); err != nil {
 				log.Printf("anime metadata refresh for aid=%d: %v", aid, err)
 			}
-		}(*req.AnimeID)
+		})
 	}
 
 	c.Redirect(http.StatusFound, "/community/request/"+strconv.FormatInt(id, 10))

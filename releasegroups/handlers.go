@@ -753,7 +753,10 @@ func (h *Handlers) RefreshReleaseGroupArchive(c *gin.Context) {
 
 	groupID := group.ID
 	groupSlug := group.Slug
-	go func() {
+	// Through pluginapi.Go: ScrapeArchive is the HOST's code fetching a remote
+	// archive, and the operator has already been redirected -- a panic in it
+	// would take the web process down with nothing left to serve.
+	pluginapi.Go(h.errs, "release-group/archive-scrape", func() {
 		bg := h.rootCtx()
 		n, err := h.deps.ScrapeArchive(bg, groupID)
 		if err != nil {
@@ -761,7 +764,7 @@ func (h *Handlers) RefreshReleaseGroupArchive(c *gin.Context) {
 			return
 		}
 		log.Printf("release-group %s archive: refreshed (%d torrents)", groupSlug, n)
-	}()
+	})
 	c.Redirect(http.StatusFound, target+"?refresh=started")
 }
 

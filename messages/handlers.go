@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/the-loon-clan/loon/core"
+
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // InboxItem is one row in the unified inbox conversation list — a DM
@@ -143,10 +145,13 @@ func (h *Handlers) Inbox(c *gin.Context) {
 					defer twg.Done()
 					activeBlocked, _ = h.store.IsDMBlocked(ctx, user.ID, activeCpID)
 				}()
-				go func(tid int64, uid int) {
-					bg := context.Background()
-					_, _ = h.store.MarkDMThreadRead(bg, tid, uid)
-				}(activeThreadID, user.ID)
+				// Fire-and-forget, and NOT part of twg above — nothing waits
+				// on the read stamp, so containing a panic here changes what
+				// the page renders not at all.
+				tid, uid := activeThreadID, user.ID
+				pluginapi.Go(h.errs, "dm/mark-thread-read", func() {
+					_, _ = h.store.MarkDMThreadRead(context.Background(), tid, uid)
+				})
 				twg.Wait()
 			}
 		}
@@ -159,10 +164,10 @@ func (h *Handlers) Inbox(c *gin.Context) {
 				if m.ID == mid {
 					activeMsg = m
 					if m.ReadAt == nil {
-						go func(id int64, uid int) {
-							bg := context.Background()
-							_ = h.store.MarkMessageRead(bg, id, uid)
-						}(m.ID, user.ID)
+						id, uid := m.ID, user.ID
+						pluginapi.Go(h.errs, "inbox/mark-read", func() {
+							_ = h.store.MarkMessageRead(context.Background(), id, uid)
+						})
 					}
 					break
 				}
@@ -434,18 +439,24 @@ func (h *Handlers) SendDM(c *gin.Context) {
 
 	// Notification fan-out — recipient gets an inbox NotifDM entry.
 	// Best-effort; failure doesn't block the message send.
+	//
+	// Through pluginapi.Go because the message is already stored and the
+	// member is already being redirected: there is nothing left to fail, and
+	// a bare goroutine here would still take the whole process down if the
+	// host's notifier panicked. Notify is the host's code, not this plugin's.
 	if recipientID > 0 {
-		go func(senderName string, recipID int, tID int64) {
-			bg := context.Background()
-			_ = h.notify.Notify(bg, int64(recipID), core.Notification{
+		senderName, recipID, tID := user.Username, recipientID, threadID
+		actorID, preview := int64(user.ID), previewBody(body, 140)
+		pluginapi.Go(h.errs, "dm/notify", func() {
+			_ = h.notify.Notify(context.Background(), int64(recipID), core.Notification{
 				Kind:      notifDM,
-				ActorID:   int64(user.ID),
+				ActorID:   actorID,
 				ActorName: senderName,
 				Title:     "New DM from " + senderName,
-				Body:      previewBody(body, 140),
+				Body:      preview,
 				Link:      "/inbox?thread=" + strconv.FormatInt(tID, 10),
 			})
-		}(user.Username, recipientID, threadID)
+		})
 	}
 
 	c.Redirect(http.StatusFound, "/inbox?thread="+strconv.FormatInt(threadID, 10)+"&ok=1")

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/the-loon-clan/loon/core"
 )
 
 // ── What the pages display ─────────────────────────────────────────────────
@@ -537,3 +539,15 @@ const (
 
 	EntityAnime = "anime"
 )
+
+// asyncErrs adapts the host's LogError seam to the reporter pluginapi.Go
+// takes. LogError rather than ReportError because these calls happen AFTER the
+// response is written — there is no client left to answer, only a log to
+// reach. A host that wired neither gets the standard logger, which is still
+// louder than a process that simply exits.
+func asyncErrs() core.ErrorReporter {
+	if deps == nil || deps.LogError == nil {
+		return nil
+	}
+	return core.NewErrorReporter(core.ErrorAdapter{ReportFn: deps.LogError})
+}
