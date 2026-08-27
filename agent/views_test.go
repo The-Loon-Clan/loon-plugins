@@ -161,10 +161,16 @@ func TestRenderDispatchPanel(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 	s := string(html)
-	// labels + the three jump links + the online/total pair + the cap value
+	// labels + the HOST's jump links + the online/total pair + the cap value.
+	//
+	// The roster and agent-groups links are the PLUGIN's own pages and are
+	// conditional on their seams, which these deps do not wire — see
+	// TestDispatchPanelLinksRosterOnlyWhenMounted and
+	// TestDispatchPanelLinksGroupsOnlyWhenMounted. Only /admin/agents and
+	// /admin/dispatch are unconditional, because those stay host-side.
 	for _, want := range []string{
 		"Agents online", "Max concurrent",
-		"/admin/agents", "/admin/agent-groups", "/admin/dispatch",
+		"/admin/agents", "/admin/dispatch",
 		">1</span> / 2",
 		">3</div>",
 	} {

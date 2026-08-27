@@ -39,7 +39,7 @@ var dispatchPanelTmpl = template.Must(template.New("agent-dispatch-panel").Parse
                          reads a queue table this plugin does not own. */}}
                     {{if .HasRoster}}<a href="/admin/p/agents" class="btn btn-outline-secondary btn-sm">Agents</a>{{end}}
                     <a href="/admin/agents" class="btn btn-outline-secondary btn-sm">Active Tasks</a>
-                    <a href="/admin/agent-groups" class="btn btn-outline-secondary btn-sm">Agent Groups</a>
+                    {{if .HasGroups}}<a href="/admin/p/agent-groups" class="btn btn-outline-secondary btn-sm">Agent Groups</a>{{end}}
                     <a href="/admin/dispatch" class="btn btn-outline-secondary btn-sm">Dispatch Debug</a>
                 </div>
                 <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.6rem;">
@@ -58,9 +58,10 @@ func (p *Plugin) renderDispatchPanel(c *gin.Context) (template.HTML, error) {
 		"Online":        online,
 		"Total":         total,
 		"MaxConcurrent": deps.MaxConcurrent(ctx),
-		// Same condition registerAdminPage uses, so the panel never links to
-		// a page this host did not mount.
+		// Same conditions the two register functions use, so the panel never
+		// links to a page this host did not mount.
 		"HasRoster": deps.AllAgents != nil,
+		"HasGroups": deps.ListAgentGroups != nil,
 	}); err != nil {
 		return "", err
 	}

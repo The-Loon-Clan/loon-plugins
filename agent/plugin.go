@@ -77,6 +77,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 	if err := p.registerAdminPage(c); err != nil {
 		return fmt.Errorf("agent: register admin roster page: %w", err)
 	}
+	if err := p.registerGroupsPage(c); err != nil {
+		return fmt.Errorf("agent: register agent-groups page: %w", err)
+	}
 	// Once, at Provision — the host serves it hashed and cached. No-ops on a
 	// host with no stylesheet sink, where the page draws unstyled: visible
 	// rather than silent, the right failure for a missing seam.

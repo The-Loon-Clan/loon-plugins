@@ -127,10 +127,14 @@ func (p *Plugin) registerAdminPage(c *core.Core) error {
 		return nil
 	}
 	return c.RegisterView(core.View{
-		Slug:        "agents",
-		Title:       "Agents",
-		Slot:        core.SlotAdminPage,
-		MinRole:     core.RoleAdmin,
+		Slug:    "agents",
+		Title:   "Agents",
+		Slot:    core.SlotAdminPage,
+		MinRole: core.RoleAdmin,
+		// Files the hub card under the host's existing Operations
+		// section rather than a generic Plugins bucket, so the fleet
+		// pages stay next to the dispatch ones they belong with.
+		Nav:         core.NavHint{Group: "Operations"},
 		Description: "Every agent registered on this site, with its owner and last check-in.",
 		Render:      p.renderAdminRoster,
 	})

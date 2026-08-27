@@ -41,6 +41,16 @@ const agentCSS = `/* /p/agents — the member page */
 /* Dates line up as a column, so they are read as one. */
 .ag-adm__when { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
+/* /admin/p/agent-groups — the posting profiles */
+.ag-hint { color: var(--text-muted); font-size: 0.78rem; }
+.ag-grp__heading { font-weight: 600; margin-bottom: 12px; }
+.ag-grp__type { font-size: 0.7rem; }
+.ag-grp__ver { color: var(--text-muted); font-size: 0.75rem; margin-left: 8px; }
+.ag-grp__del { font-size: 0.75rem; }
+.ag-grp__label { font-size: 0.82rem; }
+.ag-grp__none { text-align: center; padding: 2rem; }
+.ag-grp__foot { margin-top: 8px; }
+
 /* the one-time token reveal */
 .ag-token {
     display: block; padding: 0.6rem;

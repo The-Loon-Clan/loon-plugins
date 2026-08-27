@@ -103,6 +103,33 @@ func (a AdminAgent) Online() bool {
 	return a.LastSeen != nil && time.Since(*a.LastSeen) < agentOnlineWindow
 }
 
+// AgentGroup is one posting profile pushed to the fleet: which newsgroups a
+// kind of upload goes to, and the per-group overrides agents apply while
+// building it.
+//
+// The four override fields are POINTERS and every one of them has to stay
+// that way. Blank means "the agent uses its own default for this group",
+// which is a different instruction from zero — 0 screenshots means take
+// none, and 0% PAR2 means ship without recovery. A value type would collapse
+// those two answers into one and silently turn every unset field into an
+// aggressive setting.
+//
+// Version is the host's, read-only here: agents poll for it to notice a
+// profile changed, so the plugin must never invent one.
+type AgentGroup struct {
+	ID               int
+	Name             string
+	Type             string
+	Newsgroups       []string
+	BannedExtensions []string
+	Screenshots      *int
+	SampleSeconds    *int
+	Par2Redundancy   *int
+	Obfuscate        *bool
+	WatermarkText    string
+	Version          int
+}
+
 // Deps carries everything the plugin cannot know for itself. It is function-
 // typed rather than an interface set because every one of these needs
 // adapting at the boundary anyway (host records to the view types above), and
@@ -183,6 +210,28 @@ type Deps struct {
 	// "all" mode would give the member surfaces a parameter that turns the
 	// scoping off. Two seams, each of which can only do its own job.
 	AllAgents func(ctx context.Context) ([]AdminAgent, error)
+
+	// ── The agent-groups admin page's seams ─────────────────────────
+	//
+	// ListAgentGroups nil means no page, on the same reasoning as
+	// AllAgents. The three mutators are separately optional and gate the
+	// FORMS rather than the page: a host that can list but not write
+	// gets a read-only view of its posting profiles, which is a useful
+	// thing to have and not a broken page.
+
+	// ListAgentGroups returns every posting profile, newest schema first
+	// as the host orders them.
+	ListAgentGroups func(ctx context.Context) ([]AgentGroup, error)
+
+	// CreateAgentGroup adds a profile. The host assigns ID and Version.
+	CreateAgentGroup func(ctx context.Context, g AgentGroup) error
+
+	// UpdateAgentGroup replaces a profile by ID. The host bumps Version,
+	// which is how agents notice the change on their next poll.
+	UpdateAgentGroup func(ctx context.Context, g AgentGroup) error
+
+	// DeleteAgentGroup removes a profile by ID.
+	DeleteAgentGroup func(ctx context.Context, id int) error
 
 	// CanUseAgents decides whether a member may use the fleet surfaces at
 	// all: the profile card, the member page, and every action on it.
