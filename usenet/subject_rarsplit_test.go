@@ -186,3 +186,90 @@ func TestNoYencTwoCounterSubjectReadsBothCounters(t *testing.T) {
 		t.Errorf("single no-yEnc counter grew a file counter (%d/%d fp=%v); the ≥2-counter guard is gone", fn2, tf2, fp2)
 	}
 }
+
+// A THIRD route into the rar split, and the one that is live on production
+// today — reported from the demo index 26 Aug 2026, where 56 indexed
+// "releases" were really 4 posts and the flagship /series page offered "31
+// copies" of one episode, every one a 10 MB fragment of the same rip.
+//
+// This is the INVERSE of the collision pinned above. There, 42 volumes share
+// one key and overwrite each other; here they share no key at all and each
+// ships as its own complete, downloadable one-volume release.
+//
+// The mechanism is the trailing \b in reArchivePart. Some posters weld their
+// collection tag straight onto the archive name with no separator:
+//
+//	Army Wives S06disc 5.part109.rararmys06disc5nlsubs
+//	Greys Anatomy S09E02 …-DIMENSION NLSUBS.part011.rargrey
+//
+// "rar" followed by "a" is not a word boundary, so the volume suffix never
+// comes off and every volume derives its own base — the exact failure the
+// reArchivePart comment says the rule exists to prevent, reached through the
+// one shape its anchor cannot see. Measured on production 26 Aug 2026: 637
+// rows across 39 sets, newest four days old, so this is live and not
+// historical. None of the 39 carry an anime_id, which is why it has gone
+// unnoticed on an anime site.
+func TestConcatenatedTagDefeatsTheVolumeStrip(t *testing.T) {
+	// Same poster, same release, one space apart. The spaced form is handled
+	// correctly, which is what makes the boundary — not the mid-string match —
+	// the thing that fails.
+	spaced, _, _, _, _, _, _ := parseSubject(
+		`Army Wives S06disc 5.part109.rar - armys06disc5nlsubs - yEnc (1/15)`)
+	if spaced != "Army Wives S06disc 5 - armys06disc5nlsubs" {
+		t.Fatalf("spaced form = %q, want the volume suffix stripped", spaced)
+	}
+
+	// The welded form. If these two ever compare EQUAL, somebody has dropped
+	// the \b and this half of the bug is fixed — read the next test before
+	// celebrating, because the other half is what makes that dangerous.
+	a, _, _, _, _, _, _ := parseSubject(`Army Wives S06disc 5.part109.rararmys06disc5nlsubs yEnc (1/15)`)
+	b, _, _, _, _, _, _ := parseSubject(`Army Wives S06disc 5.part110.rararmys06disc5nlsubs yEnc (1/15)`)
+	if a == b {
+		t.Fatalf("welded volumes now share base %q — the \b was dropped; see TestDroppingTheBoundaryAloneBuildsAMosaic", a)
+	}
+	if a != "Army Wives S06disc 5.part109.rararmys06disc5nlsubs" {
+		t.Errorf("base = %q, want the volume suffix retained (the bug)", a)
+	}
+}
+
+// The trap, and the reason the one-character fix above must NOT be made on its
+// own. Measured rather than argued: dropping the \b was tried, and this is what
+// it produced.
+//
+// These posts carry a single counter — the SEGMENT counter — and no file
+// counter anywhere, so fileNum stays 0 for every volume. Collapsing the bases
+// therefore lands all 120 volumes in one staged set where volume 109's segment
+// 1 and volume 110's segment 1 are both "0:1". Completeness is then satisfied
+// the moment 15 distinct part numbers exist (COUNT(DISTINCT part_num) >=
+// MAX(total_parts), and total_parts is 15 PER VOLUME), so the set assembles
+// from the first volume that lands and what ships is one segment per key
+// claiming a whole volume's size.
+//
+// That trades 120 honest fragments for one dishonest release: the member who
+// was offered 31 obvious 10 MB pieces is instead offered a single 1.2 GB NZB
+// that is an interleaved mosaic. SUBJECT-PARSING-REVIEW.md records two such
+// mosaics passing a real newsreader's post-processing as "Completed" — no
+// data, nothing to verify, status green. A visible wrong answer became an
+// invisible one.
+//
+// So the fix is base + file key + completeness TOGETHER, not the regex alone:
+// derive the file number from ".partNNN" (the risk reArchivePart's own comment
+// measures), and give the file-parts completeness rule a total_files > 0 guard,
+// because MAX(total_files) = 0 makes "COUNT(DISTINCT file_num) >= 0" true for
+// the first article through the door.
+func TestDroppingTheBoundaryAloneBuildsAMosaic(t *testing.T) {
+	// Pre-stripped stand-ins for what the volumes look like once the suffix
+	// comes off — i.e. exactly what dropping the \b produces.
+	_, pnA, _, _, fnA, _, fpA := parseSubject(`Army Wives S06disc 5 armys06disc5nlsubs yEnc (1/15)`)
+	_, pnB, _, _, fnB, _, fpB := parseSubject(`Army Wives S06disc 5 armys06disc5nlsubs yEnc (1/15)`)
+
+	if fpA || fpB || fnA != 0 || fnB != 0 {
+		t.Fatalf("a file counter appeared (fp=%v/%v fn=%d/%d) — if .partNNN now feeds fileNum, "+
+			"the mosaic risk is gone and this test should assert the new keys instead", fpA, fpB, fnA, fnB)
+	}
+	if formatFieldKey(fnA, pnA) != formatFieldKey(fnB, pnB) {
+		t.Fatalf("volumes no longer share a field key — the completeness half may be fixed; update this test")
+	}
+	t.Logf("both volumes stage under %q with no file counter to separate them: "+
+		"collapsing the base alone merges them destructively", formatFieldKey(fnA, pnA))
+}
