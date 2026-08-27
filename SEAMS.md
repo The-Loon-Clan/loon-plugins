@@ -17,7 +17,7 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **66** of them, counted from the EXPORTED `…Name` and
+importing the other. There are **67** of them, counted from the EXPORTED `…Name` and
 `…Prefix` constants in `pluginapi` whose value is a NAMESPACED key, on
 22 Aug 2026. They are discoverable: an
 author reading `pluginapi` sees what exists, the compiler catches interface
@@ -187,6 +187,8 @@ Points themselves are `core.Points`; everything below is what points *buy*.
 | `newznab:v1:` | — | **Prefix.** Namespaces every cached Newznab response, so a worker can clear the whole search cache after an ingest (`cache.PrefixDeleter`, topic `EventIngested`). The one contract the 22 Aug recount found absent from this catalogue — which is the failure the warning at the top describes, happening again. |
 | `usenet.grabs` | `DownloadGrabLookup` | Which releases a member has taken — the check that stops a download report being writable by anyone who guesses an id. |
 | `usenet.recheck` | `ReleaseRecheckRequester` | Flag a release for the health sweep. A report is a signal; **the sweep decides from the articles themselves**. |
+| `usenet.articleprobe` | `ArticleProbe` | Ask a provider whether specific articles are still there, and read the first bytes of one. Two verbs with a sharp rule between them: `StatMissing` reports only DEFINITIVE absences, because a socket that died is not an article that is gone, and treating "could not ask" as "missing" re-posts articles that still exist. |
+| `mediainfo.summaries` | `MediaSummaries` | One line per release that carries a live media report, for a listing row. Newest report wins — two members describing one release is useful on a release page, but a row has space for one line, and the most recent is least likely to describe a file that has since been replaced. |
 | `tracker.mirrors` / `tracker.mirror.make` | `TorrentMirrors`, `TorrentMirrorMaker` | Which releases also exist as torrents, and making one on demand. On-demand because an index of 160,000 releases would otherwise pre-build gigabytes of info dictionaries nobody asked for. |
 | `collections.sink` | `CollectionSink` | Where a selection of releases can be filed. Deliberately narrow — name a member's own collections and take a batch. It cannot create one, read one, or touch anybody else's: a cart is a trolley, not an editor. |
 | `search.torznab` | `TorznabSearch` | Torrent search, answered by whoever has torrents. |
