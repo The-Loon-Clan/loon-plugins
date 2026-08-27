@@ -184,8 +184,15 @@
 <p class="m-0 small text-muted"><a href="/login">Sign in</a> to add MediaInfo or a screenshot.</p>
 {{end}}
 
+{{/* This used to end "…is in <em>What is in it</em>, above", naming a panel
+     the HOST draws. A host that suppresses that panel when it has no fact to
+     state — which is the right call, and one did it for 16,053 audio releases
+     — left this sentence pointing at nothing. A plugin fragment cannot know
+     what its host rendered above it, so the claim is now about the NZB rather
+     than about the page. */}}
 <p class="mi__foot small text-muted">
     Posted by members who downloaded this release. Bitrate, audio tracks, muxed
-    subtitles and chapters are not in an NZB, so they cannot be checked from
-    here — what the post itself proves is in <em>What is in it</em>, above.
+    subtitles and chapters are not in an NZB, so nothing here can be checked
+    against the post itself — only against what somebody reports after
+    downloading it.
 </p>
