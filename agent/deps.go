@@ -76,6 +76,33 @@ type FileDetail struct {
 	Speed   string
 }
 
+// AdminAgent is one row of the admin roster: the whole fleet, with its owner.
+//
+// Narrowed for the same reason as Agent above, and here the reason has teeth.
+// A host's own token record carries the bearer secret (or its hash) beside
+// these fields, and this page renders in an admin template where a stray
+// {{.Token}} would be both invisible in review and catastrophic. A type that
+// cannot hold the secret cannot print it.
+//
+// Status is the host's own word ("active" / "revoked") rather than a bool,
+// because a fleet grows states — expired, suspended — and a bool would force
+// the next one to be a lie or a second field.
+type AdminAgent struct {
+	ID        int
+	Name      string
+	Owner     string
+	Status    string
+	LastSeen  *time.Time
+	CreatedAt time.Time
+}
+
+// Online reports whether this agent polled recently enough to show a green
+// dot. Display only, and the same window the profile card uses so an operator
+// and a member never disagree about who is up.
+func (a AdminAgent) Online() bool {
+	return a.LastSeen != nil && time.Since(*a.LastSeen) < agentOnlineWindow
+}
+
 // Deps carries everything the plugin cannot know for itself. It is function-
 // typed rather than an interface set because every one of these needs
 // adapting at the boundary anyway (host records to the view types above), and
@@ -143,6 +170,19 @@ type Deps struct {
 
 	// SetShowOnProfile records the opt-in from the /p/agents page.
 	SetShowOnProfile func(ctx context.Context, ownerID int, show bool) error
+
+	// AllAgents lists every agent on the host, for the ADMIN roster at
+	// /admin/p/agents. Nil means the roster page is not registered at all
+	// rather than rendering empty — an operator who reaches a page that
+	// exists and shows nothing cannot tell a missing seam from an empty
+	// fleet, and only one of those is worth investigating.
+	//
+	// It is separate from AgentsForUser because it is a different question
+	// with a different answer: that one is owner-scoped by signature so the
+	// plugin cannot ask about anyone else, and widening it with an optional
+	// "all" mode would give the member surfaces a parameter that turns the
+	// scoping off. Two seams, each of which can only do its own job.
+	AllAgents func(ctx context.Context) ([]AdminAgent, error)
 
 	// CanUseAgents decides whether a member may use the fleet surfaces at
 	// all: the profile card, the member page, and every action on it.

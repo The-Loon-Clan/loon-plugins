@@ -30,6 +30,17 @@ const agentCSS = `/* /p/agents — the member page */
 .ag-card__when { color: var(--text-muted); font-size: 0.75rem; white-space: nowrap; }
 .ag-card__manage { font-size: 0.78rem; }
 
+/* /admin/p/agents — the roster */
+.ag-adm__summary {
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+    color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.9rem;
+}
+.ag-adm__summary strong { color: var(--text-primary); }
+.ag-adm__table { font-size: 0.82rem; }
+.ag-adm__badge { font-size: 0.65rem; }
+/* Dates line up as a column, so they are read as one. */
+.ag-adm__when { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
 /* the one-time token reveal */
 .ag-token {
     display: block; padding: 0.6rem;
