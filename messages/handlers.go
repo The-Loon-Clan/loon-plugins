@@ -344,12 +344,19 @@ func (h *Handlers) SendDM(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 
-	if !canSendDM(ctx, h.ents, user) {
-		c.Redirect(http.StatusFound, "/inbox?err="+
-			"You need a mod role or an active paid rank to send DMs.")
-		return
-	}
-
+	// The dm.initiate gate belongs to the NEW-THREAD branch below, and used to
+	// stand here in front of both. consts.go has always said this entitlement
+	// answers "may this user START a conversation?" and that "replying to an
+	// existing thread is not gated" — the code simply did not match, so an
+	// ordinary member could read a DM, block the sender and delete the thread,
+	// but not answer it. Being messaged and being unable to reply is a worse
+	// state than not being messaged at all.
+	//
+	// Nothing opens by moving it. The reply branch is scoped by
+	// GetDMThreadForUser(tid, user.ID), so a non-member gets "thread not
+	// found" whatever their rank, and it re-checks IsDMBlocked immediately
+	// after. Both were already there; the gate was redundant on that path and
+	// load-bearing only on the other.
 	body := strings.TrimSpace(c.PostForm("body"))
 	if body == "" {
 		c.Redirect(http.StatusFound, "/inbox?err=Message+body+required")
@@ -383,6 +390,12 @@ func (h *Handlers) SendDM(c *gin.Context) {
 			return
 		}
 	} else {
+		// Starting a conversation — the one thing dm.initiate gates.
+		if !canSendDM(ctx, h.ents, user) {
+			c.Redirect(http.StatusFound, "/inbox?err="+
+				"You need a mod role or an active paid rank to start a conversation.")
+			return
+		}
 		recipName := strings.TrimSpace(c.PostForm("recipient"))
 		if recipName == "" {
 			c.Redirect(http.StatusFound, "/inbox?err=Recipient+required")

@@ -165,7 +165,14 @@
                         </div>
                         {{end}}
                     </div>
-                    {{if and .CanSendDM (not .ActiveBlocked)}}
+                    {{/* NOT gated on CanSendDM: that entitlement gates STARTING
+                         a conversation, and this thread already exists. Gating
+                         the reply box too meant a member could read a DM, block
+                         the sender and delete the thread, but not answer it.
+                         Membership is established by the thread being active
+                         (GetDMThreadForUser scopes it), and the send handler
+                         re-checks both that and the block. */}}
+                    {{if not .ActiveBlocked}}
                     <form method="POST" action="/inbox/dm/send" class="ib-pane-foot" style="flex-direction:column;align-items:stretch;gap:0.5rem;">
                         <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                         <input type="hidden" name="thread_id" value="{{.ActiveThreadID}}">
