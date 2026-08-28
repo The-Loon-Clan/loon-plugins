@@ -707,11 +707,15 @@ func (p *Plugin) salvageSets(ctx context.Context, keys []groupKey) (removed int)
 		} else if verdict == healthBroken {
 			// Deduped broken salvage: almost always a partial crosspost copy
 			// of a release another group already completed — the stored row is
-			// the better copy and keeps its verdict. The one case this can
-			// leave wrong is a retry after a crash between our own store and
-			// verdict; report it so that window is visible, not silent.
-			p.reportErr(ctx, "usenet/salvage-dedup", fmt.Errorf(
-				"%s: broken salvage deduped onto existing nzb %d — keeping its verdict (crosspost copy, or a store-then-crash retry)", title, id))
+			// the better copy and keeps its verdict. Crossposts are ordinary
+			// on Usenet, so this is NOT an error: routing it to reportErr put
+			// 786 benign rows onto the error surface in a week and made it a
+			// "new critical" in the daily review, burying real signal. The one
+			// case it can leave wrong — a retry after a crash between our own
+			// store and its verdict — is rare and self-heals when the health
+			// job re-checks broken rows, so the job log is the right level: it
+			// stays visible without paging anyone.
+			p.buildJob.Log("salvage dedup: %q kept existing nzb %d's verdict (crosspost copy, or a store-then-crash retry)", title, id)
 		}
 		// (The healthy case — par2-only gaps — stays unmarked on purpose: all
 		// data is present, and the health job confirms from the live server.)

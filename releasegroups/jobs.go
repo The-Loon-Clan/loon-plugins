@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -91,7 +92,11 @@ func (s *scraperService) run(parentCtx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
 			s.job.SetError(fmt.Sprintf("panic: %v", r))
-			s.errs.Report(ctx, "release-group/scraper-panic", fmt.Errorf("panic: %v", r))
+			// Carry the stack: a recovered panic with only "%v" cannot be
+			// located, which left this exact op undiagnosable for days. The
+			// stack names the file:line of the nil deref.
+			s.errs.Report(ctx, "release-group/scraper-panic",
+				fmt.Errorf("panic: %v\n%s", r, debug.Stack()))
 		}
 	}()
 
@@ -376,8 +381,9 @@ func (s *archiveService) run(parentCtx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
 			s.job.SetError("panic during sweep")
-			log.Printf("release-group archive sweep panic: %v", r)
-			s.errs.Report(ctx, "release-group/archive-sweep-panic", fmt.Errorf("panic: %v", r))
+			log.Printf("release-group archive sweep panic: %v\n%s", r, debug.Stack())
+			s.errs.Report(ctx, "release-group/archive-sweep-panic",
+				fmt.Errorf("panic: %v\n%s", r, debug.Stack()))
 		}
 	}()
 
