@@ -692,6 +692,7 @@ func (h *Handlers) NzbByInfoHash(c *gin.Context) {
 //
 //	?type=anime|manga|music|movie  (default: anime)
 //	?size=<500MB|<1GB|<2.5GB|>=2.5GB  (optional)
+//	?kind=have|can_get  (optional — in hand vs obtainable-on-request)
 func (h *Handlers) OffersPage(c *gin.Context) {
 	ctx := c.Request.Context()
 	entityType := c.DefaultQuery("type", EntityAnime)
@@ -699,6 +700,10 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 		entityType = EntityAnime
 	}
 	sizeBucket := c.Query("size")
+	kind := c.Query("kind")
+	if kind != OfferKindHave && kind != OfferKindCanGet {
+		kind = ""
+	}
 	query := strings.TrimSpace(c.Query("q"))
 	tab := c.DefaultQuery("tab", "open")
 	if tab != "fulfilled" {
@@ -717,7 +722,7 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 	// fulfilled tab (in the open list they read as "nobody has this yet",
 	// the opposite of the truth) and return the moment the delivered
 	// release's articles die.
-	groups, total, err := deps.RecentBucketGroups(ctx, entityType, sizeBucket, query, tab,
+	groups, total, err := deps.RecentBucketGroups(ctx, entityType, sizeBucket, query, tab, kind,
 		pageSize, (pageNum-1)*pageSize)
 	if err != nil {
 		deps.LogError(ctx, "offer/page-buckets", err)
@@ -728,7 +733,7 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 	if tab == "fulfilled" {
 		otherTab = "open"
 	}
-	_, otherTotal, oerr := deps.RecentBucketGroups(ctx, entityType, sizeBucket, query, otherTab, 1, 0)
+	_, otherTotal, oerr := deps.RecentBucketGroups(ctx, entityType, sizeBucket, query, otherTab, kind, 1, 0)
 	if oerr != nil {
 		deps.LogError(ctx, "offer/page-buckets-count", oerr)
 	}
@@ -750,6 +755,9 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 	if sizeBucket != "" {
 		baseURL += "&size=" + url.QueryEscape(sizeBucket)
 	}
+	if kind != "" {
+		baseURL += "&kind=" + url.QueryEscape(kind)
+	}
 	if query != "" {
 		baseURL += "&q=" + url.QueryEscape(query)
 	}
@@ -765,6 +773,7 @@ func (h *Handlers) OffersPage(c *gin.Context) {
 		"ActiveNav":      "community",
 		"EntityType":     entityType,
 		"SizeBucket":     sizeBucket,
+		"Kind":           kind,
 		"Query":          query,
 		"Tab":            tab,
 		"Groups":         groups,

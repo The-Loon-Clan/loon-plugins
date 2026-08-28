@@ -64,7 +64,7 @@ func render(t *testing.T, name string, data gin.H) string {
 // (deps.RenderPagination), handed over pre-built like the requests feed's.
 func listingData(extra gin.H) gin.H {
 	base := gin.H{
-		"EntityType": EntityAnime, "SizeBucket": "", "Query": "", "Tab": "open",
+		"EntityType": EntityAnime, "SizeBucket": "", "Kind": "", "Query": "", "Tab": "open",
 		"Groups": []BucketGroup{}, "FulfilledTotal": 0,
 		"Total": 0, "Pagination": template.HTML(`<nav id="pg"></nav>`),
 	}
@@ -126,6 +126,22 @@ func TestOffersPageRenders(t *testing.T) {
 		if strings.Contains(got, gone) {
 			t.Errorf("offers page still renders the removed %q panel", gone)
 		}
+	}
+}
+
+// The availability filter is part of the form contract: both kinds are
+// offered, and the active choice comes back selected so Apply does not
+// silently reset it.
+func TestOffersPageKindFilter(t *testing.T) {
+	got := render(t, "offers.html", listingData(gin.H{"Kind": "can_get"}))
+	if !strings.Contains(got, `name="kind"`) {
+		t.Fatal("offers page has no kind select")
+	}
+	if !strings.Contains(got, `value="can_get" selected`) {
+		t.Error("active kind filter does not render selected")
+	}
+	if !strings.Contains(got, `value="have"`) {
+		t.Error("kind select is missing the 'have' option")
 	}
 }
 

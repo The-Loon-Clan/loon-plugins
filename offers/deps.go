@@ -325,7 +325,12 @@ type Deps struct {
 	// shelf is 'open' or 'fulfilled': the tabs paginate over their OWN
 	// populations, so the split happens in the host's query, not by
 	// dividing a fetched page. Returns the page plus the shelf's total.
-	RecentBucketGroups func(ctx context.Context, entityType, sizeBucket, query, shelf string, limit, offset int) ([]BucketGroup, int, error)
+	// kind ('' / 'have' / 'can_get') narrows the OFFERS the rollups count,
+	// not just the buckets shown — under 'have' a bucket's counts and
+	// minimum points describe its in-hand offers alone, and a bucket whose
+	// only offers are promises drops out, so the filtered page never shows
+	// a number the filter's premise contradicts.
+	RecentBucketGroups func(ctx context.Context, entityType, sizeBucket, query, shelf, kind string, limit, offset int) ([]BucketGroup, int, error)
 	// BucketDetail is one bucket plus the staged files behind it — the offer
 	// detail page. Files carry the agent's probe (codecs, duration, audio and
 	// subtitle tracks) so the page can describe a release nobody uploaded.
@@ -546,6 +551,12 @@ const (
 	VerificationHonor = "honor"
 
 	EntityAnime = "anime"
+
+	// Offer kinds — the promise-strength axis behind Bucket.HaveCount /
+	// CanGetCount, and the vocabulary of the listing's ?kind= filter. The
+	// values are the host's offers.offer_kind enum verbatim.
+	OfferKindHave   = "have"
+	OfferKindCanGet = "can_get"
 )
 
 // asyncErrs adapts the host's LogError seam to the reporter pluginapi.Go

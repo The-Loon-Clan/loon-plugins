@@ -46,6 +46,19 @@
                             <option value=">=2.5GB" {{if eq $s ">=2.5GB"}}selected{{end}}>&ge;2.5GB</option>
                         </select>
                     </div>
+                    <div>
+                        {{/* The promise-strength axis the row pills already
+                             speak: 'have' is a file in an offerer's hands,
+                             'can get' a release scraped from a tracker that
+                             an agent would fetch on request. */}}
+                        <label class="form__label small mb-1">Availability</label>
+                        <select aria-label="Availability" name="kind" class="form__select">
+                            {{$k := .Kind}}
+                            <option value=""        {{if eq $k ""}}selected{{end}}>Any</option>
+                            <option value="have"    {{if eq $k "have"}}selected{{end}}>Have &mdash; in hand</option>
+                            <option value="can_get" {{if eq $k "can_get"}}selected{{end}}>Can get &mdash; on request</option>
+                        </select>
+                    </div>
                     <button type="submit" class="button button--primary button--sm">Apply</button>
                 </form>
 
