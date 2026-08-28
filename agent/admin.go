@@ -16,24 +16,22 @@ import (
 // into an editable form here is deferred to the handler-move phase (it means
 // moving host settings code + widening the settings port with setters).
 var dispatchPanelTmpl = template.Must(template.New("agent-dispatch-panel").Parse(`
-                <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.75rem;">
-                    Live status of the upload fleet and where to manage it.
-                </div>
+                <p class="ag-intro ag-disp__lead">Live status of the upload fleet and where to manage it.</p>
                 <div class="row g-3 mb-3">
                     <div class="col-sm-4">
-                        <div class="home-card" style="padding:0.7rem 0.9rem;">
-                            <div style="font-size:1.3rem;font-weight:700;line-height:1;"><span style="color:var(--green);">{{.Online}}</span> / {{.Total}}</div>
-                            <div style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:0.25rem;">Agents online</div>
+                        <div class="home-card ag-disp__card">
+                            <div class="ag-disp__figure"><span class="ag-disp__on">{{.Online}}</span> / {{.Total}}</div>
+                            <div class="ag-disp__label">Agents online</div>
                         </div>
                     </div>
                     <div class="col-sm-4">
-                        <div class="home-card" style="padding:0.7rem 0.9rem;">
-                            <div style="font-size:1.3rem;font-weight:700;line-height:1;">{{.MaxConcurrent}}</div>
-                            <div style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:0.25rem;">Max concurrent / agent</div>
+                        <div class="home-card ag-disp__card">
+                            <div class="ag-disp__figure">{{.MaxConcurrent}}</div>
+                            <div class="ag-disp__label">Max concurrent / agent</div>
                         </div>
                     </div>
                 </div>
-                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                <div class="ag-disp__links">
                     {{/* The PLUGIN's own pages first: it mounts them, so it
                          knows they answer. Host pages come from the host --
                          hardcoding a route name here made /admin/dispatch a
@@ -42,9 +40,9 @@ var dispatchPanelTmpl = template.Must(template.New("agent-dispatch-panel").Parse
                     {{if .HasGroups}}<a href="/admin/p/agent-groups" class="btn btn-outline-secondary btn-sm">Agent Groups</a>{{end}}
                     {{range .HostLinks}}<a href="{{.Href}}" class="btn btn-outline-secondary btn-sm">{{.Label}}</a>{{end}}
                 </div>
-                <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.6rem;">
+                <p class="ag-disp__foot">
                     The concurrency cap + dispatch defaults are set in <strong>Agent Defaults</strong> on this page; this panel is a read-only overview.
-                </div>
+                </p>
 `))
 
 // hostAdminLinks returns the host's own agent admin pages, or nothing.

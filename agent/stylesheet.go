@@ -30,6 +30,23 @@ const agentCSS = `/* /p/agents — the member page */
 .ag-card__when { color: var(--text-muted); font-size: 0.75rem; white-space: nowrap; }
 .ag-card__manage { font-size: 0.78rem; }
 
+/* /admin/settings — the dispatch panel.
+   Every value here was an inline style= until CHECKLIST §8 named the rule:
+   a style attribute outranks any host stylesheet short of !important, so a
+   host that wants its own spacing has to fight the plugin for it. */
+.ag-disp__lead { margin-bottom: 0.75rem; font-size: 0.8rem; }
+.ag-disp__card { padding: 0.7rem 0.9rem; }
+.ag-disp__figure { font-size: 1.3rem; font-weight: 700; line-height: 1; }
+.ag-disp__on { color: var(--green); }
+.ag-disp__label {
+    font-size: 0.72rem; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.25rem;
+}
+.ag-disp__links { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.ag-disp__foot {
+    font-size: 0.72rem; color: var(--text-muted); margin: 0.6rem 0 0;
+}
+
 /* /admin/p/agents — the roster */
 .ag-adm__summary {
     display: flex; gap: 1.4rem; flex-wrap: wrap;

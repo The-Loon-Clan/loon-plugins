@@ -362,6 +362,53 @@ Verify: open `/admin` as a mod — the page is reachable from the hub;
 
 ## 8. Member-facing UI (html/css)
 
+### Where the line falls: the plugin ships STRUCTURE, the host ships LOOK
+
+A plugin cannot see the page it lands in, cannot know the theme, and must not
+decide what a host's colours mean. So it contributes markup and class names;
+the host contributes everything that turns those into an appearance. The four
+rules below are that sentence made checkable, and each one names how many
+violations were in the tree when it was written, so "we are nearly there" is a
+number rather than a feeling. `python3 scripts/audit_styles.py .` recounts
+both, per plugin.
+
+Count colours with that script rather than by eye: a naive `#[0-9a-f]{3,8}`
+also matches the digits inside `&#9679;` (a black circle) and `&#8593;` (an up
+arrow), which are not colours. That mistake inflated the first reading of this
+very section by 73.
+
+- [ ] **MUST** — no inline `style=` on any element. 830 when this was written;
+      the `agent` plugin is at zero and is the worked example.
+      A style attribute is the one thing a host CANNOT override: it outranks
+      every stylesheet rule short of `!important`, so a host that wants its own
+      spacing has to fight the plugin for it. It is also re-sent with every
+      render, and it keeps `style-src 'unsafe-inline'` alive in the host's CSP
+      exactly as a `<style>` block does — the thing the stylesheet seam exists
+      to retire. A class in the registered sheet instead.
+- [ ] **MUST** — colour, font family and type scale come from the host's
+      TOKENS, never literals. 650 hardcoded hex/rgb values when this was
+      written. `var(--text-muted)` asks the host what muted text looks like;
+      `#8b949e` decides it, on every host that mounts the plugin, including one
+      with a light theme where it is unreadable. The tokens already in use are
+      the vocabulary: `--text-primary`, `--text-muted`, `--border`,
+      `--bg-surface`, `--bg-elevated`, `--blue`, `--green`.
+- [ ] **MUST** — the plugin's own CSS and JS go through
+      `pluginapi.RegisterStylesheet` / `RegisterScript`, and every CSS selector
+      sits under the plugin's own prefix (`ag-`, `fm-`). The prefix is what
+      stops two plugins colliding on `.card__row` and what lets a host override
+      one plugin without touching another. Both seams no-op on a host that
+      offers no sink, so the fallback is the old `<style>` / `<script>` block
+      and nothing breaks.
+- [ ] **MUST** — assume ONLY the vocabulary below, and name anything else in
+      the README. What plugins may rely on, because every host that mounts them
+      ships it: the host's design system (`button`, `button--sm|--primary
+      |--outlined`, `panelV2`, `panel__header|__body`, `form__label`,
+      `form__input`, `data-table`, `tag`, `notice`, `icon`, `fs-3xs|xs|sm`) and
+      Bootstrap's utility classes (`d-flex`, `mb-*`, `text-muted`, `text-end`,
+      `align-items-center`). Bootstrap COMPONENT behaviour is not on that list
+      — see the `data-bs-toggle` rule below, which is the same mistake caught
+      from the other side.
+
 - [ ] **MUST** — templates speak the HOST's design vocabulary, or the host
       overrides them. Never markup that "happens to render": the tracker's
       Bootstrap `table-responsive` survived only until a phone, where it ran
