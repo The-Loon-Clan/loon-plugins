@@ -385,6 +385,16 @@ very section by 73.
       render, and it keeps `style-src 'unsafe-inline'` alive in the host's CSP
       exactly as a `<style>` block does — the thing the stylesheet seam exists
       to retire. A class in the registered sheet instead.
+
+      ONE CARVE-OUT, because the rule is otherwise unfollowable and people
+      route around an unfollowable rule rather than obey it: a value COMPUTED
+      AT RUNTIME has no static class to be. A progress bar's `width:42.7%`, a
+      chip whose colour a script picks — those stay inline. The discipline is
+      to inline ONLY the computed value: set a custom property
+      (`style="--pct:42.7%"`) and let the sheet do the rest, so the host still
+      owns everything except the number. What this does not license is a
+      hand-written `font-size` sitting next to the computed width, which is
+      how a carve-out becomes the rule.
 - [ ] **MUST** — colour, font family and type scale come from the host's
       TOKENS, never literals. 650 hardcoded hex/rgb values when this was
       written. `var(--text-muted)` asks the host what muted text looks like;
