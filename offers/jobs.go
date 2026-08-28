@@ -39,7 +39,7 @@ func newOfferSweeper(deps JobDeps) *offerSweeper {
 	s := &offerSweeper{deps: deps, job: offerSweeperJob}
 	// Background, not the boot context: a manual trigger from /admin/jobs must
 	// not be cancelled by whatever fired it.
-	offerSweeperJob.SetTrigger(func() { go s.runOnce(context.Background()) })
+	offerSweeperJob.SetTriggerAsync(func() { s.runOnce(context.Background()) })
 	return s
 }
 
@@ -89,7 +89,7 @@ type offerPruner struct {
 
 func newOfferPruner(deps JobDeps) *offerPruner {
 	s := &offerPruner{deps: deps, job: offerPrunerJob, staleAfter: 60 * 24 * time.Hour}
-	offerPrunerJob.SetTrigger(func() { go s.runOnce(context.Background()) })
+	offerPrunerJob.SetTriggerAsync(func() { s.runOnce(context.Background()) })
 	return s
 }
 

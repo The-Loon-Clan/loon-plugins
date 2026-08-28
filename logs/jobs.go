@@ -40,7 +40,7 @@ func newCleaner(deps JobDeps) *cleaner {
 	// The trigger context is deliberately Background, not the boot context:
 	// a manual /admin/jobs run must not be cancelled by whatever request or
 	// caller happened to fire it.
-	cleanupJob.SetTrigger(func() { go c.runOnce(context.Background()) })
+	cleanupJob.SetTriggerAsync(func() { c.runOnce(context.Background()) })
 	return c
 }
 

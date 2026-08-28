@@ -211,7 +211,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// Background rather than the trigger's request context — the /admin/jobs
 	// POST that fired it must not cancel the run. runImport's TryLock refuses
 	// overlap with the scheduled loop.
-	p.job.SetTrigger(func() { go p.runImport(context.Background()) })
+	p.job.SetTriggerAsync(func() { p.runImport(context.Background()) })
 	return nil
 }
 

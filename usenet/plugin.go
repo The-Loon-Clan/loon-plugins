@@ -368,18 +368,18 @@ func (p *Plugin) Provision(c *core.Core) error {
 			"Reads the bodies of junk-dropped postings to see whether the yEnc header names a real file (off by default; spends provider bytes)").MarkOffPeak().MarkWrites())
 		p.rot18Job = p.duty.wrap(jobNameRot18Repair, c.Scheduler.RegisterJob(jobNameRot18Repair,
 			"Rewrites titles stored before the crawler could decode ROT18-rotated subjects (off by default; changes catalogue titles)").MarkOffPeak().MarkWrites())
-		p.crawlJob.SetTrigger(func() { go p.runCrawl(p.ctx) })
-		p.backfillJob.SetTrigger(func() { go p.runBackfill(p.ctx) })
-		p.buildJob.SetTrigger(func() { go p.runBuild(p.ctx) })
-		p.tagJob.SetTrigger(func() { go p.runTagFill(p.ctx) })
-		p.pruneJob.SetTrigger(func() { go p.runPrune(p.ctx) })
-		p.healthJob.SetTrigger(func() { go p.runHealthCheck(p.ctx) })
-		p.nfoJob.SetTrigger(func() { go p.runNFO(p.ctx) })
-		p.imageJob.SetTrigger(func() { go p.runImage(p.ctx) })
-		p.spotJob.SetTrigger(func() { go p.runSpotIndex(p.ctx) })
-		p.spotFetchJob.SetTrigger(func() { go p.runSpotFetch(p.ctx) })
-		p.junkProbeJob.SetTrigger(func() { go p.runJunkProbe(p.ctx) })
-		p.rot18Job.SetTrigger(func() { go p.runRot18Repair(p.ctx) })
+		p.crawlJob.SetTriggerAsync(func() { p.runCrawl(p.ctx) })
+		p.backfillJob.SetTriggerAsync(func() { p.runBackfill(p.ctx) })
+		p.buildJob.SetTriggerAsync(func() { p.runBuild(p.ctx) })
+		p.tagJob.SetTriggerAsync(func() { p.runTagFill(p.ctx) })
+		p.pruneJob.SetTriggerAsync(func() { p.runPrune(p.ctx) })
+		p.healthJob.SetTriggerAsync(func() { p.runHealthCheck(p.ctx) })
+		p.nfoJob.SetTriggerAsync(func() { p.runNFO(p.ctx) })
+		p.imageJob.SetTriggerAsync(func() { p.runImage(p.ctx) })
+		p.spotJob.SetTriggerAsync(func() { p.runSpotIndex(p.ctx) })
+		p.spotFetchJob.SetTriggerAsync(func() { p.runSpotFetch(p.ctx) })
+		p.junkProbeJob.SetTriggerAsync(func() { p.runJunkProbe(p.ctx) })
+		p.rot18Job.SetTriggerAsync(func() { p.runRot18Repair(p.ctx) })
 		p.svc.triggerCrawl = func() { go p.runCrawl(p.ctx) }
 		p.svc.triggerBackfill = func() { go p.runBackfill(p.ctx) }
 	}
@@ -483,6 +483,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 // runTagFill retrofits quality tags onto NZBs missing them (build-time tagging
 // covers new rows; this catches rows from before a parser change).
 func (p *Plugin) runTagFill(ctx context.Context) {
+	defer p.recoverPass(jobNameTagFill, p.tagJob)
 	if ctx == nil {
 		return
 	}
@@ -640,6 +641,7 @@ func (p *Plugin) effective(ctx context.Context) Config {
 
 // runPrune deletes NZBs past the retention window + stale staged articles.
 func (p *Plugin) runPrune(ctx context.Context) {
+	defer p.recoverPass(jobNamePrune, p.pruneJob)
 	if ctx == nil {
 		return
 	}

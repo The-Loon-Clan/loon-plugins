@@ -353,12 +353,10 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// windows". Without this the answer to "where are my windows" is "wait up
 	// to thirty minutes", which reads as broken and is how someone concludes
 	// the event is misconfigured when it is merely early.
-	p.job.SetTrigger(func() {
-		go func() {
-			if err := p.maintain(context.Background()); err != nil {
-				p.job.Log("manual run: %v", err)
-			}
-		}()
+	p.job.SetTriggerAsync(func() {
+		if err := p.maintain(context.Background()); err != nil {
+			p.job.Log("manual run: %v", err)
+		}
 	})
 	go schedule.ServiceLoop(ctx, p.job,
 		2*time.Minute,  // boot delay: let migrations and the pool settle

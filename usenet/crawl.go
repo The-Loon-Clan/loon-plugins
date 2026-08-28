@@ -106,6 +106,7 @@ type crawlPlan struct {
 // connection pool; a group's watermark only advances past batches that were both
 // fetched and staged successfully.
 func (p *Plugin) runCrawl(ctx context.Context) {
+	defer p.recoverPass(jobNameCrawl, p.crawlJob)
 	if ctx == nil {
 		return
 	}
@@ -544,6 +545,7 @@ func (p *Plugin) crawlBackbone(ctx context.Context, runs []providerRun, cfg Conf
 // has none to spend. (Prod is looser: it drains health whenever backfill is
 // exhausted, even on a pass that just fetched tens of thousands of articles.)
 func (p *Plugin) idleHealthCheck(ctx context.Context) {
+	defer p.recoverPass(jobNameHealth, p.healthJob)
 	if ctx == nil || ctx.Err() != nil {
 		return
 	}

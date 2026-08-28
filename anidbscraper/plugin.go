@@ -95,8 +95,8 @@ func (p *Plugin) Provision(c *core.Core) error {
 	// Manual /admin/jobs "run now" buttons (bypass the off-peak gate). The
 	// callback has no ctx of its own, so it borrows the root ctx captured in
 	// Start; triggers only ever fire at runtime, well after Start.
-	p.scanJob.SetTrigger(func() { go p.runScan(p.ctx) })
-	p.fillJob.SetTrigger(func() { go p.runFill(p.ctx) })
+	p.scanJob.SetTriggerAsync(func() { p.runScan(p.ctx) })
+	p.fillJob.SetTriggerAsync(func() { p.runFill(p.ctx) })
 	return nil
 }
 

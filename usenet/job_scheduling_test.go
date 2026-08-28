@@ -50,12 +50,12 @@ func TestEveryRegisteredJobIsScheduledOrDispatched(t *testing.T) {
 				if !ok {
 					return true
 				}
-				switch sel.Sel.Name {
-				case "SetTrigger":
+				switch {
+				case isTriggerCall(sel.Sel.Name):
 					if inner, ok := sel.X.(*ast.SelectorExpr); ok {
 						triggered[inner.Sel.Name] = true
 					}
-				case "RunLoop":
+				case sel.Sel.Name == "RunLoop":
 					// RunLoop(ctx, p.xJob, boot, interval, fn)
 					if len(call.Args) >= 2 {
 						if job, ok := call.Args[1].(*ast.SelectorExpr); ok {
@@ -68,16 +68,23 @@ func TestEveryRegisteredJobIsScheduledOrDispatched(t *testing.T) {
 			// A job whose run function is called from ordinary code (the NFO
 			// pattern) is reachable too.
 			//
-			// The SetTrigger body must be EXCLUDED, and this is the whole
+			// The trigger body must be EXCLUDED, and this is the whole
 			// subtlety: every triggered job contains
-			// `SetTrigger(func(){ go p.runX(...) })`, so counting that as a
+			// `SetTriggerAsync(func(){ p.runX(...) })`, so counting that as a
 			// dispatch makes the check vacuous — it passes for exactly the jobs
 			// it is supposed to fail. Verified by deleting the RunLoop and
 			// watching the first version of this test stay green.
+			//
+			// Both spellings are matched. When the triggers were converted from
+			// SetTrigger to SetTriggerAsync (loon a7ccff3, so a manual run is
+			// panic-protected like a scheduled one), this walker matched the
+			// method NAME and went blind — `triggered` emptied and the guard
+			// below caught it. That guard is why the rename could not silently
+			// turn this whole test into a no-op.
 			var skip []ast.Node
 			ast.Inspect(f, func(n ast.Node) bool {
 				if call, ok := n.(*ast.CallExpr); ok {
-					if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "SetTrigger" {
+					if sel, ok := call.Fun.(*ast.SelectorExpr); ok && isTriggerCall(sel.Sel.Name) {
 						for _, a := range call.Args {
 							skip = append(skip, a)
 						}
@@ -107,7 +114,7 @@ func TestEveryRegisteredJobIsScheduledOrDispatched(t *testing.T) {
 	}
 
 	if len(triggered) == 0 {
-		t.Fatal("found no SetTrigger calls at all — the walker is broken, not the code")
+		t.Fatal("found no SetTrigger/SetTriggerAsync calls at all — the walker is broken, not the code")
 	}
 
 	// Map job field -> the run function it triggers, by naming convention, and
@@ -135,4 +142,12 @@ func TestEveryRegisteredJobIsScheduledOrDispatched(t *testing.T) {
 			"it will run only when a human presses the button, and its interval setting does nothing", job)
 	}
 	t.Logf("%d job(s) triggerable, %d on a loop", len(triggered), len(looped))
+}
+
+// isTriggerCall matches both spellings of the manual-run registration.
+// SetTriggerAsync is the one that spawns and panic-protects; SetTrigger
+// remains for callbacks that only enqueue. A walker that knew one name would
+// go blind the day a job moved between them.
+func isTriggerCall(name string) bool {
+	return name == "SetTrigger" || name == "SetTriggerAsync"
 }

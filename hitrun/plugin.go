@@ -142,7 +142,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		p.job = c.Scheduler.RegisterJob(jobName,
 			"Evaluates the tracker's seeding record: pre-warns, warns, and expires old warnings").
 			MarkWrites()
-		p.job.SetTrigger(func() { go p.runSweep(p.ctx) })
+		p.job.SetTriggerAsync(func() { p.runSweep(p.ctx) })
 	}
 	return nil
 }

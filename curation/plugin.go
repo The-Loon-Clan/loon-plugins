@@ -74,7 +74,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		"Fills season/episode on anime releases from title, AniDB entry name and TMDB season structure; unresolved rows feed the curation page").
 		MarkOffPeak().MarkWrites()
 	p.job.IntervalMin = int(defaultInterval.Minutes())
-	p.job.SetTrigger(func() { go p.runSweep(context.Background()) })
+	p.job.SetTriggerAsync(func() { p.runSweep(context.Background()) })
 	return nil
 }
 

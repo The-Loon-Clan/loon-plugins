@@ -176,7 +176,7 @@ func (b *IRCBotService) SetCreateInvite(f func(context.Context, int) (string, er
 // Start launches the connect loop with backoff. Safe to call once at boot.
 func (b *IRCBotService) Start() {
 	b.job = schedule.RegisterService("IRC Bot", "Maintains a persistent connection to the configured IRC server for chat bridge, account linking, and whisper delivery.")
-	b.job.SetTrigger(func() { go b.reconnect() })
+	b.job.SetTriggerAsync(func() { b.reconnect() })
 	stop := make(chan struct{})
 	b.mu.Lock()
 	b.stopCh = stop

@@ -99,12 +99,10 @@ func (p *Plugin) Provision(c *core.Core) error {
 		// exactly as broken as having no button, with the added cost that the
 		// button looked like it worked. Background context, not the request's:
 		// an operator's click must not be cancelled when their page finishes.
-		p.job.SetTrigger(func() {
-			go func() {
-				if err := p.generate(context.Background()); err != nil {
-					p.job.Log("generate (triggered): %v", err)
-				}
-			}()
+		p.job.SetTriggerAsync(func() {
+			if err := p.generate(context.Background()); err != nil {
+				p.job.Log("generate (triggered): %v", err)
+			}
 		})
 	}
 	return nil

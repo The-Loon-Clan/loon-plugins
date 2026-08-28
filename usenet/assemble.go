@@ -49,6 +49,7 @@ func (p *Plugin) samplePending(ctx context.Context) {
 // runBuild assembles complete (group, base_subject) sets into NZB files. A set
 // is complete when its distinct part count reaches the max total-parts seen.
 func (p *Plugin) runBuild(ctx context.Context) {
+	defer p.recoverPass(jobNameBuild, p.buildJob)
 	if ctx == nil {
 		return
 	}

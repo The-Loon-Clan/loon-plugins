@@ -37,7 +37,7 @@ func (p *Plugin) registerScoringJob(sched core.SchedulerService) {
 	p.job = sched.RegisterJob("Achievement Scoring",
 		"Scores metric achievements from host counters, backfills new ones, and repairs completions whose reward payment has not landed").
 		MarkWrites()
-	p.job.SetTrigger(func() { go p.runScoring(context.Background()) })
+	p.job.SetTriggerAsync(func() { p.runScoring(context.Background()) })
 }
 
 func (p *Plugin) runScoring(ctx context.Context) {

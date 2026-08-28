@@ -614,6 +614,7 @@ func (p *Plugin) resolveHealthBackend() (healthBackend, error) {
 
 // runHealthCheck sweeps releases that are due a check.
 func (p *Plugin) runHealthCheck(ctx context.Context) {
+	defer p.recoverPass(jobNameHealth, p.healthJob)
 	if ctx == nil {
 		return
 	}

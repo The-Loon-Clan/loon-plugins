@@ -56,7 +56,7 @@ func (p *Plugin) Provision(c *core.Core) error {
 		// MarkWrites even though it only writes cache rows: holding cache
 		// writes back during a migration keeps the row-count verification clean.
 		p.job = c.Scheduler.RegisterJob("Stats Cache", "Collects plugin StatContributor hooks into the cached stats snapshot").MarkWrites()
-		p.job.SetTrigger(func() { go p.run(p.ctx) })
+		p.job.SetTriggerAsync(func() { p.run(p.ctx) })
 	}
 
 	// web/all: the presentation views ("if a user is logged in they can see

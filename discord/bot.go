@@ -95,7 +95,7 @@ func (d *DiscordBotService) SetChatHub(h pluginapi.ChatHub) {
 // Registered as a job so logs are visible in the admin Jobs page.
 func (d *DiscordBotService) Start() {
 	d.job = schedule.RegisterService("Discord Bot", "Maintains a persistent WebSocket to Discord for chat bridge, slash commands, role sync, and release notifications.")
-	d.job.SetTrigger(func() { go d.reconnect() })
+	d.job.SetTriggerAsync(func() { d.reconnect() })
 	d.stopSync = make(chan struct{})
 	go d.connect()
 	go d.roleSyncLoop()

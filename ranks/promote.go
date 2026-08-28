@@ -224,7 +224,7 @@ func newRankPromotion(store Store, ents *entSync, stats pluginapi.RankStats, sch
 	p.job = sched.RegisterJob("Rank Promotion",
 		"Promotes and demotes members between earned ranks on releases contributed, upload, ratio and account age").
 		MarkWrites()
-	p.job.SetTrigger(func() { go p.run(context.Background()) })
+	p.job.SetTriggerAsync(func() { p.run(context.Background()) })
 	return p
 }
 

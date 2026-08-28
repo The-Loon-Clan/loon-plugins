@@ -40,7 +40,7 @@ func newBacklogSweeper(deps JobDeps) *backlogSweeper {
 	s := &backlogSweeper{deps: deps, job: backlogSweepJob}
 	// Background, not the boot context: a manual trigger from /admin/jobs must
 	// not be cancelled by whatever fired it.
-	backlogSweepJob.SetTrigger(func() { go s.runOnce(context.Background()) })
+	backlogSweepJob.SetTriggerAsync(func() { s.runOnce(context.Background()) })
 	return s
 }
 

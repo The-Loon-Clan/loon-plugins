@@ -55,10 +55,11 @@ func (j *fakeJob) Log(format string, args ...any) {
 	j.logs = append(j.logs, format)
 }
 
-func (j *fakeJob) MarkOffPeak() core.Job { return j }
-func (j *fakeJob) MarkWrites() core.Job  { return j }
-func (j *fakeJob) SetTrigger(fn func())  {}
-func (j *fakeJob) IsPaused() bool        { return false }
+func (j *fakeJob) MarkOffPeak() core.Job  { return j }
+func (j *fakeJob) MarkWrites() core.Job   { return j }
+func (j *fakeJob) SetTrigger(fn func())   {}
+func (j *fakeJob) SetTriggerAsync(func()) {}
+func (j *fakeJob) IsPaused() bool         { return false }
 
 // stillRunning is the failure this whole file exists to catch: a job left in
 // flight never runs again on the loop and holds the shutdown drain open.

@@ -35,7 +35,7 @@ func newFlowSnapshots(flow FlowStore) *flowSnapshots {
 	s.job.IntervalMin = flowSnapshotIntervalMin
 	// Background, not the trigger's request context: an /admin/jobs POST
 	// must not cancel the run it fired.
-	s.job.SetTrigger(func() { go s.run(context.Background()) })
+	s.job.SetTriggerAsync(func() { s.run(context.Background()) })
 	return s
 }
 

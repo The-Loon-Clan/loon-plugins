@@ -139,13 +139,13 @@ func (p *Plugin) Provision(c *core.Core) error {
 		"Walks the asset directories and records every file's size and content hash").
 		MarkWrites()
 	p.indexJob.IntervalMin = indexIntervalMin
-	p.indexJob.SetTrigger(func() { go p.runIndex(context.Background()) })
+	p.indexJob.SetTriggerAsync(func() { p.runIndex(context.Background()) })
 
 	p.dumpJob = schedule.RegisterJob("Backup Database",
 		"Dumps PostgreSQL into the asset tree so the pull pipeline carries it").
 		MarkWrites()
 	p.dumpJob.IntervalMin = dbDumpIntervalMin
-	p.dumpJob.SetTrigger(func() { go p.runDBDump(context.Background()) })
+	p.dumpJob.SetTriggerAsync(func() { p.runDBDump(context.Background()) })
 
 	// Publish the pack server so the host can mount HTTP routes over it
 	// without importing this package. Registered here rather than in Start

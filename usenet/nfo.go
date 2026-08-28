@@ -130,6 +130,7 @@ func (p *Plugin) resolveNFOBackend() (nfoBackend, error) {
 
 // runNFO is the job entry point.
 func (p *Plugin) runNFO(ctx context.Context) {
+	defer p.recoverPass(jobNameNFO, p.nfoJob)
 	cfg := p.effective(ctx)
 	if !cfg.NFOEnabled {
 		p.nfoJob.Log("disabled in settings")

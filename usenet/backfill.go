@@ -20,6 +20,7 @@ import (
 // A pass is bounded by BackfillBatchesPerRun across all groups, so a large
 // history doesn't monopolise the pool.
 func (p *Plugin) runBackfill(ctx context.Context) {
+	defer p.recoverPass(jobNameBackfill, p.backfillJob)
 	if ctx == nil {
 		return
 	}

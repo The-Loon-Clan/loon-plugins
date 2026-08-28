@@ -97,7 +97,7 @@ func (p *Plugin) provisionRepack() {
 			"FULL job. Skips with a logged warning if the pg_repack binary or "+
 			"extension isn't installed.").MarkOffPeak().MarkWrites()
 	p.repack.IntervalMin = pgRepackIntervalMin
-	p.repack.SetTrigger(func() { go p.runRepack(context.Background()) })
+	p.repack.SetTriggerAsync(func() { p.runRepack(context.Background()) })
 	p.repack.DeclareConfig(deps.ConfigStore,
 		schedule.JobConfigVar{
 			Key:         "tables",
@@ -130,7 +130,7 @@ func (p *Plugin) provisionReindex() {
 			"pg_repack -x. Online operation — site stays up, brief locks only "+
 			"at swap time.").MarkOffPeak().MarkWrites()
 	p.reindex.IntervalMin = reindexIntervalMin
-	p.reindex.SetTrigger(func() { go p.runReindex(context.Background()) })
+	p.reindex.SetTriggerAsync(func() { p.runReindex(context.Background()) })
 	p.reindex.DeclareConfig(deps.ConfigStore,
 		schedule.JobConfigVar{
 			Key:         "skip_tables",
@@ -166,7 +166,7 @@ func (p *Plugin) provisionVerify() {
 			"message and no structural check will ever surface. Read-only "+
 			"(AccessShareLock) — the site stays up.").MarkOffPeak()
 	p.verify.IntervalMin = verifyIntervalMin
-	p.verify.SetTrigger(func() { go p.runVerify(context.Background()) })
+	p.verify.SetTriggerAsync(func() { p.runVerify(context.Background()) })
 	p.verify.DeclareConfig(deps.ConfigStore,
 		schedule.JobConfigVar{
 			Key:   "collatable_only",
@@ -234,7 +234,7 @@ func (p *Plugin) provisionVacuum() {
 			"maintenance mode while it runs. Scheduled weekly; can also be "+
 			"triggered manually from the admin jobs page.").MarkOffPeak().MarkWrites()
 	p.vacuum.IntervalMin = vacuumFullIntervalMin
-	p.vacuum.SetTrigger(func() { go p.runVacuum(context.Background()) })
+	p.vacuum.SetTriggerAsync(func() { p.runVacuum(context.Background()) })
 	p.vacuum.DeclareConfig(deps.ConfigStore,
 		schedule.JobConfigVar{
 			Key:         "timeout_minutes",

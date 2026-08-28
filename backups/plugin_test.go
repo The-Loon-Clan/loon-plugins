@@ -43,11 +43,12 @@ func (j *fakeJob) SetError(string) {
 	j.running = false
 }
 
-func (j *fakeJob) Log(string, ...any)    {}
-func (j *fakeJob) MarkOffPeak() core.Job { return j }
-func (j *fakeJob) MarkWrites() core.Job  { return j }
-func (j *fakeJob) SetTrigger(func())     {}
-func (j *fakeJob) IsPaused() bool        { return false }
+func (j *fakeJob) Log(string, ...any)     {}
+func (j *fakeJob) MarkOffPeak() core.Job  { return j }
+func (j *fakeJob) MarkWrites() core.Job   { return j }
+func (j *fakeJob) SetTrigger(func())      {}
+func (j *fakeJob) SetTriggerAsync(func()) {}
+func (j *fakeJob) IsPaused() bool         { return false }
 
 func (j *fakeJob) stillRunning() bool {
 	j.mu.Lock()

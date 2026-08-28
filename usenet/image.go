@@ -59,6 +59,7 @@ func (p *Plugin) resolveImageBackend() (pluginapi.ReleaseImageStore, error) {
 
 // runImage is the job entry point.
 func (p *Plugin) runImage(ctx context.Context) {
+	defer p.recoverPass(jobNameImage, p.imageJob)
 	cfg := p.effective(ctx)
 	if !cfg.ImageEnabled {
 		p.imageJob.Log("disabled in settings")

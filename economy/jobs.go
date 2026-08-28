@@ -28,7 +28,7 @@ func newGrabBonus(deps Deps, points core.PointsService) *grabBonus {
 		"Awards points to uploaders for each NZB download/grab on their uploads").
 		MarkWrites()
 	s.job.IntervalMin = 24 * 60
-	s.job.SetTrigger(func() { go s.run(context.Background()) })
+	s.job.SetTriggerAsync(func() { s.run(context.Background()) })
 	return s
 }
 

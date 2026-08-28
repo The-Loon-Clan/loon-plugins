@@ -36,7 +36,7 @@ func newRankExpiry(store Store, ents *entSync, sched core.SchedulerService) *ran
 		MarkWrites()
 	// The manual "run now" button. It does NOT go through RunLoop, so the
 	// pause check inside run() is what stops it firing on a paused job.
-	s.job.SetTrigger(func() { go s.run(context.Background()) })
+	s.job.SetTriggerAsync(func() { s.run(context.Background()) })
 	return s
 }
 
