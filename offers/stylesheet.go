@@ -120,6 +120,14 @@ const offersCSS = `/* from admin_offers.html */
         .of-pill-priv { background: rgba(96,165,250,0.15); color:#60a5fa; }
         .of-pill-pub  { background: rgba(74,222,128,0.15); color:#4ade80; }
         .of-pill-per  { background: rgba(168,85,247,0.15); color:#c084fc; }
+        /* Kind pills — a different axis than visibility, so a different
+           shape: outlined where visibility is filled. Green = an offerer
+           holds the file; muted = every offerer would fetch it from their
+           source first. Tokens only (CHECKLIST §8): green and the
+           muted/border pair are in the assumable vocabulary. Also worn by
+           the detail page's od-pill row. */
+        .of-pill-have { border: 1px solid var(--green); color: var(--green); background: transparent; }
+        .of-pill-can  { border: 1px solid var(--border); color: var(--text-muted); background: transparent; }
         /* The disclosure chevron on collapsed show-cards. The native marker
            is hidden (list-style:none on the summary + the webkit rule here)
            so the header reads as a card, not a bullet list. */

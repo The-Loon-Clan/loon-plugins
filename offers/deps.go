@@ -52,6 +52,14 @@ type Bucket struct {
 	HasPrivate       bool
 	HasPublic        bool
 	HasPersonal      bool
+	// HaveCount / CanGetCount split OfferCount by promise strength: offers
+	// whose file sits on the offerer's disk ("have") vs offers the offerer
+	// would first fetch from their own source ("can get"). Computed
+	// host-side from offers.offer_kind; they sum to OfferCount. The
+	// listing renders them as tags so a requester can weigh how firm a
+	// bucket is before staking points on it.
+	HaveCount   int
+	CanGetCount int
 	// BackerCount is how many members are behind this bucket's live request,
 	// 0 when nobody has asked. It is the demand signal the listing was
 	// missing: an offerer scanning the page could see what they COULD give

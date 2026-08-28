@@ -102,6 +102,8 @@
                                     {{if .SampleFile}}<div style="font-family:var(--font-mono, ui-monospace, monospace);font-size:0.74rem;color:var(--text-primary);word-break:break-all;" title="{{.SampleFile}}">{{.SampleFile}}</div>{{end}}
                                     <div class="of-hint">
                                         {{if .SeasonNum}}S{{deref .SeasonNum}}{{if .EpisodeNum}}E{{deref .EpisodeNum}}{{end}} &middot; {{end}}{{if .FileCount}}{{.FileCount}} file{{if ne .FileCount 1}}s{{end}} &middot; {{end}}{{.SizeBucket}}
+                                        {{if .HaveCount}}<span class="of-pill of-pill-have">{{.HaveCount}} have</span>{{end}}
+                                        {{if .CanGetCount}}<span class="of-pill of-pill-can">{{.CanGetCount}} can get</span>{{end}}
                                         {{if .HasPrivate}}<span class="of-pill of-pill-priv">private</span>{{end}}
                                         {{if .HasPublic}}<span class="of-pill of-pill-pub">public</span>{{end}}
                                         {{if .HasPersonal}}<span class="of-pill of-pill-per">personal</span>{{end}}

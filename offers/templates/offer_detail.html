@@ -21,6 +21,8 @@
                     {{if .Bucket.Resolution}}<span class="od-pill">{{.Bucket.Resolution}}</span>{{end}}
                     {{if .Bucket.SourceTag}}<span class="od-pill">{{.Bucket.SourceTag}}</span>{{end}}
                     <span class="od-pill">{{.Bucket.SizeBucket}}</span>
+                    {{if .Bucket.HaveCount}}<span class="od-pill of-pill-have">{{.Bucket.HaveCount}} have</span>{{end}}
+                    {{if .Bucket.CanGetCount}}<span class="od-pill of-pill-can">{{.Bucket.CanGetCount}} can get</span>{{end}}
                     {{if .Bucket.HasPrivate}}<span class="od-pill">private</span>{{end}}
                     {{if .Bucket.HasPublic}}<span class="od-pill">public</span>{{end}}
                     {{if .Bucket.HasPersonal}}<span class="od-pill">personal</span>{{end}}
