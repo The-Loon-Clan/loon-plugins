@@ -475,9 +475,17 @@ type AssembledRelease struct {
 	NZBGz      []byte    // gzipped NZB XML
 	// CategoryHint is a category label the host maps into its own taxonomy;
 	// "" = no hint. It is an ANIME-DOMAIN hint (scraping is anime-only by
-	// design), drawn from a closed set: "Hentai" (adult terms in the title),
-	// "Anime" (an OVA/ONA/OAD/Gekijouban marker), or "Manga" (a .cbz/.cbr in the
-	// article filenames). It is a hint, not an id — the host decides what it
+	// design), drawn from a closed set: "Hentai" (ANIMATED adult — an adult
+	// title that also carries anime evidence), "Porn" (LIVE-ACTION adult — an
+	// adult title with none), "Anime" (an OVA/ONA/OAD/Gekijouban marker), or
+	// "Manga" (a .cbz/.cbr in the article filenames).
+	//
+	// "Porn" joined the set on 2026-08-31. A host that treats "Hentai" as its
+	// only adult value will show live-action porn to everyone, so a host
+	// consuming this field must gate on the adult SET, not on one string —
+	// which is the mistake the reference host had made in eighteen places.
+	// The split exists because a backfill delivered 277k live-action porn
+	// releases in a day, all of which the old single-value hint called Hentai. It is a hint, not an id — the host decides what it
 	// means, and a non-anime host may ignore it. (In internal-sink mode the
 	// plugin ignores this field and categorises via its own catalog plugin.)
 	CategoryHint string

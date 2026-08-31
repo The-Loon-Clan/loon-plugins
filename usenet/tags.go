@@ -111,11 +111,6 @@ func capitalize(s string) string {
 
 // extractTitle pulls the quoted filename out of a base subject when one is
 // present — the Usenet convention is `Release Name "file.ext" yEnc (n/m)`.
-var (
-	reTagAdult    = regexp.MustCompile(`(?i)\b(porn|porno|hentai|jav|xxx|sextape|cumshot|gangbang|milf)\b`)
-	reTagCategory = regexp.MustCompile(`(?i)\b(OVA|ONA|OAD|Gekijouban)\b`)
-)
-
 func extractTitle(base string) string {
 	if q1 := strings.IndexByte(base, '"'); q1 >= 0 {
 		if q2 := strings.IndexByte(base[q1+1:], '"'); q2 >= 0 {
@@ -125,13 +120,189 @@ func extractTitle(base string) string {
 	return base
 }
 
+// ── category classification: Hentai (animated) vs Porn (live-action) ──────
+//
+// MIRROR. Everything from here to the end of parseCategoryTag is duplicated
+// byte-for-byte in two repos:
+//
+//	canonical  loon-plugins/usenet/tags.go
+//	           — runs at ASSEMBLY, on every row the crawler indexes.
+//	mirror     Indexer/indexer-site/pkg/services/nzb_tag_service.go
+//	           — runs on RETAG, over rows that already exist.
+//
+// A rule added to only one of them is not half-applied, it is silently UNDONE:
+// the ingest copy files a row correctly and the next NZB Tag Fill pass rewrites
+// the category using the stale copy, or the reverse. The symptom is a
+// classifier that appears to forget, with nothing failing and nothing logged.
+// Change both in one commit, with the same fixtures on both sides.
+// docs/CATEGORIES.md is the taxonomy this implements.
+
+var (
+	// reTagAdult is the ORIGINAL adult keyword set, deliberately UNCHANGED.
+	//
+	// It is the breadth guarantee. Every title it matches is filed under an
+	// adult category today, and adult categories are hidden by the NSFW gate
+	// (storage.AdultCategories). Dropping a keyword from it would not relabel
+	// those rows, it would EXPOSE them. All new detection goes in pornShape,
+	// which is unioned with this and therefore can only add coverage.
+	//
+	// Whole-word only, and the boundaries are load-bearing: "xxxHOLiC" (the
+	// manga/anime) does not trip \bxxx\b because there is no boundary between
+	// "xxx" and "HOLiC", and neither "Java.Programming" nor the release group
+	// "-JAVLAR" trips \bjav\b.
+	reTagAdult = regexp.MustCompile(`(?i)\b(porn|porno|hentai|jav|xxx|sextape|cumshot|gangbang|milf)\b`)
+
+	// reTagCategory is the explicit animated-format marker.
+	// NOTE: reAnimeWords below is a SUPERSET of this list and must stay
+	// one. If reTagCategory called a title Anime while animeEvidence said
+	// it was not animated, an ONA/OAD hentai release would be filed as
+	// live-action Porn.
+	reTagCategory = regexp.MustCompile(`(?i)\b(OVA|ONA|OAD|Gekijouban)\b`)
+)
+
+// The pornShape rules: seven patterns measured against production during the
+// 2026-08-30 backfill (301,480 rows in a day, ~277k of it live-action porn), NOT
+// invented. Between them they matched 275,411 of that day's rows and ZERO rows
+// in category='Anime'. The full derivation, the corpora and the rejected
+// alternatives are in docs/CATEGORIES.md.
+//
+// Declared in descending order of measured contribution so the || chain in
+// pornShape exits early on the common case: xxx_tag 245,045 rows, meta_tail
+// 18,974, quality_tail 5,532, jav 4,724, imageset 4,233, quality_tail_bare
+// 3,567, year_quality 33.
+var (
+	// 1. The western-scene XXX tag. CASE-SENSITIVE, and the seven spellings are
+	// enumerated so that exactly one is EXCLUDED: "xXx" is the Vin Diesel film
+	// series (26 distinct titles / 236 rows on the spike day alone). A
+	// case-insensitive \bxxx\b here would claim the whole trilogy.
+	rePornXXXTag = regexp.MustCompile(`\b(XXX|xxx|Xxx|XxX|XXx|xxX|xXX)\b`)
+
+	// 2. The tube-rip pipe tail: "(2016|HD|1280x720)". No legitimate release
+	// writes year|quality|WxH pipe-separated inside parens; zero false
+	// positives anywhere measured.
+	rePornSceneMetaTail = regexp.MustCompile(`\((19|20)\d\d\|[^()|]{2,14}\|\d{3,4}x\d{3,4}\)`)
+
+	// 3. The slash variant of the same tail: "(2017//FullHD)", "(2016/DVDRip)".
+	rePornSceneYearQuality = regexp.MustCompile(`\((19|20)\d\d/{1,2}(SD|HD|FullHD|UltraHD|4K|DVDRip|WEBRip|DVD5)\)`)
+
+	// 4. The quality tail carrying a comma or a resolution: "[SD, ]",
+	// "[HD, 768p]", "[SD 432p]". The BARE "[HD ]" form is deliberately not
+	// here — see rule 5.
+	//
+	// The closing bracket is OPTIONAL on purpose. Title normalisation trims a
+	// trailing "]" before any matcher sees the string, so a rule anchored
+	// \]\s*$ silently never fires on a normalised title. That trap has already
+	// caught reTrailingTagBlock once.
+	rePornQualityTail = regexp.MustCompile(`\[(SD|HD|FullHD|UltraHD)(\s*,\s*\d{0,4}p?|\s+\d{2,4}p)\s*\]?\s*$`)
+
+	// 5. The bare "[HD ]" / "[SD ]" tail, GATED on a porn lexicon.
+	//
+	// Both halves are required and neither works alone. Ungated, the tail
+	// produced 20 false positives on a 117,955-title anime corpus, because
+	// mehsubs ends titles exactly that way ("Suzume no Tojimari (2022)
+	// [iTunes] [HD ]"). Ungated AND unanchored is worse: 129 false positives,
+	// all legitimate fansubs. And the lexicon standalone matched 84 anime-corpus
+	// titles of which 9 were real, because "-HANDJOB" is a release GROUP
+	// (Black.Jack.1977.DVDRip.x264-HANDJOB, Metal Skin Panic MADOX-01, Golgo 13)
+	// and Laid-Back Camp has a genuine episode called "The Porn Begins!!".
+	// Together: zero false positives, 3,567 rows.
+	rePornQualityTailBare = regexp.MustCompile(`(?i)\b(porn|milf|shemale|ladyboy|tgirl|cumshot|gangbang|creampie|cuckold|sextape|orgasm|teenie|cougar|fisting|femdom|gloryhole|squirting|bondage|strapon|bbw|bdsm|camgirl|imageset|bukkake|blowjob|deepthroat|handjob|pornstar|whore|slut|fuck|pussy|cock|anal|hardcore).*\[(SD|HD|FullHD|UltraHD)\s*\]?\s*$`)
+
+	// 6. Live-action Japanese AV. "\bjav\b" alone measured zero false positives
+	// on every protected corpus. "(un)?censored" was tested as a companion
+	// signal and REJECTED: hentai anime says it too.
+	reJAVRelease = regexp.MustCompile(`(?i)\bjav\b`)
+
+	// 7. Photo-set and site-rip packs, which carry no adult keyword at all —
+	// this is most of the coverage pornShape adds over reTagAdult
+	// ("12.Nora.Davis.iMAGESET-GGW" was sitting in the VISIBLE unclassified
+	// bucket).
+	rePornImageSet = regexp.MustCompile(`(?i)\b(imageset|siterip)\b`)
+)
+
+// The animeEvidence rules: the Hentai/Porn discriminator, and the reason the
+// hentai-anime this site indexes on purpose does not get shelved as western
+// porn. On the flood these cost 103 rows and saved 751 rows across 52 titles of
+// genuine work — Bible Black, Discipline, Kojin Taxi, the German HENTAiRAPE /
+// 3MiNA / GOREHOUNDS releases, and 20 3D/2D hentai titles posted in the exact
+// "(Hentai) [SD, ]" shape the spam uses.
+//
+// Feed these the RAW title. reAnimeBracketed reads a leading "[", which title
+// normalisation strips, so a normalised title makes that clause inert.
+var (
+	// The medium says so in words. "the animation" is the standard suffix on
+	// the hentai-anime naming convention.
+	reAnimeWords = regexp.MustCompile(`(?i)\b(anime|hentai|the animation|ova|ona|oad|gekijouban|ecchi|doujin)\b`)
+
+	// A leading group tag is fansub convention; the flood used it zero times
+	// out of 271,984 rows.
+	reAnimeBracketed = regexp.MustCompile(`^\s*\[`)
+
+	// SxxExx numbering. Also zero occurrences across the flood.
+	reAnimeEpisode = regexp.MustCompile(`\bS\d{1,2}E\d{1,3}\b`)
+
+	// Fansub encoding markers. Also zero across the flood.
+	reAnimeFansub = regexp.MustCompile(`(?i)\b(flac|10 ?bit|multi-?sub|soft-?sub|vostfr|dual audio)\b`)
+)
+
+// pornShape reports whether a title has the SHAPE of a live-action adult
+// release, independently of whether it carries an adult keyword. It only ever
+// widens the adult test — see parseCategoryTag.
+func pornShape(title string) bool {
+	return rePornXXXTag.MatchString(title) ||
+		rePornSceneMetaTail.MatchString(title) ||
+		rePornQualityTail.MatchString(title) ||
+		reJAVRelease.MatchString(title) ||
+		rePornImageSet.MatchString(title) ||
+		rePornQualityTailBare.MatchString(title) ||
+		rePornSceneYearQuality.MatchString(title)
+}
+
+// animeEvidence reports whether a title carries positive evidence that the
+// release is ANIMATED. It runs only on titles already judged adult, so its job
+// is to pick a shelf between two hidden categories, never to decide visibility.
+func animeEvidence(title string) bool {
+	return reAnimeWords.MatchString(title) ||
+		reAnimeBracketed.MatchString(title) ||
+		reAnimeEpisode.MatchString(title) ||
+		reAnimeFansub.MatchString(title)
+}
+
 // parseCategoryTag returns the category an EXPLICIT title marker declares, or
-// "". Adult wins over Anime so a title that is both lands behind the NSFW
-// filter. An explicit tag also vouches for the release: prod skips the junk
-// check entirely when one is present, and the plugin mirrors that.
+// "": "Hentai" for animated adult, "Porn" for live-action adult, "Anime" for a
+// declared animated format. An explicit tag also VOUCHES for the release — the
+// assembler skips the junk engine when one is present — which is why widening
+// this function can only ever spare more content, never delete more.
+//
+// BROADEN, THEN SPLIT. The order below is a safety property, not a style
+// choice. Adult categories are hidden by the NSFW gate; "" is not. So the
+// controlling invariant is that no row hidden today may become visible, and the
+// only structure that guarantees it is to test adult FIRST as a UNION of the
+// old keyword regex and the new shape rules, and to run the Hentai/Porn
+// discriminator strictly INSIDE that branch:
+//
+//   - everything reTagAdult catches today stays adult — it either keeps Hentai
+//     or moves to Porn, and both are hidden;
+//   - pornShape only adds, moving previously-VISIBLE porn (image sets, site
+//     rips, quality tails that carry no keyword) into a hidden category;
+//   - animeEvidence chooses between two hidden shelves and can never return "".
+//
+// Written the other way round — discriminate first, then decide adult — a
+// narrowing bug does not mis-file a row, it PUBLISHES it, and nothing fails and
+// nothing logs when that happens. TestOldAdultTitlesStayHidden pins the
+// invariant against the old regex's own matches rather than against reasoning
+// about it.
+//
+// Accepted imperfection: a title carrying both a porn token and an SxxExx (the
+// canonical case is "Future Man S01E06 - A Blowjob Before Dying") lands in
+// Hentai rather than Porn. Both are hidden, so the cost is a wrong shelf, not an
+// exposure — and the alternative, dropping the SxxExx clause, costs real anime.
 func parseCategoryTag(title string) string {
-	if reTagAdult.MatchString(title) {
-		return "Hentai"
+	if reTagAdult.MatchString(title) || pornShape(title) {
+		if animeEvidence(title) {
+			return "Hentai"
+		}
+		return "Porn"
 	}
 	if reTagCategory.MatchString(title) {
 		return "Anime"
