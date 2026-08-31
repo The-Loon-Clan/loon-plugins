@@ -2,7 +2,11 @@
     <div class="container mt-4">
 
         <div class="d-flex align-items-center gap-3 mb-4">
-            <h2 class="mb-0 fs-lg text-muted">Edit News Post</h2>
+            {{/* The page's one h1 when the host chrome draws none (see
+                 Deps.HeadingInFragment); an h2 under the host's own h1
+                 otherwise. .h2 keeps the level change invisible; .fs-lg
+                 still sets the size, as it did over the bare tag. */}}
+            {{if .ShowHeading}}<h1 class="h2 mb-0 fs-lg text-muted">Edit News Post</h1>{{else}}<h2 class="mb-0 fs-lg text-muted">Edit News Post</h2>{{end}}
             <a href="/admin/news" class="button button--outlined button--sm ms-auto">← Back</a>
         </div>
 
@@ -38,7 +42,7 @@
                     </div>
                     <div class="d-flex gap-2">
                         <button type="submit" class="button button--primary">Save Changes</button>
-                        <a href="/news/{{.Post.Slug}}" target="_blank" class="button button--outlined">Preview</a>
+                        <a href="/news/{{.Post.Slug}}" target="_blank" rel="noopener" class="button button--outlined">Preview</a>
                     </div>
                 </form>
             </div>

@@ -44,22 +44,22 @@
             <div class="col-lg-3 order-lg-2">
                 {{if not .IsOwner}}
                 <div class="sidebar-card">
-                    <h6>Actions</h6>
+                    <h2>Actions</h2>
                     {{if .List.Public}}
                         {{if .IsFollowing}}
                         <form method="POST" action="/lists/{{.List.ID}}/unfollow">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                            <button class="button button--outlined button--danger button--sm w-100 fw-semibold">Unfollow</button>
+                            <button type="submit" class="button button--outlined button--danger button--sm w-100 fw-semibold">Unfollow</button>
                         </form>
                         {{else}}
                         <form method="POST" action="/lists/{{.List.ID}}/follow">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                            <button class="button button--outlined button--sm w-100 fw-semibold">Follow</button>
+                            <button type="submit" class="button button--outlined button--sm w-100 fw-semibold">Follow</button>
                         </form>
                         {{end}}
                         <form method="POST" action="/lists/{{.List.ID}}/copy" class="mt-2">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                            <button class="button button--outlined button--sm w-100 fw-semibold">Copy to my lists</button>
+                            <button type="submit" class="button button--outlined button--sm w-100 fw-semibold">Copy to my lists</button>
                         </form>
                         {{/* Report — visible to every signed-in viewer except
                              the list's owner. 5 reports auto-hide the list
@@ -74,7 +74,7 @@
 
                 {{if .List.ItemCount}}
                 <div class="sidebar-card">
-                    <h6>Download</h6>
+                    <h2>Download</h2>
                     <a href="/lists/{{.List.ID}}/download-all" class="button button--primary button--sm w-100 fw-semibold mb-2">
                         &#11015; Download all NZBs
                     </a>
@@ -85,7 +85,7 @@
                 {{end}}
 
                 <div class="sidebar-card">
-                    <h6>Info</h6>
+                    <h2>Info</h2>
                     <div class="row-line">
                         <span>Created at</span>
                         <span>{{.List.CreatedAt.Format "Jan 02, 2006"}}</span>
@@ -114,14 +114,14 @@
 
                 {{if .IsOwner}}
                 <div class="sidebar-card">
-                    <h6>Manage</h6>
+                    <h2>Manage</h2>
                     <a href="/lists" class="button button--outlined button--sm w-100 fw-semibold mb-2">
                         All my lists
                     </a>
                     <form method="POST" action="/lists/{{.List.ID}}/visibility">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         <input type="hidden" name="public" value="{{if .List.Public}}0{{else}}1{{end}}">
-                        <button class="button button--outlined button--sm button--block fw-semibold">
+                        <button type="submit" class="button button--outlined button--sm button--block fw-semibold">
                             Make {{if .List.Public}}private{{else}}public{{end}}
                         </button>
                     </form>
@@ -130,7 +130,7 @@
             </div>
 
             <div class="col-lg-9 order-lg-1">
-                <h5 id="items" style="font-weight:600;margin-bottom:0.8rem;">Titles</h5>
+                <h2 id="items" class="h5" style="font-weight:600;margin-bottom:0.8rem;">Titles</h2>
 
                 {{if not .Items}}
                 <div class="empty-state">

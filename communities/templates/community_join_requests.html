@@ -34,7 +34,7 @@
             <div class="rq-actions">
                 <form method="POST" action="/c/{{$.Community.Slug}}/requests/{{.ID}}/approve" class="d-flex gap-2 align-items-center">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                    <input type="text" name="response" class="form-control form-control-sm" placeholder="Reply (optional)" maxlength="1000">
+                    <input type="text" name="response" class="form-control form-control-sm" placeholder="Reply (optional)" aria-label="Reply to {{.Username}} (optional)" maxlength="1000">
                     <button class="btn btn-sm btn-success" type="submit">Approve</button>
                 </form>
                 <form method="POST" action="/c/{{$.Community.Slug}}/requests/{{.ID}}/deny" class="d-inline">

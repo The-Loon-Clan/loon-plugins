@@ -8,7 +8,7 @@
             </div>
             <div class="d-flex gap-2">
                 {{if .IsAdmin}}
-                <button class="button button--outlined button--sm" id="scrape-now-btn" onclick="scrapeNow()" title="Trigger the Release Group Scraper job now (same as the play icon on /admin/jobs)">⟳ Scrape Now</button>
+                <button type="button" class="button button--outlined button--sm" id="scrape-now-btn" onclick="scrapeNow()" title="Trigger the Release Group Scraper job now (same as the play icon on /admin/jobs)">⟳ Scrape Now</button>
                 {{end}}
                 <a class="button button--outlined button--sm" href="/suggest-release-group">Suggest a Group</a>
             </div>
@@ -27,7 +27,8 @@
             <div class="panelV2">
                 <form method="POST" action="/admin/release-groups-create">
                     <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                    <h6 class="mb-2">Add Release Group</h6>
+                    {{/* h2 for outline order (was h6); 1rem pins the old h6 size. */}}
+                    <h2 class="mb-2" style="font-size:1rem">Add Release Group</h2>
                     <div class="mb-2"><label class="form__label small" for="add-name">Name *</label><input class="form__input" name="name" id="add-name" required></div>
                     <div class="mb-2"><label class="form__label small" for="add-website-url">Website URL</label><input class="form__input" name="website_url" id="add-website-url" type="url"></div>
                     <div class="mb-2">
@@ -61,7 +62,7 @@
         <form class="rg-search" method="GET" action="/release-groups">
             <input type="hidden" name="tab" value="{{.Tab}}">
             <div class="input-group">
-                <input type="text" class="form__input" name="q" placeholder="Search groups…" value="{{.Query}}">
+                <input type="text" class="form__input" name="q" placeholder="Search groups…" aria-label="Search groups" value="{{.Query}}">
                 <button class="button button--outlined" type="submit">Search</button>
                 {{if .Query}}<a href="/release-groups?tab={{.Tab}}" class="button button--outlined">Clear</a>{{end}}
             </div>

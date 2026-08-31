@@ -134,6 +134,7 @@ const donationsCSS = `/* from admin_donate.html */
         .pkg-bar { width: 100%; height: 6px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
         .pkg-bar-fill { height: 100%; background: linear-gradient(90deg, #85b4ff, #c0a4ff); transition: width 0.4s ease; }
         .pkg-form { margin: 0; }
+        .pkg-anon { display: flex; align-items: center; gap: 0.4rem; font-size: 0.74rem; color: var(--text-muted); margin: 0.4rem 0 0.6rem; cursor: pointer; }
         .pkg-claim { width: 100%; }
         .pkg-card-funded {
             background: linear-gradient(90deg, rgba(34,197,94,0.10) 0%, var(--bg-surface) 60%);

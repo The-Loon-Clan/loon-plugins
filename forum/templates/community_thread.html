@@ -50,18 +50,18 @@
             {{if .IsAdmin}}
             <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/pin">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                <button class="btn btn-outline-secondary"><svg class="icon" aria-hidden="true"><use href="#star"></use></svg> {{if .Thread.Pinned}}Unpin{{else}}Pin{{end}}</button>
+                <button type="submit" class="btn btn-outline-secondary"><svg class="icon" aria-hidden="true"><use href="#star"></use></svg> {{if .Thread.Pinned}}Unpin{{else}}Pin{{end}}</button>
             </form>
             <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/lock">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                <button class="btn btn-outline-secondary"><svg class="icon" aria-hidden="true"><use href="#lock"></use></svg> {{if .Thread.Locked}}Unlock{{else}}Lock{{end}}</button>
+                <button type="submit" class="btn btn-outline-secondary"><svg class="icon" aria-hidden="true"><use href="#lock"></use></svg> {{if .Thread.Locked}}Unlock{{else}}Lock{{end}}</button>
             </form>
             {{end}}
 
             {{if or .IsAdmin (eq .Thread.UserID .CurrentUserID)}}
             <form method="POST" action="/community/forums/thread/{{.Thread.ID}}/delete" onsubmit="return confirm('Delete this thread and all its posts?')">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                <button class="btn btn-outline-danger">Delete thread</button>
+                <button type="submit" class="btn btn-outline-danger">Delete thread</button>
             </form>
             {{end}}
 
@@ -230,7 +230,7 @@
                                   onsubmit="return confirm('Delete this post?')">
                                 <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="thread_id" value="{{$.Thread.ID}}">
-                                <button class="forum-post-action is-danger"> Delete</button>
+                                <button type="submit" class="forum-post-action is-danger"> Delete</button>
                             </form>
                             {{end}}
                             {{if and $.ReportModalHTML $.CurrentUserID (ne .UserID $.CurrentUserID)}}

@@ -102,13 +102,13 @@
         <span id="stat-staged">{{.TotalStaged}}</span> articles staged ·
         <span id="stat-backlog">{{.BackfillRemaining}}</span> articles left to backfill{{end}}
     </p>
-    <div class="d-none" id="pass-body"{{if not .Pass.Any}}{{end}}>
+    <div class="{{if not .Pass.Any}}d-none{{end}}" id="pass-body">
     {{/* The legacy page's live block, lifted 1:1: "Group N / M — <group>" on
          the left, "new / fetched" on the right, striped bar underneath. The
          plugin fetches every group's batches on one flat queue, so the bar
          tracks batches (finer than the legacy per-group bar) and the group
          label shows what a worker most recently started reading. */}}
-    <div id="pass-live"{{if not .Pass.Running}}{{end}} class="mb-2 d-none">
+    <div id="pass-live" class="mb-2{{if not .Pass.Running}} d-none{{end}}">
       <div class="d-flex justify-content-between mb-1">
         <span class="small text-muted">
           {{if gt .Pass.Round 1}}Round <strong id="pass-round">{{.Pass.Round}}</strong> &mdash; {{end}}Group <span id="pass-groups-done">{{.Pass.GroupsDone}}</span> / <span id="pass-groups-total">{{.Pass.Groups}}</span><span id="pass-reading-wrap"{{if not .Pass.Reading}} hidden{{end}}> — <strong id="pass-reading">{{.Pass.Reading}}</strong></span>
@@ -373,11 +373,12 @@
     var any = p.running || p.batches > 0 || p.articles > 0;
     var body = document.getElementById('pass-body');
     if (!body || !any) return;
-    body.style.display = '';
+    // d-none is display:none!important — style.display can never override it.
+    body.classList.remove('d-none');
     set('pass-title', p.running ? 'Crawl in progress' : 'Last crawl pass');
     var live = document.getElementById('pass-live');
     if (live) {
-      live.style.display = p.running ? '' : 'none';
+      live.classList.toggle('d-none', !p.running);
       set('pass-groups-done', p.groups_done); set('pass-groups-total', p.groups);
       set('pass-line-new', p.staged); set('pass-line-fetched', p.articles);
       var wrap = document.getElementById('pass-reading-wrap');

@@ -19,13 +19,13 @@
              loaded by the handler. Server-side filtering can swap in
              later if the list count grows past a few hundred. */}}
         <div class="wl-toolbar">
-            <input id="wl-search" type="search" class="form__input"
+            <input id="wl-search" type="search" aria-label="Search by name" class="form__input"
                    placeholder="Search by name…" autocomplete="off"
                    style="max-width:300px;">
-            <input id="wl-username" type="search" class="form__input"
+            <input id="wl-username" type="search" aria-label="Username" class="form__input"
                    placeholder="Username…" autocomplete="off"
                    style="max-width:200px;">
-            <select id="wl-sort" class="form__select" style="max-width:160px;">
+            <select id="wl-sort" aria-label="Sort collections" class="form__select" style="max-width:160px;">
                 <option value="new">Newest</option>
                 <option value="items">Most items</option>
                 <option value="grabs">Most grabbed</option>

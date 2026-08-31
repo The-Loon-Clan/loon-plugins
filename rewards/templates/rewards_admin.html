@@ -62,12 +62,12 @@
               <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="id" value="{{.ID}}">
               <input type="hidden" name="enabled" value="{{if .Enabled}}0{{else}}1{{end}}">
-              <button class="button button--sm button--outlined">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+              <button type="submit" class="button button--sm button--outlined">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
             </form>
             <form method="post" action="/admin/p/rewards/test-grant" class="d-inline">
               <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="id" value="{{.ID}}">
-              <button class="button button--sm button--outlined"{{if not .Enabled}} disabled{{end}}
+              <button type="submit" class="button button--sm button--outlined"{{if not .Enabled}} disabled{{end}}
                       title="Grants this reward to YOU, right now, on your own balance. Enable the reward first &mdash; a claim goes through the real path, which refuses a disabled reward.">Test on me</button>
             </form>
           </td>
@@ -128,7 +128,7 @@
                     <option value="">&mdash; none &mdash;</option>
                     {{range $.Boxes}}<option value="{{.}}" {{if eq . $b}}selected{{end}}>{{.}}</option>{{end}}
                   </select></div>
-                <div class="col-md-2"><button class="button button--sm button--primary w-100">Save changes</button></div>
+                <div class="col-md-2"><button type="submit" class="button button--sm button--primary w-100">Save changes</button></div>
                 <div class="col-12"><span class="text-muted small">
                   Payout lines are replaced by what this form carries. Grants already
                   made keep what they froze.
@@ -203,7 +203,7 @@
         </select></div>
       <div class="col-md-1"><label class="form__label small mb-0">Expires</label>
         <input aria-label="Expires" name="expires_after" class="form__input" placeholder="never"></div>
-      <div class="col-md-1"><button class="button button--sm button--primary w-100">Create</button></div>
+      <div class="col-md-1"><button type="submit" class="button button--sm button--primary w-100">Create</button></div>
       <div class="col-12"><span class="text-muted small">
         Created <strong>disabled</strong> &mdash; check the payout line, then enable. A <code>medal</code> line needs a
         registered handler or the grant is refused; points work out of the box.

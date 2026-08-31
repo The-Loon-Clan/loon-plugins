@@ -95,15 +95,23 @@
                         <span class="nzb-thumb" data-cover="{{.Picture}}" data-fallback="{{.PictureFallback}}"><img src="{{.Picture}}" data-fallback="{{.PictureFallback}}" alt="" loading="lazy"
                               onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;}else{this.parentElement.style.display='none';}"></span>
                         {{end}}
-                        <div class="min-w-0 flex-1">
+                        {{/* spans, not divs: <summary> permits phrasing content
+                             only. The outer one is a flex item (blockified), the
+                             hint gets display:block from the of-group rules. */}}
+                        <span class="min-w-0 flex-1">
                             {{/* stopPropagation so the title stays a LINK to the
                                  catalogue page; the rest of the header toggles. */}}
                             <a class="text-light text-decoration-none fw-semibold" href="/{{.EntityType}}/{{.EntityID}}" onclick="event.stopPropagation()">{{if .Title}}{{.Title}}{{else}}{{.EntityType}} #{{.EntityID}}{{end}}</a>
-                            <div class="of-hint">{{.EntityType}} #{{.EntityID}} &middot; {{len .Buckets}} variant{{if ne (len .Buckets) 1}}s{{end}}{{if .TotalFiles}} &middot; {{.TotalFiles}} file{{if ne .TotalFiles 1}}s{{end}}{{end}}</div>
-                        </div>
+                            <span class="of-hint">{{.EntityType}} #{{.EntityID}} &middot; {{len .Buckets}} variant{{if ne (len .Buckets) 1}}s{{end}}{{if .TotalFiles}} &middot; {{.TotalFiles}} file{{if ne .TotalFiles 1}}s{{end}}{{end}}</span>
+                        </span>
                         <span class="of-chevron" aria-hidden="true">&#9656;</span>
                     </summary>
                     <table class="data-table mb-0">
+                        {{/* Deliberately not the show's title: the card heading
+                             above already names it, and TestOffersPageRenders
+                             counts title renders to prove variants group under
+                             ONE card. */}}
+                        <caption class="visually-hidden">Offered variants</caption>
                         <tbody>
                         {{range .Buckets}}
                             <tr>

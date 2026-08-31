@@ -14,12 +14,12 @@
         {{/* Filter / sort bar — purely query-string driven, no JS. */}}
         <form method="get" class="d-flex gap-2 align-items-center mb-3 fs-sm">
             <span class="text-muted">Sort:</span>
-            <select name="sort" class="form__select" style="width:auto;" onchange="this.form.submit()">
+            <select name="sort" class="form__select" style="width:auto;" onchange="this.form.submit()" aria-label="Sort">
                 <option value="newest" {{if eq .Sort "newest"}}selected{{end}}>Newest</option>
                 <option value="votes"  {{if eq .Sort "votes"}}selected{{end}}>Most voted</option>
             </select>
             <span class="ms-2 text-muted">Show:</span>
-            <select name="scope" class="form__select" style="width:auto;" onchange="this.form.submit()">
+            <select name="scope" class="form__select" style="width:auto;" onchange="this.form.submit()" aria-label="Show">
                 <option value="all"        {{if eq .Scope "all"}}selected{{end}}>All</option>
                 <option value="edits"      {{if eq .Scope "edits"}}selected{{end}}>Proposed edits</option>
                 <option value="standalone" {{if eq .Scope "standalone"}}selected{{end}}>Stand-alone</option>

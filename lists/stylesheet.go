@@ -129,7 +129,9 @@ const listsCSS = `/* from community_watchlists.html */
             padding: 0.85rem 1rem;
             margin-bottom: 1rem;
         }
-        .sidebar-card h6 {
+        /* h2 (was h6; heading-outline fix, site HTML review 2026-08-30) —
+           the rule pins size and weight, so the look follows the tag. */
+        .sidebar-card h2 {
             font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em;
             text-transform: uppercase; color: var(--text-muted);
             margin: 0 0 0.6rem 0;

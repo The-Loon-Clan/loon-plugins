@@ -34,7 +34,7 @@
                          them up front. */}}
                     <form method="POST" action="/c/{{.Community.Slug}}/subscribe" class="d-flex gap-2 align-items-center">
                         <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                        <input type="text" name="message" class="form-control form-control-sm" style="width:200px;font-size:0.78rem;" maxlength="1000" placeholder="Why you want in (optional)">
+                        <input type="text" name="message" class="form-control form-control-sm" style="width:200px;font-size:0.78rem;" maxlength="1000" placeholder="Why you want in (optional)" aria-label="Why you want in (optional)">
                         <button class="c-btn primary" type="submit">Request to join</button>
                     </form>
                 {{else}}

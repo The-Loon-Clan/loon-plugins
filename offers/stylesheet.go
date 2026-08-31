@@ -20,7 +20,13 @@ package offers
      #5b8af5 -> #85b4ff   #ec4899 -> #ff8bdc
      #a78bfa -> #c0a4ff   #f87171 -> #ff9595
    Found by loon-demo-site scripts/audit_paint.py. */
-const offersCSS = `/* from admin_offers.html */
+const offersCSS = `/* Shared by several templates here. Tailwind-named because
+   its partner .flex-1 (host theme.css) is too, but no Tailwind exists on the
+   site -- without this rule a flex child keeps min-width:auto and long titles
+   overflow instead of shrinking. */
+        .min-w-0 { min-width: 0; }
+
+/* from admin_offers.html */
         .ao-grid {
             display: grid;
             grid-template-columns: 2fr 1fr;
@@ -132,6 +138,10 @@ const offersCSS = `/* from admin_offers.html */
            is hidden (list-style:none on the summary + the webkit rule here)
            so the header reads as a card, not a bullet list. */
         .of-group summary::-webkit-details-marker { display: none; }
+        /* The header's title/hint wrappers are <span>s because <summary>
+           permits phrasing content only; this restores the stacking the
+           hint had as a <div>. */
+        .of-group summary .of-hint { display: block; }
         .of-chevron { color: var(--text-muted); font-size: 0.9rem; transition: transform 0.15s ease; }
         .of-group[open] .of-chevron { transform: rotate(90deg); }
 

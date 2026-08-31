@@ -113,6 +113,9 @@ func (p *Plugin) Provision(c *core.Core) error {
 		_ = c.RegisterDef(d.def, d.value)
 	}
 
+	// The definition form's spacing utility. See stylesheet.go.
+	pluginapi.RegisterStylesheet(c, "achievements", achievementsCSS)
+
 	// Achievement metrics, discovered by prefix rather than declared, so a
 	// new achievement is a row plus one host registration and no change
 	// here. A metric with no source is INERT rather than an error — it

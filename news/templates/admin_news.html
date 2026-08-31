@@ -2,7 +2,11 @@
     <div class="container mt-4">
 
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h6 mb-0 text-muted">News Posts</h2>
+            {{/* The page's one h1 when the host chrome draws none (see
+                 Deps.HeadingInFragment); an h2 under the host's own h1
+                 otherwise. Same size either way — the level is the outline,
+                 the class is the look. */}}
+            {{if .ShowHeading}}<h1 class="h6 mb-0 text-muted">News Posts</h1>{{else}}<h2 class="h6 mb-0 text-muted">News Posts</h2>{{end}}
         </div>
 
         {{/* ── Create form ──
@@ -68,7 +72,7 @@
                     {{range .Posts}}
                     <tr>
                         <td>
-                            <a class="text-light" href="/news/{{.Slug}}" target="_blank">{{.Title}}</a>
+                            <a class="text-light" href="/news/{{.Slug}}" target="_blank" rel="noopener">{{.Title}}</a>
                             <div class="fs-2xs text-muted">/news/{{.Slug}}</div>
                         </td>
                         <td>

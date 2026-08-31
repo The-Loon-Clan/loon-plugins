@@ -10,6 +10,7 @@
                 <small class="text-muted">{{.Total}} total</small>
             </div>
             <table class="data-table mb-0">
+                <caption class="visually-hidden">{{if .Resolved}}Resolved reports{{else}}Open reports{{end}}</caption>
                 <thead>
                     <tr>
                         <th>Release</th>
@@ -40,13 +41,13 @@
                                 <input type="hidden" name="id" value="{{.ID}}">
                                 {{if $.Resolved}}<input type="hidden" name="resolved" value="1">{{end}}
                                 <input type="hidden" name="page" value="{{$.Page}}">
-                                <button class="button button--sm button--outlined">Resolve</button>
+                                <button type="submit" class="button button--sm button--outlined">Resolve</button>
                             </form>
                         </td>
                         {{end}}
                     </tr>
                     {{else}}
-                    <tr><td colspan="6" class="text-center" style="color:var(--text-muted);padding:2rem;">No reports.</td></tr>
+                    <tr><td colspan="{{if not $.Resolved}}6{{else}}5{{end}}" class="text-center" style="color:var(--text-muted);padding:2rem;">No reports.</td></tr>
                     {{end}}
                 </tbody>
             </table>

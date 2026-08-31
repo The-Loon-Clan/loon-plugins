@@ -63,7 +63,8 @@
                     <input type="hidden" name="_csrf" value="{{$csrf}}">
                     <input type="hidden" name="id" value="{{.ID}}">
                     <input class="form__input" type="text" name="note" maxlength="1000"
-                           placeholder="Note (staff only — never shown to them)">
+                           placeholder="Note (staff only — never shown to them)"
+                           aria-label="Staff note for {{.Email}}">
                     <button class="button button--outlined button--sm" type="submit" name="decision" value="reject">Reject</button>
                     <button class="button button--filled button--sm" type="submit" name="decision" value="accept"
                             {{if not $canIssue}}disabled title="No invite issuer registered"{{end}}>Accept &amp; invite</button>

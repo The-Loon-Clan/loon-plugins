@@ -2,16 +2,16 @@
 
     <div class="flow-shell">
         <div class="flow-toolbar">
-            <button id="btn-add-node" class="button button--sm button--primary" title="Add node (N)">+ Node</button>
-            <button id="btn-add-comment" class="button button--sm button--outlined" title="Add comment node">+ Comment</button>
-            <button id="btn-add-mockup" class="button button--sm button--outlined" title="Add UI mockup node — HTML preview, fork-able like any other node">+ Mockup</button>
-            <button id="btn-undo" class="button button--sm button--outlined" title="Undo (Ctrl+Z)" disabled>&#9100;</button>
-            <button id="btn-redo" class="button button--sm button--outlined" title="Redo (Ctrl+Shift+Z)" disabled>&#9101;</button>
+            <button type="button" id="btn-add-node" class="button button--sm button--primary" title="Add node (N)">+ Node</button>
+            <button type="button" id="btn-add-comment" class="button button--sm button--outlined" title="Add comment node">+ Comment</button>
+            <button type="button" id="btn-add-mockup" class="button button--sm button--outlined" title="Add UI mockup node — HTML preview, fork-able like any other node">+ Mockup</button>
+            <button type="button" id="btn-undo" class="button button--sm button--outlined" title="Undo (Ctrl+Z)" disabled>&#9100;</button>
+            <button type="button" id="btn-redo" class="button button--sm button--outlined" title="Redo (Ctrl+Shift+Z)" disabled>&#9101;</button>
             <span class="spacer"></span>
             <span class="status" id="flow-status">ready</span>
-            <button id="btn-refresh" class="button button--sm button--outlined" title="Refresh from server">Refresh</button>
-            <button id="btn-fit" class="button button--sm button--outlined" title="Fit (F)">Fit</button>
-            <button id="btn-help" class="button button--sm button--outlined" title="Help">?</button>
+            <button type="button" id="btn-refresh" class="button button--sm button--outlined" title="Refresh from server">Refresh</button>
+            <button type="button" id="btn-fit" class="button button--sm button--outlined" title="Fit (F)">Fit</button>
+            <button type="button" id="btn-help" class="button button--sm button--outlined" title="Help">?</button>
         </div>
 
         <div class="flow-canvas" id="flow-canvas">
@@ -74,7 +74,7 @@
             <aside class="flow-inspector" id="inspector">
                 <div class="flow-inspector-header">
                     <span id="inspector-title">Node</span>
-                    <button class="button button--text button--sm" id="inspector-close" aria-label="Close" style="filter:invert(0.7);"></button>
+                    <button type="button" class="button button--text button--sm" id="inspector-close" aria-label="Close" style="filter:invert(0.7);">✕</button>
                 </div>
                 <div class="flow-inspector-body" id="inspector-body"></div>
                 <div class="flow-inspector-footer">

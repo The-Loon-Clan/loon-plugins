@@ -228,7 +228,9 @@ const releasegroupsCSS = `/* from release_group_archive.html */
         .rg-panel-quiet { background: var(--bg-surface); border-color: var(--border); }
         .rg-bio { font-size: var(--fs-md); line-height: 1.55; }
         .rg-panel-accent { border-color: var(--primary-tint); }
-        .rg-claim-title { margin: 0 0 0.5rem; font-weight: 600; }
+        /* Tag is h2 for outline order (was h6); 1rem pins the old h6 size,
+           the class already pins the weight. Site HTML review 2026-08-30. */
+        .rg-claim-title { margin: 0 0 0.5rem; font-weight: 600; font-size: 1rem; }
         .rg-claim-note { margin: 0 0 0.8rem; color: var(--text-muted); }
         .rg-snippet-box { background: var(--bg-elevated); border-radius: 6px; padding: 0.85rem 0.95rem; }
         .rg-label {

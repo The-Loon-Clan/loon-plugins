@@ -32,4 +32,10 @@ const ticketsCSS = `/* from support_ticket.html */
             padding-right: 0.5rem;
         }
 
+/* from admin_tickets.html */
+        /* The rows navigate via onclick, which no UA renders as clickable.
+           The class name is a Tailwind utility the template already uses;
+           defined here because no utility framework is loaded. */
+        .cursor-pointer { cursor: pointer; }
+
 `

@@ -100,6 +100,30 @@ func TestHeadingRendersOnlyWhenTheHostAsks(t *testing.T) {
 	if strings.Contains(render1(t, "news_detail.html", map[string]any{"Post": sampleSafe()}), "<h1") {
 		t.Error("post renders an h1 the host's chrome will duplicate")
 	}
+
+	// The two admin pages already had a visible title; the seam decides its
+	// LEVEL, not its presence. With it, the title is the one h1; without it,
+	// the title stays an h2 under the chrome's own h1 — either way exactly one
+	// heading carries the name, and the markup keeps the same size class.
+	post := NewsPost{ID: 1, Title: "Server maintenance", Slug: "server-maintenance",
+		Body: "back shortly", Published: true, CreatedAt: time.Now()}
+	for name, data := range map[string]map[string]any{
+		"admin_news.html":      {"Posts": []NewsPost{post}},
+		"admin_news_form.html": {"Post": post},
+	} {
+		with := map[string]any{"ShowHeading": true, "PageHeading": "News"}
+		for k, v := range data {
+			with[k] = v
+		}
+		if got := render1(t, name, with); strings.Count(got, "<h1") != 1 {
+			t.Errorf("%s with ShowHeading has %d h1(s), want exactly 1", name, strings.Count(got, "<h1"))
+		}
+		if got := render1(t, name, data); strings.Contains(got, "<h1") {
+			t.Errorf("%s renders an h1 the host's chrome will duplicate", name)
+		} else if !strings.Contains(got, "<h2") {
+			t.Errorf("%s lost its visible title on a host whose chrome draws the h1", name)
+		}
+	}
 }
 
 func TestNewsAdminPagesRender(t *testing.T) {

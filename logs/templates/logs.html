@@ -16,7 +16,8 @@
         <form method="get" action="/admin/p/logs" class="mb-2" id="searchForm">
             <div class="input-group">
                 <input type="text" class="form__input" name="q" id="qInput" value="{{.Query}}"
-                       placeholder='e.g.  timeout op:usenet/*  severity:error  since:24h  sort:count' autofocus>
+                       placeholder='e.g.  timeout op:usenet/*  severity:error  since:24h  sort:count' autofocus
+                       aria-label="Log search query">
                 <button class="button button--primary" type="submit">Search</button>
                 <button class="button button--outlined" type="button" id="helpBtn" title="Query syntax">?</button>
             </div>
@@ -40,14 +41,14 @@
 
         <div class="log-layout">
             <div class="facet-rail">
-                <h6>Severity</h6>
+                <h5>Severity</h5>
                 {{range .SevFacets}}
                 <div class="facet" data-add="severity:{{.Key}}">
                     <span class="k">{{.Key}}</span><span class="n">{{.Count}}</span>
                 </div>
                 {{else}}<div class="fs-xs text-muted">—</div>{{end}}
 
-                <h6>Top ops</h6>
+                <h5>Top ops</h5>
                 {{range .OpFacets}}
                 <div class="facet" data-add="op:{{.Key}}" title="{{.Rows}} rows, {{.Count}} occurrences">
                     <span class="k">{{.Key}}</span><span class="n">{{.Count}}</span>
@@ -66,6 +67,7 @@
 
                 <div class="data-table-wrapper">
                     <table class="data-table">
+                        <caption class="visually-hidden">Matching log rows</caption>
                         <thead>
                             <tr class="fs-2xs">
                                 <th>Sev</th><th>Op</th><th>Message</th>
@@ -87,7 +89,7 @@
                                 <td class="text-end log-count">{{if gt .Count 1}}<span class="tag">{{.Count}}</span>{{else}}{{.Count}}{{end}}</td>
                                 <td class="fs-2xs text-nowrap">{{.LastAt.Format "01-02 15:04"}}</td>
                                 <td class="fs-2xs">{{if .UserID}}<a href="/admin/users/{{.UserID}}">#{{.UserID}}</a>{{end}}</td>
-                                <td><button class="button button--sm button--outlined js-dismiss-btn" title="Dismiss">&times;</button></td>
+                                <td><button type="button" class="button button--sm button--outlined js-dismiss-btn" title="Dismiss">&times;</button></td>
                             </tr>
                             {{else}}
                             <tr><td colspan="7" class="text-center text-muted py-4">No matching log rows.</td></tr>

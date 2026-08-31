@@ -23,7 +23,7 @@ package logs
 const logsCSS = `/* from logs.html */
         .log-layout { display:grid; grid-template-columns:210px 1fr; gap:1.25rem; }
         @media (max-width: 900px){ .log-layout{ grid-template-columns:1fr; } }
-        .facet-rail h6 { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em;
+        .facet-rail h5 { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em;
                          color:var(--text-muted); margin:0.9rem 0 0.4rem; }
         .facet { display:flex; justify-content:space-between; align-items:center; gap:0.5rem;
                  padding:0.2rem 0.45rem; border-radius:5px; cursor:pointer; font-size:0.82rem; }

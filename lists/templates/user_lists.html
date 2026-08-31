@@ -6,10 +6,10 @@
                 <form method="POST" action="/lists">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-2">
-                        <input type="text" name="name" class="form__input" placeholder="Collection name" required maxlength="100">
+                        <input type="text" name="name" class="form__input" placeholder="Collection name" aria-label="Collection name" required maxlength="100">
                     </div>
                     <div class="mb-2">
-                        <input type="text" name="description" class="form__input" placeholder="Description (optional)" maxlength="300">
+                        <input type="text" name="description" class="form__input" placeholder="Description (optional)" aria-label="Description (optional)" maxlength="300">
                     </div>
                     <div class="mb-3 d-flex align-items-center gap-2">
                         <input type="checkbox" name="public" value="1" class="form-check-input mt-0" id="createPublic">
@@ -26,6 +26,7 @@
                 <a class="fs-xs text-primary" href="/community/watchlists">Browse Collections →</a>
             </div>
             <table class="data-table mb-0">
+                <caption class="visually-hidden">My collections</caption>
                 <tbody>
                     {{range .Lists}}
                     <tr>
@@ -48,18 +49,18 @@
                             <form method="POST" action="/lists/{{.ID}}/visibility" class="d-inline me-1">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="public" value="0">
-                                <button class="button button--sm button--outlined">Make Private</button>
+                                <button type="submit" class="button button--sm button--outlined">Make Private</button>
                             </form>
                             {{else}}
                             <form method="POST" action="/lists/{{.ID}}/visibility" class="d-inline me-1">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="public" value="1">
-                                <button class="button button--sm button--outlined">Make Public</button>
+                                <button type="submit" class="button button--sm button--outlined">Make Public</button>
                             </form>
                             {{end}}
                             <form method="POST" action="/lists/{{.ID}}/delete" class="d-inline">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                <button class="button button--sm button--outlined button--danger">Delete</button>
+                                <button type="submit" class="button button--sm button--outlined button--danger">Delete</button>
                             </form>
                         </td>
                     </tr>
@@ -77,6 +78,7 @@
             </div>
             {{if .Followed}}
             <table class="data-table mb-0">
+                <caption class="visually-hidden">Followed collections</caption>
                 <tbody>
                     {{range .Followed}}
                     <tr>
@@ -97,11 +99,11 @@
                         <td style="width:180px;vertical-align:middle;white-space:nowrap;">
                             <form method="POST" action="/lists/{{.ID}}/copy" class="d-inline me-1">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                <button class="button button--sm button--outlined" title="Copy to my lists">Copy</button>
+                                <button type="submit" class="button button--sm button--outlined" title="Copy to my lists">Copy</button>
                             </form>
                             <form method="POST" action="/lists/{{.ID}}/unfollow" class="d-inline">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                <button class="button button--sm button--outlined button--danger">Unfollow</button>
+                                <button type="submit" class="button button--sm button--outlined button--danger">Unfollow</button>
                             </form>
                         </td>
                     </tr>

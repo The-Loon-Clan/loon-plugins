@@ -92,6 +92,8 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
+	// The admin page's CSS. See stylesheet.go.
+	pluginapi.RegisterStylesheet(c, "downloads", downloadsCSS)
 	p.core = c
 	db := c.Storage.SchemaDB(p.Metadata().Name)
 	if db == nil {

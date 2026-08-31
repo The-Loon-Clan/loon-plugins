@@ -72,7 +72,7 @@
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                                 <input type="hidden" name="id" value="{{.ID}}">
                                 <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
-                                <button class="button button--outlined button--sm"
+                                <button type="submit" class="button button--outlined button--sm"
                                         {{if not .Enabled}}title="Enabling awards this to everyone already past the value, silently, on the next job tick."{{end}}>
                                     {{if .Enabled}}Disable{{else}}Enable{{end}}
                                 </button>
@@ -148,7 +148,7 @@
         <form method="post" action="/admin/p/achievements/achievement-create"
               enctype="multipart/form-data" class="stack">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-            <div class="form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem">
                 <label class="form__label">Slug
                     <input name="slug" class="form__input" placeholder="centurion" required>
                 </label>
@@ -231,7 +231,7 @@
                 <input type="checkbox" name="hidden" value="1"> Hidden until earned
             </label>
             <div style="margin-top:0.75rem">
-                <button class="button button--primary button--sm">Create — disabled</button>
+                <button type="submit" class="button button--primary button--sm">Create — disabled</button>
             </div>
             <p class="text-muted small" style="margin:0.5rem 0 0">
                 Pick a <strong>metric with a value</strong> (a counter the member must reach)
@@ -247,4 +247,17 @@
         </form>
     </div>
 </section>
+
+{{/* Suggestion lists for the per-row edit forms' metric/trigger inputs.
+     Declared once at page level, not inside the achievements range — the
+     inputs repeat per row and a datalist id must be unique on the page.
+     Same vocabulary the create form's selects draw from; the edit fields
+     stay free-text because a defined row may hold a value the current
+     catalogue no longer offers. */}}
+<datalist id="metric-options">
+    {{range .MetricOptions}}<option value="{{.}}">{{end}}
+</datalist>
+<datalist id="trigger-options">
+    {{range .TriggerOptions}}<option value="{{.}}">{{end}}
+</datalist>
 {{end}}

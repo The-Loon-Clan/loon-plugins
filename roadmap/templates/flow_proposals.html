@@ -135,7 +135,7 @@
                     {{$isOwn := and .CreatedBy (eq (deref .CreatedBy) $cuid)}}
                     <div class="prop-row" data-id="{{.ID}}" id="prop-{{.ID}}" data-own="{{if $isOwn}}1{{else}}0{{end}}">
                         {{if .AvatarPath}}
-                        <a href="/u/{{.Username}}" onclick="event.stopPropagation();"><img class="prop-avatar" src="{{.AvatarPath}}" alt=""></a>
+                        <a href="/u/{{.Username}}" onclick="event.stopPropagation();"><img class="prop-avatar" src="{{.AvatarPath}}" alt="{{.Username}}"></a>
                         {{else}}
                         <a class="text-decoration-none" href="/u/{{.Username}}" onclick="event.stopPropagation();"><div class="prop-avatar-fallback">{{initial .Username}}</div></a>
                         {{end}}
@@ -201,7 +201,8 @@
                                 <div class="fr-step-title">What's your idea?</div>
                                 <div class="fr-step-hint">A clear, specific title helps others find and vote for it.</div>
                                 <input id="new-title" class="form__input" type="text" maxlength="100"
-                                       placeholder="Summarise your request in one line">
+                                       placeholder="Summarise your request in one line"
+                                       aria-label="Summarise your request in one line">
                                 <div class="fr-counter"><span id="title-count">0</span> / 100</div>
                                 <div id="dup-hint" class="dup-hint d-none"></div>
                             </div>
@@ -283,7 +284,7 @@
                                     <div class="fr-drop-text">Drag an image here, or <b>choose a file</b><br>
                                         <span class="fs-3xs">PNG, JPEG, GIF or WebP &middot; up to 2 MB each</span>
                                     </div>
-                                    <input type="file" id="file-input" accept="image/*" multiple hidden>
+                                    <input type="file" id="file-input" accept="image/*" multiple hidden aria-label="Choose screenshot files">
                                 </div>
                                 <div class="fr-shots" id="shots"></div>
                             </div>
@@ -446,7 +447,7 @@
             countTitle();
             clearTimeout(dupTimer);
             const q = $title.value.trim();
-            if (q.length < 4) { $dupHint.style.display = 'none'; return; }
+            if (q.length < 4) { $dupHint.classList.add('d-none'); return; }
             dupTimer = setTimeout(() => fetchSimilar(q), 350);
         });
         async function fetchSimilar(q) {
@@ -455,7 +456,7 @@
                 if (!r.ok) return;
                 const body = await r.json();
                 const matches = (body && body.matches) || [];
-                if (!matches.length) { $dupHint.style.display = 'none'; return; }
+                if (!matches.length) { $dupHint.classList.add('d-none'); return; }
                 let html = '<strong>Already asked?</strong><ul style="margin:0.3rem 0 0 1rem;padding:0;">';
                 for (const m of matches) {
                     html += '<li><a href="/flow/proposals#prop-' + m.id + '">'
@@ -466,7 +467,7 @@
                 }
                 html += '</ul>';
                 $dupHint.innerHTML = html;
-                $dupHint.style.display = 'block';
+                $dupHint.classList.remove('d-none');
             } catch (_) { /* silent — hint is best-effort */ }
         }
 
@@ -587,7 +588,7 @@
             if ($shots) $shots.innerHTML = '';
             chosenTag = ''; descUserEdited = false;
             if ($cats) $cats.querySelectorAll('.fr-cat').forEach(el => el.classList.remove('selected'));
-            $dupHint.style.display = 'none';
+            $dupHint.classList.add('d-none');
             $status.textContent = '';
             countTitle(); countDesc();
         });
@@ -634,14 +635,16 @@
             const id = row.dataset.id;
             const detail = document.getElementById('detail-' + id);
             if (!detail) return;
-            const isOpen = detail.style.display !== 'none';
+            // d-none is display:none!important, so inline style can neither
+            // reveal the pane nor be trusted for its state — the class is both.
+            const isOpen = !detail.classList.contains('d-none');
             if (isOpen) {
-                detail.style.display = 'none';
+                detail.classList.add('d-none');
                 row.classList.remove('expanded');
                 return;
             }
             row.classList.add('expanded');
-            detail.style.display = 'block';
+            detail.classList.remove('d-none');
             if (detailCache.has(id)) {
                 detail.innerHTML = detailCache.get(id);
                 wireDetail(id, detail);

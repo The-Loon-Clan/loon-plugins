@@ -57,7 +57,7 @@
         <input type="number" id="add-sort-order" name="sort_order" class="form-control form-control-sm">
       </div>
       <div class="col-md-1">
-        <button class="btn btn-sm btn-primary w-100">Add</button>
+        <button type="submit" class="btn btn-sm btn-primary w-100">Add</button>
       </div>
     </form>
   </div>
@@ -134,7 +134,7 @@
                  historically sold for on an unrelated edit. */}}
             <input type="hidden" name="monthly_cost" value="{{.CostPoints}}">
             <div class="col-md-1 d-flex gap-1">
-              <button class="btn btn-sm btn-outline-primary flex-grow-1">Save</button>
+              <button type="submit" class="btn btn-sm btn-outline-primary flex-grow-1">Save</button>
             </div>
             <div class="col-12">
               <div class="d-flex gap-3 align-items-center" style="font-size:0.75rem;">
@@ -155,7 +155,7 @@
                 onsubmit="return confirm('Delete {{.Name}}? Members lose it immediately.');">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
             <input type="hidden" name="id" value="{{.ID}}">
-            <button class="btn btn-sm btn-outline-danger">Delete</button>
+            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
           </form>
         </td>
       </tr>

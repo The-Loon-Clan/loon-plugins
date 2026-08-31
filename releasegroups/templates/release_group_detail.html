@@ -186,7 +186,7 @@
         {{$hiddenSnippet := printf `<a href="%s">%s</a>` $verifyURL $.SiteName}}
         <div class="panelV2 mb-3 rg-panel-accent">
             <div class="panel__body fs-sm">
-                <h6 class="rg-claim-title">Your pending ownership claim</h6>
+                <h2 class="rg-claim-title">Your pending ownership claim</h2>
                 <p class="rg-claim-note">
                     Pick one of the snippets below and paste it into your group's description at
                     {{if .ViewerClaim.VerificationURL}}<a class="text-primary" href="{{.ViewerClaim.VerificationURL}}" target="_blank" rel="noopener">{{.ViewerClaim.VerificationURL}} ↗</a>{{else}}the URL you nominated{{end}}.
@@ -297,7 +297,7 @@
         {{$canPostNews := or .IsAdmin .ViewerIsOwner}}
         {{if or $canPostNews .NewsPosts}}
         <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="rg-label rg-label--lg">News</h6>
+            <h2 class="rg-label rg-label--lg">News</h2>
             <span class="fs-xs text-muted">{{.NewsTotal}} post{{if ne .NewsTotal 1}}s{{end}}</span>
         </div>
 
@@ -310,10 +310,10 @@
                 <form method="POST" action="/release-groups/{{.Group.Slug}}/news">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                     <div class="mb-2">
-                        <input type="text" name="title" class="form__input" placeholder="Post title (required, ≤ 200 chars)" maxlength="200" required>
+                        <input type="text" name="title" class="form__input" placeholder="Post title (required, ≤ 200 chars)" aria-label="Post title (required, ≤ 200 chars)" maxlength="200" required>
                     </div>
                     <div class="mb-2">
-                        <textarea name="body" class="form__input" rows="4" placeholder="Post body — describe what's new, what's coming, what you're recruiting for…" maxlength="10000"></textarea>
+                        <textarea name="body" class="form__input" rows="4" placeholder="Post body — describe what's new, what's coming, what you're recruiting for…" aria-label="Post body — describe what's new, what's coming, what you're recruiting for…" maxlength="10000"></textarea>
                     </div>
                     <button type="submit" class="button button--primary button--sm">Publish</button>
                 </form>
@@ -328,7 +328,7 @@
                 <div class="panel__body fs-md">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div class="rg-min0">
-                            <h6 class="m-0 fs-base fw-semibold">{{.Title}}</h6>
+                            <h3 class="m-0 fs-base fw-semibold">{{.Title}}</h3>
                             <div class="rg-item-sub">
                                 by {{userTag .AuthorName}} &middot; {{.CreatedAt.Format "Jan 2, 2006 15:04"}}
                             </div>
@@ -443,6 +443,7 @@
                 <div class="panelV2">
                     <div class="panel__body p-0">
                         <table class="data-table mb-0 fs-sm">
+                            <caption class="visually-hidden">Archive torrents for {{.Group.Name}}</caption>
                             <thead class="fs-3xs text-muted">
                                 <tr>
                                     <th class="rg-col-cover"></th>
@@ -519,7 +520,7 @@
                                                     <form method="POST" action="/release-groups/{{$.Group.Slug}}/archive/torrents/{{.NekobtTorrentID}}/hide" class="px-2 py-1"
                                                           onsubmit="return confirm('Hide this torrent from your group&apos;s archive? You can unhide later via psql.');">
                                                         <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                                                        <input type="text" name="reason" placeholder="Reason (optional)" class="form__input mb-1 fs-3xs" maxlength="256">
+                                                        <input type="text" name="reason" placeholder="Reason (optional)" aria-label="Reason for hiding {{.Title}} (optional)" class="form__input mb-1 fs-3xs" maxlength="256">
                                                         <button type="submit" class="button button--outlined button--danger button--sm w-100 fs-3xs">Hide from archive</button>
                                                     </form>
                                                 </div>
@@ -649,10 +650,10 @@
             <form method="POST" action="/admin/release-groups/{{.Group.ID}}/edit">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                 <div>
-                        <div class="mb-2"><label class="form__label small">Name *</label><input class="form__input" name="name" id="edit-name" value="{{.Group.Name}}" required></div>
+                        <div class="mb-2"><label class="form__label small" for="edit-name">Name *</label><input class="form__input" name="name" id="edit-name" value="{{.Group.Name}}" required></div>
                         <div class="mb-2"><label class="form__label small">Website URL</label><input aria-label="Website URL" class="form__input" name="website_url" type="url" value="{{.Group.WebsiteURL}}"></div>
                         <div class="mb-2">
-                            <label class="form__label small">Logo URL</label>
+                            <label class="form__label small" for="edit-logo-url">Logo URL</label>
                             <div class="d-flex gap-2">
                                 <input class="form__input" name="logo_url" id="edit-logo-url" type="text" value="{{.Group.LogoURL}}" placeholder="Paste a URL then click Scrape">
                                 <button type="button" class="button button--outlined" onclick="scrapeLogoFromEditModal()">Scrape</button>

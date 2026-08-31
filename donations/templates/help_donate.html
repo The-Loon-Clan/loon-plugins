@@ -427,7 +427,7 @@
                         <div class="ref-label">Your Invite Code</div>
                         <div class="ref-code">
                             <span id="ref-code-value">AME-8421</span>
-                            <button onclick="navigator.clipboard.writeText(document.getElementById('ref-code-value').textContent)" title="Copy code">⧉</button>
+                            <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('ref-code-value').textContent)" title="Copy code">⧉</button>
                         </div>
                     </div>
                     <div class="referral-stats">
@@ -526,21 +526,21 @@
                 <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.04);">
                     <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);width:50px;">BTC</span>
                     <span style="font-family:monospace;font-size:0.78rem;color:var(--text-primary);flex:1;word-break:break-all;" id="addr-btc">{{.BTCAddress}}</span>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('addr-btc').textContent)">Copy</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('addr-btc').textContent)">Copy</button>
                 </div>
                 {{end}}
                 {{if .ETHAddress}}
                 <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.04);">
                     <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);width:50px;">ETH</span>
                     <span style="font-family:monospace;font-size:0.78rem;color:var(--text-primary);flex:1;word-break:break-all;" id="addr-eth">{{.ETHAddress}}</span>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('addr-eth').textContent)">Copy</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('addr-eth').textContent)">Copy</button>
                 </div>
                 {{end}}
                 {{if .XMRAddress}}
                 <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.04);">
                     <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);width:50px;">XMR</span>
                     <span style="font-family:monospace;font-size:0.78rem;color:var(--text-primary);flex:1;word-break:break-all;" id="addr-xmr">{{.XMRAddress}}</span>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('addr-xmr').textContent)">Copy</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('addr-xmr').textContent)">Copy</button>
                 </div>
                 {{end}}
                 {{if and (not .BTCAddress) (not .ETHAddress) (not .XMRAddress)}}

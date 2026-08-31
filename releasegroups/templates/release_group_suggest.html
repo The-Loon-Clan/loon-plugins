@@ -17,8 +17,8 @@
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
 
                 <div class="mb-3">
-                    <label class="form__label small">Name {{if .IsNew}}*{{end}}</label>
-                    <input class="form__input" name="name"
+                    <label class="form__label small" for="suggest-name">Name {{if .IsNew}}*{{end}}</label>
+                    <input class="form__input" name="name" id="suggest-name"
                            value="{{if not .IsNew}}{{.Group.Name}}{{end}}"
                            {{if .IsNew}}required{{end}}>
                 </div>

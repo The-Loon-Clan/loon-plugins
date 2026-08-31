@@ -268,9 +268,9 @@
             <span class="text-muted small">{{.Diag.TotalHits}} observation(s), page {{.Diag.Page}} of {{.Diag.Pages}}.</span>
             <span>
                 {{if .Diag.PrevURL}}<a class="button button--sm button--outlined" href="{{.Diag.PrevURL}}">prev</a>
-                {{else}}<button class="button button--sm button--outlined" disabled>prev</button>{{end}}
+                {{else}}<button type="button" class="button button--sm button--outlined" disabled>prev</button>{{end}}
                 {{if .Diag.NextURL}}<a class="button button--sm button--outlined" href="{{.Diag.NextURL}}">next</a>
-                {{else}}<button class="button button--sm button--outlined" disabled>next</button>{{end}}
+                {{else}}<button type="button" class="button button--sm button--outlined" disabled>next</button>{{end}}
             </span>
         </div>
     </div>

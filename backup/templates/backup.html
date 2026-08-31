@@ -36,7 +36,7 @@
                     <div class="progress" style="height:14px;background:var(--bg-elevated,#222)">
                         <div class="progress-bar{{if not .Current}} bg-warning{{end}}"  {{/* .progress-bar and .bg-warning are BOTH host-defined (theme.css); the bar is already the host's vocabulary and converting it would be churn. */}}
                              role="progressbar" style="width:{{.Pct}}%"
-                             aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"></div>
+                             aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100" aria-label="{{if .Source}}{{.Source}}{{else}}(unnamed){{end}} coverage"></div>
                     </div>
                     <div class="text-muted small mt-1">
                         {{bytes .HeldBytes}} of {{bytes .TotalBytes}} ·
@@ -72,6 +72,7 @@
         </p>
         <div class="data-table-wrapper">
             <table class="data-table">
+                <caption class="visually-hidden">Coverage by class</caption>
                 <thead><tr><th>Class</th><th class="text-end">Files</th><th class="text-end">Change</th><th class="text-end">Size</th><th class="text-end">Packs</th><th></th></tr></thead>
                 <tbody>
                 {{range .Classes}}
@@ -114,6 +115,7 @@
         {{if .Dumps}}
         <div class="data-table-wrapper">
             <table class="data-table mb-2">
+                <caption class="visually-hidden">Database dumps</caption>
                 <thead><tr><th>Dump</th><th class="text-end">Files</th><th class="text-end">Size</th><th class="text-end">Tables</th><th>Postgres</th></tr></thead>
                 <tbody>
                 {{range .Dumps}}
@@ -148,6 +150,7 @@
     <div class="panel__body">
         <div class="data-table-wrapper">
             <table class="data-table mb-2">
+                <caption class="visually-hidden">Index generations</caption>
                 <thead><tr><th>Gen</th><th>Started</th><th>Sealed</th><th class="text-end">Files</th><th class="text-end">Size</th><th class="text-end">Re-hashed</th><th></th></tr></thead>
                 <tbody>
                 {{range .Generations}}
@@ -184,6 +187,7 @@
         {{if .Suspects}}
         <div class="data-table-wrapper">
             <table class="data-table mb-2">
+                <caption class="visually-hidden">Suspect files</caption>
                 <thead><tr><th>Path</th><th>Class</th><th>Why</th><th class="text-end">Seen</th><th>Last</th></tr></thead>
                 <tbody>
                 {{range .Suspects}}

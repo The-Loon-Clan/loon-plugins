@@ -59,9 +59,9 @@
                 <a href="/login" class="button button--outlined button--sm w-100" style="flex-shrink:0;">Log in to chat</a>
                 {{else}}
                 <input type="text" id="chat-input" class="form__input"
-                       placeholder="Type a message…" autocomplete="off" maxlength="2000"
+                       placeholder="Type a message…" aria-label="Type a message…" autocomplete="off" maxlength="2000"
                        style="background:var(--bg-elevated);border-color:var(--border);color:var(--text);">
-                <button id="chat-send" class="button button--primary button--sm" style="flex-shrink:0;">Send</button>
+                <button type="button" id="chat-send" class="button button--primary button--sm" style="flex-shrink:0;">Send</button>
                 {{end}}
             </div>
             <div class="chat-status">

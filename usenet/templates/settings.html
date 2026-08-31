@@ -275,6 +275,13 @@
         </form>
     </div>
     {{if .Groups}}
+    {{/* Empty per-row forms, outside the table: a <form> may not be a child
+         of <tr>, so each row's tune controls bind to theirs by id via the
+         form= attribute — the same pattern as the prov-* forms above. */}}
+    {{range .Groups}}
+    <form method="post" action="/admin/p/usenet/group-tune" id="tune-{{.Name}}" class="js-group-tune">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}"></form>
+    {{end}}
     <div class="data-table-wrapper">
         <table class="data-table">
             <caption class="visually-hidden">Newsgroups this indexer crawls</caption>
@@ -291,8 +298,6 @@
                          state, button = the action that changes it. */}}
                     <td>{{if .Active}}<span class="tag tag--success">enabled</span>{{else}}<span class="tag tag--sm">disabled</span>{{end}}</td>
                     <td class="text-end">{{.NZBs}}</td>
-                    <form method="post" action="/admin/p/usenet/group-tune" id="tune-{{.Name}}" class="js-group-tune">
-            <input type="hidden" name="_csrf" value="{{$.CSRF}}"></form>
                     <td><input aria-label="Depth (d)" class="form__input" form="tune-{{.Name}}" type="text" name="retention_days" value="{{if .RetentionDays}}{{.RetentionDays}}{{end}}"
                                placeholder="site" title="blank = follow the site-wide crawl depth" style="width:4.5rem"></td>
                     <td><input aria-label="Throttle (ms)" class="form__input" form="tune-{{.Name}}" type="text" name="throttle_ms" value="{{.ThrottleMs}}"

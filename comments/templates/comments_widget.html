@@ -81,7 +81,7 @@
                             <input type="hidden" name="_csrf" value="{{$csrf}}">
                             <input type="hidden" name="id" value="{{.ID}}">
                             <input type="hidden" name="back" value="{{$back}}">
-                            <textarea class="form__input" name="body" rows="3" maxlength="{{$max}}" required>{{.Body}}</textarea>
+                            <textarea class="form__input" name="body" rows="3" maxlength="{{$max}}" required aria-label="Edit your comment">{{.Body}}</textarea>
                             <button class="button button--outlined button--sm mt-1" type="submit">Save</button>
                         </form>
                     </details>

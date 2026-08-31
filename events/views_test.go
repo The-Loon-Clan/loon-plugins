@@ -115,7 +115,13 @@ func TestWindowsPanelRenders(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	ws, _ := GenerateWindows(ev, now.Add(-60*24*time.Hour), now.Add(60*24*time.Hour))
+	// ±90 days, not ±60: the assertion below needs at least one window that
+	// has already CLOSED. With -60d, a run late in a month (first seen
+	// 30 Aug) puts `from` a few hours past that month's "0 0 1 * *" firing,
+	// so the earliest window generated is the currently-open one and the
+	// panel legitimately shows no "past" row — a date-dependent flake, not
+	// a rendering bug. 90 days always spans two closed monthly windows.
+	ws, _ := GenerateWindows(ev, now.Add(-90*24*time.Hour), now.Add(90*24*time.Hour))
 	if _, err := m.InsertWindows(ctx, "season", ws); err != nil {
 		t.Fatal(err)
 	}

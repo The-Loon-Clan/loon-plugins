@@ -19,7 +19,7 @@
             </div>
             <div class="d-flex gap-2 align-items-center">
                 <span class="tag tag--sm fs-xs">▲ <span id="vote-count">{{.Node.VoteCount}}</span></span>
-                <button id="btn-vote" class="button button--sm button--outlined">👍 Vote</button>
+                <button type="button" id="btn-vote" class="button button--sm button--outlined">👍 Vote</button>
                 <a href="/flow#node-{{.Node.ID}}" class="button button--sm button--outlined">🌐 Open in graph</a>
             </div>
         </div>
@@ -54,7 +54,7 @@
                 {{end}}
 
                 {{if .MockupNotesHTML}}
-                <h6 class="mt-4 mb-2 fs-sm text-muted">Notes</h6>
+                <h3 class="mt-4 mb-2 fs-sm text-muted">Notes</h3>
                 <div class="notes-rendered">{{.MockupNotesHTML}}</div>
                 {{end}}
             </div>
@@ -85,8 +85,8 @@
                     <div class="panel__header fs-sm text-muted">Quick add</div>
                     <div class="panel__body">
                         <div class="d-flex gap-1">
-                            <input id="comment-input" class="form__input" type="text" placeholder="Leave a comment…" maxlength="2000">
-                            <button id="btn-comment" class="button button--sm button--primary">Send</button>
+                            <input id="comment-input" class="form__input" type="text" placeholder="Leave a comment…" aria-label="Leave a comment" maxlength="2000">
+                            <button type="button" id="btn-comment" class="button button--sm button--primary">Send</button>
                         </div>
                         <div style="font-size:0.7rem;color:var(--text-muted);margin-top:6px;">
                             Comments here go to the same thread as the canvas. Markdown isn't rendered yet — keep it short.

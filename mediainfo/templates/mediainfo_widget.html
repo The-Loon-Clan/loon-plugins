@@ -28,7 +28,7 @@
 <ul class="shots">
     {{$csrf := .CSRF}}{{$back := .Back}}
     {{range .Shots}}
-    <li class="shots__item">
+    <li>
         {{/* Served from THIS site, never from where the member found it — a
              page that renders a remote image hands that host a log of who
              reads what. loading=lazy because a set of 4K frames below the

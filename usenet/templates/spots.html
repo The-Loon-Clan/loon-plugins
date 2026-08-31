@@ -153,7 +153,7 @@
     </p>
     <form method="post" action="/admin/p/usenet/spot-enable">
             <input type="hidden" name="_csrf" value="{{$.CSRF}}">
-      <button class="button button--sm button--outlined">Index {{.Group}}</button>
+      <button type="submit" class="button button--sm button--outlined">Index {{.Group}}</button>
     </form>
     {{end}}
   </div>
@@ -279,7 +279,7 @@
       <label class="fs-sm text-muted" for="spot-sample">sample</label>
       <input id="spot-sample" type="number" name="sample" value="25" min="1" max="200"
              class="form__input" style="width:6rem">
-      <button class="button button--sm button--outlined" {{if not .HaveProvider}}disabled{{end}}>
+      <button type="submit" class="button button--sm button--outlined" {{if not .HaveProvider}}disabled{{end}}>
         Probe {{.Group}}
       </button>
       {{if not .HaveProvider}}

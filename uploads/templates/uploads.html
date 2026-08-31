@@ -1,5 +1,5 @@
 {{define "uploads.html"}}
-<div class="uploads">
+<div>
     {{/* The sentences live HERE, not in Go (CHECKLIST §10), and the notice
          follows the CODE. This block used to be hardcoded to the success
          colour, so a failed save arrived in green. */}}
@@ -49,6 +49,7 @@
         {{if .Public}}
         <div style="overflow-x:auto;">
         <table class="data-table mb-0">
+            <caption class="visually-hidden">Public uploads</caption>
             <thead><tr>
                 <th>Release</th><th class="text-end">Size</th><th>Uploaded</th>
                 <th>Visibility</th><th style="width:230px;"></th>
@@ -68,14 +69,14 @@
                             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <input type="hidden" name="id" value="{{.ID}}">
                             {{if .Deleted}}
-                            <button name="action" value="restore" class="button button--sm button--outlined">Restore</button>
+                            <button type="submit" name="action" value="restore" class="button button--sm button--outlined">Restore</button>
                             {{else}}
-                            <button name="action" value="delete" class="button button--sm button--outlined button--danger">Delete</button>
+                            <button type="submit" name="action" value="delete" class="button button--sm button--outlined button--danger">Delete</button>
                             {{end}}
                             {{if .Anonymous}}
-                            <button name="action" value="deanonymous" class="button button--sm button--outlined">Show name</button>
+                            <button type="submit" name="action" value="deanonymous" class="button button--sm button--outlined">Show name</button>
                             {{else}}
-                            <button name="action" value="anonymous" class="button button--sm button--outlined">Anonymous</button>
+                            <button type="submit" name="action" value="anonymous" class="button button--sm button--outlined">Anonymous</button>
                             {{end}}
                         </form>
                     </td>
@@ -98,15 +99,15 @@
         <div class="panel__body">
             <form class="d-inline" method="POST" action="/account-settings/uploads/bulk">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
-                <button name="action" value="delete" class="button button--sm button--outlined button--danger">Delete all</button>
-                <button name="action" value="restore" class="button button--sm button--outlined">Restore all</button>
-                <button name="action" value="anonymous" class="button button--sm button--outlined">Make all anonymous</button>
+                <button type="submit" name="action" value="delete" class="button button--sm button--outlined button--danger">Delete all</button>
+                <button type="submit" name="action" value="restore" class="button button--sm button--outlined">Restore all</button>
+                <button type="submit" name="action" value="anonymous" class="button button--sm button--outlined">Make all anonymous</button>
             </form>
             <form class="d-inline" method="POST" action="/account-settings/uploads/bulk"
                   onsubmit="return confirm('This unlinks every upload from your account permanently. They will leave this page and cannot be recovered. Continue?')">
                 <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
                 <input type="hidden" name="confirm" value="permanent">
-                <button name="action" value="true-anonymous" class="button button--sm button--danger">Permanently anonymous</button>
+                <button type="submit" name="action" value="true-anonymous" class="button button--sm button--danger">Permanently anonymous</button>
             </form>
         </div>
     </div>
@@ -122,6 +123,7 @@
         {{if .PrivateNZB}}
         <div style="overflow-x:auto;">
         <table class="data-table mb-0">
+            <caption class="visually-hidden">Private NZB uploads</caption>
             <thead><tr><th>Title</th><th class="text-end">Size</th><th>Uploaded</th></tr></thead>
             <tbody>
             {{range .PrivateNZB}}
@@ -152,6 +154,7 @@
         {{if .PrivateTorrent}}
         <div style="overflow-x:auto;">
         <table class="data-table mb-0">
+            <caption class="visually-hidden">Private torrent uploads</caption>
             <thead><tr>
                 <th>Title</th><th>Info hash</th><th>Uploaded</th>
                 <th>After fulfilment</th><th style="width:150px;"></th>
@@ -170,7 +173,8 @@
                             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                             <input type="hidden" name="request_id" value="{{.ID}}">
                             <select name="keep_private" class="form__select d-inline"
-                                    style="width:auto" onchange="this.form.submit()">
+                                    style="width:auto" onchange="this.form.submit()"
+                                    aria-label="After fulfilment for {{.Title}}">
                                 <option value="false" {{if not .KeptPrivate}}selected{{end}}>Publish</option>
                                 <option value="true"  {{if .KeptPrivate}}selected{{end}}>Keep private</option>
                             </select>

@@ -27,7 +27,7 @@
                 <span class="text-muted">Status:</span>
                 <form method="POST" action="/admin/tickets/{{.Ticket.ID}}/update" class="d-flex gap-1 align-items-center">
                     <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
-                    <select name="status" class="form__select" style="width:auto;font-size:0.8rem;">
+                    <select name="status" aria-label="Status" class="form__select" style="width:auto;font-size:0.8rem;">
                         <option value="open" {{if eq .Ticket.Status "open"}}selected{{end}}>Open</option>
                         <option value="in_progress" {{if eq .Ticket.Status "in_progress"}}selected{{end}}>In Progress</option>
                         <option value="closed" {{if eq .Ticket.Status "closed"}}selected{{end}}>Closed</option>

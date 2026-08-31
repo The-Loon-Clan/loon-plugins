@@ -72,6 +72,8 @@ func (p *Plugin) Metadata() core.Metadata {
 }
 
 func (p *Plugin) Provision(c *core.Core) error {
+	// The queue page's CSS. See stylesheet.go.
+	pluginapi.RegisterStylesheet(c, "applications", applicationsCSS)
 	p.core = c
 	db := c.Storage.SchemaDB(p.Metadata().Name)
 	if db == nil {

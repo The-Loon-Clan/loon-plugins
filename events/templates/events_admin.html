@@ -13,7 +13,7 @@
   </div>
   <div class="data-table-wrapper">
     <table class="data-table mb-0">
-        <caption class="visually-hidden">Scheduled events</caption>
+        <caption class="visually-hidden">Configuration findings</caption>
       <tbody>
       {{range .Findings}}
         <tr>
@@ -37,7 +37,7 @@
   </div>
   <div class="data-table-wrapper">
     <table class="data-table mb-0">
-        <caption class="visually-hidden">Event windows</caption>
+        <caption class="visually-hidden">Scheduled events</caption>
       <thead><tr>
         <th>Slug</th><th>Name</th><th>Shape</th><th>Cron</th><th>TZ</th>
         <th>Windows</th><th>Open now</th><th>Next opens</th><th>Covered to</th><th></th>
@@ -63,14 +63,14 @@
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="slug" value="{{.Slug}}">
               <input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}">
-              <button class="button button--sm button--outlined">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+              <button type="submit" class="button button--sm button--outlined">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
             </form>
             <a class="button button--sm button--outlined" href="?edit={{.Slug}}#event-form">Edit</a>
             <form method="post" action="/admin/p/events/event-delete" class="d-inline"
                   onsubmit="return confirm('Delete {{.Slug}} and all its windows? Anything referencing this slug will see it as absent.');">
             <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="slug" value="{{.Slug}}">
-              <button class="button button--sm button--outlined button--danger">Delete</button>
+              <button type="submit" class="button button--sm button--outlined button--danger">Delete</button>
             </form>
           </td>
         </tr>
@@ -89,7 +89,7 @@
   </div>
   <div class="data-table-wrapper">
     <table class="data-table mb-0">
-        <caption class="visually-hidden">Configuration findings</caption>
+        <caption class="visually-hidden">Event windows</caption>
       <thead><tr><th>Starts</th><th>Ends</th><th>State</th></tr></thead>
       <tbody>
       {{range .Windows}}
@@ -167,7 +167,7 @@
       </div>
 
       <div class="col-12">
-        <button class="button button--sm button--primary">{{if .Edit}}Save changes{{else}}Create event{{end}}</button>
+        <button type="submit" class="button button--sm button--primary">{{if .Edit}}Save changes{{else}}Create event{{end}}</button>
       </div>
     </form>
   </div>
