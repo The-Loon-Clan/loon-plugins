@@ -484,7 +484,7 @@
                             {{else if .RequestID}}
                                 <a href="/community/request/{{deref64 .RequestID}}" class="badge bg-info bg-opacity-50 text-info" style="font-size:0.62rem;text-decoration:none;" title="View request">queued</a>
                             {{else}}
-                                <button type="button" class="button button--outlined button--micro button--info feed-request-btn" title="Queue this immediately"
+                                <button type="button" class="button button--outlined button--micro feed-request-btn" title="Queue this immediately"
                                         data-title="{{.Title}}"
                                         data-source-url="{{if .SourceURL}}{{.SourceURL}}{{else}}{{.MagnetURL}}{{end}}"
                                         data-info-hash="{{.InfoHash}}"

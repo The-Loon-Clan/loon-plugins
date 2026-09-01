@@ -291,6 +291,13 @@ func (p *Plugin) Start(ctx context.Context) error {
 			return pluginapi.ResolveMultiplier(ctx, reg, pluginapi.MultUpload, mc),
 				pluginapi.ResolveMultiplier(ctx, reg, pluginapi.MultDownload, mc)
 		})
+		// Publish who is seeding what, so an economy plugin can pay for
+		// seeding without reading this plugin's tables. The store is the
+		// implementation; registering it here rather than in Provision keeps
+		// it next to the other registry work and after the store exists.
+		if ss, ok := p.store.(pluginapi.SeedingSnapshotter); ok {
+			_ = p.core.Register(pluginapi.SeedingSnapshotName, ss)
+		}
 		// The restriction half of the same registry. Separate resolver
 		// because it is a separate algebra: offers combine best-of, flags
 		// combine ANY. Same per-call scan, so a source registered later

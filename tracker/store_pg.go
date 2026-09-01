@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -309,6 +311,43 @@ func (s *PGStore) ListUserStats(ctx context.Context, userID int64, limit int) ([
 		 WHERE s.user_id = $1 ORDER BY s.last_seen DESC LIMIT $2`, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list user stats: %w", err)
+	}
+	return rows, nil
+}
+
+// SeedingSnapshot implements pluginapi.SeedingSnapshotter.
+//
+// ONE query, and the seeder count is a window over the same result set rather
+// than a read of torrents.seeders. That is the entire reason this seam exists:
+// an economy divides a per-torrent pool by this count and pays the rows it got
+// back, so a count sourced anywhere else can disagree with the payees the
+// moment a peer announces between the two reads — and the shares then stop
+// summing to the pool, minting or destroying value every tick with both halves
+// looking correct in isolation.
+//
+// The seeding predicate is the tracker's own (left_bytes = 0 plus a recent
+// announce); only the freshness window is the caller's, because a payout and a
+// listing want different tolerances.
+func (s *PGStore) SeedingSnapshot(ctx context.Context, freshFor time.Duration) ([]pluginapi.SeedRow, error) {
+	if freshFor <= 0 {
+		freshFor = time.Hour
+	}
+	var rows []pluginapi.SeedRow
+	// The interval is bound as a parameter, not interpolated: it comes from a
+	// caller in another plugin.
+	err := s.sel(ctx, &rows, `
+		SELECT us.user_id                          AS userid,
+		       us.info_hash                        AS infohash,
+		       t.size                              AS sizebytes,
+		       us.seedtime                         AS seedtime,
+		       count(*) OVER (PARTITION BY us.info_hash)::int AS seeders
+		  FROM user_stats us
+		  JOIN torrents t ON t.info_hash = us.info_hash
+		 WHERE us.left_bytes = 0
+		   AND us.last_seen > now() - $1::interval`,
+		fmt.Sprintf("%d seconds", int64(freshFor/time.Second)))
+	if err != nil {
+		return nil, fmt.Errorf("seeding snapshot: %w", err)
 	}
 	return rows, nil
 }
