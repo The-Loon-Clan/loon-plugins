@@ -19,6 +19,22 @@ type Deps struct {
 	Matcher pluginapi.TitleMatcher
 	// Covers maps to web/static/covers/{aid}.jpg.
 	Covers pluginapi.CoverStore
+
+	// AllowTitleGuess is the OPTIONAL jurisdiction test for the newsgroup
+	// gate (group_gate.go): given an untagged row, may the scanner guess
+	// its anime from the title at all?
+	//
+	// nil — the default, and what every existing host gets — means the gate
+	// falls back to the plugins.anidbscraper.group_allowlist patterns, which
+	// ship EMPTY, so an unconfigured host's scanner behaves exactly as it did
+	// before the gate existed.
+	//
+	// Wire it when "is this release in scope" is not a question about
+	// newsgroups on your site: a tracker category, a source flag, an origin
+	// column. It REPLACES the allowlist (setting both is a Provision error,
+	// because the plugin would have to ignore one); group_gate_mode still
+	// decides what an out-of-scope row may be tagged by.
+	AllowTitleGuess func(row pluginapi.NzbRow) bool
 }
 
 // deps is package-scoped because RegisterPlugin captures a zero-value factory at

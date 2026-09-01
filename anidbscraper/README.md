@@ -27,6 +27,7 @@ are entangled, and what has to stay host-side.
 | Lifecycle, `Provision`/`Start`/`Stop` | real |
 | Job registration, off-peak and write gating, manual triggers | real |
 | `Deps` ports and their fail-fast checks | real |
+| The newsgroup gate (`group_gate.go`) | **real** — ported from the host, ships inert |
 | `buildTitleIndex` | **partial** — combines the two catalog maps, but does not parse the AniDB titles dump |
 | `fetchMetadata` | **stub** — returns an error for every aid |
 | Everything else marked `// EXTRACT:` | not moved yet |
@@ -45,9 +46,11 @@ Two consequences an operator should know:
 The production service registers **six** jobs; this wires the three that carry
 the core loop.
 
-**No tests.** This is the only package in the repo with none, and deliberately
-so: a test over a stub pins the stub. It becomes a normal expectation the day
-the bodies land.
+**One test file, and only one.** A test over a stub pins the stub, so the
+extraction stubs stay untested until their bodies land. `group_gate_test.go` is
+the exception because the gate is not a stub: it is a mirror of host code, and
+the two copies had already drifted apart once without anything noticing. Those
+cases are the host's own, ported alongside it.
 
 ## Surface
 
@@ -82,11 +85,100 @@ nil-panicking half way through a scan.
 | `pluginapi.NzbTagSink` | **entangled** | The write-back into the host's `nzbs` table — the deep seam, and the reason this is a host-data plugin at all. |
 | `pluginapi.TitleMatcher` | **entangled** | The shared title matcher, rebuilt after each titles refresh. |
 | `pluginapi.CoverStore` | **entangled** | Maps to `web/static/covers/{aid}.jpg`. |
+| `Deps.AllowTitleGuess` | **optional** | The newsgroup gate's jurisdiction test. `nil` (the default) falls back to the allowlist patterns, which ship empty — so nothing is gated. See below. |
 
 The clean/entangled split is the finding this exercise produced, and
 `pluginapi/anidb.go` and `JOBS-AS-PLUGINS.md` carry the reasoning for each.
 
 Core: `Scheduler` only.
+
+## The newsgroup gate
+
+The scanner answers "which anime is this release" for every untagged row, using
+a title matcher that has no way to say *this isn't anime at all*. On ameNZB,
+over the 14 days to 2026-08-31, that produced 12,247 tags:
+
+| Where the row came from | Tags | Strict precision |
+|---|---|---|
+| `alt.binaries.multimedia.anime.highspeed` | 7,945 | 83% |
+| every other newsgroup | 4,302 | ~15% |
+
+Off the anime groups the matcher is not wrong at the margin, it is guessing:
+"Adobe Audition 2026" reached an anime romanized *O-di-syeon*, "Any Video
+Downloader Pro" reached one called *Downloader*, "The Bear S03" reached *Mori no
+Kuma-san*. Any catalogue of this size holds entries whose English title is an
+ordinary phrase, and a group carrying western TV, music and software keeps
+producing releases that spell those phrases.
+
+So the gate is about **jurisdiction, not confidence**: in a group whose traffic
+is not anime, the scanner has no business guessing by title at all.
+
+### It ships OFF
+
+```yaml
+plugins:
+  anidbscraper:
+    group_allowlist: ""       # empty (the default) = no gate at all
+    group_gate_mode: refuse   # refuse | exact | report | off
+```
+
+The allowlist is empty on purpose. ameNZB ships `*anime*` because it measured
+its own 62 crawled groups; that is a fact about ameNZB's traffic, not about
+newsgroups. **A host that upgrades past this file and configures nothing tags
+exactly what it tagged before** — pinned by `TestUnconfiguredGateIsInert`. An
+empty allowlist means "no gate", never "block everything".
+
+Patterns are one per line or comma-separated, case-insensitive, `*` matches any
+run of characters, `#` starts a comment. A release is allowed if **any** group
+it was seen in matches **any** pattern, so a crosspost into an anime group still
+counts. A release with **no** newsgroup is always allowed — on the host that is
+an upload or a scraped release, and refusing on absent evidence would silently
+stop tagging them.
+
+| Mode | Out-of-jurisdiction rows |
+|---|---|
+| `refuse` (default) | No title matching at all. |
+| `exact` | Only an exact whole-title index hit — no prefix walk, no containment. Requires the injected `Matcher` to also implement `pluginapi.ExactTitleMatcher`; `Provision` refuses to boot otherwise rather than quietly running the fuzzy matcher the mode exists to switch off. |
+| `report` | Nothing is blocked; gated rows are counted and the run log says what enforcing would have cost. Run this first when tuning an allowlist. |
+| `off` | No gate, even with an allowlist configured. |
+
+An unrecognised mode falls back to `refuse` and logs why. It does not turn the
+gate off — that is the failure the gate exists to prevent — and it does not stop
+the worker booting over one config string.
+
+### Two ways to say "in scope"
+
+The allowlist reads `pluginapi.NzbRow.Groups`, which is **optional**: a host
+whose `NzbTagSink.UntaggedBatch` leaves it empty is a host where every row looks
+like "no newsgroup", which the gate allows. That is what keeps the field
+backwards-compatible, and it is also the way to configure a gate and get
+nothing — so a configured pattern gate that saw no newsgroup on a single row of
+a non-empty scan says so, loudly, in the run log.
+
+If jurisdiction on your site is not a question about newsgroups — a tracker
+category, a source flag, an origin column — wire `Deps.AllowTitleGuess` instead.
+It replaces the allowlist (setting both is a `Provision` error, because the
+plugin would have to ignore one of them); `group_gate_mode` still decides what
+an out-of-scope row may be tagged by.
+
+### It is a mirror — change both copies
+
+`group_gate.go` is a 1:1 port of ameNZB's
+`indexer-site/pkg/services/anidb_scan_group_gate.go`, down to the mode names and
+the shape of the allow/verdict decision, and that host file names this one back.
+The two already diverged once: the host added the gate, this copy kept guessing,
+and any site running the plugin kept the pre-fix behaviour. **A change to the
+decision belongs in both files, with its cases in both test files.**
+
+Two differences are deliberate and worth knowing:
+
+- ameNZB re-reads the allowlist from its job-settings table once per 5,000-row
+  batch, so an operator can widen it mid-run. loon's `core.Job` carries no
+  config vars, so this copy reads `config.yml` in `Provision` — a change needs a
+  worker restart.
+- The host's verdict carries a fourth field, `anilist`, permitting its
+  last-resort AniList search on allowed rows only. This port has no such step
+  yet, so the field would have no reader; it comes back with that body.
 
 ## Hooks & callbacks
 
@@ -106,8 +198,10 @@ titles-dump cadence.
 ## Files
 
 ```
-plugin.go   lifecycle, the three jobs, the run bodies and their EXTRACT markers
-deps.go     the four ports and why each is clean or entangled
+plugin.go          lifecycle, the three jobs, the run bodies and their EXTRACT markers
+deps.go            the ports, why each is clean or entangled, and the one optional seam
+group_gate.go      the newsgroup gate — a mirror of the host's, and the measurement behind it
+group_gate_test.go the host's gate cases, ported with it
 ```
 
 ## Finishing it

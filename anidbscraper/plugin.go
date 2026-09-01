@@ -36,6 +36,14 @@ type Config struct {
 	Client         string `json:"client"`     // AniDB HTTP API client name
 	ClientVer      int    `json:"client_ver"` // AniDB HTTP API client version
 	ScanThrottleMs int    `json:"scan_throttle_ms"`
+
+	// The newsgroup gate — same two key names as the host's job-config
+	// vars, so the setting is recognisable on both sides. Both ship EMPTY,
+	// which means "no gate": upgrading past this does not change what an
+	// unconfigured host tags. See group_gate.go for the measurement that
+	// makes the gate worth turning on, and why its default is not.
+	GroupAllowlist string `json:"group_allowlist"`
+	GroupGateMode  string `json:"group_gate_mode"`
 }
 
 type Plugin struct {
@@ -46,6 +54,14 @@ type Plugin struct {
 	titlesJob core.Job
 	scanJob   core.Job
 	fillJob   core.Job
+
+	// gate is resolved once in Provision (loon's core.Job has no config
+	// vars, so unlike the host this cannot be re-read mid-run).
+	gate     groupGate
+	gateWarn string
+	// exactMatcher is non-nil only in gate mode "exact"; Provision refuses
+	// to boot in that mode without it.
+	exactMatcher pluginapi.ExactTitleMatcher
 }
 
 func (p *Plugin) Metadata() core.Metadata {
@@ -76,6 +92,18 @@ func (p *Plugin) Provision(c *core.Core) error {
 		return fmt.Errorf("anidbscraper: config: %w", err)
 	}
 
+	// Newsgroup gate (group_gate.go). Resolved here so a misconfiguration
+	// is a boot failure or a boot-time log line, not a surprise five hours
+	// into a scan.
+	gate, warn, err := newGroupGate(p.cfg, deps.AllowTitleGuess)
+	if err != nil {
+		return err
+	}
+	p.gate, p.gateWarn = gate, warn
+	if p.exactMatcher, err = resolveExactMatcher(gate, deps.Matcher); err != nil {
+		return err
+	}
+
 	// Register jobs in Provision (registering at Start races the admin view's
 	// registry snapshot — see loon core/scheduler.go). The production service
 	// registers six; the exemplar wires the three that carry the core loop.
@@ -91,6 +119,12 @@ func (p *Plugin) Provision(c *core.Core) error {
 		"AniDB Metadata Fill",
 		"Fetches images and metadata from AniList for the anime catalog").
 		MarkOffPeak().MarkWrites()
+
+	// A mode the plugin does not recognise falls back to refuse rather than
+	// off; say so where the operator looks, not only at boot on stderr.
+	if p.gateWarn != "" {
+		p.scanJob.Log("Newsgroup gate: %s", p.gateWarn)
+	}
 
 	// Manual /admin/jobs "run now" buttons (bypass the off-peak gate). The
 	// callback has no ctx of its own, so it borrows the root ctx captured in
@@ -137,6 +171,10 @@ func (p *Plugin) runTitlesRefresh(ctx context.Context) {
 //
 // EXTRACT: body of pkg/services/anidb_service.go runNzbScan (with the per-batch
 // OffPeakGate re-check and the 1ms/row throttle).
+//
+// The newsgroup gate below IS extracted, ahead of the rest of the body: the
+// host added it and this copy did not have it, so the two scanners answered
+// "which anime is this" differently for the same row (see group_gate.go).
 func (p *Plugin) runScan(ctx context.Context) {
 	if ctx == nil {
 		return // trigger fired before Start (should never happen)
@@ -145,6 +183,20 @@ func (p *Plugin) runScan(ctx context.Context) {
 	throttle := time.Duration(p.cfg.ScanThrottleMs) * time.Millisecond
 	var cursor int64
 	var tagged int
+	// Gate accounting: rows outside the gate's jurisdiction, how many of
+	// those were still tagged (report/exact modes), the busiest gated groups
+	// so an operator can widen an allowlist that is turning away a real anime
+	// group, and whether ANY row carried a newsgroup at all.
+	gate := p.gate
+	scanned, gatedRows, gatedTagged, rowsWithGroups := 0, 0, 0, 0
+	gatedByGroup := make(map[string]int, 16)
+	if gate.active() {
+		// Only when it does something. A host that configured no gate does
+		// not need a line every run about a feature it is not using; a host
+		// that DID configure one needs to see the mode it is enforcing next
+		// to the numbers at the end of the run.
+		p.scanJob.Log("Newsgroup gate: %s", gate.describe())
+	}
 	for {
 		// Every early return after SetRunning must SetIdle, or the job
 		// reads as running forever and stalls the host's shutdown drain.
@@ -162,12 +214,35 @@ func (p *Plugin) runScan(ctx context.Context) {
 			break
 		}
 		for _, row := range rows {
-			if aid, ok := deps.Matcher.Find(row.Title); ok {
-				if err := deps.Nzbs.SetAnimeID(ctx, row.ID, aid); err != nil {
-					p.core.Errors.Report(ctx, "anidbscraper/scan-write", err)
-					continue
+			scanned++
+			if primaryGroup(row.Groups) != "" {
+				rowsWithGroups++
+			}
+			// Everything below this line identifies the release by what its
+			// NAME looks like, and in a group that does not carry anime that
+			// question has no good answer.
+			verdict := p.verdict(gate, row)
+			if verdict.offGate {
+				gatedRows++
+				if g := primaryGroup(row.Groups); g != "" {
+					gatedByGroup[g]++
 				}
-				tagged++
+			}
+			if verdict.match != nil {
+				if aid, ok := verdict.match(row.Title); ok {
+					if err := deps.Nzbs.SetAnimeID(ctx, row.ID, aid); err != nil {
+						p.core.Errors.Report(ctx, "anidbscraper/scan-write", err)
+						continue
+					}
+					tagged++
+					if verdict.offGate {
+						// In report mode this is what enforcing WOULD have
+						// blocked; in exact mode it is what the narrowed
+						// evidence still let through. Either way it is the
+						// number an operator needs to judge the allowlist.
+						gatedTagged++
+					}
+				}
 			}
 			if throttle > 0 {
 				time.Sleep(throttle)
@@ -176,6 +251,9 @@ func (p *Plugin) runScan(ctx context.Context) {
 		cursor = next
 	}
 	p.scanJob.Log("AniDB scan complete: %d newly tagged", tagged)
+	if line := gateOutcomeLine(gate, scanned, gatedRows, gatedTagged, rowsWithGroups, gatedByGroup); line != "" {
+		p.scanJob.Log("%s", line)
+	}
 	p.scanJob.SetIdle(nextMidnight())
 }
 

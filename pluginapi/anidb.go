@@ -34,6 +34,21 @@ type AnimeMetadata struct {
 type NzbRow struct {
 	ID    int64
 	Title string
+	// Groups are the newsgroups this release was seen in (the crosspost
+	// list, or the single primary group), lowercase or not — the gate
+	// folds case itself. It exists for anidbscraper's newsgroup gate,
+	// which refuses to guess an anime by title for a release that arrived
+	// in a group whose traffic is not anime (see anidbscraper/group_gate.go
+	// for the production measurement behind it).
+	//
+	// OPTIONAL: a host whose UntaggedBatch leaves it empty reads as "no
+	// newsgroup", which the gate always allows, so the scanner behaves
+	// exactly as it did before the field existed. A host that DOES
+	// configure the gate must populate this — the plugin cannot tell an
+	// unpopulated projection from a genuine upload, so it warns once per
+	// run when a configured gate saw no groups at all rather than
+	// silently doing nothing.
+	Groups []string
 }
 
 // SuggestionInput mirrors storage.NzbSuggestionInput for the auto-suggest job.
@@ -83,6 +98,22 @@ type NzbTagSink interface {
 type TitleMatcher interface {
 	Find(rawTitle string) (animeID int, ok bool)
 	Rebuild(index map[string]int)
+}
+
+// ExactTitleMatcher is an OPTIONAL extension of TitleMatcher: the whole
+// normalized title, present in the index, with none of the fuzzy steps
+// (no season-suffix strip, no prefix walk, no substring containment).
+//
+// It exists for one caller — anidbscraper's newsgroup gate in its "exact"
+// mode, which narrows what a release from a non-anime newsgroup may be
+// tagged by instead of refusing it outright. A host that never sets that
+// mode never needs to implement it; the plugin type-asserts for it and
+// refuses to boot in "exact" mode without it, rather than quietly running
+// the fuzzy matcher the mode exists to switch off.
+//
+// Implement it on the same type as TitleMatcher.
+type ExactTitleMatcher interface {
+	FindExact(rawTitle string) (animeID int, ok bool)
 }
 
 // CoverStore abstracts the host's web/static/covers/{aid}.jpg directory. Third
