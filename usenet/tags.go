@@ -176,11 +176,12 @@ var (
 	// series (26 distinct titles / 236 rows on the spike day alone). A
 	// case-insensitive \bxxx\b here would claim the whole trilogy.
 	// Glued studio/scene compounds. Deliberately NOT word-bounded, which is
-	// the whole point: every other porn token here uses , and that is how
-	// "GangbangCreampie - G355 Anna Chambers Blowbang" reached the PUBLIC
-	// browse page uncategorised on 2026-09-01 -- gangbang cannot match
-	// inside a compound, so a studio name glued into one word escaped every
-	// rule. Found by loading the rendered page, not by reading the regex.
+	// the whole point: every other porn token here is word-bounded, and
+	// that is how "GangbangCreampie - G355 Anna Chambers Blowbang" reached
+	// the PUBLIC browse page uncategorised on 2026-09-01 -- a word-bounded
+	// "gangbang" cannot match inside a compound, so a studio name glued
+	// into one word escaped every rule. Found by loading the rendered
+	// page, not by reading the regex.
 	//
 	// Measured whole-table before shipping: 2,241 uncategorised rows caught,
 	// ZERO rows categorised Anime touched. The list is only multi-syllable
