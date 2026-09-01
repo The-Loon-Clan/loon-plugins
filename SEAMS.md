@@ -17,9 +17,12 @@ difference matters more than it looks.
 
 **Declared contracts** live in [`pluginapi`](pluginapi/) — an interface or func
 type, a `…Name` constant, both sides importing the contract and neither
-importing the other. There are **67** of them, counted from the EXPORTED `…Name` and
-`…Prefix` constants in `pluginapi` whose value is a NAMESPACED key, on
-22 Aug 2026. They are discoverable: an
+importing the other. There are **70** of them, counted from the EXPORTED `…Name` and
+`…Prefix` constants in `pluginapi` whose value is a NAMESPACED key,
+recounted 1 Sep 2026 (67 on 22 Aug). This number is CHECKED, not
+decorative: `audit_seams` re-derives it from the source and fails when the
+sentence drifts, which is how the last three additions were caught — two
+of them written in this repo and left uncatalogued by their own author. They are discoverable: an
 author reading `pluginapi` sees what exists, the compiler catches interface
 skew, and `/admin/contracts` can report an unwired one.
 
