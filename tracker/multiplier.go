@@ -41,7 +41,22 @@ var (
 	// promotion rule the genre settled on: a freeleech token and a 2×
 	// magic together credit 2× up and 0× down, never a compromise.
 	promo Multiplier
+	// neutral answers "is this member, on this torrent, under neutral leech?"
+	// It is NOT a Multiplier and cannot be one: neutral needs upload×0, and
+	// every combining step here is a best-of that starts at 1 and only rises,
+	// so a 0 loses to the floor and neutral silently degrades to ordinary
+	// freeleech — more generous than the operator asked, with nothing
+	// reporting it. A restriction does not compete with offers; it is applied
+	// after they have finished arguing. See pluginapi.ResolvePolicyFlag.
+	neutral func(ctx context.Context, userID int64, infoHash string) bool
 )
+
+// setNeutral installs the registry-sourced neutral-leech predicate.
+func setNeutral(f func(ctx context.Context, userID int64, infoHash string) bool) {
+	multMu.Lock()
+	defer multMu.Unlock()
+	neutral = f
+}
 
 // setPromo installs the registry-sourced promotion resolver.
 func setPromo(m Multiplier) {
@@ -72,7 +87,7 @@ func SetMultiplier(m Multiplier) {
 // negative multiplier would silently run their account backwards.
 func Credit(ctx context.Context, userID int64, infoHash string, up, down int64) (int64, int64) {
 	multMu.RLock()
-	m, pr := mult, promo
+	m, pr, nf := mult, promo, neutral
 	multMu.RUnlock()
 	upF, downF := 1.0, 1.0
 	if m != nil {
@@ -88,6 +103,14 @@ func Credit(ctx context.Context, userID int64, infoHash string, up, down int64) 
 		if pd >= 0 && (pd < downF || !(downF >= 0)) {
 			downF = pd
 		}
+	}
+	// The restriction lands LAST, on purpose. Neutral is not an offer
+	// competing with the promotions above — it is a statement that this
+	// traffic does not count in either direction, so it must not be
+	// reachable by out-bidding. Both halves together: a neutral torrent that
+	// still credited upload would be a ratio farm.
+	if nf != nil && nf(ctx, userID, infoHash) {
+		return 0, 0
 	}
 	return scale(up, upF), scale(down, downF)
 }

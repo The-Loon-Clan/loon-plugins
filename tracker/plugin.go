@@ -291,6 +291,14 @@ func (p *Plugin) Start(ctx context.Context) error {
 			return pluginapi.ResolveMultiplier(ctx, reg, pluginapi.MultUpload, mc),
 				pluginapi.ResolveMultiplier(ctx, reg, pluginapi.MultDownload, mc)
 		})
+		// The restriction half of the same registry. Separate resolver
+		// because it is a separate algebra: offers combine best-of, flags
+		// combine ANY. Same per-call scan, so a source registered later
+		// still counts.
+		setNeutral(func(ctx context.Context, userID int64, infoHash string) bool {
+			return pluginapi.ResolvePolicyFlag(ctx, reg, pluginapi.FlagNeutral,
+				pluginapi.MultiplierContext{UserID: userID, InfoHash: infoHash})
+		})
 	}
 	// What magic is cast on a given torrent, for the torrent page's history
 	// panel. A SIBLING plugin, so this is in Start and absence is normal: a

@@ -175,7 +175,20 @@ var (
 	// enumerated so that exactly one is EXCLUDED: "xXx" is the Vin Diesel film
 	// series (26 distinct titles / 236 rows on the spike day alone). A
 	// case-insensitive \bxxx\b here would claim the whole trilogy.
-	rePornXXXTag = regexp.MustCompile(`\b(XXX|xxx|Xxx|XxX|XXx|xxX|xXX)\b`)
+	// Glued studio/scene compounds. Deliberately NOT word-bounded, which is
+	// the whole point: every other porn token here uses , and that is how
+	// "GangbangCreampie - G355 Anna Chambers Blowbang" reached the PUBLIC
+	// browse page uncategorised on 2026-09-01 -- gangbang cannot match
+	// inside a compound, so a studio name glued into one word escaped every
+	// rule. Found by loading the rendered page, not by reading the regex.
+	//
+	// Measured whole-table before shipping: 2,241 uncategorised rows caught,
+	// ZERO rows categorised Anime touched. The list is only multi-syllable
+	// terms with no innocent English use -- "handjob" and "blowjob" are
+	// absent ON PURPOSE, because -HANDJOB is a scene RELEASE GROUP carried by
+	// real anime (Black Jack 1977, Golgo 13, Ramayana).
+	rePornCompound = regexp.MustCompile(`(?i)(gangbang|creampie|blowbang|cumshot|bukkake|deepthroat|sextape|pornstar)`)
+	rePornXXXTag   = regexp.MustCompile(`\b(XXX|xxx|Xxx|XxX|XXx|xxX|xXX)\b`)
 
 	// 2. The tube-rip pipe tail: "(2016|HD|1280x720)". No legitimate release
 	// writes year|quality|WxH pipe-separated inside parens; zero false
@@ -249,7 +262,8 @@ var (
 // release, independently of whether it carries an adult keyword. It only ever
 // widens the adult test — see parseCategoryTag.
 func pornShape(title string) bool {
-	return rePornXXXTag.MatchString(title) ||
+	return rePornCompound.MatchString(title) ||
+		rePornXXXTag.MatchString(title) ||
 		rePornSceneMetaTail.MatchString(title) ||
 		rePornQualityTail.MatchString(title) ||
 		reJAVRelease.MatchString(title) ||

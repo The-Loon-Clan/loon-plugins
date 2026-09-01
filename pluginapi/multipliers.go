@@ -22,7 +22,24 @@
 //	                  tradition stacks them
 //
 // An unknown dimension combines like points, which is the conservative
-// reading for anything bonus-shaped.
+// reading for anything bonus-shaped — and that qualifier is load-bearing.
+// EVERY rule above assumes the source is OFFERING the member something, so
+// "the best offer wins" settles the argument. A RESTRICTION cannot be
+// expressed here at all, and fails silently in the generous direction if you
+// try: neutral leech (download free, upload earns nothing) needs upload×0,
+// but `up` starts at 1 and only ever rises, so a source answering 0 loses to
+// the floor and neutral silently becomes ordinary freeleech — strictly more
+// generous than asked, with nothing reporting a problem. Measured against a
+// bare core by the demo host, 2026-09-01, before it reached anyone's ratio.
+//
+// So restrictions live in the mirror seam below — POLICY FLAGS, combined by
+// ANY — and the two algebras are stated together on purpose:
+//
+//	multipliers  best-of  — an OFFER competes; the most generous one wins
+//	flags        ANY      — a RESTRICTION does not compete; one is enough
+//
+// Modelling a restriction as a multiplier is the category error that hid
+// this. If a new dimension is a thing the member LOSES, it is a flag.
 package pluginapi
 
 import (
@@ -106,4 +123,77 @@ func ResolveMultiplier(ctx context.Context, c *core.Core, dim string, mc Multipl
 		}
 		return f
 	}
+}
+
+// ── Policy flags: the mirror of the multiplier seam ──────────────────────
+//
+// A flag is a RESTRICTION a member is under, not a bonus they have earned.
+// The distinction is not stylistic: it decides the combining rule, and
+// getting it wrong is unsafe in one specific direction. An offer that loses
+// its argument costs the member a bonus they might have had; a restriction
+// that loses its argument hands out credit the operator meant to withhold,
+// and the accounting looks entirely normal afterwards.
+//
+// Hence ANY: one source asserting a flag is enough, and no source can
+// out-bid it. There is no "best" restriction to pick.
+
+// PolicyFlagPrefix is where restriction sources register:
+// "policy.flag.<system>" — the same discoverable shape as multiplier
+// sources, so a reader finds both in one listing of the registry.
+const PolicyFlagPrefix = "policy.flag."
+
+// Policy flags.
+const (
+	// FlagNeutral is neutral leech: the download does not count against the
+	// member AND the upload earns them nothing. Both halves, together —
+	// that pairing is the whole point, and it is what no multiplier can say,
+	// because the upload half is a restriction wearing a promotion's clothes.
+	FlagNeutral = "neutral"
+)
+
+// PolicySource answers whether one member is under one flag.
+//
+// ok=false is "no opinion", exactly as in MultiplierSource. Called on the
+// same hot paths — an announce runs this per peer per few minutes — so an
+// implementation must be one cheap read, and an error is treated as no
+// opinion: an economy that cannot answer must not fail an announce.
+//
+// Note the asymmetry with MultiplierSource, and that it is deliberate: an
+// error here means the restriction is NOT applied, i.e. it fails generous.
+// That is the safe direction for the member and the honest one for the
+// operator, who can see a flag that never fires; the alternative silently
+// withholds credit somebody earned, which nobody can see at all.
+type PolicySource interface {
+	Flag(ctx context.Context, flag string, mc MultiplierContext) (on bool, ok bool, err error)
+}
+
+// ResolvePolicyFlag reports whether ANY registered source asserts flag.
+//
+// False with no sources, which is the dormant default every seam here keeps:
+// a host that installs no economy plugin sees no behavioural change.
+func ResolvePolicyFlag(ctx context.Context, c *core.Core, flag string, mc MultiplierContext) bool {
+	if c == nil {
+		return false
+	}
+	for _, name := range c.ExtensionNames() {
+		if !strings.HasPrefix(name, PolicyFlagPrefix) {
+			continue
+		}
+		v, ok := c.Lookup(name)
+		if !ok {
+			continue
+		}
+		src, ok := v.(PolicySource)
+		if !ok {
+			continue
+		}
+		on, has, err := src.Flag(ctx, flag, mc)
+		if err != nil || !has {
+			continue
+		}
+		if on {
+			return true
+		}
+	}
+	return false
 }
