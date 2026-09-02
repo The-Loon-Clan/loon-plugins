@@ -444,6 +444,11 @@ func (s *archiveService) run(parentCtx context.Context) {
 // reads it because the const said "AmeNZB/1.0" on every host that installed
 // this plugin. A User-Agent naming the wrong site is a false statement about
 // who is crawling you, which is the one thing a UA exists to get right.
+//
+// It reads the WORKER-leg deps. This function is only ever called from the
+// scrape job, and a job runs in a process that called SetJobDeps and never
+// SetDeps — so the earlier `deps.siteName()` was a nil dereference on every
+// run, and the weekly scrape panicked before it read a single page.
 func scraperUserAgent() string {
-	return deps.siteName() + "/1.0 (+release-group scraper; contact via site)"
+	return jobSiteName() + "/1.0 (+release-group scraper; contact via site)"
 }

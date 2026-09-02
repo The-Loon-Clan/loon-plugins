@@ -180,6 +180,18 @@ type JobDeps struct {
 	Slugify func(name string) string
 	// ScrapeArchive — same seam as the web leg's on-demand refresh.
 	ScrapeArchive func(ctx context.Context, groupID int) (int, error)
+
+	// SiteName and BaseURL name this deployment in the User-Agent the nekoBT
+	// scraper sends. They duplicate the web leg's fields on purpose.
+	//
+	// The scrape job runs in the WORKER process, which calls SetJobDeps and
+	// never SetDeps — so the web-leg `deps` global is nil there by contract,
+	// and scraperUserAgent reaching for it dereferenced nil on every single
+	// run. Both are optional: an unset pair yields the same fallback the web
+	// leg uses, which is a true statement about who is crawling rather than a
+	// wrong one.
+	SiteName string
+	BaseURL  string
 }
 
 func (d *JobDeps) ok() bool {
@@ -199,11 +211,27 @@ func SetJobDeps(d JobDeps) { jobDeps = &d }
 // callers address somebody outside: a group owner reading a snippet in their
 // own bio, and whoever reads their server logs. "this site" is useless in
 // both, and a bare host name is at least true.
-func (d Deps) siteName() string {
-	if n := strings.TrimSpace(d.SiteName); n != "" {
+func (d Deps) siteName() string { return resolveSiteName(d.SiteName, d.BaseURL) }
+
+// jobSiteName is the worker-leg answer to the same question. It reads
+// jobDeps, NOT deps: a job runs in a process that only ever called
+// SetJobDeps, so the web-leg global is nil there and touching it panics.
+// Nil-safe on its own account too — an unwired host gets the fallback, not a
+// crash, because a User-Agent is not worth killing a scrape over.
+func jobSiteName() string {
+	if jobDeps == nil {
+		return resolveSiteName("", "")
+	}
+	return resolveSiteName(jobDeps.SiteName, jobDeps.BaseURL)
+}
+
+// resolveSiteName is shared by both legs so the two cannot drift into
+// describing the same deployment differently.
+func resolveSiteName(siteName, baseURL string) string {
+	if n := strings.TrimSpace(siteName); n != "" {
 		return n
 	}
-	if u, err := url.Parse(d.BaseURL); err == nil && u.Host != "" {
+	if u, err := url.Parse(baseURL); err == nil && u.Host != "" {
 		return u.Host
 	}
 	return "this indexer"
