@@ -312,7 +312,252 @@ func animeEvidence(title string) bool {
 // canonical case is "Future Man S01E06 - A Blowjob Before Dying") lands in
 // Hentai rather than Porn. Both are hidden, so the cost is a wrong shelf, not an
 // exposure — and the alternative, dropping the SxxExx clause, costs real anime.
+// adultStudios identifies adult releases by their PUBLISHER, because the
+// studio naming convention carries no adult word for a token rule to find.
+// A release named "EvilAngel - <performer>" or "TrueAnal - <performer>" has
+// nothing a word-bounded pattern can match: the studio name IS the content
+// warning, and it is glued into one word so even an unbounded "anal" only
+// reaches it by accident.
+//
+// Measured before it was written. Of 248,761 uncategorised free.pt rows, the
+// token rules above caught 4,851 -- under two percent -- while these prefixes
+// account for roughly 70,000. The list is the top of a measured distribution
+// (prefixes with >=120 rows), then curated: seven publishers share the
+// "Publisher - Title" shape without being adult (Elvis Presley, VA, Android,
+// Sky Sports Formule 1, Top 40, Diverse Artiesten, MasterChef Australia) and
+// were excluded by reading three of each one's titles.
+//
+// Safe to apply to EVERY group, which was checked rather than assumed: over
+// the last 900k releases outside free.pt the rule fires on 102 rows and all
+// 102 are genuinely pornography -- including the names that look like
+// ordinary English words ("Private - Porn Wars", "Vixen - Naomi Woods...",
+// "Lubed - ..."). 101 of them already carried the Porn category.
+//
+// The value is whether the studio is ANIMATED: animated adult is Hentai and
+// live-action is Porn, and the two are deliberately separate categories here
+// rather than one bucket.
+//
+// MIRROR: this list exists twice, in loon-plugins/usenet/tags.go and in the
+// host's pkg/services/nzb_tag_service.go. Both are generated from the same
+// two committed .sql repair files (indexer-tools/sql/2026-09-02a and b), so
+// the ingest rule and the backlog cleanup cannot disagree about a studio.
+var adultStudios = map[string]bool{
+	"18lust":               false,
+	"5kporn":               false,
+	"abbiemaley":           false,
+	"abbywinters":          false,
+	"adulttime":            false,
+	"allanalallthetime":    false,
+	"allover30":            false,
+	"alsangels":            false,
+	"alsscan":              false,
+	"analonly":             false,
+	"anilos":               false,
+	"assholefever":         false,
+	"assparade":            false,
+	"atkgalleria":          false,
+	"atkgirlfriends":       false,
+	"atkhairy":             false,
+	"auntjudys":            false,
+	"auntjudysxxx":         false,
+	"backroomcastingcouch": false,
+	"badmommypov":          false,
+	"bang realteens":       false,
+	"bangbros18":           false,
+	"bangbus":              false,
+	"bbcpie":               false,
+	"beauty-angels":        false,
+	"bigbootytgirls":       false,
+	"biggulpgirls":         false,
+	"bjraw":                false,
+	"blacked":              false,
+	"blackedraw":           false,
+	"brattysis":            false,
+	"brazzersexxtra":       false,
+	"breedme":              false,
+	"brokenlatinawhores":   false,
+	"brokensluts":          false,
+	"brothalovers":         false,
+	"castingcouch-hd":      false,
+	"caughtfapping":        false,
+	"clubsweethearts":      false,
+	"cosmid":               false,
+	"cuckhunter":           false,
+	"cum4k":                false,
+	"cumperfection":        false,
+	"dadcrush":             false,
+	"deeplush":             false,
+	"defloration":          false,
+	"desperateamateurs":    false,
+	"devilsfilm":           false,
+	"dickdrainers":         false,
+	"digitalplayground":    false,
+	"dirtyauditions":       false,
+	"dorcelclub":           false,
+	"eternaldesire":        false,
+	"evilangel":            false,
+	"evolvedfights":        false,
+	"evolvedfightslez":     false,
+	"faketaxi":             false,
+	"familytherapyxxx":     false,
+	"femjoy":               false,
+	"filthypov":            false,
+	"finishhim":            false,
+	"fitting-room":         false,
+	"freakmobmedia":        false,
+	"frolicme":             false,
+	"ftvgirls":             false,
+	"ftvmilfs":             false,
+	"futanari":             true,
+	"genderx":              false,
+	"girlcum":              false,
+	"girlfriendsfilms":     false,
+	"girlsoutwest":         false,
+	"girlsway":             false,
+	"gloryholesecrets":     false,
+	"gotfilled":            false,
+	"grandmams":            false,
+	"hegre":                false,
+	"hentaied":             false,
+	"hollandschepassie":    false,
+	"hookuphotshot":        false,
+	"hotguysfuck":          false,
+	"hotwifexxx":           false,
+	"hucows":               false,
+	"hunt4k":               false,
+	"hussiepass":           false,
+	"immorallive":          false,
+	"inserted":             false,
+	"interracialvision":    false,
+	"jacquieetmicheltv":    false,
+	"japanhdv":             false,
+	"jaxslayher":           false,
+	"jayspov":              false,
+	"joibabes":             false,
+	"karupsha":             false,
+	"karupsow":             false,
+	"karupspc":             false,
+	"ladyvoyeurs":          false,
+	"lanewgirl":            false,
+	"legalporno":           false,
+	"littlecaprice-dreams": false,
+	"lubed":                false,
+	"maturenl":             false,
+	"metart":               false,
+	"metartx":              false,
+	"milfaf":               false,
+	"moderndaysins":        false,
+	"mommysboy":            false,
+	"mommysgirl":           false,
+	"monstersofcock":       false,
+	"myfamilypies":         false,
+	"myfriendshotmom":      false,
+	"mylifeinmiami":        false,
+	"mypervyfamily":        false,
+	"mysistershotfriend":   false,
+	"mysweetapple":         false,
+	"nebraskacoeds":        false,
+	"netgirl":              false,
+	"netvideogirls":        false,
+	"newsensations":        false,
+	"nookiesoriginals":     false,
+	"nubilefilms":          false,
+	"nubiles":              false,
+	"nurumassage":          false,
+	"nympho":               false,
+	"onlyfans":             false,
+	"onlytarts":            false,
+	"oopsfamily":           false,
+	"pascalssubsluts":      false,
+	"passion-hd":           false,
+	"pawged":               false,
+	"pegasproductions":     false,
+	"penthousegold":        false,
+	"perfect18":            false,
+	"pervmom":              false,
+	"pinupfiles":           false,
+	"playboyplus":          false,
+	"plumperpass":          false,
+	"pornforce":            false,
+	"pornmegaload":         false,
+	"pornplus":             false,
+	"pornworld":            false,
+	"povmasters":           false,
+	"private":              false,
+	"privatesociety":       false,
+	"producersfun":         false,
+	"publicagent":          false,
+	"puretaboo":            false,
+	"purgatoryx":           false,
+	"putalocura":           false,
+	"rickysroom":           false,
+	"rkprime":              false,
+	"roccosiffredi":        false,
+	"romemajor":            false,
+	"seehimfuck":           false,
+	"sexart":               false,
+	"sexmex":               false,
+	"shadyspa":             false,
+	"sheseducedme":         false,
+	"shoplyfter":           false,
+	"sinfulxxx":            false,
+	"sislovesme":           false,
+	"slutinspection":       false,
+	"sofiemariexxx":        false,
+	"spankmonster":         false,
+	"stepsiblingscaught":   false,
+	"straplez":             false,
+	"stunning18":           false,
+	"sweetheartvideo":      false,
+	"tabooheat":            false,
+	"tadpolexstudio":       false,
+	"teenytaboo":           false,
+	"thelifeerotic":        false,
+	"tiny4k":               false,
+	"tmwpov":               false,
+	"trans500":             false,
+	"transangels":          false,
+	"transfixed":           false,
+	"tripforfuck":          false,
+	"tushy":                false,
+	"tushyraw":             false,
+	"vickyathome":          false,
+	"vipissy":              false,
+	"vivthomas":            false,
+	"vixen":                false,
+	"wanilianna":           false,
+	"wankitnow":            false,
+	"watch4beauty":         false,
+	"wetandpissy":          false,
+	"wetandpuffy":          false,
+	"wildoncam":            false,
+	"willtilexxx":          false,
+	"woodmancastingx":      false,
+	"xes":                  false,
+	"yesgirlz":             false,
+}
+
+// adultStudioOf reports whether a "Studio - Title" release comes from a known
+// adult studio, and whether that studio is animated. The separator is " - "
+// with the spaces: without them "Blacked" would match inside hyphenated
+// words, and a bare prefix match would claim any title merely starting with
+// a studio's name.
+func adultStudioOf(title string) (animated, ok bool) {
+	i := strings.Index(title, " - ")
+	if i <= 0 {
+		return false, false
+	}
+	animated, ok = adultStudios[strings.ToLower(strings.TrimSpace(title[:i]))]
+	return animated, ok
+}
+
 func parseCategoryTag(title string) string {
+	if animated, ok := adultStudioOf(title); ok {
+		if animated || animeEvidence(title) {
+			return "Hentai"
+		}
+		return "Porn"
+	}
 	if reTagAdult.MatchString(title) || pornShape(title) {
 		if animeEvidence(title) {
 			return "Hentai"
