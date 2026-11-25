@@ -9,6 +9,7 @@ package lists
 
 import (
 	"context"
+	"errors"
 	"html/template"
 	"time"
 
@@ -129,7 +130,29 @@ type Deps struct {
 	RemoveItem         func(ctx context.Context, listID int, nzbID int64, userID int) error
 	NzbData            func(ctx context.Context, nzbID int64) ([]byte, error)
 	IncrementDownloads func(ctx context.Context, listID int) error
+
+	// DownloadItem is the host's per-release gate for the bulk ZIP, called
+	// for each item before it is written. It is where the host counts the
+	// download against the member's daily limit and refuses releases the
+	// member may not have (hidden, deleted). Return ErrSkipItem to leave one
+	// item out and carry on; any other error ends the ZIP there. A refusal
+	// on the FIRST item is answered as a page instead of an empty ZIP.
+	//
+	// Optional: nil serves every item, the behaviour before it existed. A
+	// host with a download limit should set it — without it "Download all"
+	// was a way round that limit, one ZIP of any size with no download
+	// counted.
+	DownloadItem func(c *gin.Context, nzbID int64) error
 }
+
+// ErrSkipItem tells DownloadAllList to leave one item out of the ZIP and
+// continue with the next.
+var ErrSkipItem = errors.New("lists: skip this item")
+
+// ErrDownloadLimit is what a host's DownloadItem returns (wrapped or not)
+// when the member's download allowance is spent. On the first item it is
+// answered with a "limit" page rather than a generic one.
+var ErrDownloadLimit = errors.New("lists: download limit reached")
 
 var deps *Deps
 

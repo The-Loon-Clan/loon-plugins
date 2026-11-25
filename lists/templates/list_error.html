@@ -17,6 +17,7 @@
                 {{else if eq .Reason "private"}}That list is private.
                 {{else if eq .Reason "empty"}}There is nothing in that list yet.
                 {{else if eq .Reason "ippinned"}}Download blocked &mdash; your IP does not match the one your session is pinned to.
+                {{else if eq .Reason "limit"}}You have used today's downloads. A list download counts each release in it.
                 {{else if eq .Reason "renderfailed"}}This page failed to render. It has been logged.
                 {{else}}Something went wrong.{{end}}
             </span>

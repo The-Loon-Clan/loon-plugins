@@ -2,6 +2,7 @@ package lists
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -165,14 +166,41 @@ func (h *Handlers) DownloadAllList(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Type", "application/zip")
-	safeName := sanitizeListFilename(list.Name)
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, safeName))
-
-	zw := zip.NewWriter(c.Writer)
-	defer zw.Close()
+	// The host's per-item gate (daily limit, visibility), when it has one.
+	// Asked before the headers go out so a member with nothing left gets a
+	// page that says so, not an empty ZIP; once the ZIP has started, a
+	// refusal can only end it.
+	started := false
+	var zw *zip.Writer
+	defer func() {
+		if zw != nil {
+			_ = zw.Close()
+		}
+	}()
 
 	for _, nzb := range items {
+		if deps.DownloadItem != nil {
+			if err := deps.DownloadItem(c, nzb.ID); errors.Is(err, ErrSkipItem) {
+				continue
+			} else if err != nil {
+				if !started {
+					if errors.Is(err, ErrDownloadLimit) {
+						fail(c, http.StatusTooManyRequests, "limit")
+					} else {
+						fail(c, http.StatusInternalServerError, "failed")
+					}
+					return
+				}
+				break
+			}
+		}
+		if !started {
+			c.Header("Content-Type", "application/zip")
+			safeName := sanitizeListFilename(list.Name)
+			c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, safeName))
+			zw = zip.NewWriter(c.Writer)
+			started = true
+		}
 		compressed, err := deps.NzbData(ctx, nzb.ID)
 		if err != nil || len(compressed) == 0 {
 			continue
@@ -192,6 +220,11 @@ func (h *Handlers) DownloadAllList(c *gin.Context) {
 		_, _ = w.Write(raw)
 	}
 
+	if !started {
+		// Every item was skipped: nothing in the list is downloadable.
+		fail(c, http.StatusNotFound, "empty")
+		return
+	}
 	_ = deps.IncrementDownloads(ctx, listID)
 }
 
