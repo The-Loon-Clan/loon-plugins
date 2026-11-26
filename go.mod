@@ -1,6 +1,6 @@
 module github.com/the-loon-clan/loon-plugins
 
-go 1.26.4
+go 1.26.11
 
 require (
 	github.com/bwmarrin/discordgo v0.29.0
@@ -13,10 +13,10 @@ require (
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/the-loon-clan/loon v0.0.0-20260828034710-5c0772cbc68b
-	github.com/yuin/goldmark v1.7.13
-	golang.org/x/image v0.44.0
-	golang.org/x/net v0.53.0
-	golang.org/x/text v0.40.0
+	github.com/yuin/goldmark v1.7.17
+	golang.org/x/image v0.48.0
+	golang.org/x/net v0.63.0
+	golang.org/x/text v0.44.0
 )
 
 require (
@@ -35,7 +35,7 @@ require (
 	github.com/gorilla/context v1.1.2 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/gorilla/sessions v1.4.0 // indirect
-	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
@@ -44,14 +44,14 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.59.0 // indirect
+	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/arch v0.22.0 // indirect
-	golang.org/x/crypto v0.50.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/crypto v0.59.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 )
 
